@@ -226,9 +226,15 @@ hidden (alpha 0.01, non-interactive, zero-size) in the root view outside the web
   `keyboardType = .default` keeps locale IMEs and dictation available without enabling
   suggestions. Public text-field traits remove predictions on the app's line without
   WebKit swizzling.
-- In `terminal`, committed text is sent as typed; Backspace on an empty field sends
-  `BSpace`, and Return sends `Enter`. The field is cleared after each committed terminal
-  text so edits cannot arrive after they were sent.
+- In `terminal`, committed text is sent as typed, Backspace sends `BSpace`, and Return
+  sends `Enter`. Outside `line` the field holds exactly one U+200B and the caret after it:
+  committed text is sent and the field goes back to that one character, so edits cannot
+  arrive after they were sent. iOS repeats a held delete only while the field has a
+  character before the caret, and after about two seconds it switches to word steps that
+  select that character first, so each `BSpace` also puts the field back.
+- Leaving `line` parks the draft and its selection natively and empties the field to the
+  U+200B; returning to `line` restores them, and a `lineSet` replaces the parked copy. A
+  draft left in the field went to tmux with the next terminal key.
 - In `line`, UITextField owns marked text, dictation, the spacebar caret trackpad and
   selection; each edit is mirrored through `lineEdit`. Return is `.send` and sends
   `lineReturn` unless IME composition is active. Native assigns generations for edits and

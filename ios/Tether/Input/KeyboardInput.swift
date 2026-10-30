@@ -24,6 +24,8 @@ final class KeyboardInput: UITextField, UITextFieldDelegate {
     private var lineTab: TabKey?
     private var lastLineEdit: LineEdit?
     private var suppressLineEdit = false
+    /// The line's text and caret while another mode holds the field.
+    private var parkedLine: (text: String, selection: NSRange)?
 
     private struct LineEdit: Equatable {
         let text: String
@@ -71,13 +73,25 @@ final class KeyboardInput: UITextField, UITextFieldDelegate {
         guard self.mode != mode else { return }
         // A held hardware key was routed for the old mode (Esc in the line returns to the terminal): repeats must not go on under the new one.
         stopAllRepeats()
+        let previous = self.mode
         self.mode = mode
+        // Only the line keeps its text in the field. Its draft is parked on the way out and put back,
+        // caret and all, on the way in: left in the field, it went to tmux with the next key.
+        if mode == .line {
+            restoreParkedLine()
+        } else if previous == .line {
+            parkedLine = (lineEdit.text, lineEdit.selection)
+            resetToSentinel()
+        } else {
+            resetToSentinel()
+        }
         inputView = mode == .hidden ? emptyInputView : nil
         returnKeyType = mode == .line ? .send : .default
         reloadInputViews()
     }
 
     func setLine(text: String, caret: Int, tab: TabKey) -> NativeLineSnapshot {
+        parkedLine = nil
         generation += 1
         lineTab = tab
         self.text = text
@@ -185,6 +199,10 @@ final class KeyboardInput: UITextField, UITextFieldDelegate {
         }
         guard mode == .line else {
             output?.keyboardInput(.key("BSpace"))
+            // After a long hold iOS deletes by word: it selects the word before the caret, here the
+            // sentinel, and asks for a delete. The field must come back as the sentinel with the caret
+            // after it, or the next step finds nothing it can delete and the repeat stops.
+            resetToSentinel()
             return
         }
         super.deleteBackward()
@@ -245,9 +263,36 @@ final class KeyboardInput: UITextField, UITextFieldDelegate {
             publishLineEdit()
             return
         }
-        guard markedTextRange == nil, let text, !text.isEmpty else { return }
-        output?.keyboardInput(.text(text))
-        self.text = ""
+        guard markedTextRange == nil, let text, text != Self.sentinel else { return }
+        let typed = text.replacingOccurrences(of: Self.sentinel, with: "")
+        if !typed.isEmpty { output?.keyboardInput(.text(typed)) }
+        resetToSentinel()
+    }
+
+    /// Outside the line the field holds one invisible character and never anything else. iOS repeats a held
+    /// delete only while the field has text before the caret; `deleteBackward` sends BSpace and keeps it.
+    private static let sentinel = "\u{200B}"
+
+    private func restoreParkedLine() {
+        guard let parked = parkedLine else {
+            if text == Self.sentinel { text = "" }
+            return
+        }
+        parkedLine = nil
+        suppressLineEdit = true
+        text = parked.text
+        if let start = position(from: beginningOfDocument, offset: parked.selection.location),
+           let end = position(from: start, offset: parked.selection.length) {
+            selectedTextRange = textRange(from: start, to: end)
+        }
+        suppressLineEdit = false
+        lastLineEdit = lineEdit
+    }
+
+    private func resetToSentinel() {
+        text = Self.sentinel
+        let end = endOfDocument
+        selectedTextRange = textRange(from: end, to: end)
     }
 
     private var lineEdit: LineEdit {
