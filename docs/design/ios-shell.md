@@ -56,11 +56,11 @@ rebuilding the app.
 | Native (Swift) | Web (`web/`, in the WKWebView) |
 |---|---|
 | Keyboard: the first responder, software and hardware keys | Terminal rendering (xterm.js), touch gestures, selection overlay |
-| Nothing drawn above the keyboard: one native `UITextField` responder with terminal/line targets and system keyboard traits | The dock: Home, the current-tab button and keyboard control at rest; line mirror above the key row while the keyboard is up; the picker sheet; the terminal's edit menu (Copy, Paste) |
+| Nothing drawn above the keyboard: one native `UITextField` responder with terminal/line targets and system keyboard traits | The dock: the tab row (‹, tabs, +) and keyboard control at rest; the tab row, line mirror and key row while the keyboard is up; the + and long-press menus; the terminal's edit menu (Copy, Paste) |
 | Focus: who holds the keyboard; native owns terminal and line editing, WebKit owns sheet fields | File manager and viewers; the editor (v2) |
 | Keyboard geometry: sizing the web view | Host protocol: WebSocket per host, tabs, reconnect |
 | Auth: Face ID lock, tokens in the Keychain, lock screen | |
-| Hosts: host list, Add host and enrolment screens | Server cards and grouped sessions (from the native host list) |
+| Hosts: host list, Add host and enrolment screens | Home's workspaces, one per host (from the native host list) |
 | Media: photo picker, camera, image paste, JPEG conversion, uploads; pasteboard reads and writes | Upload chips, path insertion through the normal input path |
 | Haptics, video player, share extension (later) | Requests for them, over the bridge |
 | Lifecycle and network signals; saved workspace | Reacting to them: reconnect, restore tabs |
@@ -80,9 +80,9 @@ above the keyboard is the web view; native draws no accessory.
 └──────────────────────────────────────┘
 ```
 
-With the keyboard down, the web view fills the screen and the current-tab button and
-keyboard control sit at the bottom safe area without a blank band. The toggle is in the
-key row while the keyboard is up and in the resting bar while down. The dock's rules are in
+With the keyboard down, the web view fills the screen and the tab row, with the keyboard
+control at its end, sits at the bottom safe area without a blank band. The toggle is in the
+key row while the keyboard is up and in the tab row while down. The dock's rules are in
 [browser-behaviors.md](client/browser-behaviors.md#phone-dock); native's part is to own
 the terminal and line targets, keep WebKit first responder for sheet fields, and size the
 web view.

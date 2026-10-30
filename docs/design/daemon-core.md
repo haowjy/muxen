@@ -2363,6 +2363,25 @@ with the replay tests and the recorder in `tests/support/`):
     covered, by design: bells before the first device connects after a tmux start, and
     the two-daemon removal gap (§4.8).
 
+### The tab's tmux commands (open)
+
+The client's long-press menu ([browser-behaviors.md](client/browser-behaviors.md#tab-row)) asks for
+Kill session, Kill window and Rename session; New window exists (`NewWindow`). The messages,
+replies and refusals are not specified yet, and they must settle these before the menu ships:
+
+- **tmux 3.4's crash.** A window change and a kill of the same session in one command list kill the
+  whole server whenever a control client is attached (risk 4); tether's own control client is always
+  attached to the session it kills. Separate lists survived every trial, which is not proof. Decide
+  whether a kill goes through a one-shot or the control client, prove that session-follow (a
+  `switch-client` or a claim) never lands in the same list as a kill, and gate on the real-tmux suite
+  on 3.4 and on the host's newer tmux.
+- **Kill window's race.** Another client can close the session's other windows between the menu
+  opening and the confirm, so `kill-window` would end the session. Re-check the window count in the
+  daemon, or target the window by `@id` and say in the confirmation that the session may end.
+- **Rename.** `rename-session` on the session's `$id`; a refused name returns tmux's reason, and the
+  tab follows the rename through `sessionsChanged`.
+- **Hub serialization**, like the other one-shots: an overlapping request gets `busy`.
+
 ## Sources
 
 - [probe-control-client.md](research/probe-control-client.md),

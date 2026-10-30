@@ -22,10 +22,10 @@ focus and touch behavior also require the [device checklist](../ios-shell.md#dev
 
 ### Which rules win
 
-The [interaction contract](browser-behaviors.md) governs layout: desktop uses a top
-row with Home, tabs and +; phone Home is server-first, and the current-tab button opens
-the picker sheet. Files is a tab. With the keyboard up the phone dock shows a compose
-box above the key row. The contract covers browser/PWA and native differences and the
+The [interaction contract](browser-behaviors.md) governs layout: Home lists the
+workspaces (a server's tabs), a workspace's tab overview lists its tabs, and a tab shows the
+tab row (‹, tabs, +), at the top on desktop and at the bottom on the phone. Files is a tab.
+With the keyboard up the phone's tab row stays and the compose box and key row sit under it. The contract covers browser/PWA and native differences and the
 open implementation details. Older mockups and review notes do not override it.
 
 Existing subsystem security, resource budgets, tmux ownership, and native focus

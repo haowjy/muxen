@@ -16,35 +16,107 @@ naming the old option under Rejected; git history keeps the removed text.
 
 Decided by Jimmy, 2026-10-21 unless an entry gives another date.
 
+### Workspaces: Home, the tab overview, a tab with its tab row (2026-10-30)
+
+- **What:** a workspace is one server's open tabs, in the user's order, and the tab it last showed;
+  one per server for now, kept as a record of its own so a second workspace on a server later is
+  another record. Home lists the workspaces only and opens one on its last tab. The tab overview
+  lists a workspace's tabs as rows (tap to open, drag a handle to reorder, swipe to close) with Open
+  session and Open files. A tab shows the tab row: ‹ to the overview, the tabs as pills, + (Open
+  session, Open files), and on the phone Show keyboard. With the keyboard up the tab row stays and
+  the compose box and key row sit under it. Desktop and phone share the model
+  ([client/browser-behaviors.md](client/browser-behaviors.md#platform-layout)).
+- **Why:** Jimmy, after the `tab-chip` build on his iPhone ("there is a lot wrong with this") and a
+  recording of Termius: the tab chip blended into the key row, its keyboard-down and keyboard-up
+  forms differed and opened two pickers, and finding a file took four steps in a mostly empty
+  half sheet. "I think maybe we should consider the screen with all the terminals and tabs like a
+  'workspace'? (a collection of the tabs and open tab sessions) for a given server"; "maybe in the
+  future we can have multiple 'workspaces'"; Home "should only list the workspaces"; the overview
+  as a "list of rows"; ‹ "should go back to 2. tab overview".
+- **Rejected:** the half-height picker sheet with its open tabs and Add new tab; the tab chip and its
+  non-modal tab menu (two pickers for one job); one strip mixing every server's tabs; terminal
+  previews in the overview (they would stream every tab's screen); reordering by dragging pills in
+  the tab row (it scrolls sideways); Home listing sessions or files.
+
+### Open session is new-or-attach; Open files starts at ~/ (2026-10-30)
+
+- **What:** adding a tab is two actions, in the tab overview and in +'s menu. Open session is one
+  screen: a name field over this server's sessions not open in the workspace; a tap or a listed
+  name attaches, a name no session has creates it, an empty field creates one tmux names. A new
+  session starts in `~` (Jimmy: "yes"). New-or-attach is the client's rule over the listing, not
+  tmux's `new-session -A`, which fails from the daemon on an existing name ("open terminal
+  failed: not a terminal", tmux 3.8). Open
+  files opens a Files tab at `~/`; its path field works like a browser's address bar.
+- **Why:** Jimmy: tmux "should use the 'new or attach' command"; Files "should just always start at
+  ~/"; the search he meant was "search by path picker".
+- **The path field's tap** keeps tether's behaviour, the caret at the end after a trailing `/`, so
+  typing narrows the folder you are in (Jimmy: "maybe the 2nd one?"), not Safari's select-all.
+- **Rejected:** separate Attach session and New session actions; the New session form with a start
+  directory; Files remembering the workspace's last folder; search by file name (a tree walk on the
+  daemon).
+
+### No favorites (2026-10-30)
+
+- **What:** favorites are gone end to end: the star in a Files tab's header, the picker's Files side,
+  `GET /fs/favorites`, `POST /fs/favorites/add` and `/remove`, `POST /fs/uploads-dir` (which no
+  client called) and the `favorites` key in `config.toml`. With nothing left to write it, the
+  daemon's `config.toml` writer goes too. `uploads_dir` stays, set in `config.toml` by hand.
+- **Why:** Jimmy: "tbh, idk if we even need the favorites feature at all"; the path field, like an
+  address bar, is the way to a folder.
+- **Rejected:** favorites as suggestions under the empty path field; a list of recent folders kept
+  per device (Jimmy: "I think we just need to, in the workspace, remember where we last were",
+  then "it should just always start at ~/").
+
+### A tab's long press has the tmux commands; killing asks first (2026-10-30)
+
+- **What:** a long press on a terminal tab's pill opens: the session's windows (tap switches,
+  `select-window`) and New window, Rename session, Move to start or end, Close tab, then Kill
+  window (more than one window only) and Kill session, in the danger colour, each behind a
+  confirmation that names what ends. Close stays detach-only everywhere (the ×, a swipe, Close
+  tab). The daemon needs kill-session, kill-window and rename-session commands (`new-window`
+  exists); how they stay clear of tmux 3.4's crash is open (below).
+- **Why:** Jimmy: "long pressing a tab - we should be able to detach, or kill a session (what
+  else?)", then "consider the most important tmux commands"; on overriding "Closing a tab never
+  kills tmux": "yeah I think so... just they have to confirm it".
+- **Replaces** "Closing a tab never kills tmux" (2026-10-29), whose rule that no path from the tab
+  list runs `kill-session` it reverses; its rule that closing only detaches stands. **Amends the
+  invariant** "tmux is the source of truth" (plan.md), which said tether has no control that kills a
+  session or window; it now says tether never kills tmux on its own or without a confirmation that
+  names what ends (Jimmy: "change the invariant").
+- **Open:** the daemon side, with the tmux 3.4 crash risk
+  ([daemon-core.md](daemon-core.md#the-tabs-tmux-commands-open)).
+- **Rejected:** a kill without a confirmation; kill on a swipe or the ×.
+
+### The keyboard is sticky (2026-10-30)
+
+- **What:** only the keyboard control lowers the phone keyboard. Scrolling, tapping the terminal,
+  switching tabs in the tab row, the + and long-press menus and reconnects leave it up; the tab
+  overview and Home, which have no input, lower it.
+- **Why:** Jimmy: typing like Termius is the benchmark, and the keyboard must stay until he closes it.
+- **Rejected:** opening an overlay lowers the keyboard (the old picker sheet's rule).
+
+### Keys are plain text; controls are filled (2026-10-30)
+
+- **What:** the key row's keys have no fill until pressed; the tab row's ‹, pills, + and the
+  keyboard control are filled.
+- **Why:** Jimmy: the tab selector "blends in with the keys"; it should "clearly read as a control".
+- **Rejected:** a different colour for the tab chip alone.
+
+### The key row opens esc, tab; ^C last; no ^S or ^Q (2026-10-29)
+
+- **What:** the key row always opens esc, tab ("the first row should guarantee esc | tab"), then
+  the arrows; it keeps chords out of its first slots and ^Z away from ⏎; ^C is last; ^S and ^Q
+  are dropped ([client/browser-behaviors.md](client/browser-behaviors.md#phone-dock)).
+- **Why:** "^C ... is kinda dangerous to be put in the initial keyboard setup"; ⇧tab is rarely
+  used now.
+
 ### Files reads any path the user can (2026-10-29)
 
-- **What:** Files has no roots or scope; any readable path opens, and favorites replace roots
+- **What:** Files has no roots or scope; any readable path opens
   ([fs.md](fs.md)). Uploads still never replace a file and downloads are served sandboxed.
 - **Why:** a device that can use tether already has the user's terminal, which reads the same
   files; a scope would add rules without removing any reach.
 - **Rejected:** keeping roots below `$HOME`.
-
-### Closing a tab never kills tmux (2026-10-29)
-
-- **What:** every way to close a tab (× on the desktop, swipe left on a sheet row on touch, the
-  top row's ×, Home's close) only detaches: the client drops the tab and sends `unwatch`, and the
-  daemon stops its watch (`refresh-client -B`). No path from the tab list runs `kill-session` or
-  `kill-server`; the daemon has no such command. The swipe action reads "Close", never "Kill" or
-  "Delete".
-- **Why:** Jimmy: closing must "NEVER kill tmux", only stop tracking; the session is his and
-  lives on for every other client.
-- **Rejected:** a kill action on the swipe; a confirm-to-kill variant.
-
-### The phone picker lists open tabs; adding is one row (2026-10-29)
-
-- **What:** the sheet opens on the open tabs and an "Add new tab" row, which offers "Add
-  session" or "Add file", each with its own search and list; the Sessions / Files switch is gone
-  (the desktop + opens on the same choice). The key row always opens esc, tab ("the first row should guarantee esc | tab"), then the arrows; it keeps chords out of
-  its first slots and ^Z away from ⏎; ^C is last; ^S and ^Q are dropped
-  ([client/browser-behaviors.md](client/browser-behaviors.md)).
-- **Why:** "^C ... is kinda dangerous to be put in the initial keyboard setup"; ⇧tab is rarely
-  used now; "it should be 'add new tab' and then show 'add session' or 'add file'".
-- **Rejected:** every tmux session in the first view; a Sessions / Files switch, top or bottom.
 
 ### Device: iPhone 17 Pro only
 
@@ -4027,68 +4099,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 - **A tap on a completion row opens the folder** (it is Go on that row), instead of filling the field and waiting for a Return the phone's user does not know about. Drilling deeper is a tap in the opened folder's list. Go on a row that is a step toward a root (`Users` above `~/repos`) fills the field instead, as Tab does, for tap and Enter alike. Tab and → on a hardware keyboard still accept in place. Rejected: a visible "Open" button beside the field (a second step for the common case).
 - **A disabled `Button` shows its reason beside it**, from the one `disabledReason` prop that already named it to screen readers; the visible span is also the button's `aria-describedby`. Rejected: a per-screen caption (each screen would repeat the rule). Busy is its own state (`busy`: blocked by work in flight, `aria-busy`, no reason), since the label already says "Adding…". Rejected: showing a reason for busy too (the label and the reason would say the same thing twice). The sessions picker and + menu show one server reason in place of their two dead buttons, since it is about the server and not either button.
 - **A previewed file's path line wraps** (the title still truncates), so its full name is readable without a new control; matches the code and Markdown viewers, which wrap on a phone. Rejected: tap-to-expand title (a hidden gesture for text that can simply be shown).
-- **The current-tab button is `width: 100%` and both its labels shrink** (the window far faster), so it is never wider than its host and the count and chevron stay, whether the host is a flex row or not.
 - **A Mermaid block reads "Loading diagram…" until it draws**, its source hidden; a failure restores the source with the reason.
-
-### 2026-10-28: One picker, Sessions | Files, on every surface
-
-- **Decided:** 2026-10-28, Jimmy, on a real iPhone: Home had separate "All N sessions" and "Files" rows,
-  the phone sheets hid Browse files behind a + that sat at the bottom of one sheet and the top of the
-  other, the desktop popover kept it in a footer, and a pick left the half sheet open but closed the
-  others. He wanted "1 shared thing that can open a session or a file".
-- **What:** (1) one picker, a Sessions / Files switch (a tablist, 44 px tabs), a search that filters
-  the side showing ("Find a session" / "Find a folder"), rows grouped by server, and one + beside the
-  switch: New session on Sessions, New Files tab on Files. It is the desktop popover, the phone half
-  sheet and the full-height sheet from Home: one component, three containers. (2) The Files side
-  lists each server's roots (Uploads included) with the Files tab's own roots list; a root opens a
-  **new** Files tab at that folder; open Files tabs are not listed. Folder editing stays in the Files
-  tab: the picker's list has no × and no Add folder button, and its + ("New Files tab") opens a new Files tab at the
-  folder list, where Add folder is. The roots are asked for when the side is shown (`fs.roots()`
-  per server), never per keystroke. (3) A pick closes the picker on every surface, then acts. (4) Home's
-  card has one row, "Sessions and files", with the session count as its meta, opening the full-height
-  picker on the side last used (in memory; it also serves the phone sheet and the desktop popover).
-  It shows for any server that answers, including an empty one and one with no tmux running (roots
-  need no tmux). (5) "Browse files" is gone; the phone empty-terminal text names the current-tab button; the
-  desktop popover is titled "Open".
-- **Reverses** "a session-row tap opens or activates that tab behind the sheet and the sheet stays
-  open" (2026-10-27, above) for rows and for Browse files. Why: a pick means "take me there", the
-  half sheet covers half of what you opened, and a new Files tab is for browsing. Peeking at open
-  tabs survives in the bottom strip, whose pills still switch the tab behind the sheet and keep it open.
-- **Home button** (Jimmy, same day): the phone sheet's Home moves to the resting dock row, before
-  the current-tab button, on Terminal and Files alike (the keyboard-up row is unchanged). The
-  current-tab button shrinks to fit; the row keeps its height. The strip's + is gone: + sits beside the switch (as moved in "Density" below).
-- **Rejected:** a footer or menu per container (three places for one verb); listing open Files tabs
-  in the picker (they are tabs: the strip and Home hold them); a second roots list for the picker;
-  keeping × in the picker (a second editing surface for the roots, and a fetch-then-remove flow in an overlay that
-  closes on a pick); fetching roots at app start (every byte costs on a bad link); leaving the half sheet open on a pick for sessions only.
-- **Density** (Jimmy, same day, real iPhone: "so much lost space"; about 200 pt before the first row):
-  the switch is a segmented control, 32 pt tall on touch with a 44 pt hit area (the Choice
-  primitive, so Settings' choices match); the + moves beside the switch and the search gets its own
-  full-width row (switch and search read as one group; ~8 pt between rows). With one server shown
-  (one listable, or a server's own sheet, whose title already names it) the list has no "On X"
-  heading; with several it stays, tighter. A root that is Missing or unopenable is left out of the
-  picker (the Files tab keeps it to fix or remove); with none usable the side says "No folders to show".
-  The half sheet's tab strip has 8 pt above its pills and only the safe-area inset below. With no
-  heading, "Updating" is not shown (it would shift the rows). **Rejected:** a one-row header with the
-  switch beside the search (too tight at 390 pt); a heading kept for one server (the lost space).
-- **Controls at the bottom on the phone** (Jimmy, same day, real iPhone: thumb reach; matches the dock
-  and Home at the bottom): the control block (switch + `+`, then search) moves below the list on the
-  half sheet (above the open-tab strip) and the full-height sheet (whose top bar is Back and the
-  server's name); the desktop popover keeps it on top. One block placed by container: the Dialog's
-  footer slot on the phone, its header on desktop. The sheet already lifts above the keyboard, so
-  the block rides on it; the half sheet's tab strip hides while the keyboard is up. **Rejected:** only
-  the switch at the bottom (splits it from the search again); keeping the block at the top.
-- **Review fixes** (same day): the Files-side + is named for what it does, "New Files tab" (Add folder
-  lives in the Files tab; on desktop focus lands on the new tab's pill). The remembered side is one value for the page,
-  shared by the three containers (`sessions/pickerMemory.ts`), not one per container. Each server's roots are
-  kept until the picker closes, so switching sides doesn't ask again or flash "Loading folders". A pick leaves
-  no picker entry in history, so Back from the opened tab never reopens it (the earlier "returns to what was
-  under the picker" was wrong: switching tabs replaces the history entry). The switch is a full tablist
-  (`aria-controls`, a labelled panel, Home and End). + is disabled with "Checking access" while the server's id is unknown.
-  The current-tab button is named "…, open sessions and files".
-- **Budget:** initial JS 201 to 202 KB (201.1 measured): the switch, the roots side and the dock's Home button are
-  launch code, and the cuts the change could make (the dead menu variant, `RovingList`'s role prop) did not cover them.
-  Rejected: splitting screens into lazy chunks in this change (its own piece of work, in `web/.context/TODO`).
 
 ### 2026-10-28: Files without a scope
 
@@ -4105,7 +4116,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   from one `/fs/list` per folder. Kept: the hidden-files toggle, sandboxed previews and
   sanitized Markdown and Mermaid, the scan, page and upload caps, the descriptor-checked
   no-follow open (so the reported path is real, and a FIFO never blocks), non-UTF-8 names, the
-  upload destination and naming, and atomic config writes.
+  upload destination and naming. (Favorites were removed on 2026-10-30, "No favorites".)
 - **Why:** Jimmy, on a real iPhone at `~` that said "Open a folder inside your home folder
   first": "u already have terminal access... why tf are we restricting this?". A device token
   already runs any command in tmux, so the scope guarded against nothing but Jimmy, and it
@@ -4119,60 +4130,6 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   lists of one thing, since the picker lists them); keeping `roots` as the config name or
   accepting it as an alias (two names for one concept, and a compatibility layer for one user:
   the CHANGELOG says to rename the key).
-
-#### The same day: how the picker lists, opens and creates (Jimmy, on the device)
-
-- **Order and missing.** Favorites are listed alphabetically by path (Home first, Uploads last),
-  as sessions come in tmux's alphabetical order. The client sorts, from the daemon's config
-  order, since only the picker lists them and nothing else needs the order; there is no
-  reordering. A favorite whose folder is gone stays, dimmed and "Missing", with a × that removes
-  it (the star lives inside the folder, so a missing one has no other way out); a missing Home
-  or Uploads is hidden. A Files tab whose folder vanished says "This folder no longer exists",
-  and its up row (the parent of its path, since `Listing.parent` is not available) still works.
-- **A folder row behaves like a session row.** It activates the Files tab on that server whose
-  place is that folder (canonical path), else opens one, and carries "here" and "open" like
-  session rows, with the same mark rendering. A tab browsed elsewhere no longer matches.
-- **No + in the picker; creating is each list's last row.** Sessions: "New session" per server
-  group (`New session "<query>"`, Name prefilled, when the search matches nothing), which
-  replaces the list in the same container with the form. Files: the search is also the path
-  field (text starting `~` or `/` shows completions; a tap or Go opens a new tab), and the last
-  row "Open a folder…" (one per server group, like New session) starts a path on that server inside the tap. Rejected: a dialog over the picker (a second
-  surface to dismiss), an "Add favorite" + (favorites are starred in the folder), an Open folder
-  form (the search already is the field).
-- **No pick closes the picker** (Jimmy: "inconsistent behavior for 2 things that look similar is bad"; reverses "a pick closes the picker"). Session, window, folder, strip, Create and a typed path all put a tab on screen behind the picker, which stays on its list; one behaviour, no `commit`-then-close path. Earlier text for Create and Open: The tab opens behind it and the picker returns to
-  its list (the new row reads "here"); row picks still close it. Over Home too (Jimmy: "why don't we
-  have tabs under the home one?"): the route under the full sheet switches to the new tab and the
-  sheet stays open, so Create and Open behave the same in every container. ‹ still goes Home;
-  closing the sheet otherwise leaves you on the tab. The form page is a router entry of its own, so Back and
-  Escape leave it before they close the picker; `Router.closeOverlay(then)` therefore waits for the
-  entry it pops, not for "no overlay".
-- **One sheet, two heights.** The half-height sheet and the full-height sheet from Home are one
-  component: same list, search, switch, end-of-list rows and open-tab strip. The full sheet adds
-  a Back to Home and the server's name, and lists only that server. Phone control order, top to
-  bottom: search, switch, strip; the desktop popover keeps switch then search.
-- **One completing field.** `useCompletion` (`screens/files/completion.ts`) is the path field's
-  behaviour for the Files tab, the picker's search and New session's Start directory, so all type
-  paths alike. Start directory accepts `~/…` and sends the absolute path (`parseCreation` is
-  unchanged). Path field details (Jimmy): the caret goes to the end when an edit starts, set
-  again after iOS places it; no "in <folder>" line; "‹ .." steps to the parent folder.
-
-### 2026-10-28: Home's picker row lands on a tab; the full-height sheet is gone
-
-- **Decided:** 2026-10-28, Jimmy. Home's "All sessions and files" row opened a full-height picker
-  page over Home, with "Back to Home", filtered to the one server. Nothing sat behind it, so a pick
-  looked like a no-op.
-- **What:** the full-height container is gone; there is one picker, the desktop popover and the phone
-  half-height sheet. Home's row lands on a tab first — the server's open tab if there is one, else its
-  first session's tab, else Home for a server with none — then opens the sheet over it. The sheet and
-  the popover list every listable server, grouped when several, as the half sheet already did. Home's
-  empty-card New session opens the sheet on its form page. Every pick still leaves the picker open,
-  the tab it put on screen behind it.
-- **Deletes:** `Picker`'s `full` kind — the `server` overlay, `useContainer`'s `only` and host params,
-  the "server removed while open" effect, `fullTitle`, the "Back to Home" `PageBar` and `toHome` — and
-  the `only` prop threaded through `SessionPicks`, `HostSessionLists`, `HostFavoriteLists` and
-  `HostSection.useListedHosts`; the `serverSheet` harness fixture goes with it.
-- **Reverses** "One sheet, two heights" and the over-Home route switch: closing the sheet leaves you
-  on the tab it opened over, and the browser Back returns Home, not a dedicated full-height sheet.
 
 ## The key row's order, and Home's card
 
