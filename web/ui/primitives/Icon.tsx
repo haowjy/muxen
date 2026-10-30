@@ -7,6 +7,8 @@ const PATHS = {
   folder: <path d="M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v11H3Z" />,
   plus: <path d="M12 5v14M5 12h14" />,
   close: <path d="m6 6 12 12M18 6 6 18" />,
+  /** A tab's close: the × in a ring, as a pill's own control. */
+  closeCircle: <><circle cx="12" cy="12" r="9" /><path d="m9 9 6 6m0-6-6 6" /></>,
   keyboard: <><rect x="2" y="5" width="20" height="14" rx="2" /><path d="M5 9h1m3 0h1m3 0h1m3 0h1M5 12h1m3 0h1m3 0h1m3 0h1M7 16h10" /></>,
   keyboardHide: <><rect x="2" y="3" width="20" height="12" rx="2" /><path d="M5 7h1m3 0h1m3 0h1m3 0h1M7 11h10m-8 6.5 3 3 3-3" /></>,
   /** The drag handle: two bars. */

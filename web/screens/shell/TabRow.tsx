@@ -1,5 +1,6 @@
 import { useCallback, useState } from "preact/hooks";
 import { useApp, useAppView, useBells, useHostName } from "../../app/context";
+import { cx } from "../../ui/cx";
 import { DockButton } from "../../ui/primitives/DockButton";
 import { Icon } from "../../ui/primitives/Icon";
 import { TabStrip } from "../../ui/primitives/TabStrip";
@@ -42,7 +43,7 @@ export function TabRow({ place }: { place: "top" | "dock" }) {
 
   return (
     <nav class={styles.row} data-place={place} aria-label="Tabs" onPointerDown={(e) => { if (touchInput) e.preventDefault(); }}>
-      <DockButton kind="control" aria-label="Back to the tab overview" onClick={() => { app.router.toOverview(space.id); }}>
+      <DockButton kind="control" class={styles.control} aria-label="Back to the tab overview" onClick={() => { app.router.toOverview(space.id); }}>
         <Icon name="back" size={20} />
       </DockButton>
       <div class={styles.strip}>
@@ -56,6 +57,7 @@ export function TabRow({ place }: { place: "top" | "dock" }) {
       </div>
       <DockButton
         kind="control"
+        class={styles.control}
         aria-label="Add a tab"
         aria-haspopup="menu"
         aria-expanded={menu?.kind === "add"}
@@ -67,7 +69,7 @@ export function TabRow({ place }: { place: "top" | "dock" }) {
       {place === "dock" && !typing && (
         <DockButton
           kind="control"
-          class={styles.keyboard}
+          class={cx(styles.control, styles.keyboard)}
           aria-label={files && keyboard ? "Hide keyboard" : "Show keyboard"}
           onClick={() => { if (files) app.focus.toggleFilesKeyboard(keyboard); else app.focus.toggleKeyboard(); }}
         >

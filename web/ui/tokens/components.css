@@ -23,8 +23,9 @@
   /* Pills are equal width: they share the strip between these two. */
   --tab-min-width: 7.5rem;
   --tab-max-width: 14rem;
-  --tab-bg: transparent;
-  --tab-bg-active: var(--color-bg-hover);
+  /* Every pill is filled; the active one is tinted with its status colour (Jimmy, after Termius). */
+  --tab-bg: var(--color-bg-hover);
+  --tab-tint: 18%;
   --dialog-width: 480px;
   /* Home's centred column and a page dialog's. */
   --page-width: 720px;

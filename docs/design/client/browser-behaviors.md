@@ -129,14 +129,15 @@ stopped daemon is explained. Returning from the background keeps the screen the 
 ## Tab row
 
 The tab row holds ‹, the workspace's tabs as pills in workspace order, and +; on the phone,
-Show keyboard ends it while the keyboard is down. The active pill is filled, its label in the
-status colour, with ×; other pills are plain text, with the attention dot when they have one.
+Show keyboard ends it while the keyboard is down. Every pill is filled; the active one is tinted with its
+status colour, its label and its circled × in that colour; other pills have a muted label and the
+attention dot when they have one (Jimmy, 2026-10-30, after Termius's tabs).
 Every pill is the same width, whatever its label, and keeps space for ×, so changing tabs never moves the others (Jimmy, 2026-10-30: “the tabs change size... they should be consistent... look at termius's”): the pills share the strip between a minimum and a maximum width, past the minimum the row scrolls, and on the phone they fill the row between ‹ and +. A phone pill shows the session or folder name only; the window is in the tab overview and the pill's menu. The row scrolls
 horizontally, the active pill is scrolled into view, and the next pill peeks when more remain.
 A tap switches tabs and leaves the keyboard up or down as it was; with it up, it goes to the
 new tab's input (Phone dock). ‹ goes to the tab overview.
-The tab row's controls (‹, pills, +, the keyboard control) are filled; the key row's keys are
-plain text, so the two never read alike (Jimmy, 2026-10-30).
+The tab row's controls (‹, pills, +, the keyboard control) are filled, one height and one corner
+radius; the key row's keys are plain text, so the two never read alike (Jimmy, 2026-10-30).
 
 **+** opens a small menu anchored to it, in the popover look: **Open session**, **Open files**.
 It opens over the tab with the keyboard up or down and does not lower it; a tap outside,

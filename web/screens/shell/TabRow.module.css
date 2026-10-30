@@ -13,7 +13,9 @@
   min-height: var(--toolbar-height);
   border-bottom: 1px solid var(--color-border);
 }
-.row[data-place="dock"] { height: var(--dock-height); }
+.row[data-place="dock"] { height: var(--dock-height); --tab-height: var(--dock-control-height); }
+/* ‹, + and the keyboard control share the pills' height and corners, so the row reads as one set. */
+.control { height: var(--tab-height); min-width: var(--tab-height); border-radius: var(--radius-3); }
 /* On the desktop the strip is as wide as its pills and + follows the last one; on the phone the strip
    fills the row, so + and the keyboard control sit at its end. Past the pills' minimum it scrolls. */
 .strip { display: flex; flex: 0 1 auto; min-width: 0; }

@@ -26,7 +26,7 @@
   width: var(--tab-max-width);
   min-width: var(--tab-min-width);
   height: var(--tab-height);
-  border-radius: var(--radius-2);
+  border-radius: var(--radius-3);
   background: var(--tab-bg);
   color: var(--pill-color, var(--color-text-muted));
 }
@@ -34,8 +34,9 @@
 .active[data-tone="reconnecting"] { --pill-color: var(--color-status-reconnecting); }
 .active[data-tone="error"] { --pill-color: var(--color-status-error); }
 .active[data-tone="gone"] { --pill-color: var(--color-status-gone); }
-.active { background: var(--tab-bg-active); }
-/* Only the active pill carries its status colour; the others are plain text. */
+/* sRGB, not OKLCH: the grey has a hue of 0, which OKLCH mixing turned the green brown. */
+.active { background: color-mix(in srgb, var(--pill-color) var(--tab-tint), var(--tab-bg)); }
+/* Only the active pill carries its status colour, as a tint, a label and its close. */
 
 .select {
   display: flex;
@@ -68,3 +69,4 @@
    the window is in the tab overview and the pill's long-press menu. */
 :root[data-layout="phone"] .window { display: none; }
 :root[data-layout="phone"] .select { padding: 0 var(--space-2); }
+.active .close { color: var(--pill-color); }

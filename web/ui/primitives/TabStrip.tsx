@@ -122,7 +122,7 @@ function PillView({ pill, active, onSelect, onClose, onMenu }: { pill: Pill; act
         {pill.window !== "" && <span class={styles.window}>{pill.window}</span>}
         {pill.bell && <BellDot class={styles.bell} />}
       </button>
-      <IconButton icon="close" label={`Close ${pill.full}`} class={styles.close} onClick={() => { onClose(pill.id); }} />
+      <IconButton icon="closeCircle" label={`Close ${pill.full}`} class={styles.close} onClick={() => { onClose(pill.id); }} />
     </div>
   );
 }
