@@ -53,6 +53,8 @@
   /* How far the keyboard covers the bottom of the page; the platform sets it (ui/theme.ts). The dock, sheets and toasts rise by it. */
   --keyboard-inset: 0px;
   --keyboard-duration: 0ms;
+  /* Duration and easing for whatever moves with the keyboard: `transition: translate var(--keyboard-timing)`. */
+  --keyboard-timing: calc(var(--keyboard-duration) * var(--keyboard-motion)) var(--ease-keyboard);
 
   /* The terminal's theme (xterm.js), read by ui/theme.ts. */
   --term-bg: var(--color-bg-sunken);

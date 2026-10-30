@@ -58,7 +58,7 @@ rebuilding the app.
 | Keyboard: the first responder, software and hardware keys | Terminal rendering (xterm.js), touch gestures, selection overlay |
 | Nothing drawn above the keyboard: one native `UITextField` responder with terminal/line targets and system keyboard traits | The dock: the tab row (‹, tabs, +) and keyboard control at rest; the tab row, line mirror and key row while the keyboard is up; the + and long-press menus; the terminal's edit menu (Copy, Paste) |
 | Focus: who holds the keyboard; native owns terminal and line editing, WebKit owns sheet fields | File manager and viewers; the editor (v2) |
-| Keyboard geometry: sizing the web view | Host protocol: WebSocket per host, tabs, reconnect |
+| Keyboard geometry: measuring the keyboard and reporting what it covers | Host protocol: WebSocket per host, tabs, reconnect |
 | Auth: Face ID lock, tokens in the Keychain, lock screen | |
 | Hosts: host list, Add host and enrolment screens | Home's workspaces, one per host (from the native host list) |
 | Media: photo picker, camera, image paste, JPEG conversion, uploads; pasteboard reads and writes | Upload chips, path insertion through the normal input path |
@@ -70,9 +70,9 @@ above the keyboard is the web view; native draws no accessory.
 
 ```text
 ┌──────────────────────────────────────┐
-│ terminal (web; same rows, keeps the  │  WKWebView, frame ends at the
-│ last row visible unless cursor needs │  top of the keyboard
-│ the bottom edge)                     │
+│ terminal (web; same rows, keeps the  │  WKWebView, full screen; the
+│ last row visible unless cursor needs │  keyboard covers its bottom and
+│ the bottom edge)                     │  the dock rides above it
 │ [ Type or dictate a line          ]  │  web dock: always-visible line mirror
 │ esc tab ⇧tab ctrl alt ← ↑ ↓ → … [⌨↓] │  web dock: text-only key row and hide
 ├──────────────────────────────────────┤
@@ -84,8 +84,8 @@ With the keyboard down, the web view fills the screen and the tab row, with the 
 control at its end, sits at the bottom safe area without a blank band. The toggle is in the
 key row while the keyboard is up and in the tab row while down. The dock's rules are in
 [browser-behaviors.md](client/browser-behaviors.md#phone-dock); native's part is to own
-the terminal and line targets, keep WebKit first responder for sheet fields, and size the
-web view.
+the terminal and line targets, keep WebKit first responder for sheet fields, and report
+what the keyboard covers.
 
 ## Where the web UI comes from
 
@@ -232,9 +232,10 @@ hidden (alpha 0.01, non-interactive, zero-size) in the root view outside the web
   arrive after they were sent. iOS repeats a held delete only while the field has a
   character before the caret, and after about two seconds it switches to word steps that
   select that character first, so each `BSpace` also puts the field back.
-- Leaving `line` parks the draft and its selection natively and empties the field to the
-  U+200B; returning to `line` restores them, and a `lineSet` replaces the parked copy. A
-  draft left in the field went to tmux with the next terminal key.
+- Outside `line` native keeps the line (text and selection) apart from the field, and that
+  copy is the line: `lineSet`, `lineCaret`, `lineSelectAll`, `lineInsert` and the line
+  snapshot all read or write it there. `line` puts it in the field and takes it back out on
+  leaving. A draft left in the field went to tmux with the next terminal key.
 - In `line`, UITextField owns marked text, dictation, the spacebar caret trackpad and
   selection; each edit is mirrored through `lineEdit`. Return is `.send` and sends
   `lineReturn` unless IME composition is active. Native assigns generations for edits and
@@ -394,8 +395,8 @@ and a docked keyboard covers its bottom, as in a browser.
   `keyboardInset` is the height the keyboard will cover when it stops, with
   `keyboardDuration`, the seconds of its animation still to run. The dock, Files' tab row
   and full-screen sheets rise by `--keyboard-inset` over `--keyboard-duration` on
-  `--ease-keyboard` (`web/ui/tokens/primitives.css`), a curve fitted to the keyboard's
-  measured motion, so they ride on it; the terminal's pan slides with them. Reduced motion
+  `--ease-keyboard` (`--keyboard-timing`, `web/ui/tokens/semantic.css`), a curve fitted to
+  the keyboard's measured motion, so they ride on it; the terminal's pan slides with them. Reduced motion
   moves them at once. Resizing the web view instead made WebKit lay the page out at the
   final size at once: the dock jumped ahead of the keyboard and dropped out as it closed.
 - The inset is sent at once while `terminal` or `line` owns the keyboard and whenever the
@@ -442,17 +443,14 @@ and a docked keyboard covers its bottom, as in a browser.
   the cursor above the area's top, it instead puts the cursor row's bottom there. It
   never pans down or past the last row, and does not pan while every row fits or while
   scrolled into history. The area's height and cursor row decide the pan; the web keeps
-  no keyboard flag for it. The dock recomputes the area when `visibleHeight` changes,
-  including the app's native resize with `keyboardInset` still 0. The slide animates with the
-  keyboard's curve and duration when the area changes size (`--ease-keyboard`,
-  `--dur-keyboard`); a cursor move jumps, as text does.
+  no keyboard flag for it. The dock recomputes the area when `keyboardInset` changes, from where its row will
+  be once the lift ends, not where it is mid-slide. The slide animates with the keyboard
+  (`--keyboard-timing`) when the area changes size; a cursor move jumps, as text does.
 - `webView.scrollView`: `contentInsetAdjustmentBehavior = .never`, `bounces = false`,
   `keyboardDismissMode = .none`; zoom off in the viewport meta.
 
-*Fallback, decided by the device checklist:* leave the web view full size and send
-only the keyboard height, if resizing the frame makes WebKit relayout badly or WebKit
-also adjusts for the keyboard itself. The app's line mirror is non-editable, so it cannot
-be WebKit-scrolled as a focused field.
+The app's line mirror is non-editable, so WebKit never scrolls it into view as a focused
+field.
 
 ### Haptics
 

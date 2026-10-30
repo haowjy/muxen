@@ -118,7 +118,7 @@ export function createXtermRenderer(container: HTMLElement, options: RendererOpt
     if (next === panned) return;
     panned = next;
     // The pan's slide follows the keyboard's (ui/theme.ts writes its duration beside the inset).
-    element.style.transition = animate ? "transform calc(var(--keyboard-duration) * var(--keyboard-motion)) var(--ease-keyboard)" : "none";
+    element.style.transition = animate ? "transform var(--keyboard-timing)" : "none";
     element.style.transform = next ? `translateY(${String(-next)}px)` : "";
   };
   const scrollListeners: ((scrolledUp: boolean) => void)[] = [];

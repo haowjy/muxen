@@ -95,7 +95,7 @@ export function Dock({ active }: { active: boolean }) {
       // keyboard (Dock.module.css), and a box's client rect includes that. Offsets don't, so the row's
       // place in the slot less the lift's end value is its top once the keyboard is there.
       const rest = box.getBoundingClientRect().top + lifted.offsetTop + bar.offsetTop;
-      const raised = Math.max(0, viewport.keyboardInset - parseFloat(getComputedStyle(box).paddingBottom));
+      const raised = Math.max(0, viewport.keyboardInset - parseFloat(getComputedStyle(lifted).bottom));
       terminals.setPanArea(Math.max(0, rest - raised - covered - terminals.element.getBoundingClientRect().top));
     };
     update();

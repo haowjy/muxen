@@ -556,8 +556,11 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
     private func publishViewportIfChanged(force: Bool = false) {
         guard isViewLoaded else { return }
         let next = viewport()
-        guard force || next != lastViewport else { return }
-        lastViewport = next
+        // The duration belongs to one move: a later message that differs only by it says nothing new.
+        var settled = next
+        settled.keyboardDuration = nil
+        guard force || settled != lastViewport else { return }
+        lastViewport = settled
         send(.viewport(next))
     }
 

@@ -57,7 +57,7 @@
      (iOS 26.5), within 7 pt of the keyboard's top over its whole travel. The duration is the
      keyboard's own, written beside the inset (ui/theme.ts). */
   --ease-keyboard: cubic-bezier(0.25, 0.6, 0.1, 1);
-  /* Read as `calc(var(--keyboard-duration) * var(--keyboard-motion))`: reduced motion zeroes it. */
+  /* Zeroed by reduced motion; read through --keyboard-timing (semantic.css). */
   --keyboard-motion: 1;
 }
 

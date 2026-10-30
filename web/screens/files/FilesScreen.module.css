@@ -6,7 +6,7 @@
   border-top: 1px solid var(--color-border);
   background: var(--color-bg-raised);
   translate: 0 calc(-1 * max(0px, var(--keyboard-inset) - var(--safe-bottom)));
-  transition: translate calc(var(--keyboard-duration) * var(--keyboard-motion)) var(--ease-keyboard);
+  transition: translate var(--keyboard-timing);
 }
 .files {
   /* Content sits in the same centred column as Home on a wide screen; the header, the preview bar and the lists all start at it.
