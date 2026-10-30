@@ -92,7 +92,7 @@ function Body({ host, openTabs }: { host: HostClient; openTabs: string[] }) {
         {offered.map((s) => (
           <li key={s.id}>
             <Row
-              icon="sessions"
+              icon="terminal"
               label={s.name}
               mark={bellLook(bells, idOf(listing, s)).ring ? <BellDot /> : undefined}
               meta={<>{windowCount(s.windows.length)}{lastActivity(s) > 0 && <span class={styles.since}>{ago(lastActivity(s) * 1000)}</span>}</>}

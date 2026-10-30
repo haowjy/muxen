@@ -13,7 +13,6 @@ import { Row } from "../../ui/primitives/Row";
 import { BellDot } from "../../ui/primitives/BellDot";
 import { useStore } from "../../ui/store";
 import type { Tab, Workspace } from "../../workspace/state";
-import { shorten } from "../../files/format";
 import { pillMeta, tabPills } from "../terminal/tabView";
 import { terminalsOf } from "../terminal/terminals";
 import { useAddActions } from "../shell/tabMenus";
@@ -43,10 +42,8 @@ function WorkspacePage({ workspace }: { workspace: Workspace }) {
   const [drag, setDrag] = useState<{ id: string; from: number; to: number; dy: number; pitch: number } | null>(null);
   const rows = useRef(new Map<string, HTMLElement>());
 
-  const detail = (tab: Tab): string => {
-    if (tab.kind === "files") return shorten(tab.place.path, null);
-    return "";
-  };
+  // A Files row's label is its folder's name: the full path goes under it only when that adds something.
+  const detail = (tab: Tab, label: string): string => (tab.kind === "files" && tab.place.path !== label ? tab.place.path : "");
   const terminalDetail = (tab: Tab): { window: string; since: string; hidden: boolean } | null => {
     if (tab.kind !== "terminal" || !listing) return null;
     const session = findSession(listing, tab.key.session);
@@ -104,6 +101,7 @@ function WorkspacePage({ workspace }: { workspace: Workspace }) {
                 // The dragged row follows the finger; the rows it passes make room.
                 const shift = drag === null ? 0 : pill.id === drag.id ? drag.dy : (i > drag.from && i <= drag.to ? -drag.pitch : i < drag.from && i >= drag.to ? drag.pitch : 0);
                 const meta = pillMeta(pill);
+                const path = detail(tab, pill.session);
                 return (
                   <li
                     key={pill.id}
@@ -123,9 +121,11 @@ function WorkspacePage({ workspace }: { workspace: Workspace }) {
                         label={
                           <span class={styles.text}>
                             <span class={styles.name}>{pill.session}</span>
-                            <span class={styles.detail}>
-                              {terminal ? <><span>{terminal.window}</span>{terminal.since && <span>{terminal.since}</span>}</> : <span>{detail(tab)}</span>}
-                            </span>
+                            {(terminal || path) && (
+                              <span class={styles.detail}>
+                                {terminal ? <><span>{terminal.window}</span>{terminal.since && <span>{terminal.since}</span>}</> : <span>{path}</span>}
+                              </span>
+                            )}
                             {terminal?.hidden && <span class={styles.detail}>tmux settings hide bells in this session</span>}
                           </span>
                         }

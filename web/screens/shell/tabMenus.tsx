@@ -65,7 +65,7 @@ function TabMenu({ id, anchor, workspace, onClose }: { id: string; anchor: HTMLE
       // Select-window rides the tab's watch, which only the shown tab has.
       title: "Windows",
       items: [
-        ...(active && windows.length > 1 ? windows.map((w) => ({ label: `${String(w.index)}: ${w.name}`, selected: w.id === shown, onSelect: () => { if (w.id !== shown) terminals.selectWindow(id, w.id); } })) : []),
+        ...(active && windows.length > 1 ? windows.map((w) => ({ label: `${String(w.index)}: ${w.name}`, icon: "sessions" as const, selected: w.id === shown, onSelect: () => { if (w.id !== shown) terminals.selectWindow(id, w.id); } })) : []),
         { label: "New window", icon: "plus" as const, onSelect: () => { void terminals.newWindow(id); } },
       ],
     });
@@ -74,8 +74,8 @@ function TabMenu({ id, anchor, workspace, onClose }: { id: string; anchor: HTMLE
   }
   sections.push({
     items: [
-      ...(at > 0 ? [{ label: "Move to start", onSelect: () => { app.dispatch({ type: "moved", id, to: 0 }); } }] : []),
-      ...(at < last ? [{ label: "Move to end", onSelect: () => { app.dispatch({ type: "moved", id, to: last }); } }] : []),
+      ...(at > 0 ? [{ label: "Move to start", icon: "back" as const, onSelect: () => { app.dispatch({ type: "moved", id, to: 0 }); } }] : []),
+      ...(at < last ? [{ label: "Move to end", icon: "chevron" as const, onSelect: () => { app.dispatch({ type: "moved", id, to: last }); } }] : []),
       { label: "Close tab", icon: "close" as const, onSelect: () => { app.dispatch({ type: "closed", id }); } },
     ],
   });
