@@ -1,7 +1,7 @@
 //! The `/fs/*` routes (fs.md "Routes"): thin handlers that parse the request, take
 //! slots, call into `crate::fs` and build responses. They sit in the `devices` router,
 //! behind both auth layers. A path rides in the URL path, percent-encoded per segment;
-//! the daemon decodes it and prepends `/`.
+//! the daemon decodes it and prepends `/`, unless it starts with `~`.
 
 use std::path::Path as FilePath;
 use std::sync::Arc;
@@ -73,11 +73,11 @@ async fn listing(
     };
     let listed = async {
         let _scan = ctx.fs.scan().await?;
-        let asked = path.clone();
+        let (asked, home) = (path.clone(), ctx.app.home.clone());
         ctx.fs
             .lane
             .run(move || {
-                let dir = crate::fs::open(&asked, Want::Dir)?;
+                let dir = crate::fs::open(&asked, &home, Want::Dir)?;
                 list::list(&dir, filter, query.offset).map_err(FsError::io)
             })
             .await?
@@ -95,11 +95,11 @@ async fn raw(State(ctx): State<Arc<Ctx>>, path: WirePath, headers: HeaderMap) ->
     };
     let sent = async {
         let slot = ctx.fs.raw().await?;
-        let asked = path.clone();
+        let (asked, home) = (path.clone(), ctx.app.home.clone());
         let opened = ctx
             .fs
             .lane
-            .run(move || crate::fs::open(&asked, Want::File))
+            .run(move || crate::fs::open(&asked, &home, Want::File))
             .await??;
         let size = opened.meta.len();
         let etag = Stamp::of(&opened.meta).etag();
@@ -180,7 +180,12 @@ async fn upload(
 /// `{*path}` decoded, with its `/` (just `/` without one); `None` if it doesn't decode.
 fn wire_path(path: WirePath) -> Option<String> {
     let path = path.ok()?.map_or_else(String::new, |Path(path)| path);
-    Some(format!("/{path}"))
+    // `~` and `~/…` ride bare: `fs::open` expands them to the daemon user's home.
+    Some(if path.starts_with('~') {
+        path
+    } else {
+        format!("/{path}")
+    })
 }
 
 /// The response, or the refusal in the JSON error shape, logged by fs.md's rules.

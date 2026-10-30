@@ -219,7 +219,7 @@ mod tests {
     const VISIBLE: Filter = Filter { hidden: false };
 
     fn listed(tree: &Tree, filter: Filter, offset: u32) -> Listing {
-        let dir = open(&tree.str(""), Want::Dir).expect("the folder");
+        let dir = open(&tree.str(""), Path::new("/"), Want::Dir).expect("the folder");
         list(&dir, filter, offset).expect("listed")
     }
 
@@ -272,7 +272,7 @@ mod tests {
         assert_eq!((listing.total, listing.truncated), (7, false));
         let parent = tree.root().parent().and_then(Path::to_str);
         assert_eq!(listing.parent.as_deref(), parent);
-        let top = open("/", Want::Dir).expect("the top");
+        let top = open("/", Path::new("/"), Want::Dir).expect("the top");
         assert_eq!(list(&top, VISIBLE, 0).expect("listed").parent, None);
 
         let hidden = listed(&tree, Filter { hidden: true }, 0);

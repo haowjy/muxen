@@ -17,7 +17,7 @@ pub mod raw;
 mod slots;
 pub mod upload;
 
-pub use open::{Opened, Want, check_dir, check_shape, open};
+pub use open::{Opened, Want, check_dir, check_shape, open, open_absolute};
 pub use slots::Slots;
 
 /// A path in a request: absolute, UTF-8, no NUL, at most this long.
@@ -73,8 +73,11 @@ impl From<Busy> for FsError {
     }
 }
 
-/// An entry as written: absolute, or `~/` for `$HOME`; anything else is ignored.
+/// An entry as written: absolute, `~` or `~/…` for `$HOME`; anything else is ignored.
 pub fn expand(stored: &str, home: &Path) -> Option<PathBuf> {
+    if stored == "~" {
+        return Some(home.to_path_buf());
+    }
     match stored.strip_prefix("~/") {
         Some(rest) => Some(home.join(rest)),
         None if Path::new(stored).is_absolute() => Some(PathBuf::from(stored)),
