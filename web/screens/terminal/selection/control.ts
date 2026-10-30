@@ -101,6 +101,7 @@ export class SelectionControl {
     this.layer = layer;
     this.drag = { rows, topRow, hostTop: hostRect.top, left: origin.left, cell, anchor: { row: index, from: word.from, to: word.to } };
     host.append(layer.element);
+    layer.fit(cell.width);
     layer.align(topRow);
     layer.select({ row: index, offset: word.from }, { row: index, offset: word.to });
     this.unsubscribe = layer.onChange(() => { this.changed(); });

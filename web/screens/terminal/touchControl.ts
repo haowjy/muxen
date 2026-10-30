@@ -46,6 +46,10 @@ export function tapAction(t: { owner: Owner; cell: boolean; nearCursor: boolean;
   return t.nearCursor ? "focus" : "none";
 }
 
+/** A second tap this soon and this near the first is a double tap: it selects the word. */
+const DOUBLE_TAP_MS = 300;
+const DOUBLE_TAP_SLOP = 24;
+
 export class TouchControl {
   private readonly recognizer = new GestureRecognizer();
   private timer: ReturnType<typeof setTimeout> | undefined;
@@ -59,6 +63,8 @@ export class TouchControl {
   private selecting = false;
   /** The touch that stopped a coasting scroll is that, and not a tap. */
   private stoppedCoast = false;
+  /** The last tap, so a second one close by in time and place selects the word (as a long-press does) instead of zooming. */
+  private lastTap: { x: number; y: number; at: number } | null = null;
 
   constructor(private readonly deps: TouchDeps) {
     const { element } = deps;
@@ -139,9 +145,21 @@ export class TouchControl {
   private handle(action: GestureAction): void {
     const { scroll, selection } = this.deps;
     switch (action.type) {
-      case "tap":
-        if (!this.stoppedCoast) this.tap(action.x, action.y);
+      case "tap": {
+        if (this.stoppedCoast) break;
+        const now = performance.now();
+        const last = this.lastTap;
+        if (last && now - last.at < DOUBLE_TAP_MS && Math.hypot(action.x - last.x, action.y - last.y) < DOUBLE_TAP_SLOP) {
+          this.lastTap = null;
+          this.deps.haptic("rigid");
+          selection.begin(action.x, action.y);
+          selection.release();
+          break;
+        }
+        this.lastTap = { x: action.x, y: action.y, at: now };
+        this.tap(action.x, action.y);
         break;
+      }
       case "scroll":
         if (!this.scrolling) {
           this.scrolling = true;

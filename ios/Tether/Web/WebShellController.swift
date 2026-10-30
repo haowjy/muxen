@@ -65,6 +65,19 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         publishViewportIfChanged()
+        lockZoom()
+    }
+
+    /// The page never zooms: WKWebView re-reads its scale limits from each page, so this is applied again
+    /// after every load and layout, and a zoom already taken is undone.
+    private func lockZoom() {
+        guard let scrollView = webView?.scrollView else { return }
+        scrollView.minimumZoomScale = 1
+        scrollView.maximumZoomScale = 1
+        scrollView.bouncesZoom = false
+        scrollView.pinchGestureRecognizer?.isEnabled = false
+        if scrollView.zoomScale != 1 { scrollView.setZoomScale(1, animated: false) }
+        if scrollView.contentOffset != .zero { scrollView.setContentOffset(.zero, animated: false) }
     }
 
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
@@ -73,6 +86,7 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        lockZoom()
         focus.restoreAfterInterruption()
     }
 
@@ -257,6 +271,9 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         result.scrollView.bounces = false
         result.scrollView.keyboardDismissMode = .none
         result.scrollView.isScrollEnabled = false
+        result.scrollView.minimumZoomScale = 1
+        result.scrollView.maximumZoomScale = 1
+        result.scrollView.bouncesZoom = false
         result.allowsBackForwardNavigationGestures = false
         #if DEBUG
         result.isInspectable = true

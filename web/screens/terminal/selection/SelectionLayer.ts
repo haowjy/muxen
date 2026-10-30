@@ -15,6 +15,9 @@ interface RowPoint {
  * work on. It holds the rows it was made from and nothing live, so new output cannot reach
  * it, and dropping it frees them.
  */
+/** Enough characters that one advance measures to well under a device pixel. */
+const PROBE_CHARS = 100;
+
 export class SelectionLayer {
   readonly element: HTMLDivElement = document.createElement("div");
   private readonly rows: HTMLDivElement[];
@@ -34,6 +37,22 @@ export class SelectionLayer {
     });
     this.element.append(...this.rows);
     this.logical = logicalLines(rows.map((row) => ({ text: rowText(row), wrapped: row.wrapped })));
+  }
+
+  /**
+   * Matches the DOM text's advance to the canvas cell. The renderer rounds its cell to device
+   * pixels (WebGL floors it), while DOM text advances by the font's own fractional width, so
+   * without this the snapshot's text runs wider than the canvas it covers and drifts a little
+   * more each column. Call once the layer is in the document, where its font applies.
+   */
+  fit(cellWidth: number): void {
+    const probe = document.createElement("span");
+    probe.textContent = "W".repeat(PROBE_CHARS);
+    probe.style.cssText = "position:absolute;visibility:hidden;white-space:pre;letter-spacing:0";
+    this.element.append(probe);
+    const advance = probe.getBoundingClientRect().width / PROBE_CHARS;
+    probe.remove();
+    if (advance > 0) this.element.style.letterSpacing = `${String(cellWidth - advance)}px`;
   }
 
   /**
