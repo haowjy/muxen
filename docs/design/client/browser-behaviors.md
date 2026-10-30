@@ -72,7 +72,7 @@ between the key row and keyboard. Standalone PWA mode has no Safari toolbar.
   Phone screens use a single 44 pt header row, a back icon where the screen has a parent,
   and a 17 pt title; no large titles.
 - A terminal tab's session name is bold and its current window name regular, separated
-  by spacing, including for a one-window session. Truncate the window name first. A Files
+  by spacing, including for a one-window session; a phone pill shows the session alone. Truncate the window name first. A Files
   tab is labelled by its folder or open file. When multiple hosts are available, keep host
   context accessible for otherwise ambiguous tabs. Icon-only controls have accessible
   names and tooltips on hover and keyboard focus.
@@ -131,7 +131,7 @@ stopped daemon is explained. Returning from the background keeps the screen the 
 The tab row holds ‹, the workspace's tabs as pills in workspace order, and +; on the phone,
 Show keyboard ends it while the keyboard is down. The active pill is filled, its label in the
 status colour, with ×; other pills are plain text, with the attention dot when they have one.
-Every pill keeps space for ×, so changing tabs never moves the others. The row scrolls
+Every pill is the same width, whatever its label, and keeps space for ×, so changing tabs never moves the others (Jimmy, 2026-10-30: “the tabs change size... they should be consistent... look at termius's”): the pills share the strip between a minimum and a maximum width, past the minimum the row scrolls, and on the phone they fill the row between ‹ and +. A phone pill shows the session or folder name only; the window is in the tab overview and the pill's menu. The row scrolls
 horizontally, the active pill is scrolled into view, and the next pill peeks when more remain.
 A tap switches tabs and leaves the keyboard up or down as it was; with it up, it goes to the
 new tab's input (Phone dock). ‹ goes to the tab overview.

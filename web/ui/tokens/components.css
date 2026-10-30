@@ -20,6 +20,9 @@
 }
 
 :root {
+  /* Pills are equal width: they share the strip between these two. */
+  --tab-min-width: 7.5rem;
+  --tab-max-width: 14rem;
   --tab-bg: transparent;
   --tab-bg-active: var(--color-bg-hover);
   --dialog-width: 480px;
@@ -43,7 +46,7 @@
   --z-toast: 40;
 }
 
-:root[data-layout="phone"] { --toast-offset: var(--toolbar-height); }
+:root[data-layout="phone"] { --toast-offset: var(--toolbar-height); --tab-min-width: 9rem; }
 :root[data-layout="phone"]:has([data-dock]) { --toast-offset: var(--dock-height); }
 /* The compose box, shown while an input holds the keyboard, is above the row. */
 :root[data-layout="phone"]:has([data-keyboard]) { --toast-offset: calc(var(--dock-height) + var(--dock-above-height)); }

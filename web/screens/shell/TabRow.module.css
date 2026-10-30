@@ -14,6 +14,8 @@
   border-bottom: 1px solid var(--color-border);
 }
 .row[data-place="dock"] { height: var(--dock-height); }
-/* The pills take what they need and scroll past the row; + follows the last one, and the keyboard control sits at the end. */
+/* On the desktop the strip is as wide as its pills and + follows the last one; on the phone the strip
+   fills the row, so + and the keyboard control sit at its end. Past the pills' minimum it scrolls. */
 .strip { display: flex; flex: 0 1 auto; min-width: 0; }
+.row[data-place="dock"] .strip { flex: 1 1 auto; }
 .keyboard { margin-left: auto; }

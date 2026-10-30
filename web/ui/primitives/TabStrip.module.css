@@ -1,5 +1,6 @@
 .strip {
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
   gap: var(--space-1);
   min-width: 0;
@@ -15,11 +16,15 @@
 
 /* The strip scrolls, so it clips on both axes: rings sit inside the pill. */
 .pill :focus-visible { outline-offset: -2px; }
+/* Every pill is the same width, whatever its label (Jimmy, 2026-10-30, after Termius): they share
+   the row equally between the min and max widths, and past the minimum the strip scrolls. */
 .pill {
   display: flex;
-  flex: none;
+  flex: 0 1 auto;
   align-items: center;
-  max-width: 16rem;
+  /* A width, not a flex basis: the strip sizes itself from it, so pills start at the max and shrink together. */
+  width: var(--tab-max-width);
+  min-width: var(--tab-min-width);
   height: var(--tab-height);
   border-radius: var(--radius-2);
   background: var(--tab-bg);
@@ -53,6 +58,13 @@
 .window { min-width: 0; overflow: hidden; text-overflow: ellipsis; flex: 0 100 auto; margin-left: var(--space-2); font-weight: normal; }
 .kind { flex: none; margin-right: var(--space-2); }
 .bell { margin-left: var(--space-2); }
-.close { width: var(--tab-height); height: var(--tab-height); flex: none; color: var(--color-text-muted); }
+/* Narrower than tall, so the label keeps the width: the pill's full height is still the touch target. */
+.close { width: var(--dock-control-height); height: var(--tab-height); flex: none; color: var(--color-text-muted); }
 /* Hidden, not removed: the slot keeps every pill's width, and a hidden button takes no tap or focus. */
 .pill:not(.active) .close { visibility: hidden; }
+/* On the phone the tabs fill the row between ‹ and +, as Termius's do. */
+:root[data-layout="phone"] .pill { flex: 1 1 0; }
+/* A phone pill is too narrow for two names: it shows the session (or folder), as Termius shows the host;
+   the window is in the tab overview and the pill's long-press menu. */
+:root[data-layout="phone"] .window { display: none; }
+:root[data-layout="phone"] .select { padding: 0 var(--space-2); }
