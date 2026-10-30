@@ -4,7 +4,7 @@
 // box above). It rides on the keyboard but never resizes tmux: the row is the same height in both
 // and in flow in the keyboard-hidden layout, and the lifted dock is translated out of the slot by
 // `--keyboard-inset` (Dock.module.css).
-import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { useApp, useAppView, useTabLabels } from "../../../app/context";
 import { Icon } from "../../../ui/primitives/Icon";
 import { DockButton } from "../../../ui/primitives/DockButton";
@@ -14,6 +14,7 @@ import { terminalsOf } from "../terminals";
 import { CurrentTabButton } from "./CurrentTabButton";
 import { HomeButton } from "./HomeButton";
 import { KeyRow } from "./KeyRow";
+import { TabMenu } from "./TabMenu";
 import { LineField, type LocalNote } from "./LineField";
 import { lineDraftsOf } from "./lineDrafts";
 import { nativeLineOf } from "./nativeLine";
@@ -69,6 +70,11 @@ export function Dock({ active }: { active: boolean }) {
   // The one derived value: no input holds the keyboard (resting), or one does (typing).
   const typing = owner !== "none";
 
+  const [menu, setMenu] = useState(false);
+  const closeMenu = useCallback(() => { setMenu(false); }, []);
+  // The tab menu lives with the keyboard: it goes when typing stops.
+  useEffect(() => { if (!typing) setMenu(false); }, [typing]);
+
   // A note belongs to the field it came from.
   useEffect(() => { setLocal(null); }, [tab?.id]);
 
@@ -115,6 +121,7 @@ export function Dock({ active }: { active: boolean }) {
   return (
     <div class={styles.slot} data-keyboard={typing ? "" : undefined}>
       <div class={styles.lift}>
+        {menu && typing && <TabMenu onClose={closeMenu} />}
         <div class={styles.above} ref={above}>
           <p class={styles.note} data-tone={note?.tone} role="status">{note?.text}</p>
           {/* Mounted at rest too, so the draft and the field's refs outlive the keyboard; hidden, so nothing can focus it. */}
@@ -123,7 +130,7 @@ export function Dock({ active }: { active: boolean }) {
           </div>
         </div>
         <div class={styles.row} ref={row}>
-          {typing ? <KeyRow /> : phone && <><HomeButton /><CurrentTabButton /></>}
+          {typing ? <><KeyRow />{phone && <CurrentTabButton compact open={menu} onToggle={() => { setMenu((m) => !m); }} />}</> : phone && <><HomeButton /><CurrentTabButton /></>}
           <DockButton
             kind="control"
             class={styles.toggle}

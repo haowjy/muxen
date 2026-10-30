@@ -50,7 +50,7 @@ export function NewSessionPage({ host, initialName }: { host: HostClient; initia
 
   return (
     <form class={styles.page} onSubmit={(e) => { void submit(e); }}>
-      <TextField label="Name" data-initial-focus="" value={name} onInput={setName} placeholder="Let tmux choose" hint="Optional." />
+      <TextField label="Name" value={name} onInput={setName} placeholder="Let tmux choose" hint="Optional." />
       <FolderField session={session} field={field} label="Start directory" value={dir} placeholder="tmux's default" hint="Optional. Starts with ~ or /." error={dirError} />
       {error && <p class={styles.error} role="alert">{error}</p>}
       <div class={styles.actions}>

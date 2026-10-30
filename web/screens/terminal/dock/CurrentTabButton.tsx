@@ -6,8 +6,15 @@ import { DockButton } from "../../../ui/primitives/DockButton";
 import { activeTab } from "../../../workspace/state";
 import styles from "./CurrentTabButton.module.css";
 
-/** The phone's current-tab button, on a terminal tab and on a Files tab alike: the tab's name, how many tabs are open, and a tap opens the sessions sheet. It fills its bar. */
-export function CurrentTabButton() {
+interface CurrentTabButtonProps {
+  /** Typing: the chip sits beside Hide keyboard at its own width and opens the tab menu (`onToggle`); at rest it fills the bar and opens the sessions sheet. */
+  compact?: boolean;
+  open?: boolean;
+  onToggle?: () => void;
+}
+
+/** The phone's current-tab chip, at rest and while typing alike: the tab's name and how many tabs are open. A dock control, so a tap never moves focus. */
+export function CurrentTabButton({ compact = false, open = false, onToggle }: CurrentTabButtonProps) {
   const app = useApp();
   const tab = useAppView((v) => activeTab(v.workspace));
   const count = useAppView((v) => v.workspace.tabs.length);
@@ -15,24 +22,31 @@ export function CurrentTabButton() {
   // The tab on screen counts as seen, so a dot here is another tab's.
   const bells = useBells();
   const ringing = useAppView((v) => v.workspace.tabs).some((t) => bellLook(bells, t.id).ring);
+  const what = compact ? "switch tabs" : "open sessions and files";
   return (
     <DockButton
       kind="control"
-      class={styles.chip}
-      aria-label={label ? `${label.full}, ${String(count)} ${count === 1 ? "tab" : "tabs"}, open sessions and files${ringing ? ", bell rang in a tab" : ""}` : undefined}
-      onClick={(e) => { app.openOverlay({ screen: "sessions", name: "sheet" }, e.currentTarget); }}
+      class={compact ? styles.compact : styles.chip}
+      pressed={open}
+      aria-haspopup={compact ? "dialog" : undefined}
+      aria-expanded={compact ? open : undefined}
+      aria-label={label ? `${label.full}, ${String(count)} ${count === 1 ? "tab" : "tabs"}, ${what}${ringing ? ", bell rang in a tab" : ""}` : undefined}
+      onClick={(e) => {
+        if (compact) onToggle?.();
+        else app.openOverlay({ screen: "sessions", name: "sheet" }, e.currentTarget);
+      }}
     >
       {label ? (
         <>
           <span class={styles.session}>{label.session}</span>
-          {label.window !== "" && <span class={styles.window}>{label.window}</span>}
+          {!compact && label.window !== "" && <span class={styles.window}>{label.window}</span>}
           {ringing && <BellDot />}
           <span class={styles.count}>{count}</span>
         </>
       ) : (
         <span class={styles.only}>Sessions</span>
       )}
-      <Icon name="chevronUp" size={16} class={styles.open} />
+      <Icon name={open ? "chevronDown" : "chevronUp"} size={16} class={styles.open} />
     </DockButton>
   );
 }

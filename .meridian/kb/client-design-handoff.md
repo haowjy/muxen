@@ -31,8 +31,9 @@ These are the ones older documents contradict:
   rest (tab chip, one-line field, the one keyboard toggle) and the fixed key row above
   it while the keyboard is up. Navigation stays at the bottom; tabs on top were
   rejected as "hard to reach". Native draws nothing above the keyboard; it owns the
-  terminal input's first responder, lends the line field to WebKit by touch location,
-  and sizes the web view so the dock rides the keyboard.
+  terminal input's first responder and all line editing (one keyboard, decided
+  2026-10-26: the web line field mirrors native's line; `LineFieldLender` is gone, bridge
+  contract v7), and sizes the web view so the dock rides the keyboard.
 - A tap on the terminal never opens or closes the keyboard; the toggle does, and
   tapping the line field opens line typing.
 - The line field holds one line; Return sends it to the tab it was written for, then
@@ -46,11 +47,12 @@ These are the ones older documents contradict:
   and inserted paths go to the window the tab was showing when they started, never the
   one current when they arrive. `client-architecture.md` predates this and is corrected
   only where its banner says.
-- The dock's tab chip opens the session switcher (open tabs, every session, search,
-  New session, and the active session's windows). The desktop terminal's `+` opens
-  existing sessions only; the active tab's pill holds the windows menu, the desktop's
-  only way to create a window. New session is on Home and in the phone's switcher.
-  Closing a tether tab only detaches it.
+- The phone's sheet lists only the open tabs, then "Add new tab", which asks "Add session" or
+  "Add file"; each opens its search and list (every tmux session, or folders) with Back to the
+  choice (2026-10-29, uncommitted at the time of writing). There is no Sessions | Files switch.
+  The desktop `+` opens on the same choice.
+  The phone's bar has a Home button. Files opens any readable path by Jimmy's decision; there
+  are no roots, only favorites (a90e1c7, `docs/design/fs.md`). Closing a tab only detaches it: × or a swipe left ("Close") drops the tab and sends `unwatch`; nothing in the client or daemon kills a tmux session (rule, `docs/design/decisions.md` 2026-10-29).
 - A window takes the size of the client that acted on it last: "whoever has the last
   focus gets the focus and the size of the screen" (Jimmy). A watching phone no longer
   caps the window while the laptop is in use (`docs/design/daemon-core.md` §3.6).
@@ -70,7 +72,7 @@ native shell and its bridge are built and tested in browsers, against real tmux 
 
 | Gate | What must hold |
 | --- | --- |
-| Real device | The device checklist in `docs/design/ios-shell.md`, run by Jimmy on his iPhone: keyboard toggle, focus restoration, line-field lending, geometry and rotation, selection, hardware keys, latency, paste, Face ID. |
+| Real device | Also the path-field caret, several servers at once, and reload mid New-session form. The device checklist in `docs/design/ios-shell.md`, run by Jimmy on his iPhone: keyboard toggle, focus restoration, line-field lending, geometry and rotation, selection, hardware keys, latency, paste, Face ID. |
 | Touch on device | Tap, scroll and long-press resolve before anything is sent, and selection and copy behave in iPhone Safari and WKWebView, not only in emulated touch. |
 | Deployment | The auth probe gates G1–G12 in `docs/design/auth.md`, on the Linux dev box behind real Tailscale Serve; a Mac host has its own gates, M0–M8, which don't stand in for G1–G12. |
 | tmux versions | The real-tmux Rust suite (`tests/tmux_real.rs`) and the real-daemon web suites (`pnpm --dir web run e2e:real`, with `TETHER_E2E_TMUX=3.4` or `3.7b`) pass on both versions. |

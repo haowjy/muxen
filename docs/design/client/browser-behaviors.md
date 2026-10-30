@@ -21,7 +21,7 @@ Interactive mockup: [mockups/index.html](mockups/index.html). It predates this r
 | Primary navigation | One top row: Home, terminal and Files tabs, +, and server context. No rail. | Home is server-first. Terminal, Files and previews have a resting bar with Home and the current-tab button, which opens the picker; Home has no tab strip. |
 | Tabs | Top row, with × on the active tab only. + opens the picker. | With the keyboard down, the bar has Home, the current-tab button and keyboard control. The open tabs are at the bottom of the picker sheet, not on the terminal. |
 | Terminal | All available space below the top row. Direct physical-keyboard input; no dock. | Full-bleed above the dock. With the keyboard up, the compose box and key row replace the resting bar. |
-| Picker | + opens a popover: a Sessions / Files switch, search, and that side's list, which ends with creation (New session; on Files, Open a folder…). | The same picker as a half-height sheet over the current tab; the search, the switch and the open tabs sit at the bottom, in thumb reach. |
+| Picker | + opens a popover on a choice, Add session or Add file; each shows its search and list, which ends with creation (New session; on Files, Open a folder…), and Back returns to the choice. | A half-height sheet over the current tab that lists the open tabs and one row, Add new tab, which opens the same choice and lists as the popover. |
 
 Safe areas and browser chrome are real platform constraints. Use the measured visible
 viewport and keep controls unobscured. Mobile controls target at least 44 px of touch
@@ -116,14 +116,16 @@ Returning from the background keeps the screen the user left.
 
 ## Picker (desktop) and picker sheet (phone)
 
-One picker opens a session or a Files tab, on every surface. Its controls are one block: a
-full-width search field that filters whichever side is showing (“Find a session” / “Find a
-folder or type a path”) and a **Sessions / Files** switch (a tablist: a segmented control 32 px
-tall on touch, each tab with a 44 px hit area), about 8 px apart. There is no +: creating is the
-last row of each list. On the desktop the block leads the popover, switch first and then search,
-with the list below it. On the phone the block sits at the bottom, in thumb reach like the dock,
-search first and the switch under it, then the open tabs as the last row, and the list above it is
-the only thing that scrolls; the list still starts at its top. With several servers, the lists are
+One picker opens a session or a Files tab, on every surface. Adding starts with a choice of two
+rows, **Add session** and **Add file**; each is a router entry of its own, so Back steps to the
+choice. Add session shows a full-width “Find a session” field above every tmux session; Add file
+shows “Find a folder or type a path” above the folders. There is no Sessions / Files switch and
+no +: creating is the last row of each list. On the phone the sheet opens on the open tabs (both
+kinds, in order; a tap switches and closes the sheet, a swipe left reveals Close, a full swipe closes, and × does it on a pointer that hovers; closing only detaches and never touches tmux)
+and one last row, **Add new tab**, which opens the choice; Back there returns to the tabs
+(Jimmy, 2026-10-29: the sheet's first job is switching between open tabs, and adding reads as
+“add new tab”, then session or file). The desktop's + opens on the choice, since its tabs are on
+the top row. With several servers, the lists are
 grouped by server, each under an “On pop-os” heading; with one server shown (one listable) there is
 no heading, since nothing needs telling apart (its transient
 “Updating” note goes with it, so no row shifts). The phone sheet and the desktop popover differ only
@@ -342,7 +344,7 @@ keyboard down                              keyboard up
 terminal, full-bleed       $ █             terminal, panned       $ █
 ───────────────────────────────            ───────────────────────────────────
 [⌂] [a1 python   4 tabs  ⌃] [⌨]            [ Type or dictate a line          ]
-bottom safe area                           esc tab ⇧tab ctrl alt ← ↑ ↓ → | ~ / - ^C ^R ^S ^Q ^Z ⏎ … [⌨↓]
+bottom safe area                           esc tab ← ↑ ↓ → ctrl alt | ~ / - ⇧tab ⏎ ^R ^Z ^C … [⌨↓]
                                            iOS keyboard
                                            (Safari's ⌃ ⌄ Done bar sits above it)
 ```
@@ -374,8 +376,8 @@ bottom safe area                           esc tab ⇧tab ctrl alt ← ↑ ↓ �
   route. Clipboard reads capture the tab and window before a system prompt; if the
   target changes, paste falls back to that captured terminal target instead of editing
   the new line. An IME candidate Return remains with the editor.
-- **Key row.** A fixed, horizontally scrolling text-only row: esc, ←, ↑, ↓, →, ⇧tab,
-  tab, ^C, ^R, ctrl, alt, ⏎, then `|`, `~`, `/`, `-`, with Hide keyboard fixed at its end. While the box owns focus, unmodified ← and →
+- **Key row.** A fixed, horizontally scrolling text-only row: esc, tab, ←, ↑, ↓, →,
+  ctrl, alt, `|`, `~`, `/`, `-`, ⇧tab, ⏎, then the chords ^R, ^Z, ^C, with the current-tab chip and Hide keyboard fixed at its end. The chip (the resting bar's current-tab button at its own width) opens a non-modal tab menu: the open tabs and Add new tab, in the popover's look with sheet rows. Its rows cancel pointerdown like dock controls, so switching tabs keeps the keyboard and the focused input (Jimmy, 2026-10-30). The order serves agent CLIs first (esc interrupts, arrows walk menus); no chord sits in the first slots, ^Z is never beside ⏎, and ^C is last (Jimmy, 2026-10-29). ^S and ^Q are not offered: ^S freezes a terminal with flow control on. While the box owns focus, unmodified ← and →
   move its caret and unmodified esc returns focus to the terminal; ↑, ↓, ^R, ^C, tab and other
   terminal controls go to tmux. Distinguish the two destinations visually. In terminal
   mode the controls go to tmux. Arrows repeat while held; ↑, ↓ and ^R use the shell's

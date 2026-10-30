@@ -1,0 +1,15 @@
+/* The Dialog popover's look (radius-3, dialog-bg, shadow-2) at the dock's right edge, above the compose box. */
+.menu {
+  position: absolute;
+  right: var(--space-2);
+  bottom: calc(100% + var(--dock-above-height, 0px) + var(--space-1));
+  z-index: 3;
+  width: min(18rem, calc(100% - 2 * var(--space-2)));
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-3);
+  background: var(--dialog-bg);
+  box-shadow: var(--shadow-2);
+}

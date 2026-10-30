@@ -16,3 +16,7 @@
 .count + .open, .only + .open { margin-left: var(--space-1); }
 .only { margin-right: auto; }
 .open { flex: none; color: var(--color-text-muted); }
+/* While typing: its own width beside Hide keyboard, after the scrolling keys; a long session name truncates. */
+.compact { flex: none; max-width: 9rem; min-width: 0; gap: var(--space-1); }
+.compact .count { margin-left: var(--space-1); }
+.compact[data-pressed] .count, .compact[data-pressed] .open { color: inherit; }

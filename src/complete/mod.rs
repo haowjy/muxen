@@ -532,6 +532,8 @@ esac
         chips.iter().map(|c| (c.source, c.insert.clone())).collect()
     }
 
+    // The fake carapace is a Linux shell script setup; macOS fails it (see .meridian/kb/probe-environments.md).
+    #[cfg(target_os = "linux")]
     #[tokio::test]
     async fn every_chip_only_extends_what_is_typed() {
         use ChipSource::*;

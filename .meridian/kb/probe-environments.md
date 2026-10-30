@@ -115,3 +115,19 @@ clear 3.7b of the distinct select-and-destroy crash above. Issue #2 tracks the c
 baseline/backport decision; no installed binary changes or daily-use sign-off without
 Jimmy. See `docs/design/daemon-core.md` §9 and work evidence
 `session-follow-tmux-attach-crash.md`.
+
+## Driving the web app on the Mac without touching Jimmy's tmux
+
+`TETHER_E2E_TMUX=3.7b pnpm --dir web run e2e:stack` starts a real debug daemon on a private
+tmux and prints a URL already admitted with a native token. Its tmux is
+`TMUX_TMPDIR=<stack>/run tmux -L by-hand`; it starts with no server, so make a session there
+first or the picker says "No tmux server is running". The Home card says "pop-os" whatever
+the host. The Sessions | Files switch is `role=tab`; the key row is the group "Terminal keys".
+Ctrl-C on the stack kills its tmux too.
+
+## `scripts/preflight.sh full` fails on macOS
+
+Four `complete::` tests are Linux-only by construction: the runner tests read `/proc/<pid>/stat`
+and one expects `carapace` on PATH. They stopped preflight at `cargo test` on the Mac
+(2026-10-29, 437adc1) and are now `#[cfg(target_os = "linux")]`, so a Mac run skips them; only a
+Linux run covers them.

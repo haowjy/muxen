@@ -1,21 +1,20 @@
 // The picker (browser-behaviors.md "Picker (desktop) and picker sheet (phone)"): one component for the
 // desktop popover and the phone's half-height sheet. The router overlay open says which: `picker` is the
 // popover under the top row's +, `sheet` the half sheet over the current tab (Home's card row lands on a
-// tab, then opens the sheet over it). Everything else is shared: a search that filters the side showing
-// (on Files, a path too), a Sessions / Files switch, and that side's list, ending with creation. The
-// control block is below the list on the phone (search, switch, then the open tabs) and above it in the
-// popover (switch, search). Every pick leaves it open, the tab it puts on screen behind it; "New session"
+// tab, then opens the sheet over it). The sheet opens on the open tabs and one "Add new tab" row; that
+// opens a choice, Add session or Add file (the popover opens on it), and either one is a search above
+// that side's list, ending with creation. Every pick leaves it open, the tab it puts on screen behind it; "New session"
 // replaces the list with a form page, a router entry of its own, so Back and Escape return to the list
 // before they close the picker (a reload drops overlays, so a page never outlives its list).
-import { useEffect, useId, useRef, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { useApp, useAppView } from "../../app/context";
 import { describeError } from "../../files/browser";
 import { isPath } from "../../files/pathfield";
 import type { HostClient } from "../../net/hosts";
 import { HttpRefusal } from "../../net/http";
-import { Choice } from "../../ui/primitives/Choice";
 import { Dialog } from "../../ui/primitives/Dialog";
 import { PageBar, ToolBar } from "../../ui/primitives/DialogBars";
+import { Row } from "../../ui/primitives/Row";
 import { SearchField } from "../../ui/primitives/TextField";
 import { useStore } from "../../ui/store";
 import { screenOf } from "../../workspace/state";
@@ -27,11 +26,12 @@ import { HostSection } from "./HostSection";
 import { NewSessionPage } from "./NewSessionPage";
 import { useActiveHost, useQuery } from "./pick";
 import { pickerMemoryOf, type Side } from "./pickerMemory";
+import { listClass } from "./PickRows";
 import { SessionPicks } from "./SessionPicks";
-import { SheetTabs } from "./SheetTabs";
+import { OpenTabs } from "./OpenTabs";
 import styles from "./Picker.module.css";
 
-const SIDES = [{ value: "sessions", label: "Sessions" }, { value: "files", label: "Files" }] as const;
+const SIDES = [{ value: "sessions" }, { value: "files" }] as const;
 const FIND: Record<Side, string> = { sessions: "Find a session", files: "Find a folder or type a path" };
 
 type Kind = "popover" | "half";
@@ -66,8 +66,11 @@ interface DialogProps {
 function PickerDialog({ open, name, kind, params, host }: DialogProps) {
   const app = useApp();
   const memory = pickerMemoryOf(app);
-  const side = useStore(memory, (s) => s.side);
-  const panel = useId();
+  const remembered = useStore(memory, (s) => s.side);
+  // `add` is the step: "choose" (Add session / Add file) or the side chosen, each a router entry so Back steps back.
+  const step = params?.["add"];
+  const chosen: Side | null = step === "sessions" || step === "files" ? step : null;
+  const side: Side = chosen ?? remembered;
   // The Files side asks for folders when first shown, then stays mounted (hidden) until the picker closes.
   const [filesShown, setFilesShown] = useState(false);
   useEffect(() => { setFilesShown(open && (filesShown || side === "files")); }, [open, side]);
@@ -84,6 +87,15 @@ function PickerDialog({ open, name, kind, params, host }: DialogProps) {
   // A form page is the same overlay with `newSession` (the server's handle) and `name`.
   const target = typeof params?.["newSession"] === "string" ? hosts.find((h) => h.entry.handle === params["newSession"]) : undefined;
   const page = params?.["newSession"] !== undefined;
+  // The phone's sheet opens on the open tabs, whose last row, "Add new tab", opens the choice; the
+  // desktop's + opens on the choice, since its tabs are on the top row.
+  const choosing = !page && chosen === null && (step === "choose" || kind === "popover");
+  const listing = !page && chosen !== null;
+  const showTabs = !page && !choosing && !listing;
+  const add = (to: "choose" | Side): void => {
+    if (to !== "choose") memory.setSide(to);
+    app.openOverlay({ screen: "sessions", name, params: { ...params, add: to } });
+  };
   const newSession = (on: HostClient, initial: string): void => {
     app.openOverlay({ screen: "sessions", name, params: { ...params, newSession: on.entry.handle, name: initial } });
   };
@@ -123,8 +135,6 @@ function PickerDialog({ open, name, kind, params, host }: DialogProps) {
     if (search.current) app.focus.focusElement(search.current);
   };
 
-  const phone = kind !== "popover";
-  const switcher = <Choice as="tabs" label="Open from" options={SIDES} value={side} onChange={(s) => { memory.setSide(s); }} panel={panel} />;
   const searchField = (
     <SearchField
       label={FIND[side]}
@@ -136,11 +146,7 @@ function PickerDialog({ open, name, kind, params, host }: DialogProps) {
       {...(kind === "popover" && { "data-initial-focus": "" })}
     />
   );
-  // On the phone the block sits at the bottom, in thumb reach and above the keyboard: the search, then the switch,
-  // nearest the thumb last. The popover hangs from the top row, so the block leads it, switch first.
-  const block = phone
-    ? <><ToolBar>{searchField}</ToolBar><ToolBar>{switcher}</ToolBar></>
-    : <><ToolBar>{switcher}</ToolBar><ToolBar>{searchField}</ToolBar></>;
+  const TITLE: Record<Side, string> = { sessions: "Add session", files: "Add file" };
   const problem = pathError ?? field.said;
   return (
     <Dialog
@@ -150,14 +156,24 @@ function PickerDialog({ open, name, kind, params, host }: DialogProps) {
       {...(returnFocusTo && { returnFocusTo })}
       onClose={close}
       header={page
-        ? <PageBar back="Back to sessions" onBack={close} title={`New session on ${target?.name ?? "the server"}`} />
-        : kind === "half" ? false : block}
-      {...(phone && { footer: <>{!page && block}{open && <SheetTabs />}</> })}
+        ? <PageBar back="Back" onBack={close} title={`New session on ${target?.name ?? "the server"}`} />
+        : listing
+          ? <><PageBar back="Back" onBack={close} title={TITLE[side]} /><ToolBar>{searchField}</ToolBar></>
+          : choosing && kind !== "popover"
+            ? <PageBar back="Back to open tabs" onBack={close} title="Add new tab" />
+            : false}
     >
+      {open && showTabs && <OpenTabs onAdd={() => { add("choose"); }} onPick={close} />}
+      {open && choosing && (
+        <div class={listClass}>
+          <Row icon="terminal" label="Add session" trailing="chevron" onClick={() => { add("sessions"); }} />
+          <Row icon="folder" label="Add file" trailing="chevron" onClick={() => { add("files"); }} />
+        </div>
+      )}
       {/* The list stays mounted under a page, so Back finds it as it was. */}
-      <div hidden={page}>
+      <div hidden={!listing}>
         {open && SIDES.map(({ value }) => (
-          <div key={value} role="tabpanel" id={`${panel}-panel-${value}`} aria-labelledby={`${panel}-tab-${value}`} hidden={side !== value}>
+          <div key={value} hidden={side !== value}>
             {value === "sessions" ? (
               <SessionPicks query={query} onNew={newSession} />
             ) : filesShown && (pathMode ? (

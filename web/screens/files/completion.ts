@@ -58,7 +58,10 @@ export function useCompletion({ session, text, setText, onOpen, enterOpens }: Op
     if ("wait" in result && c.ask) {
       await browser.folders.load(c.ask.path, c.ask.hidden);
       if (latest.current !== text) return;
-      result = go(text, target, { ...ctx, folder: (key) => browser.folders.snapshot.held.get(key)?.names ?? undefined });
+      const arrived: CompleteContext = { ...ctx, folder: (key) => browser.folders.snapshot.held.get(key)?.names ?? undefined };
+      // The highlight is read again: before the listing arrived there was no prediction to Go to.
+      const now = complete(text, arrived);
+      result = go(text, row ?? now.rows.find((r) => r.name === chosen) ?? now.predicted, arrived);
     }
     if ("open" in result) await onOpen(result.open);
     else if ("say" in result) setSaid(result.say);

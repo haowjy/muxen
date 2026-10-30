@@ -252,7 +252,8 @@ async fn read_tail(pipe: Option<impl AsyncRead + Unpin>) -> Result<Vec<u8>, Fail
     }
 }
 
-#[cfg(test)]
+// Every test reads `/proc` to see the group die: Linux only.
+#[cfg(all(test, target_os = "linux"))]
 mod tests {
     use std::os::unix::fs::PermissionsExt as _;
 

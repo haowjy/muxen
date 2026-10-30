@@ -1,6 +1,31 @@
 # Client implementation checkpoint
 
-## Client redesign build (c312, 2026-10-27) — current
+## Status at HEAD 437adc1 (verified 2026-10-29) — read this first
+
+Checked against the code, `gh` and a local build; supersedes every status line below.
+
+- **tmux crash risk (issue #2): still OPEN** (`gh issue view 2`, last updated 2026-10-25).
+  Daily-use sign-off is still Jimmy's decision. The 2026-10-26 pop-os segfault was tmux's own
+  `clients_calculate_size`, not tether (handoff-tech-lead.md, tmux-3.4-crash.md). The
+  `destroy-unattached` handling is specified in docs/design/daemon-core.md:2344; p282/p287
+  evidence files are still uncommitted.
+- **One keyboard: DECIDED and built.** one-keyboard.md is "decided 2026-10-26"
+  (f4b4b6d); `LineFieldLender` is gone from web/ and ios/; bridge contract is version 7
+  (ios/TetherKit/.../BridgeTypes.swift:4). The "put the four decisions to Jimmy" step in
+  handoff-tech-lead.md is done.
+- **Startup JS: no longer capped.** web/scripts/checks.mjs:15,146 records it only; measured
+  202.3 KB gzipped at 437adc1 (the old 192/202 KB caps are history). Screen splitting
+  is still the way to cut it.
+- **Rust tests on macOS:** 4 `complete::` tests fail on the Mac (runner tests read `/proc`;
+  one expects `carapace`, not installed). Linux-only by construction, so preflight on the Mac
+  fails at `cargo test`; run it on pop-os or gate those tests.
+- **Still unverified on a real iPhone:** path-field caret, several servers, reload mid
+  New-session form, and most of ios-shell.md's device checklist.
+- **Uncommitted work notes:** files-unscoped/, picker/, p287-tmux-crash/, p282 probes,
+  ~30 prompts/ (see `git status`). main == origin/main; nothing unpushed.
+
+
+## Client redesign build (c312, 2026-10-27) — superseded by the status above
 
 Plan, slice order and structural decisions: [redesign/plan.md](redesign/plan.md)
 (reviewed p320). Before-state screenshots: redesign/before/. Slice 1 (Files tabs, one
@@ -28,7 +53,7 @@ crash on 3.4 is confirmed by p259 and fixed upstream in 3.7; that does not fix t
 distinct 3.7b crash. Both are tracked in issue #2; daily-use sign-off is blocked. Notification channels are disabled;
 the lead flagged this in chat.
 
-## First real use on pop-os (2026-10-25) — read this first
+## First real use on pop-os (2026-10-25)
 
 Setup and teardown shipped to main at 64b78c3 (earlier session c106). Jimmy then ran
 `tether setup` (terminal mode) on pop-os (ssh/mosh `homebox`), with tether running in his

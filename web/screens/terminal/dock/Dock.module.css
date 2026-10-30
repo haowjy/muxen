@@ -55,7 +55,7 @@
   height: var(--dock-height);
   padding: 0 var(--space-2);
 }
-.toggle { width: var(--dock-control-height); padding: 0; margin-left: auto; }
+.toggle { flex: none; width: var(--dock-control-height); padding: 0; margin-left: auto; }
 
 /* The keys scroll; Hide keyboard stays fixed at the row's end. The scroller is the row's full height, so a key's touch area reaches it. */
 .keys {

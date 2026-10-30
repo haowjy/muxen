@@ -16,6 +16,36 @@ naming the old option under Rejected; git history keeps the removed text.
 
 Decided by Jimmy, 2026-10-21 unless an entry gives another date.
 
+### Files reads any path the user can (2026-10-29)
+
+- **What:** Files has no roots or scope; any readable path opens, and favorites replace roots
+  ([fs.md](fs.md)). Uploads still never replace a file and downloads are served sandboxed.
+- **Why:** a device that can use tether already has the user's terminal, which reads the same
+  files; a scope would add rules without removing any reach.
+- **Rejected:** keeping roots below `$HOME`.
+
+### Closing a tab never kills tmux (2026-10-29)
+
+- **What:** every way to close a tab (× on the desktop, swipe left on a sheet row on touch, the
+  top row's ×, Home's close) only detaches: the client drops the tab and sends `unwatch`, and the
+  daemon stops its watch (`refresh-client -B`). No path from the tab list runs `kill-session` or
+  `kill-server`; the daemon has no such command. The swipe action reads "Close", never "Kill" or
+  "Delete".
+- **Why:** Jimmy: closing must "NEVER kill tmux", only stop tracking; the session is his and
+  lives on for every other client.
+- **Rejected:** a kill action on the swipe; a confirm-to-kill variant.
+
+### The phone picker lists open tabs; adding is one row (2026-10-29)
+
+- **What:** the sheet opens on the open tabs and an "Add new tab" row, which offers "Add
+  session" or "Add file", each with its own search and list; the Sessions / Files switch is gone
+  (the desktop + opens on the same choice). The key row always opens esc, tab ("the first row should guarantee esc | tab"), then the arrows; it keeps chords out of
+  its first slots and ^Z away from ⏎; ^C is last; ^S and ^Q are dropped
+  ([client/browser-behaviors.md](client/browser-behaviors.md)).
+- **Why:** "^C ... is kinda dangerous to be put in the initial keyboard setup"; ⇧tab is rarely
+  used now; "it should be 'add new tab' and then show 'add session' or 'add file'".
+- **Rejected:** every tmux session in the first view; a Sessions / Files switch, top or bottom.
+
 ### Device: iPhone 17 Pro only
 
 - **What:** one target device, iOS 26. The layout stays responsive for rotation and a
