@@ -9,7 +9,7 @@
       "scheme": "dark",
       "width": 402,
       "stableHeight": 874,
-      "visibleHeight": 520,
+      "visibleHeight": 874,
       "keyboardInset": 354,
       "safeArea": {
         "top": 62,
@@ -17,7 +17,8 @@
         "bottom": 34,
         "left": 0
       },
-      "keyboard": true
+      "keyboard": true,
+      "keyboardDuration": 0.3833
     }
   }
 }

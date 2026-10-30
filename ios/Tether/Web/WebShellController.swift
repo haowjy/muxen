@@ -15,7 +15,9 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
     private var focus: FocusController!
     private var webView: TetherWebView!
     private var webViewConstraints: [NSLayoutConstraint] = []
-    private var bottomConstraint: NSLayoutConstraint!
+    /// How much of the web view's bottom a docked keyboard covers, and how long it takes to get there.
+    private var keyboardCover: (height: CGFloat, duration: Double) = (0, 0)
+    private var pendingKeyboardCover: DispatchWorkItem?
     private var pendingInput: [InputEvent] = []
     private var inputFlushQueued = false
     private var lineReceiverReady = false
@@ -46,8 +48,7 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         focus = FocusController(input: terminalInput)
 
         terminalInput.translatesAutoresizingMaskIntoConstraints = false
-        bottomConstraint = webView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
-        webViewConstraints = constraints(for: webView, bottom: bottomConstraint)
+        webViewConstraints = constraints(for: webView)
         NSLayoutConstraint.activate(webViewConstraints + [
             terminalInput.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             terminalInput.topAnchor.constraint(equalTo: view.topAnchor),
@@ -250,8 +251,7 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         previous.uiDelegate = nil
         previous.removeFromSuperview()
         webView = makeWebView()
-        bottomConstraint = webView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: bottomConstraint.constant)
-        webViewConstraints = constraints(for: webView, bottom: bottomConstraint)
+        webViewConstraints = constraints(for: webView)
         NSLayoutConstraint.activate(webViewConstraints)
         loadUI(fragment: fragment)
     }
@@ -283,12 +283,13 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         return result
     }
 
-    private func constraints(for webView: WKWebView, bottom: NSLayoutConstraint) -> [NSLayoutConstraint] {
+    /// The web view always fills the screen; the keyboard covers its bottom (see `keyboardWillChange`).
+    private func constraints(for webView: WKWebView) -> [NSLayoutConstraint] {
         [
             webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             webView.topAnchor.constraint(equalTo: view.topAnchor),
-            bottom,
+            webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ]
     }
 
@@ -562,12 +563,11 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
 
     private func viewport() -> Viewport {
         let stable = max(0, view.bounds.height)
-        let visible = max(0, webView?.bounds.height ?? stable)
-        // A docked keyboard moves the web view's bottom edge up, so the keyboard covers none of
-        // the page: the dock and sheets sit at the bottom of the resized view, and the web lifts
-        // nothing (ios-shell.md, "Keyboard geometry"). `covered` is the frame the keyboard took,
-        // which is what the keyboard-dependent chrome keys on.
-        let covered = max(0, stable - visible)
+        // The web view fills the screen and a docked keyboard covers its bottom, as in a browser: the
+        // dock and sheets rise by `keyboardInset` (ios-shell.md, "Keyboard geometry"). Resizing the web
+        // view instead made WebKit lay the page out at the final size at once, so the dock jumped ahead
+        // of the keyboard opening and dropped out while it closed.
+        let covered = min(stable, max(0, keyboardCover.height))
         let width = max(0, view.bounds.width)
         let safe = view.safeAreaInsets
         return Viewport(
@@ -576,37 +576,58 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
             scheme: traitCollection.userInterfaceStyle == .dark ? "dark" : "light",
             width: width,
             stableHeight: stable,
-            visibleHeight: visible,
-            keyboardInset: 0,
+            visibleHeight: stable - covered,
+            keyboardInset: covered,
             safeArea: SafeArea(top: safe.top, right: safe.right, bottom: safe.bottom, left: safe.left),
-            keyboard: covered >= 120
+            keyboard: covered >= 120,
+            keyboardDuration: keyboardCover.duration > 0 ? keyboardCover.duration : nil
         )
     }
 
+    /// The page hears where the keyboard is going as it starts, with its duration, so the dock moves with
+    /// it instead of after it.
     @objc private func keyboardWillChange(_ notification: Notification) {
         guard let info = notification.userInfo,
               let screenFrame = info[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
         let frame = view.convert(screenFrame, from: nil)
         let docked = frame.maxY >= view.bounds.maxY - 1 && frame.minY < view.bounds.maxY
-        bottomConstraint.constant = docked ? -(view.bounds.maxY - frame.minY) : 0
-        let duration = info[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0.25
-        let curve = info[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt ?? 7
-        let options = UIView.AnimationOptions(rawValue: curve << 16).union(.beginFromCurrentState)
-        UIView.animate(withDuration: duration, delay: 0, options: options) {
-            self.view.layoutIfNeeded()
-        } completion: { [weak self] _ in
-            self?.publishViewportIfChanged(force: true)
-        }
+        // `hidden` holds the field with an empty input view, so no keyboard covers anything.
+        let height = docked && focus.mode != .hidden ? view.bounds.maxY - frame.minY : 0
+        setKeyboardCover(height, duration: info[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0)
     }
 
     @objc private func keyboardWillHide(_ notification: Notification) {
         focus.systemKeyboardDidHide()
-        bottomConstraint.constant = 0
-        let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0.25
-        UIView.animate(withDuration: duration) {
-            self.view.layoutIfNeeded()
-        } completion: { [weak self] _ in self?.publishViewportIfChanged(force: true) }
+        setKeyboardCover(0, duration: notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0)
     }
+
+    /// The page hears where the keyboard is going and how long it has left to get there.
+    ///
+    /// Sent at once when the native field owns the keyboard (`terminal`, `line`) or the keyboard is going
+    /// down: anything later and the keyboard visibly leads the dock. A keyboard coming up for anyone else is
+    /// held for `keyboardSettle` first. Handing first responder from the native field to WebKit with no
+    /// keyboard wanted (a tab switch to Files) posts a full-height frame and a zero one 20 to 50 ms later,
+    /// and no keyboard shows; sending both lurched the page up and back. The zero one cancels the held one.
+    private func setKeyboardCover(_ height: CGFloat, duration: Double) {
+        pendingKeyboardCover?.cancel()
+        pendingKeyboardCover = nil
+        let posted = CACurrentMediaTime()
+        let apply = { [weak self] in
+            guard let self, height != self.keyboardCover.height else { return }
+            self.keyboardCover = (height, max(0, duration - (CACurrentMediaTime() - posted)))
+            self.publishViewportIfChanged()
+            self.keyboardCover.duration = 0
+        }
+        if height == 0 || focus.mode == .terminal || focus.mode == .line {
+            apply()
+            return
+        }
+        let held = DispatchWorkItem(block: apply)
+        pendingKeyboardCover = held
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.keyboardSettle, execute: held)
+    }
+
+    private static let keyboardSettle: TimeInterval = 0.06
 
     private func jsonObject<T: Encodable>(_ value: T) throws -> Any {
         let data = try JSONEncoder().encode(value)
@@ -681,6 +702,7 @@ private final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandlerWi
         target.userContentController(userContentController, didReceive: message, replyHandler: replyHandler)
     }
 }
+
 
 /// While the terminal's selection is up (`.select`), the page draws tether's own Copy and Paste: only its
 /// Paste reaches tmux. WebKit's menu for the same selection would stack under it, so it is emptied then.

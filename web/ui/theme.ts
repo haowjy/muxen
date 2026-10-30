@@ -69,16 +69,19 @@ export function applyViewport(viewport: Viewport): void {
   setData("scheme", viewport.scheme);
   setData("density", viewport.density);
   setData("layout", viewport.layout);
-  // Not the bottom: CSS pads by the inset at the view's own bottom edge, which env() gives. The
-  // app ends its web view at a docked keyboard's top, where that edge has none, while
-  // `safeArea.bottom` stays the full-screen inset tmux is sized from; padding by it left a blank
-  // band above the keyboard. In a browser the two are equal.
+  // Not the bottom: CSS pads by the inset at the view's own bottom edge, which env() gives. It
+  // equals `safeArea.bottom` in a browser and in the app, whose web view fills the screen.
   for (const side of ["top", "right", "left"] as const) {
     const value = `${String(viewport.safeArea[side])}px`;
     if (root.style.getPropertyValue(`--safe-${side}`) !== value) root.style.setProperty(`--safe-${side}`, value);
   }
   const inset = `${String(viewport.keyboardInset)}px`;
-  if (root.style.getPropertyValue("--keyboard-inset") !== inset) root.style.setProperty("--keyboard-inset", inset);
+  if (root.style.getPropertyValue("--keyboard-inset") !== inset) {
+    // The duration is written with the inset it belongs to, so the transition it starts uses it; an
+    // inset that arrives without one (a browser, a rotation) moves at once. Reduced motion: primitives.css.
+    root.style.setProperty("--keyboard-duration", `${String(Math.round((viewport.keyboardDuration ?? 0) * 1000))}ms`);
+    root.style.setProperty("--keyboard-inset", inset);
+  }
 }
 
 /** Puts the text size where CSS reads it (`--term-text-delta`); the terminal re-fonts when the preference changes. */

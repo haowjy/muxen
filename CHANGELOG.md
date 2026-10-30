@@ -5,6 +5,7 @@ version section on release.
 
 ## [Unreleased]
 
+- In the iPhone app, the dock slides up and down with the keyboard instead of jumping to its keyboard-up place before the keyboard moves and dropping out as it closes, and switching to a Files tab no longer makes the page jump as if a keyboard were coming. With Reduce Motion on, the dock moves at once.
 - In the iPhone app, selecting terminal text shows only tether's Copy and Paste; iOS's own Copy, Look Up and Translate bar no longer appears behind it.
 - In the iPhone app, holding delete while typing into the terminal keeps deleting until you let go; it used to delete one character. After about two seconds it slows to iOS's word steps, about six characters a second.
 - In the iPhone app, text typed in the compose box and not sent no longer goes to tmux when you tap the terminal and type. The box keeps it: go back to the box and it is still there.

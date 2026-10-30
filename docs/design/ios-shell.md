@@ -387,33 +387,38 @@ responder. Terminal's native responder stays the same object while its target ch
 
 ### Keyboard geometry
 
-Native sizes the web view, so the web never measures the keyboard.
+Native measures the keyboard, so the web never does. The web view always fills the screen
+and a docked keyboard covers its bottom, as in a browser.
 
-- On `keyboardWillChangeFrame`, native moves the web view's bottom edge to the top of
-  the keyboard, with the keyboard's curve and duration. The dock, at the bottom of the
-  web view, rides on the keyboard. With the
-  keyboard hidden, the web view fills the screen.
+- On `keyboardWillChangeFrame` and `keyboardWillHide`, native sends a `viewport` whose
+  `keyboardInset` is the height the keyboard will cover when it stops, with
+  `keyboardDuration`, the seconds of its animation still to run. The dock, Files' tab row
+  and full-screen sheets rise by `--keyboard-inset` over `--keyboard-duration` on
+  `--ease-keyboard` (`web/ui/tokens/primitives.css`), a curve fitted to the keyboard's
+  measured motion, so they ride on it; the terminal's pan slides with them. Reduced motion
+  moves them at once. Resizing the web view instead made WebKit lay the page out at the
+  final size at once: the dock jumped ahead of the keyboard and dropped out as it closed.
+- The inset is sent at once while `terminal` or `line` owns the keyboard and whenever the
+  keyboard is going down. A keyboard rising for anyone else waits 60 ms first: handing
+  first responder from the native field to WebKit with no keyboard wanted (a tab switch to
+  Files) posts a full-height frame and a zero one 20 to 50 ms later, and no keyboard shows.
+  The zero cancels the held frame, so the page doesn't lurch. In `hidden` the inset is 0.
 - On every change native sends the v2 `viewport` object: `layout`, `density`,
   `directInput`, `scheme`, `width`, `stableHeight`, `visibleHeight`, `keyboardInset`,
-  `safeArea` and `keyboard`. Heights and insets are CSS-pixel-equivalent points. The
-  native view moves above a docked keyboard, so the keyboard covers none of the web
-  view: `keyboardInset` is 0 there, and the dock and sheets sit at the bottom of the
-  resized view without rising. The key row sits flush against the keyboard. Only the
-  browser reports a nonzero value, the part of
-  the page the keyboard hides; the web rises by exactly that. `keyboard` is how the
-  keyboard-up chrome knows the frame it took was at least 120 pt.
+  `safeArea`, `keyboard` and, while the keyboard is moving, `keyboardDuration`. Heights
+  and insets are CSS-pixel-equivalent points; `visibleHeight` is `stableHeight` less the
+  inset. The key row sits flush against the keyboard. `keyboard` is how the keyboard-up
+  chrome knows the frame it took was at least 120 pt.
 - **Appearance.** Settings offers System / Light / Dark. The app reports the effective
   scheme to the web: System follows `traitCollection.userInterfaceStyle`, while an
   explicit Light or Dark overrides it. Native chrome and the web use the same effective
   scheme; a system trait change must not override an explicit choice.
 - **Every `viewport` carries the full-screen layout's `safeArea`, including while the
-  keyboard is up.** The web view that ends above the keyboard has no bottom inset of its own
-  (its `env(safe-area-inset-bottom)` is 0), but the web sizes tmux from `stableHeight`
-  and `safeArea`, and pads with the top and side insets from `safeArea` (`--safe-*` in
-  `web/ui/tokens/semantic.css`). The bottom padding is always the view's own
-  `env(safe-area-inset-bottom)`, so the key row meets the keyboard with no band. Native
-  therefore sends the insets of the full-screen layout in every message, so a rotation
-  while the keyboard is up gives the rows the collapsed layout has.
+  keyboard is up.** The web sizes tmux from `stableHeight` and `safeArea`, and pads with
+  the top and side insets from `safeArea` (`--safe-*` in `web/ui/tokens/semantic.css`).
+  The bottom padding is the view's own `env(safe-area-inset-bottom)`, the same value; the
+  keyboard covers it, so what rises lifts by the inset less the safe area and the key row
+  meets the keyboard with no band.
 - The web computes the tmux size from `stableHeight` and width only, and sends a
   new size only when that geometry or font size changes (Fit re-sends the same one,
   [daemon-core.md §3.6](daemon-core.md#36-sizing)). A keyboard change never
@@ -423,7 +428,7 @@ Native sizes the web view, so the web never measures the keyboard.
   `stableHeight` minus the top and bottom insets and the dock, at the current
   cell size (`web/term/size.ts`). The web measures that chrome (the dock's resting slot,
   the tab bar) only when layout, density, width or the safe area change, never from a
-  surface the shrinking web view has shortened (client-architecture.md §5.4; the daemon clamps what it receives,
+  surface the keyboard has covered (client-architecture.md §5.4; the daemon clamps what it receives,
   [daemon-core.md §6](daemon-core.md#6-limits-and-the-memory-ceiling)). **The strip is
   not subtracted:** it shows only while the keyboard is up and the tab is live, so
   counting it would resize tmux each time chips came or went. It shortens the terminal

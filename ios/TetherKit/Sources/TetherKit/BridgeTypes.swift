@@ -29,6 +29,8 @@ public struct Viewport: Codable, Equatable, Sendable {
     public var keyboardInset: Double
     public var safeArea: SafeArea
     public var keyboard: Bool
+    /// Seconds the keyboard takes to reach `keyboardInset`, from its notification; absent when the inset is not moving.
+    public var keyboardDuration: Double?
 
     public init(
         layout: String,
@@ -40,7 +42,8 @@ public struct Viewport: Codable, Equatable, Sendable {
         visibleHeight: Double,
         keyboardInset: Double,
         safeArea: SafeArea,
-        keyboard: Bool
+        keyboard: Bool,
+        keyboardDuration: Double? = nil
     ) {
         self.layout = layout
         self.density = density
@@ -52,6 +55,7 @@ public struct Viewport: Codable, Equatable, Sendable {
         self.keyboardInset = keyboardInset
         self.safeArea = safeArea
         self.keyboard = keyboard
+        self.keyboardDuration = keyboardDuration
     }
 }
 

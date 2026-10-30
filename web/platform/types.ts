@@ -37,14 +37,19 @@ export interface Viewport {
   /**
    * How far the keyboard, or Safari's form bar with a hardware keyboard, covers the bottom of
    * the page the web can see; 0 with none. The dock, sheets and toasts rise by this much (CSS
-   * reads it as `--keyboard-inset`). The app's shell moves its web view above a docked
-   * keyboard instead, so it reports 0 and nothing rises. Smaller than the `keyboard` threshold
-   * for the bar.
+   * reads it as `--keyboard-inset`). The app's web view fills the screen too, so a docked
+   * keyboard covers it the same way. Smaller than the `keyboard` threshold for the bar.
    */
   keyboardInset: number;
   /** Of the keyboard-hidden layout. */
   safeArea: SafeArea;
   keyboard: boolean;
+  /**
+   * Seconds the keyboard takes to reach `keyboardInset`, sent by the app as the keyboard starts
+   * to move, so what rises with it moves with it (`--keyboard-duration`). Absent in a browser,
+   * which learns the inset only once the keyboard is there.
+   */
+  keyboardDuration?: number;
 }
 
 export type Appearance = "system" | "light" | "dark";

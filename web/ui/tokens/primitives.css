@@ -53,6 +53,12 @@
   --duration-2: 200ms;
   --duration-3: 320ms;
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* What rises with the iOS keyboard moves with it: its spring, as measured in the Simulator
+     (iOS 26.5), within 7 pt of the keyboard's top over its whole travel. The duration is the
+     keyboard's own, written beside the inset (ui/theme.ts). */
+  --ease-keyboard: cubic-bezier(0.25, 0.6, 0.1, 1);
+  /* Read as `calc(var(--keyboard-duration) * var(--keyboard-motion))`: reduced motion zeroes it. */
+  --keyboard-motion: 1;
 }
 
 /* Reduced motion shortens what the components declare. It must not set a duration on every
@@ -63,5 +69,6 @@
     --duration-1: 1ms;
     --duration-2: 1ms;
     --duration-3: 1ms;
+    --keyboard-motion: 0;
   }
 }

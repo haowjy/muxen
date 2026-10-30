@@ -58,6 +58,8 @@ export function Dock({ active }: { active: boolean }) {
   const above = useRef<HTMLDivElement>(null);
   const row = useRef<HTMLDivElement>(null);
   const under = useRef<HTMLDivElement>(null);
+  const slot = useRef<HTMLDivElement>(null);
+  const lift = useRef<HTMLDivElement>(null);
   const [local, setLocal] = useState<LocalNote | null>(null);
 
   const tab = activeTerminal(workspace);
@@ -70,12 +72,14 @@ export function Dock({ active }: { active: boolean }) {
   // A note belongs to the field it came from.
   useEffect(() => { setLocal(null); }, [tab?.id]);
 
-  // The terminal pan ends above the tab row and its note, even when native shrinks the web view.
+  // The terminal pan ends above the tab row and its note.
   useLayoutEffect(() => {
     const strip = above.current;
     const bar = row.current;
     const hung = under.current;
-    if (!active || !strip || !bar || !hung) {
+    const box = slot.current;
+    const lifted = lift.current;
+    if (!active || !strip || !bar || !hung || !box || !lifted) {
       terminals.setPanArea(null);
       return;
     }
@@ -83,12 +87,16 @@ export function Dock({ active }: { active: boolean }) {
     const update = (): void => {
       const covered = strip.offsetHeight;
       root.style.setProperty("--dock-above-height", `${String(covered + hung.offsetHeight)}px`);
-      // The row's own box already includes what hangs under it and the CSS lift (--keyboard-inset), set before this render.
       if (!typing && viewport.keyboardInset === 0) {
         terminals.setPanArea(null);
         return;
       }
-      terminals.setPanArea(Math.max(0, bar.getBoundingClientRect().top - covered - terminals.element.getBoundingClientRect().top));
+      // Where the row is going, not where it is: the lift may be part way through its slide with the
+      // keyboard (Dock.module.css), and a box's client rect includes that. Offsets don't, so the row's
+      // place in the slot less the lift's end value is its top once the keyboard is there.
+      const rest = box.getBoundingClientRect().top + lifted.offsetTop + bar.offsetTop;
+      const raised = Math.max(0, viewport.keyboardInset - parseFloat(getComputedStyle(box).paddingBottom));
+      terminals.setPanArea(Math.max(0, rest - raised - covered - terminals.element.getBoundingClientRect().top));
     };
     update();
     // Defer layout writes until after ResizeObserver delivery. Growing the line changes this
@@ -112,8 +120,8 @@ export function Dock({ active }: { active: boolean }) {
   }, [active, typing, viewport.keyboardInset, viewport.visibleHeight, terminals]);
 
   return (
-    <div class={styles.slot} data-keyboard={typing ? "" : undefined}>
-      <div class={styles.lift}>
+    <div class={styles.slot} ref={slot} data-keyboard={typing ? "" : undefined}>
+      <div class={styles.lift} ref={lift}>
         <div class={styles.above} ref={above}>
           <p class={styles.note} data-tone={note?.tone} role="status">{note?.text}</p>
         </div>

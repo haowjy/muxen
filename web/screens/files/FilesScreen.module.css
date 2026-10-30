@@ -1,11 +1,12 @@
 .screen { display: flex; flex: 1; flex-direction: column; min-height: 0; min-width: 0; }
-/* Touch: the tab row at the bottom, riding the path field's keyboard in a browser (the app's web view ends above it). */
+/* Touch: the tab row at the bottom, riding the path field's keyboard. */
 .dock {
   flex: none;
   padding-bottom: var(--safe-bottom);
   border-top: 1px solid var(--color-border);
   background: var(--color-bg-raised);
   translate: 0 calc(-1 * max(0px, var(--keyboard-inset) - var(--safe-bottom)));
+  transition: translate calc(var(--keyboard-duration) * var(--keyboard-motion)) var(--ease-keyboard);
 }
 .files {
   /* Content sits in the same centred column as Home on a wide screen; the header, the preview bar and the lists all start at it.

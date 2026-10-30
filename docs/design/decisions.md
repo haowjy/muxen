@@ -4183,3 +4183,28 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   tab's menu has New window (`newWindow` takes a session). Rejected: activating the tab first and
   selecting on its next `watching` (a menu row that moves the user to another tab).
 
+
+## The app's keyboard covers the web view; the dock rides it (2026-10-30)
+
+- **The app's web view always fills the screen, and a docked keyboard covers its bottom, as in a
+  browser.** Native reports the covered height as `keyboardInset`, with `keyboardDuration`, the
+  seconds of the keyboard's animation left, as the keyboard starts to move. The dock, Files' tab row,
+  full-screen sheets and the terminal's pan move by the inset with that duration on a curve fitted to
+  the keyboard's measured motion (`cubic-bezier(0.25, 0.6, 0.1, 1)`, within 7 pt of the keyboard's
+  top over its travel in the iOS 26.5 Simulator). This supersedes "The app reports no keyboard inset,
+  because its view moves" (2026-10-26): the inset now means the same thing on both platforms, and nothing
+  shrinks underneath it, so the gap that entry fixed can't return. WebKit lays a resized web view out at its final size at
+  once, so the dock jumped to its keyboard-up height before the keyboard moved and the keyboard slid
+  into an empty band; closing, the dock dropped out and snapped back (Jimmy: "opening the keyboard
+  animates horribly"; reproduced in the Simulator). Rejected: keeping the resize and sending the
+  viewport at the start (the jump is WebKit's layout, not the message); sending the keyboard's
+  position every frame (one bridge message per frame lags and jitters); a fixed CSS duration (the
+  keyboard's own duration is in its notification, and Jimmy's ux-lead asked for it).
+- **A keyboard rising for WebKit is held 60 ms before the page hears of it; every other change is
+  sent at once.** Handing first responder from the native field to WebKit with no keyboard wanted (a tab
+  switch to Files) posts a full-height frame and a zero one 20 to 50 ms later, and no keyboard shows;
+  sent through, the page lurched up and back (Jimmy: "swapping to a folder tap looks like it tries to
+  bring up the keyboard"). Holding every frame instead made the dock trail the terminal's keyboard by
+  80 to 140 ms. Not taken for now: the web resting Files in `hidden` while no field is focused would
+  avoid the handoff altogether; the native hold already keeps the page still, and the web's focus flow
+  is the ux-lead's to change.
