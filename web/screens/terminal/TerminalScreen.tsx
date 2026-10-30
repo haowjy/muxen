@@ -9,7 +9,7 @@ import { EmptyState } from "../../ui/primitives/EmptyState";
 import { StatusBand } from "../../ui/primitives/StatusBand";
 import { useStore } from "../../ui/store";
 import { Button } from "../../ui/primitives/Button";
-import { terminalTabOf } from "../../workspace/state";
+import { activeTerminal } from "../../workspace/state";
 import { Dock } from "./dock/Dock";
 import { EditMenu } from "./selection/EditMenu";
 import { bandTone, lookOf } from "./tabView";
@@ -34,7 +34,7 @@ export function TerminalScreen({ active }: { active: boolean }) {
   }, [terminals]);
 
   const hostName = useHostName();
-  const current = terminalTabOf(workspace, workspace.active);
+  const current = activeTerminal(workspace);
   const running = active && current !== null && statuses[current.id]?.state.kind !== "live";
   const now = useNow(running);
   const look = current && lookOf(current, statuses[current.id], hostName(current.host), active, now);

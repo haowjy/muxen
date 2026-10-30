@@ -25,13 +25,17 @@ by a server, so a second one on the same server later is another record, not a r
 2. **The tab overview** lists one workspace's tabs, and adds, reorders and closes them.
 3. **A tab** (terminal or Files) fills the screen, with the workspace's **tab row**.
 
-Back steps up one level: from a tab to its overview, from the overview to Home.
+Back steps up one level: from a tab to its overview, from the overview to Home. It lands on the
+nearest earlier entry of that level, so folders drilled into on the way never add a stop.
 
 **Workspace state.** A workspace record has its own id, its server's host id, its tabs in order and
 its last-shown tab; today each host has exactly one, made when the server is first known. The route is Home,
-a workspace's overview, or a tab (which names its workspace). Reordering is one event that moves a
+a workspace's overview, or a workspace's tab, and it names the workspace: the tab on screen is that
+workspace's last-shown tab, so there is no separate "active tab" to disagree with it. An event that
+adds a tab (Open session, Open files) names the workspace it adds to. Reordering is one event that moves a
 tab to an index; the order and the last tab are saved per device with the rest of the workspace.
-Each workspace's last terminal tab is where Insert path and uploads go, from a Files tab too. When
+Each workspace's last terminal tab is where Insert path and uploads go, from a Files tab too; when
+that tab closes, the nearest remaining terminal tab (right-hand neighbour first) takes over. When
 a server is removed, its workspace and tabs go with it; nothing in tmux changes. A workspace saved
 in the earlier single-strip format is discarded whole at boot, as earlier formats were: tether
 starts at Home with no tabs, and the sessions are one Open session away.

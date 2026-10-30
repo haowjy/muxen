@@ -6,14 +6,16 @@ import type { AppController } from "../../app/controller";
 import { RequestError } from "../../net/host";
 import type { HostClient } from "../../net/hosts";
 import type { SessionListing, TmuxListing } from "../../proto/generated/messages";
+import type { Workspace } from "../../workspace/state";
 
 const LISTING_WAIT_MS = 5_000;
 
 /** Opens the session's tab, or activates the one it already has, and shows Terminal. The tab shows whatever window tmux has current. */
-export function openSession(app: AppController, host: HostClient, listing: TmuxListing, session: SessionListing): void {
+export function openSession(app: AppController, workspace: Workspace, host: HostClient, listing: TmuxListing, session: SessionListing): void {
   if (host.hostId === null) return; // a listing came from a welcomed socket, so the id is known
   app.dispatch({
     type: "opened",
+    workspace: workspace.id,
     key: { host: host.hostId, session: { server: listing.server, session: session.id } },
     session: session.name,
     window: session.windows.find((w) => w.active)?.name ?? session.windows[0]?.name ?? "",
@@ -64,11 +66,11 @@ function listingWith(app: AppController, host: HostClient, find: (listing: TmuxL
 }
 
 /** Attaches `name` if the listing has it, else creates it (`name` empty: tmux names it); the tab opens behind the closing Open session screen. */
-export async function openOrCreate(app: AppController, host: HostClient, name: string): Promise<OpenResult> {
+export async function openOrCreate(app: AppController, workspace: Workspace, host: HostClient, name: string): Promise<OpenResult> {
   const hostName = host.name ?? "the server";
   const typed = name.trim();
   const attach = ({ listing, session }: Found): OpenResult => {
-    app.router.closeOverlay(() => { openSession(app, host, listing, session); });
+    app.router.closeOverlay(() => { openSession(app, workspace, host, listing, session); });
     return { ok: true };
   };
   const listed = app.sessions.snapshot.hosts[host.entry.handle]?.listing;

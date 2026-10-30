@@ -1,5 +1,5 @@
-// The workspace core (client-architecture.md §6.1): a pure reducer over the open tabs and
-// nothing else. Events in; state and effects out. No Preact, no window, no document.
+// The workspace core (browser-behaviors.md "Platform layout"): a pure reducer over the workspaces,
+// their open tabs and the route. Events in; state and effects out. No Preact, no window, no document.
 import { tabId } from "../platform/tabKey";
 import { samePlace, type FilesPlace, type SavedTab, type SavedWorkspace, type SavedWorkspaces, type TabKey } from "../platform/types";
 import type { TmuxListing } from "../proto/generated/messages";
@@ -30,11 +30,11 @@ export interface FilesTab {
 
 export type Tab = TerminalTab | FilesTab;
 
-/** Home, a workspace's tab overview, or the active tab. */
-export type Route = "home" | "overview" | "tab";
-/** Where a history entry lands: Home, a workspace's overview, or a tab with the place a Files tab held there. */
-export type Landing = { route: "home" } | { route: "overview"; workspace: string } | { route: "tab"; tab: string; place: FilesPlace | null };
-/** What is on screen: derived from the route and the active tab by {@link screenOf}. */
+/** Where the user is: Home, a workspace's overview, or a workspace's tab (the one it last showed). */
+export type Route = { kind: "home" } | { kind: "overview"; workspace: string } | { kind: "tab"; workspace: string };
+/** Where a history entry lands: a {@link Route}, and for a tab the one it names and the place a Files tab held there. */
+export type Landing = { route: "home" } | { route: "overview"; workspace: string } | { route: "tab"; workspace: string; tab: string; place: FilesPlace | null };
+/** What is on screen: derived from the route by {@link screenOf}. */
 export type Screen = "home" | "overview" | "terminal" | "files";
 
 /** A server's open tabs in the order the user gave them, and what it last showed. Today each host has one; the id is its own so a second is another record. */
@@ -51,20 +51,18 @@ export interface Workspace {
 
 export interface WorkspaceState {
   workspaces: Workspace[];
-  /** The active tab's id: the one on screen on the tab route, else the one last shown. */
-  active: string | null;
   /** From `navigated` only; never set any other way. */
   route: Route;
-  /** The workspace the overview shows, on the overview route; from `navigated` too. */
-  overview: string | null;
 }
 
 export type WorkspaceEvent =
   | { type: "restored"; saved: SavedWorkspaces | null }
   /** The hosts whose `hostId` is known. Each gets a workspace; `complete` once every host's id is known: saved workspaces of any other host are discarded. */
   | { type: "hostsKnown"; ids: string[]; complete: boolean }
-  | { type: "opened"; key: TabKey; session: string; window: string }
-  | { type: "filesOpened"; id: string; host: string; place: FilesPlace }
+  /** A terminal tab in workspace `workspace`. */
+  | { type: "opened"; workspace: string; key: TabKey; session: string; window: string }
+  /** A Files tab in workspace `workspace`. */
+  | { type: "filesOpened"; workspace: string; id: string; place: FilesPlace }
   | { type: "closed"; id: string }
   | { type: "activated"; id: string }
   /** The tab takes position `to` in its workspace's order; the tabs between shift by one. */
@@ -79,18 +77,17 @@ export type WorkspaceEvent =
   /** The daemon found the session and says which window it shows now: the tab is live, and its label follows. */
   | { type: "watching"; id: string; window: string };
 
-/** Where the `navigate` effect goes. */
-export type NavigateTo = "home" | "tab" | { overview: string };
-
 export type WorkspaceEffect =
   | { type: "save" }
-  /** Show Home, a workspace's overview, or the active tab, through the router. It runs before the focus effects, and the focus lands on the screen it opens. */
-  | { type: "navigate"; to: NavigateTo }
+  /** Show `to` through the router. It runs before the focus effects, and the focus lands on the screen it opens. */
+  | { type: "navigate"; to: Route }
   /** Move focus on the user's behalf (desktop): to the terminal. */
   | { type: "focus"; target: "terminal" }
   | { type: "notice"; text: string };
 
-export const initialWorkspace: WorkspaceState = { workspaces: [], active: null, route: "home", overview: null };
+const HOME: Route = { kind: "home" };
+
+export const initialWorkspace: WorkspaceState = { workspaces: [], route: HOME };
 
 /** Every open tab, workspace by workspace. */
 export const allTabs = (state: WorkspaceState): Tab[] => state.workspaces.flatMap((w) => w.tabs);
@@ -102,7 +99,23 @@ export const workspaceOfTab = (state: WorkspaceState, id: string | null): Worksp
 export const workspaceOfHost = (state: WorkspaceState, host: string | null): Workspace | null =>
   state.workspaces.find((w) => w.host === host) ?? null;
 
-export const activeTab = (state: WorkspaceState): Tab | null => allTabs(state).find((t) => t.id === state.active) ?? null;
+/** The workspace the route is in: the overview's, or the tab's. Null on Home, or when it is gone. */
+export function routeWorkspace(state: WorkspaceState): Workspace | null {
+  const { route } = state;
+  return route.kind === "home" ? null : (state.workspaces.find((w) => w.id === route.workspace) ?? null);
+}
+
+/** The tab on the tab route: its workspace's last. Null off the tab route. */
+export function activeTab(state: WorkspaceState): Tab | null {
+  const ws = state.route.kind === "tab" ? routeWorkspace(state) : null;
+  return ws?.tabs.find((t) => t.id === ws.last) ?? null;
+}
+
+/** The active tab if it is a terminal tab. */
+export function activeTerminal(state: WorkspaceState): TerminalTab | null {
+  const tab = activeTab(state);
+  return tab?.kind === "terminal" ? tab : null;
+}
 
 /** The terminal tab `id`, or null if there is none (a Files tab is not one). */
 export function terminalTabOf(state: WorkspaceState, id: string | null): TerminalTab | null {
@@ -110,22 +123,27 @@ export function terminalTabOf(state: WorkspaceState, id: string | null): Termina
   return tab?.kind === "terminal" ? tab : null;
 }
 
-/** Where Insert path and uploads go from the active tab: the last terminal tab of its workspace. */
+/** Where Insert path and uploads go from the route's workspace: its last terminal tab. */
 export function insertTargetOf(state: WorkspaceState): string | null {
-  return workspaceOfTab(state, state.active)?.lastTerminal ?? null;
+  return routeWorkspace(state)?.lastTerminal ?? null;
 }
 
-/** The screen the route and the active tab show. */
+/** The screen the route shows. A tab route with no tab to show reads as Home until the reducer moves it. */
 export function screenOf(state: WorkspaceState): Screen {
-  if (state.route === "overview") return "overview";
-  const tab = state.route === "tab" ? activeTab(state) : null;
-  return tab === null ? "home" : tab.kind;
+  if (state.route.kind === "overview") return "overview";
+  return activeTab(state)?.kind ?? "home";
 }
 
 /** The tab whose watch runs: only the active terminal tab, and only while its screen shows. The terminal lane reads this to cover and uncover its drivers. */
 export function shownTab(state: WorkspaceState): string | null {
-  return screenOf(state) === "terminal" ? state.active : null;
+  return screenOf(state) === "terminal" ? (activeTab(state)?.id ?? null) : null;
 }
+
+const workspaceIdOf = (route: Route): string | null => (route.kind === "home" ? null : route.workspace);
+
+const sameRoute = (a: Route, b: Route): boolean => a.kind === b.kind && workspaceIdOf(a) === workspaceIdOf(b);
+
+const routeOf = (entry: Landing): Route => (entry.route === "home" ? HOME : { kind: entry.route, workspace: entry.workspace });
 
 const newTerminalTab = (key: TabKey, session: string, window: string, restoring: boolean): TerminalTab =>
   ({ kind: "terminal", id: tabId(key), host: key.host, key, session, window, restoring });
@@ -143,7 +161,7 @@ const newWorkspace = (host: string): Workspace => ({ id: `ws/${host}`, host, tab
 
 /** `host`'s workspace, made if it has none. */
 function withWorkspace(state: WorkspaceState, host: string): WorkspaceState {
-  return workspaceOfHost(state, host) ? state : { ...state, workspaces: [...state.workspaces, newWorkspace(host)] };
+  return state.workspaces.some((w) => w.host === host) ? state : { ...state, workspaces: [...state.workspaces, newWorkspace(host)] };
 }
 
 /** Replaces the workspace `id` with `change(it)`; the same state if `change` returns the same workspace. */
@@ -152,52 +170,51 @@ function amend(state: WorkspaceState, id: string, change: (w: Workspace) => Work
   return workspaces.some((w, i) => w !== state.workspaces[i]) ? { ...state, workspaces } : state;
 }
 
-/** Appends `tab` to its host's workspace, made if it has none, and makes it the active tab. */
-function addTab(state: WorkspaceState, tab: Tab): WorkspaceState {
-  const base = withWorkspace(state, tab.host);
-  const ws = workspaceOfHost(base, tab.host) as Workspace;
-  return activate(amend(base, ws.id, (w) => ({ ...w, tabs: [...w.tabs, tab] })), tab.id);
+/** Appends `tab` to workspace `id` and makes it that workspace's last. A workspace that isn't there takes nothing. */
+function addTab(state: WorkspaceState, id: string, tab: Tab): WorkspaceState {
+  return activate(amend(state, id, (w) => ({ ...w, tabs: [...w.tabs, tab] })), tab.id);
 }
 
-/** `id` becomes the active tab, and its workspace's last; a terminal tab also becomes its workspace's insert target. */
-function activate(state: WorkspaceState, id: string | null): WorkspaceState {
+/** `id` becomes its workspace's last tab; a terminal tab also becomes its workspace's insert target. */
+function activate(state: WorkspaceState, id: string): WorkspaceState {
   const ws = workspaceOfTab(state, id);
   const tab = ws?.tabs.find((t) => t.id === id);
-  const shown = state.active === id ? state : { ...state, active: id };
-  if (!ws || !tab) return shown;
-  return amend(shown, ws.id, (w) => {
+  if (!ws || !tab) return state;
+  return amend(state, ws.id, (w) => {
     const lastTerminal = tab.kind === "terminal" ? tab.id : w.lastTerminal;
     return w.last === tab.id && w.lastTerminal === lastTerminal ? w : { ...w, last: tab.id, lastTerminal };
   });
 }
 
-/** Removes `ids`. A workspace whose last tab goes moves to its right neighbour, else its left; so does `active`. */
+/** Removes `ids`. When a workspace's last or last terminal tab goes, it moves to the nearest remaining one of its kind, the right-hand neighbour first. */
 function without(state: WorkspaceState, ids: Set<string>): WorkspaceState {
-  const successor = (w: Workspace, id: string): string | null => {
+  const successor = (w: Workspace, id: string, wanted: (t: Tab) => boolean): string | null => {
     const at = w.tabs.findIndex((t) => t.id === id);
-    return (w.tabs.slice(at + 1).find((t) => !ids.has(t.id)) ?? w.tabs.slice(0, at).reverse().find((t) => !ids.has(t.id)))?.id ?? null;
+    const fits = (t: Tab): boolean => !ids.has(t.id) && wanted(t);
+    return (w.tabs.slice(at + 1).find(fits) ?? w.tabs.slice(0, at).reverse().find(fits))?.id ?? null;
   };
   const workspaces = state.workspaces.map((w) => {
     if (!w.tabs.some((t) => ids.has(t.id))) return w;
     return {
       ...w,
       tabs: w.tabs.filter((t) => !ids.has(t.id)),
-      last: w.last !== null && ids.has(w.last) ? successor(w, w.last) : w.last,
-      lastTerminal: w.lastTerminal !== null && ids.has(w.lastTerminal) ? null : w.lastTerminal,
+      last: w.last !== null && ids.has(w.last) ? successor(w, w.last, () => true) : w.last,
+      lastTerminal: w.lastTerminal !== null && ids.has(w.lastTerminal) ? successor(w, w.lastTerminal, (t) => t.kind === "terminal") : w.lastTerminal,
     };
   });
-  const removed = state.active !== null && ids.has(state.active) ? workspaceOfTab(state, state.active) : null;
-  const active = removed ? (workspaces.find((w) => w.id === removed.id)?.last ?? null) : state.active;
-  return activate({ ...state, workspaces }, active);
+  return { ...state, workspaces };
 }
 
-/** Showing the active tab: show the tab route if not there. Arriving at Terminal focuses it (`navigated`); switching to a terminal tab already on the tab route, focus it now. */
-function showActive(before: WorkspaceState, after: WorkspaceState): { navigate?: "tab"; focus?: "terminal" } {
-  if (before.route !== "tab") return { navigate: "tab" };
+/** Showing `id`'s workspace on its tab: show the tab route if not there. Arriving at Terminal focuses it (`navigated`); switching to a terminal tab already on the tab route, focus it now. */
+function showTab(before: WorkspaceState, after: WorkspaceState, id: string): { navigate?: Route; focus?: "terminal" } {
+  const ws = workspaceOfTab(after, id);
+  if (!ws) return {};
+  const to: Route = { kind: "tab", workspace: ws.id };
+  if (!sameRoute(before.route, to)) return { navigate: to };
   return activeTab(after)?.kind === "terminal" ? { focus: "terminal" } : {};
 }
 
-type Step = { state: WorkspaceState; notices: string[]; navigate?: NavigateTo; focus?: "terminal" };
+type Step = { state: WorkspaceState; notices: string[]; navigate?: Route; focus?: "terminal" };
 
 function step(state: WorkspaceState, event: WorkspaceEvent): Step {
   const none: Step = { state, notices: [] };
@@ -217,9 +234,7 @@ function step(state: WorkspaceState, event: WorkspaceEvent): Step {
           lastTerminal: has(w.lastTerminal) && tabs.some((t) => t.kind === "terminal" && t.id === w.lastTerminal) ? w.lastTerminal : null,
         };
       });
-      const all = workspaces.flatMap((w) => w.tabs);
-      const active = all.some((t) => t.id === saved.active) ? saved.active : (all[0]?.id ?? null);
-      return { state: activate({ ...state, workspaces }, active), notices: [] };
+      return { state: { ...state, workspaces }, notices: [] };
     }
     case "hostsKnown": {
       const known = new Set(event.ids);
@@ -238,17 +253,19 @@ function step(state: WorkspaceState, event: WorkspaceEvent): Step {
     case "opened": {
       const id = tabId(event.key);
       // Opening a session that already has a tab activates that tab.
-      const next = allTabs(state).some((t) => t.id === id) ? activate(state, id) : addTab(state, newTerminalTab(event.key, event.session, event.window, false));
-      return { state: next, notices: [], ...showActive(state, next) };
+      const next = allTabs(state).some((t) => t.id === id) ? activate(state, id) : addTab(state, event.workspace, newTerminalTab(event.key, event.session, event.window, false));
+      return { state: next, notices: [], ...showTab(state, next, id) };
     }
     case "filesOpened": {
-      const next = addTab(state, { kind: "files", id: event.id, host: event.host, place: event.place });
-      return { state: next, notices: [], ...showActive(state, next) };
+      const host = state.workspaces.find((w) => w.id === event.workspace)?.host;
+      if (host === undefined) return none;
+      const next = addTab(state, event.workspace, { kind: "files", id: event.id, host, place: event.place });
+      return { state: next, notices: [], ...showTab(state, next, event.id) };
     }
     case "activated": {
       if (!allTabs(state).some((t) => t.id === event.id)) return none;
       const next = activate(state, event.id);
-      return { state: next, notices: [], ...showActive(state, next) };
+      return { state: next, notices: [], ...showTab(state, next, event.id) };
     }
     case "moved": {
       const ws = workspaceOfTab(state, event.id);
@@ -279,9 +296,9 @@ function step(state: WorkspaceState, event: WorkspaceEvent): Step {
       const { entry } = event;
       const [id, place] = entry.route === "tab" ? [entry.tab, entry.place] : [null, null];
       const moved = place ? mapTabs(state, (t) => (t.kind === "files" && t.id === id && !samePlace(t.place, place) ? { ...t, place } : t)) : state;
-      const overview = entry.route === "overview" ? entry.workspace : null;
-      if (state.route === entry.route && state.overview === overview && moved === state) return none;
-      const next = { ...moved, route: entry.route, overview };
+      const route = routeOf(entry);
+      if (sameRoute(state.route, route) && moved === state) return none;
+      const next = sameRoute(state.route, route) ? moved : { ...moved, route };
       // Arriving at Terminal (a tab, Back, a deep link) puts desktop focus in it.
       return { state: next, notices: [], ...(screenOf(next) === "terminal" && screenOf(state) !== "terminal" && { focus: "terminal" as const }) };
     }
@@ -333,23 +350,19 @@ export function reduce(state: WorkspaceState, event: WorkspaceEvent): Reduced {
   const result = step(state, event);
   const next = result.state;
   const effects: WorkspaceEffect[] = [];
-  if (savedChanged(state, next)) effects.push({ type: "save" });
-  // With no tab to show, the tab route has nothing to show: the workspace's overview, or Home when it is gone too. An overview whose workspace is gone shows Home.
-  const overviewGone = next.route === "overview" && !next.workspaces.some((w) => w.id === next.overview);
-  const emptied = next.route === "tab" && activeTab(next) === null;
-  const before = workspaceOfTab(state, state.active);
-  const emptiedTo = before && next.workspaces.some((w) => w.id === before.id) ? { overview: before.id } : "home";
-  const navigate = result.navigate ?? (emptied ? emptiedTo : overviewGone ? "home" : undefined);
+  if (next.workspaces !== state.workspaces && savedChanged(state, next)) effects.push({ type: "save" });
+  // A route whose workspace is gone shows Home; the tab route of a workspace with no tab left shows that workspace's overview.
+  const ws = routeWorkspace(next);
+  const emptied: Route | null = next.route.kind === "home" ? null : !ws ? HOME : next.route.kind === "tab" && ws.last === null ? { kind: "overview", workspace: ws.id } : null;
+  const navigate = result.navigate ?? emptied;
   if (navigate) effects.push({ type: "navigate", to: navigate });
-  if (result.focus === "terminal" && next.active !== null) effects.push({ type: "focus", target: "terminal" });
+  if (result.focus === "terminal" && activeTab(next) !== null) effects.push({ type: "focus", target: "terminal" });
   for (const text of result.notices) effects.push({ type: "notice", text });
   return { state: next, effects };
 }
 
 /** The saved form of the workspaces, for persist now. */
-export function savedWorkspaces(state: WorkspaceState): Pick<SavedWorkspaces, "workspaces" | "active"> {
-  return { workspaces: state.workspaces.map(savedWorkspace), active: state.active };
-}
+export const savedWorkspaces = (state: WorkspaceState): SavedWorkspace[] => state.workspaces.map(savedWorkspace);
 
 const savedTab = (t: Tab): SavedTab =>
   t.kind === "terminal" ? { kind: "terminal", key: t.key, session: t.session, window: t.window } : { kind: "files", id: t.id, host: t.host, place: t.place };
@@ -357,17 +370,4 @@ const savedTab = (t: Tab): SavedTab =>
 const savedWorkspace = (w: Workspace): SavedWorkspace => ({ id: w.id, host: w.host, tabs: w.tabs.map(savedTab), last: w.last, lastTerminal: w.lastTerminal });
 
 /** Whether the saved form differs: `restoring` is not saved, so changing only it writes nothing. */
-function savedChanged(a: WorkspaceState, b: WorkspaceState): boolean {
-  if (a.active !== b.active || a.workspaces.length !== b.workspaces.length) return true;
-  return a.workspaces.some((w, i) => {
-    const x = b.workspaces[i] as Workspace;
-    if (x === w) return false;
-    if (x.id !== w.id || x.last !== w.last || x.lastTerminal !== w.lastTerminal || x.tabs.length !== w.tabs.length) return true;
-    return w.tabs.some((t, j) => {
-      const u = x.tabs[j] as Tab;
-      if (u === t) return false;
-      if (u.id !== t.id || u.kind !== t.kind) return true;
-      return t.kind === "terminal" ? t.session !== (u as TerminalTab).session || t.window !== (u as TerminalTab).window : !samePlace(t.place, (u as FilesTab).place);
-    });
-  });
-}
+const savedChanged = (a: WorkspaceState, b: WorkspaceState): boolean => JSON.stringify(savedWorkspaces(a)) !== JSON.stringify(savedWorkspaces(b));

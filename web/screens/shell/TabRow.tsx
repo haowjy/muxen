@@ -5,7 +5,7 @@ import { DockButton } from "../../ui/primitives/DockButton";
 import { Icon } from "../../ui/primitives/Icon";
 import { TabStrip } from "../../ui/primitives/TabStrip";
 import { useStore } from "../../ui/store";
-import { screenOf, workspaceOfTab } from "../../workspace/state";
+import { activeTab, routeWorkspace, screenOf } from "../../workspace/state";
 import { tabPills } from "../terminal/tabView";
 import { terminalsOf } from "../terminal/terminals";
 import { useNow } from "../terminal/useNow";
@@ -32,11 +32,12 @@ export function TabRow({ place }: { place: "top" | "dock" }) {
   const [menu, setMenu] = useState<MenuTarget | null>(null);
   const closeMenu = useCallback(() => { setMenu(null); }, []);
   const screen = screenOf(workspace);
-  const space = workspaceOfTab(workspace, workspace.active);
-  const running = screen === "terminal" && statuses[workspace.active ?? ""]?.state.kind !== "live";
+  const space = routeWorkspace(workspace);
+  const active = activeTab(workspace)?.id ?? null;
+  const running = screen === "terminal" && statuses[active ?? ""]?.state.kind !== "live";
   const now = useNow(running);
   if (!space) return null;
-  const pills = tabPills(space.tabs, statuses, hostName, screen === "terminal" ? workspace.active : null, now, bells);
+  const pills = tabPills(space.tabs, statuses, hostName, screen === "terminal" ? active : null, now, bells);
   const files = screen === "files";
   // A Files tab has no terminal input to raise: its keyboard control is its path field, which lowers with its keyboard.
   const typing = !files && owner !== "none";
@@ -49,7 +50,7 @@ export function TabRow({ place }: { place: "top" | "dock" }) {
       <div class={styles.strip}>
         <TabStrip
           pills={pills}
-          active={workspace.active}
+          active={active}
           onSelect={(id) => { terminals.activate(id); }}
           onClose={(id) => { app.dispatch({ type: "closed", id }); }}
           onMenu={(id, anchor) => { setMenu({ kind: "tab", id, anchor }); }}

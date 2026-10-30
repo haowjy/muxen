@@ -7,7 +7,7 @@ import { useApp, useAppView } from "../../app/context";
 import { findSession } from "../../sessions/groups";
 import { Menu, type MenuSection } from "../../ui/primitives/Menu";
 import { useStore } from "../../ui/store";
-import { allTabs, workspaceOfTab, type Workspace } from "../../workspace/state";
+import { activeTab, allTabs, type Workspace } from "../../workspace/state";
 import { baseName } from "../../files/paths";
 import { terminalsOf } from "../terminal/terminals";
 
@@ -19,7 +19,7 @@ export function useAddActions(workspace: Workspace): { openSession: (opener?: El
   const app = useApp();
   return {
     openSession: (opener) => { app.openOverlay({ screen: "sessions", name: "open", params: { workspace: workspace.id } }, opener); },
-    openFiles: () => { app.openFiles(workspace.host, { kind: "dir", path: "~" }); },
+    openFiles: () => { app.openFiles(workspace.id, { kind: "dir", path: "~" }); },
   };
 }
 
@@ -50,13 +50,13 @@ function TabMenu({ id, anchor, workspace, onClose }: { id: string; anchor: HTMLE
   const host = useAppView((v) => v.hosts.find((h) => h.hostId === tab?.host));
   const listing = useStore(app.sessions, (s) => (host ? s.hosts[host.entry.handle]?.listing : undefined));
   const shown = useStore(terminals, (s) => s.tabs[id]?.shown?.id ?? null);
-  const active = useAppView((v) => v.workspace.active === id);
+  const active = useAppView((v) => activeTab(v.workspace)?.id === id);
   const focusFirst = useFocusFirst();
   // The windows are asked for when the menu opens, unless a listing newer than the last change is in.
   useEffect(() => { if (host) app.listing.refresh(host.entry.handle); }, [host]);
   if (!tab) return null;
 
-  const at = (workspaceOfTab(app.snapshot.workspace, id) ?? workspace).tabs.findIndex((t) => t.id === id);
+  const at = workspace.tabs.findIndex((t) => t.id === id);
   const last = workspace.tabs.length - 1;
   const sections: MenuSection[] = [];
   if (tab.kind === "terminal") {

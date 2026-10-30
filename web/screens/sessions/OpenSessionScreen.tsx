@@ -18,6 +18,7 @@ import { Row } from "../../ui/primitives/Row";
 import { Spinner } from "../../ui/primitives/Spinner";
 import { TextField } from "../../ui/primitives/TextField";
 import { useStore } from "../../ui/store";
+import type { Workspace } from "../../workspace/state";
 import { openOrCreate, openSession } from "./createSession";
 import styles from "./OpenSessionScreen.module.css";
 
@@ -27,7 +28,7 @@ export function OpenSessionScreen() {
   const host = useAppView((v) => v.hosts.find((h) => h.hostId === workspace?.host));
   return (
     <Dialog open={open} title="Open session" variant="page" onClose={close} header={<PageBar back="Back" onBack={close} title="Open session" />}>
-      {open && workspace && host && <Body host={host} openTabs={workspace.tabs.map((t) => t.id)} />}
+      {open && workspace && host && <Body host={host} workspace={workspace} />}
     </Dialog>
   );
 }
@@ -39,7 +40,7 @@ function blockedBy(host: HostClient): string | undefined {
 
 const lastActivity = (s: SessionListing): number => Math.max(0, ...s.windows.map((w) => w.activity));
 
-function Body({ host, openTabs }: { host: HostClient; openTabs: string[] }) {
+function Body({ host, workspace }: { host: HostClient; workspace: Workspace }) {
   const app = useApp();
   const handle = host.entry.handle;
   const sessions = useStore(app.sessions, (s) => s.hosts[handle]);
@@ -55,19 +56,19 @@ function Body({ host, openTabs }: { host: HostClient; openTabs: string[] }) {
 
   const idOf = (l: TmuxListing, s: SessionListing): string => tabId({ host: host.hostId ?? "", session: { server: l.server, session: s.id } });
   // Sessions already open here are not offered; typing one's name goes to its tab.
-  const offered = listing ? matching(listing, query).filter((s) => !openTabs.includes(idOf(listing, s))) : [];
+  const offered = listing ? matching(listing, query).filter((s) => !workspace.tabs.some((t) => t.id === idOf(listing, s))) : [];
   const exact = listing?.sessions.find((s) => s.name === typed);
   const create = typed === "" ? "New session" : exact ? `Go to “${typed}”` : `Create “${typed}”`;
   const blocked = blockedBy(host);
 
   const attach = (l: TmuxListing, s: SessionListing): void => {
-    app.router.closeOverlay(() => { openSession(app, host, l, s); });
+    app.router.closeOverlay(() => { openSession(app, workspace, host, l, s); });
   };
   const commit = async (): Promise<void> => {
     if (busy || blocked !== undefined) return;
     setBusy(true);
     setError(null);
-    const result = await openOrCreate(app, host, typed);
+    const result = await openOrCreate(app, workspace, host, typed);
     setBusy(false);
     if ("error" in result) setError(result.error);
   };

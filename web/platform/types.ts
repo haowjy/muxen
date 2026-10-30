@@ -105,10 +105,8 @@ export interface SavedWorkspace {
 
 /** What persists across a reload. `app/persist.ts` assembles it; `workspace/saved.ts` is the one parser. */
 export interface SavedWorkspaces {
-  version: 4;
+  version: 5;
   workspaces: SavedWorkspace[];
-  /** The active tab's id. */
-  active: string | null;
   /** The host's last known name: an offline launch cannot ask `/auth/info`, yet still says "Can't reach pop-os". */
   hostName?: string;
   /** Bell attention (sessions/bells.ts): the bell mark this device last showed, by tab id, for the sessions it has seen. */

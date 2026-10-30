@@ -19,11 +19,11 @@ function fakeHistory(initialHash = "#/", initialState: unknown = null) {
 
 const dir = (path: string): FilesPlace => ({ kind: "dir", path });
 
-/** `active` stands in for the workspace's active tab. */
+/** `state.active` stands in for the last tab of workspace `w1`, the only one. */
 function setup(hash = "#/") {
   const h = fakeHistory(hash);
   const state = { active: null as string | null };
-  const router = new Router(h.port, () => state.active, (id) => id === "w1");
+  const router = new Router(h.port, (id) => (id === "w1" ? { last: state.active } : undefined));
   const seen: Entry[] = [];
   router.subscribe((n) => seen.push(n));
   const open = (tab: string, place: FilesPlace | null = null): void => { state.active = tab; router.openTab("w1", tab, place); };
@@ -82,11 +82,11 @@ describe("Router", () => {
     expect(router.entry).toMatchObject({ tab: "f2", place: dir("/x") });
   });
 
-  it("tabs switched under an open sheet stay as they are when the sheet closes, by an action or by Back", () => {
+  it("tabs switched under an open overlay stay as they are when it closes, by an action or by Back", () => {
     for (const close of [(r: Router) => { r.closeOverlay(); }, (_: Router, back: () => void) => { back(); }]) {
       const { router, state, open, h } = setup();
       open("t1");
-      router.openOverlay({ screen: "sessions", name: "sheet" });
+      router.openOverlay({ screen: "sessions", name: "find" });
       state.active = "t2";
       router.switchTab("t2", null);
       expect(router.entry).toMatchObject({ tab: "t2", overlay: { screen: "sessions" } });
@@ -114,7 +114,7 @@ describe("Router", () => {
     const { router, open, h } = setup();
     open("f1", { kind: "dir", path: "~" });
     router.pushPlace("f1", dir("/a"));
-    const after = new Router(h.port, () => null, () => false); // a reload: a new stack, no tab active
+    const after = new Router(h.port, () => undefined); // a reload: a new stack, no tab active
     h.port.go(-1);
     expect(after.entry.route).toBe("home");
   });
@@ -122,7 +122,7 @@ describe("Router", () => {
   it("closing an overlay by an action is history.back()", () => {
     const { router, open, h } = setup();
     open("t1");
-    router.openOverlay({ screen: "sessions", name: "sheet" });
+    router.openOverlay({ screen: "sessions", name: "find" });
     expect(h.entries).toHaveLength(4);
     router.closeOverlay();
     expect(router.entry.overlay).toBeNull();
@@ -133,7 +133,7 @@ describe("Router", () => {
     const { router } = setup();
     const ran: (string | null)[] = [];
     router.closeOverlay(() => ran.push("none open"));
-    router.openOverlay({ screen: "sessions", name: "sheet" });
+    router.openOverlay({ screen: "sessions", name: "find" });
     router.closeOverlay(() => ran.push(router.entry.overlay?.name ?? null));
     expect(ran).toEqual(["none open", null]);
   });
@@ -151,7 +151,7 @@ describe("Router", () => {
   it("after a reload an overlay cannot be popped to: a new Router starts at Home with no overlay", () => {
     const { router, h } = setup();
     router.openOverlay({ screen: "settings", name: "x" });
-    const again = new Router(h.port, () => null, () => false);
+    const again = new Router(h.port, () => undefined);
     expect(again.entry.overlay).toBeNull();
   });
 
@@ -166,15 +166,16 @@ describe("Router", () => {
     expect(router.entry.route).toBe("home");
     expect(h.at).toBe(0);
 
+    // After a reload, Back onto the overview of the earlier life: nothing below it, so ‹ Home replaces it.
     const deep = setup();
-    deep.router.replacePlace("t1", { kind: "dir", path: "~" });
-    deep.router.toOverview("w1");
-    expect(deep.router.entry).toMatchObject({ route: "overview", workspace: "w1" });
-    expect(deep.h.entries).toHaveLength(1);
-
-    deep.router.toHome();
-    expect(deep.router.entry.route).toBe("home");
-    expect(deep.h.entries).toHaveLength(1);
+    deep.open("t1");
+    const after = new Router(deep.h.port, (id) => (id === "w1" ? { last: "t1" } : undefined));
+    deep.h.port.go(-1);
+    expect(after.entry).toMatchObject({ route: "overview", workspace: "w1" });
+    const at = deep.h.at;
+    after.toHome();
+    expect(after.entry.route).toBe("home");
+    expect(deep.h.at).toBe(at);
   });
 
   it("a Files tab's in-app back goes back when the previous entry is that place in that tab, else replaces", () => {

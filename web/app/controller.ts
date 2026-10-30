@@ -1,8 +1,8 @@
-// The controller (client-architecture.md §3.2, §6): it boots the app from a Platform and
+// The controller (browser-behaviors.md "Platform layout"): it boots the app from a Platform and
 // runs the workspace reducer's effects. Everything else has its own owner: the workspace
 // reducer owns tabs, `net/hosts.ts` owns sockets and admission, the router owns navigation,
 // `app/focus.ts` owns focus, `app/persist.ts` owns persistence, `app/listing.ts` owns the
-// listing, `sessions/cache.ts` the rows Home and the sessions overlay render. Screens reach each of them
+// listing, `sessions/cache.ts` the rows Home and Open session render. Screens reach each of them
 // through `useApp()`.
 import { HostRegistry, type HostClient } from "../net/hosts";
 import { BellMarks } from "../sessions/bells";
@@ -10,7 +10,7 @@ import { SessionsCache } from "../sessions/cache";
 import { samePlace, type BootResult, type FilesPlace, type Lifecycle, type Platform, type Preferences, type UpdateState, type Viewport } from "../platform/types";
 import { Store } from "../ui/store";
 import { parseSavedWorkspaces } from "../workspace/saved";
-import { activeTab, allTabs, initialWorkspace, reduce, savedWorkspaces, screenOf, shownTab, workspaceOfTab, type NavigateTo, type Screen, type WorkspaceEffect, type WorkspaceEvent, type WorkspaceState } from "../workspace/state";
+import { activeTab, allTabs, initialWorkspace, reduce, savedWorkspaces, screenOf, shownTab, type Route, type Screen, type WorkspaceEffect, type WorkspaceEvent, type WorkspaceState } from "../workspace/state";
 import { FocusController } from "./focus";
 import { ListingFetcher } from "./listing";
 import { Persist } from "./persist";
@@ -50,7 +50,7 @@ export interface StartOptions {
   history?: HistoryPort;
 }
 
-/** The listing surface on screen: Home, or one sessions overlay (the picker, the sheet). */
+/** The listing surface on screen: Home, or one sessions overlay (Open session). */
 interface ListingSurface {
   kind: "home" | "sessions";
   name: string;
@@ -95,7 +95,7 @@ export class AppController extends Store<AppView> {
     // Read before the Router: it replaces the link's `#code=…` with the entry hash, so a reload or Back cannot replay the code.
     const enrolCode = enrolCodeFromHash(history.current().hash);
     const saved = parseSavedWorkspaces(boot.workspace);
-    const router = new Router(history, () => this.snapshot.workspace.active, (id) => this.snapshot.workspace.workspaces.some((w) => w.id === id));
+    const router = new Router(history, (id) => this.snapshot.workspace.workspaces.find((w) => w.id === id));
     super({
       viewport: boot.viewport,
       preferences: boot.preferences,
@@ -171,9 +171,10 @@ export class AppController extends Store<AppView> {
     // On a tab route the current entry names the active tab, so a switch rewrites it (a replace: no history is added).
     const tab = activeTab(state);
     const { entry } = this.router;
-    if (state.route === "tab" && tab && entry.route === "tab" && entry.tab !== tab.id) this.router.switchTab(tab.id, tab.kind === "files" ? tab.place : null);
-    if (state.active !== this.sentActive) {
-      this.sentActive = state.active;
+    if (tab && entry.route === "tab" && entry.tab !== tab.id) this.router.switchTab(tab.id, tab.kind === "files" ? tab.place : null);
+    const active = tab?.id ?? null;
+    if (active !== this.sentActive) {
+      this.sentActive = active;
       this.platform.input.setActiveTab(tab?.kind === "terminal" ? tab.key : null);
     }
     this.syncScreen();
@@ -193,11 +194,11 @@ export class AppController extends Store<AppView> {
     else this.listing.refresh(handle);
   }
 
-  /** A new Files tab on `hostId`, at `place` (every time: the tab is the place). */
-  openFiles(hostId: string, place: FilesPlace): void {
+  /** A new Files tab in workspace `workspace`, at `place` (every time: the tab is the place). */
+  openFiles(workspace: string, place: FilesPlace): void {
     // With the keyboard up it stays up: the new tab's path field takes it.
-    if (this.snapshot.viewport.keyboard && this.snapshot.workspace.route === "tab") this.focus.keepKeyboardOn("path");
-    this.dispatch({ type: "filesOpened", id: `files-${crypto.randomUUID()}`, host: hostId, place });
+    if (this.snapshot.viewport.keyboard && this.snapshot.workspace.route.kind === "tab") this.focus.keepKeyboardOn("path");
+    this.dispatch({ type: "filesOpened", workspace, id: `files-${crypto.randomUUID()}`, place });
     // Desktop focus lands on the new tab's pill, once it has rendered; touch never focuses outside a tap.
     queueMicrotask(() => { this.focus.focusTarget("tabs"); });
   }
@@ -279,11 +280,15 @@ export class AppController extends Store<AppView> {
     }
   }
 
-  private navigate(to: NavigateTo): void {
-    const tab = activeTab(this.snapshot.workspace);
-    if (typeof to === "object") this.router.toOverview(to.overview);
-    else if (to === "home" || !tab) this.router.goHome();
-    else this.router.openTab(workspaceOfTab(this.snapshot.workspace, tab.id)?.id ?? "", tab.id, tab.kind === "files" ? tab.place : null);
+  private navigate(to: Route): void {
+    if (to.kind === "home") this.router.goHome();
+    else if (to.kind === "overview") this.router.toOverview(to.workspace);
+    else {
+      // The route is not `to` yet: the tab is the workspace's last.
+      const ws = this.snapshot.workspace.workspaces.find((w) => w.id === to.workspace);
+      const tab = ws?.tabs.find((t) => t.id === ws.last);
+      if (ws && tab) this.router.openTab(ws.id, tab.id, tab.kind === "files" ? tab.place : null);
+    }
   }
 
   private navigated(entry: Entry): void {

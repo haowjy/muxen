@@ -12,14 +12,14 @@ import { SwipeToClose } from "../../ui/primitives/SwipeToClose";
 import { Row } from "../../ui/primitives/Row";
 import { BellDot } from "../../ui/primitives/BellDot";
 import { useStore } from "../../ui/store";
-import type { Tab, Workspace } from "../../workspace/state";
+import { routeWorkspace, type Tab, type Workspace } from "../../workspace/state";
 import { pillMeta, tabPills } from "../terminal/tabView";
 import { terminalsOf } from "../terminal/terminals";
 import { useAddActions } from "../shell/tabMenus";
 import styles from "./Overview.module.css";
 
 export function Overview() {
-  const workspace = useAppView((v) => v.workspace.workspaces.find((w) => w.id === v.workspace.overview) ?? null);
+  const workspace = useAppView((v) => routeWorkspace(v.workspace));
   if (!workspace) return null;
   return <WorkspacePage workspace={workspace} />;
 }
@@ -27,7 +27,6 @@ export function Overview() {
 function WorkspacePage({ workspace }: { workspace: Workspace }) {
   const app = useApp();
   const terminals = terminalsOf(app);
-  const active = useAppView((v) => v.workspace.active);
   const host = useAppView((v) => v.hosts.find((h) => h.hostId === workspace.host));
   const sessions = useStore(app.sessions, (s) => (host ? s.hosts[host.entry.handle] : undefined));
   const statuses = useStore(terminals, (s) => s.tabs);
@@ -108,14 +107,14 @@ function WorkspacePage({ workspace }: { workspace: Workspace }) {
                     ref={(el) => { if (el) rows.current.set(pill.id, el); else rows.current.delete(pill.id); }}
                     class={styles.item}
                     data-dragging={drag?.id === pill.id ? "" : undefined}
-                    data-selected={pill.id === active ? "" : undefined}
+                    data-selected={pill.id === workspace.last ? "" : undefined}
                     style={shift === 0 ? undefined : { transform: `translateY(${String(shift)}px)` }}
                   >
                     <SwipeToClose label={`Close ${pill.full}`} onClose={() => { app.dispatch({ type: "closed", id: pill.id }); }}>
                       <Row
                         class={styles.row}
                         icon={pill.kind === "files" ? "folder" : "terminal"}
-                        selected={pill.id === active}
+                        selected={pill.id === workspace.last}
                         mark={pill.bell ? <BellDot /> : undefined}
                         meta={meta}
                         label={

@@ -9,7 +9,7 @@ import { useApp, useAppView, useTabLabels } from "../../../app/context";
 import { Icon } from "../../../ui/primitives/Icon";
 import { DockButton } from "../../../ui/primitives/DockButton";
 import { useStore } from "../../../ui/store";
-import { terminalTabOf } from "../../../workspace/state";
+import { activeTerminal } from "../../../workspace/state";
 import { terminalsOf } from "../terminals";
 import { TabRow } from "../../shell/TabRow";
 import { KeyRow } from "./KeyRow";
@@ -59,7 +59,7 @@ export function Dock({ active }: { active: boolean }) {
   const under = useRef<HTMLDivElement>(null);
   const [local, setLocal] = useState<LocalNote | null>(null);
 
-  const tab = terminalTabOf(workspace, workspace.active);
+  const tab = activeTerminal(workspace);
   const native = viewport.directInput === "native";
   const labels = useTabLabels();
   const label = labels.find((l) => l.id === tab?.id);

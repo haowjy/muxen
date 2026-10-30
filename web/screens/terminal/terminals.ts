@@ -18,7 +18,7 @@ import type { RowKey } from "../../touch/keyRoute";
 import { createOwnedInput } from "../../touch/owned-input";
 import { Store } from "../../ui/store";
 import { terminalTheme } from "../../ui/theme";
-import { allTabs, screenOf, shownTab, terminalTabOf } from "../../workspace/state";
+import { activeTab, allTabs, screenOf, shownTab, terminalTabOf } from "../../workspace/state";
 import { failureText } from "../sessions/createSession";
 import type { LineEditor } from "./dock/lineEditor";
 import { nativeLineEditor } from "./dock/lineEditor";
@@ -206,7 +206,7 @@ export class Terminals extends Store<TerminalsView> {
   activate(id: string): void {
     const { viewport, workspace } = this.app.snapshot;
     const tab = allTabs(workspace).find((t) => t.id === id);
-    if (viewport.keyboard && workspace.route === "tab" && tab) this.app.focus.keepKeyboardOn(tab.kind === "terminal" ? "terminal" : "path");
+    if (viewport.keyboard && workspace.route.kind === "tab" && tab) this.app.focus.keepKeyboardOn(tab.kind === "terminal" ? "terminal" : "path");
     this.app.dispatch({ type: "activated", id });
     const status = this.snapshot.tabs[id];
     if (status?.state.kind === "reconnecting" || status?.state.kind === "limited") this.drivers.get(id)?.nudge();
@@ -325,7 +325,7 @@ export class Terminals extends Store<TerminalsView> {
   private showPainted(): void {
     const { workspace } = this.app.snapshot;
     const onTerminal = screenOf(workspace) === "terminal";
-    const blank = !allTabs(workspace).some((t) => t.kind === "terminal") || (onTerminal && this.painted !== workspace.active);
+    const blank = !allTabs(workspace).some((t) => t.kind === "terminal") || (onTerminal && this.painted !== activeTab(workspace)?.id);
     if (blank) this.element.dataset["blank"] = "true";
     else if (onTerminal) this.element.removeAttribute("data-blank");
   }

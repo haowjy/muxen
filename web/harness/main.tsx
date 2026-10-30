@@ -37,7 +37,8 @@ const platform = createTestPlatform({ viewport, ...fixture.options?.() });
 fixture.daemon?.(platform.daemon);
 const app = await AppController.start(platform, { fetchFn: platform.fetch, applyPreferences, applyViewport });
 window.__harness = { platform, app };
-if ((fixture.openActive || params.has("open")) && app.snapshot.workspace.active) app.dispatch({ type: "activated", id: app.snapshot.workspace.active });
+const last = app.snapshot.workspace.workspaces[0]?.last;
+if ((fixture.openActive || params.has("open")) && last) app.dispatch({ type: "activated", id: last });
 
 if (fixture.overview) app.router.toOverview(app.snapshot.workspace.workspaces[0]?.id ?? "");
 if (fixture.overlay) app.openOverlay(fixture.overlay);
