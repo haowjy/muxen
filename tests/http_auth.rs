@@ -21,11 +21,7 @@ use daemon::{
 };
 
 /// Every `/fs` route and `/complete`, with a body where it takes one.
-const DEVICE_ROUTES: [(&str, &str, &str); 9] = [
-    ("GET", "/fs/favorites", ""),
-    ("POST", "/fs/favorites/add", r#"{"path":"/tmp"}"#),
-    ("POST", "/fs/favorites/remove", r#"{"path":"/tmp"}"#),
-    ("POST", "/fs/uploads-dir", r#"{"path":"/tmp"}"#),
+const DEVICE_ROUTES: [(&str, &str, &str); 5] = [
     ("GET", "/fs/list/", ""),
     ("GET", "/fs/list/tmp", ""),
     ("GET", "/fs/raw/etc/hostname", ""),
@@ -109,7 +105,7 @@ async fn the_default_allowlist_refreshes_tailnet_state_after_idle() {
     let shell = send(daemon.serve_port, "GET", "/", &login, &[]);
     let protocols = format!("tether.v1, tether.auth.{token}");
     let websocket = open(daemon.port, Some(LOGIN), &protocols);
-    let fs = send_owned(daemon.port, "GET", "/fs/favorites", &native, &[]);
+    let fs = send_owned(daemon.port, "GET", "/fs/list/", &native, &[]);
     let (shell, websocket, fs) = tokio::join!(shell, websocket, fs);
     assert_eq!(shell.status, 200, "{}", shell.text());
     let (mut socket, protocol) = websocket.expect("native WebSocket admitted after idle");
@@ -797,14 +793,7 @@ async fn a_stored_node_with_an_old_login_is_not_enrolled_and_tokens_stay_native(
         .iter()
         .map(|(name, value)| (name.as_str(), value.as_str()))
         .collect::<Vec<_>>();
-    let accepted = send(
-        daemon.serve_port,
-        "GET",
-        "/fs/favorites",
-        &native_headers,
-        &[],
-    )
-    .await;
+    let accepted = send(daemon.serve_port, "GET", "/fs/list/", &native_headers, &[]).await;
     assert_eq!(accepted.status, 200, "{}", accepted.text());
 
     let mut bad_native = NODE_HEADERS.to_vec();
@@ -830,7 +819,7 @@ async fn a_stored_node_with_an_old_login_is_not_enrolled_and_tokens_stay_native(
         ("Tailscale-User-Login", LOGIN),
         ("Cookie", "tether=anything"),
     ];
-    let refused = send(daemon.port, "GET", "/fs/favorites", &cookie, &[]).await;
+    let refused = send(daemon.port, "GET", "/fs/list/", &cookie, &[]).await;
     assert_eq!(refused.status, 401);
     assert_eq!(refused.json()["error"].as_str(), Some("auth_required"));
 }

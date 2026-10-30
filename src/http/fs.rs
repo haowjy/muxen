@@ -7,7 +7,7 @@ use std::path::Path as FilePath;
 use std::sync::Arc;
 
 use axum::body::Body;
-use axum::extract::rejection::{JsonRejection, PathRejection, QueryRejection};
+use axum::extract::rejection::{PathRejection, QueryRejection};
 use axum::extract::{DefaultBodyLimit, Path, Query, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse as _, Response};
@@ -18,30 +18,17 @@ use tracing::{debug, error, info, warn};
 
 use super::{Ctx, Refusal};
 use crate::files::Stamp;
-use crate::fs::config_write::{self, Change};
 use crate::fs::list::{self, Filter};
 use crate::fs::raw::{self, Span};
 use crate::fs::upload::{self, MAX_UPLOAD};
-use crate::fs::{Favorites, FsError, Want, mime};
+use crate::fs::{FsError, Want, mime};
 use crate::proto::HttpError;
-use crate::proto::fs::PathBody;
-
-/// `/fs/favorites/*` and `/fs/uploads-dir` bodies are one path.
-const JSON_BODY: usize = 4 * 1024;
 
 /// `{*path}`, or nothing on a route without one; a rejection if it doesn't decode.
 type WirePath = Result<Option<Path<String>>, PathRejection>;
 
 pub(super) fn routes() -> Router<Arc<Ctx>> {
-    let settings = |make: fn(String) -> Change| {
-        let handler = move |State(ctx): State<Arc<Ctx>>, body| change(ctx, body, make);
-        post(handler).layer(DefaultBodyLimit::max(JSON_BODY))
-    };
     Router::new()
-        .route("/fs/favorites", get(favorites))
-        .route("/fs/favorites/add", settings(Change::AddFavorite))
-        .route("/fs/favorites/remove", settings(Change::RemoveFavorite))
-        .route("/fs/uploads-dir", settings(Change::UploadsDir))
         // `{*path}` doesn't match an empty path: `/` is its own route.
         .route("/fs/list/", get(listing))
         .route("/fs/list/{*path}", get(listing))
@@ -67,45 +54,6 @@ struct UploadQuery {
     /// The client's file name: only its extension is used.
     #[serde(default)]
     name: String,
-}
-
-async fn favorites(State(ctx): State<Arc<Ctx>>) -> Response {
-    let app = ctx.clone();
-    let loaded = async { ctx.fs.lane.run(move || app.favorites()).await? }.await;
-    respond(
-        "",
-        loaded.map(|favorites| Json(favorites.to_wire()).into_response()),
-    )
-}
-
-/// A Settings change, then the favorites as they are after it.
-async fn change(
-    ctx: Arc<Ctx>,
-    body: Result<Json<PathBody>, JsonRejection>,
-    make: fn(String) -> Change,
-) -> Response {
-    let path = match body {
-        Ok(Json(PathBody { path })) => path,
-        Err(rejection) => return Refusal::from(rejection).into_response(),
-    };
-    let app = ctx.clone();
-    let requested = make(path.clone());
-    let changed = async {
-        ctx.fs
-            .lane
-            .run(move || {
-                let file = &app.app.config;
-                let state_dir = app.app.auth.store().dir();
-                config_write::apply(file, state_dir, &app.app.home, requested)?;
-                app.favorites()
-            })
-            .await?
-    }
-    .await;
-    respond(
-        &path,
-        changed.map(|favorites| Json(favorites.to_wire()).into_response()),
-    )
 }
 
 /// A page of any directory, holding the scan slot.
@@ -229,13 +177,6 @@ async fn upload(
     }
 }
 
-impl Ctx {
-    /// The favorites as `config.toml` names them now. Blocks.
-    fn favorites(&self) -> Result<Favorites, FsError> {
-        Favorites::load(&self.app.config, &self.app.home)
-    }
-}
-
 /// `{*path}` decoded, with its `/` (just `/` without one); `None` if it doesn't decode.
 fn wire_path(path: WirePath) -> Option<String> {
     let path = path.ok()?.map_or_else(String::new, |Path(path)| path);
@@ -256,9 +197,6 @@ fn respond(asked: &str, result: Result<Response, FsError>) -> Response {
         }
         FsError::ConfigUnavailable(cause) => {
             error!(%cause, "can't read config.toml: every file request fails");
-        }
-        FsError::ConfigReadOnly(cause) => {
-            warn!(%cause, path = asked, "config.toml can't be written: refused");
         }
         FsError::Internal(cause) => error!(%cause, path = asked, "a file request failed"),
         _ => debug!(path = asked, %code, "refused a file request"),

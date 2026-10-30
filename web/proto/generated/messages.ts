@@ -196,31 +196,7 @@ node?: ErrorNode, };
  * Every code an HTTP route answers with. Each has one status (`src/http/error.rs`),
  * except `bad_request` for a body that isn't the route's JSON, which takes axum's.
  */
-export type HttpError = "bad_request" | "auth_required" | "forbidden" | "bad_origin" | "node_refused" | "not_enrolled" | "bad_code" | "denied" | "not_found" | "not_a_directory" | "not_a_file" | "memory_backed" | "config_read_only" | "too_large" | "bad_range" | "busy" | "auth_unavailable" | "identity_unavailable" | "config_unavailable" | "no_space" | "internal";
-
-/**
- * `GET /fs/favorites` and the answer to every Settings change.
- */
-export type Favorites = {
-/**
- * The canonical `$HOME`: the picker lists it first.
- */
-home: string, favorites: Array<PlaceStatus>, uploadsDir: PlaceStatus, };
-
-export type PlaceStatus = {
-/**
- * As stored in `config.toml`.
- */
-path: string,
-/**
- * Null when the entry is missing, isn't a directory, or isn't absolute or `~/`.
- */
-canonical: string | null, ok: boolean, };
-
-/**
- * The body of `POST /fs/favorites/add`, `/fs/favorites/remove` and `/fs/uploads-dir`.
- */
-export type PathBody = { path: string, };
+export type HttpError = "bad_request" | "auth_required" | "forbidden" | "bad_origin" | "node_refused" | "not_enrolled" | "bad_code" | "denied" | "not_found" | "not_a_directory" | "not_a_file" | "memory_backed" | "too_large" | "bad_range" | "busy" | "auth_unavailable" | "identity_unavailable" | "config_unavailable" | "no_space" | "internal";
 
 /**
  * `GET /fs/list/{*path}`.

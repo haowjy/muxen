@@ -1,7 +1,7 @@
 //! `config.toml` and the XDG paths (plan.md "Long-term": unknown keys are ignored, so
 //! an older daemon reads a newer config). A missing default file means every default.
-//! The daemon reads the file once at startup, except `favorites` and `uploads_dir`, which
-//! fs re-reads through the same `ConfigFile` on every request (fs.md "Favorites").
+//! The daemon reads the file once at startup, except `uploads_dir`, which
+//! fs re-reads through the same `ConfigFile` on every upload (fs.md "The uploads folder").
 
 use std::env;
 use std::path::{Path, PathBuf};
@@ -22,8 +22,6 @@ pub struct Config {
     /// The daemon's memory budget, in MiB; daemon-core.md §6 derives its caps from it.
     pub memory_budget_mib: u64,
     pub tmux: Tmux,
-    /// The file API's favorites, absolute or `~/`, as written (fs.md "Favorites").
-    pub favorites: Vec<String>,
     /// Where uploads land.
     pub uploads_dir: String,
     pub complete: Complete,
@@ -59,7 +57,6 @@ impl Default for Config {
             name: None,
             memory_budget_mib: DEFAULT_MEMORY_BUDGET_MIB,
             tmux: Tmux::default(),
-            favorites: Vec::new(),
             uploads_dir: DEFAULT_UPLOADS.to_owned(),
             complete: Complete::default(),
         }
@@ -167,7 +164,7 @@ pub fn state_dir() -> Result<PathBuf, ConfigError> {
     Ok(xdg("XDG_STATE_HOME", ".local/state")?.join("tether"))
 }
 
-/// `$HOME`, which `~/` in `favorites` and `uploads_dir` stands for.
+/// `$HOME`, which `~/` in `uploads_dir` stands for.
 pub fn home() -> Result<PathBuf, ConfigError> {
     env::var_os("HOME")
         .map(PathBuf::from)

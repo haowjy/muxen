@@ -4,31 +4,6 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-/// `GET /fs/favorites` and the answer to every Settings change.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "camelCase")]
-pub struct Favorites {
-    /// The canonical `$HOME`: the picker lists it first.
-    pub home: String,
-    pub favorites: Vec<PlaceStatus>,
-    pub uploads_dir: PlaceStatus,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-pub struct PlaceStatus {
-    /// As stored in `config.toml`.
-    pub path: String,
-    /// Null when the entry is missing, isn't a directory, or isn't absolute or `~/`.
-    pub canonical: Option<String>,
-    pub ok: bool,
-}
-
-/// The body of `POST /fs/favorites/add`, `/fs/favorites/remove` and `/fs/uploads-dir`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-pub struct PathBody {
-    pub path: String,
-}
-
 /// `GET /fs/list/{*path}`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct Listing {

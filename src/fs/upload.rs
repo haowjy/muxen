@@ -15,7 +15,7 @@ use futures_util::{Stream, StreamExt as _};
 use rustix::io::Errno;
 use tracing::debug;
 
-use super::{Favorites, FsError, Opened, Want, expand, open};
+use super::{FsError, Opened, Want, expand, open};
 use crate::blocking::Lane;
 use crate::config::ConfigFile;
 use crate::files::{Dir, Temp};
@@ -42,21 +42,17 @@ const BASE32: &[u8; 32] = b"abcdefghijklmnopqrstuvwxyz234567";
 /// a folder that didn't exist a moment ago still counts. Blocks.
 pub fn open_dir(file: &ConfigFile, home: &Path) -> Result<Opened, FsError> {
     let config = file.load()?;
-    if let Some(dir) = expand(&config.uploads_dir, home) {
-        // A failure shows up in the open below.
-        let _ = std::fs::DirBuilder::new()
-            .recursive(true)
-            .mode(0o700)
-            .create(&dir);
-    }
-    let favorites = Favorites::resolve(&config, home)?;
-    let dir = favorites
-        .uploads
-        .canonical
-        .as_deref()
-        .and_then(Path::to_str);
-    let dir = dir.ok_or(FsError::NotADirectory)?;
-    let opened = open(dir, Want::Dir)?;
+    let dir = expand(&config.uploads_dir, home).ok_or(FsError::NotADirectory)?;
+    // A failure shows up in the open below.
+    let _ = std::fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(&dir);
+    let dir = std::fs::canonicalize(&dir)
+        .ok()
+        .and_then(|dir| dir.into_os_string().into_string().ok())
+        .ok_or(FsError::NotADirectory)?;
+    let opened = open(&dir, Want::Dir)?;
     if memory_backed(&opened.file)? {
         return Err(FsError::MemoryBacked);
     }

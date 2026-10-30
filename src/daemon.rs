@@ -292,13 +292,11 @@ fn assemble_serve_front(front: crate::runtime::ServeFront) -> Result<ServeAssemb
     })
 }
 
-/// Deletes part files of uploads a daemon that died left, and warns of favorites that
+/// Deletes part files of uploads a daemon that died left, and warns of an `uploads_dir` that
 /// fs ignores. Runtime::open holds the single-instance lock before this can run.
 async fn start_file_api(config: &Config, home: &Path, lanes: &Lanes) {
-    for entry in config.favorites.iter().chain([&config.uploads_dir]) {
-        if fs::expand(entry, home).is_none() {
-            warn!(%entry, "a favorite in config.toml isn't absolute or ~/: ignored");
-        }
+    if fs::expand(&config.uploads_dir, home).is_none() {
+        warn!(entry = %config.uploads_dir, "uploads_dir in config.toml isn't absolute or ~/: uploads are refused");
     }
     let Some(uploads) = fs::expand(&config.uploads_dir, home) else {
         return;
