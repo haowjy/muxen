@@ -30,6 +30,9 @@
   background: var(--tab-bg);
   color: var(--pill-color, var(--color-text-muted));
 }
+/* An idle tab (Files) has no status colour: its active tint and label are the plain text colour.
+   Without a default the mix is invalid and the active pill loses its fill. */
+.active { --pill-color: var(--color-text); }
 .active[data-tone="live"] { --pill-color: var(--color-status-live); }
 .active[data-tone="reconnecting"] { --pill-color: var(--color-status-reconnecting); }
 .active[data-tone="error"] { --pill-color: var(--color-status-error); }

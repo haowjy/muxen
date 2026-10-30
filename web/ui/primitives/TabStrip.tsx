@@ -60,7 +60,8 @@ export function TabStrip({ pills, active, onSelect, onClose, onMenu }: TabStripP
   };
 
   useEffect(() => {
-    scroller.current?.querySelector('[aria-current="true"]')?.scrollIntoView({ inline: "nearest", block: "nearest" });
+    // The pill, not its button: the button stops short of the ×, which would stay under the fade.
+    scroller.current?.querySelector('[aria-current="true"]')?.parentElement?.scrollIntoView({ inline: "nearest", block: "nearest" });
     measure();
   }, [active, pills.length]);
 
