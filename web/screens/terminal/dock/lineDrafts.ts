@@ -9,7 +9,7 @@ import type { DraftRecord, TabKey } from "../../../platform/types";
 import { tabId } from "../../../platform/tabKey";
 import { Store } from "../../../ui/store";
 import { terminalsOf } from "../terminals";
-import type { TerminalTab } from "../../../workspace/state";
+import { allTabs, type TerminalTab } from "../../../workspace/state";
 
 /** An edit settles this long after the last keystroke. */
 const DEBOUNCE_MS = 300;
@@ -61,7 +61,7 @@ export class LineDrafts extends Store<DraftsState> {
   }
 
   private openTabs(): ReadonlySet<string> {
-    return new Set(this.app.snapshot.workspace.tabs.map((t) => t.id));
+    return new Set(allTabs(this.app.snapshot.workspace).map((t) => t.id));
   }
 
   private listed(records: DraftRecord[]): void {

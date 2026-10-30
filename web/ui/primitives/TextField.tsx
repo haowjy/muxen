@@ -21,6 +21,8 @@ interface FieldProps {
   error?: string | null | undefined;
   /** Registers the input with the focus controller under this name. */
   focusTarget?: FocusTarget;
+  /** Takes focus when its dialog opens, with a fine pointer (`Dialog`). */
+  "data-initial-focus"?: string;
   class?: string | undefined;
 }
 

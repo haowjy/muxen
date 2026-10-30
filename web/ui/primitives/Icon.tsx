@@ -9,6 +9,8 @@ const PATHS = {
   close: <path d="m6 6 12 12M18 6 6 18" />,
   keyboard: <><rect x="2" y="5" width="20" height="14" rx="2" /><path d="M5 9h1m3 0h1m3 0h1m3 0h1M5 12h1m3 0h1m3 0h1m3 0h1M7 16h10" /></>,
   keyboardHide: <><rect x="2" y="3" width="20" height="12" rx="2" /><path d="M5 7h1m3 0h1m3 0h1m3 0h1M7 11h10m-8 6.5 3 3 3-3" /></>,
+  /** The drag handle: two bars. */
+  grip: <path d="M5 9h14M5 15h14" />,
   chevron: <path d="m9 6 6 6-6 6" />,
   chevronUp: <path d="m6 15 6-6 6 6" />,
   chevronDown: <path d="m6 9 6 6 6-6" />,

@@ -25,11 +25,12 @@
   background: var(--tab-bg);
   color: var(--pill-color, var(--color-text-muted));
 }
-.pill[data-tone="live"] { --pill-color: var(--color-status-live); }
-.pill[data-tone="reconnecting"] { --pill-color: var(--color-status-reconnecting); }
-.pill[data-tone="error"] { --pill-color: var(--color-status-error); }
-.pill[data-tone="gone"] { --pill-color: var(--color-status-gone); }
+.active[data-tone="live"] { --pill-color: var(--color-status-live); }
+.active[data-tone="reconnecting"] { --pill-color: var(--color-status-reconnecting); }
+.active[data-tone="error"] { --pill-color: var(--color-status-error); }
+.active[data-tone="gone"] { --pill-color: var(--color-status-gone); }
 .active { background: var(--tab-bg-active); }
+/* Only the active pill carries its status colour; the others are plain text. */
 
 .select {
   display: flex;
@@ -44,10 +45,13 @@
   color: inherit;
   font-weight: inherit;
   white-space: nowrap;
+  -webkit-touch-callout: none;
+  user-select: none;
 }
 /* The session name is bold and the window's regular, set apart by space alone. Both shrink, the window far faster: it truncates first, then the session, so the label stays inside the pill and never runs under the ×. (A shrink factor near 0 on the session left it overflowing.) */
 .session { min-width: 0; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; font-weight: var(--weight-bold); }
 .window { min-width: 0; overflow: hidden; text-overflow: ellipsis; flex: 0 100 auto; margin-left: var(--space-2); font-weight: normal; }
+.kind { flex: none; margin-right: var(--space-2); }
 .bell { margin-left: var(--space-2); }
 .close { width: var(--tab-height); height: var(--tab-height); flex: none; color: var(--color-text-muted); }
 /* Hidden, not removed: the slot keeps every pill's width, and a hidden button takes no tap or focus. */

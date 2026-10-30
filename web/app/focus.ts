@@ -18,6 +18,9 @@ export type { FocusTarget };
  */
 export type Owner = "terminal" | "line" | "none";
 
+/** How long a Files tab's path field has to mount and take the keyboard a tab switch kept. */
+const KEEP_KEYBOARD_MS = 1_500;
+
 interface FocusView {
   owner: Owner;
 }
@@ -46,6 +49,8 @@ export class FocusController extends Store<FocusView> implements FocusPort {
   private mode: FocusMode | null = null;
   private screen: { screen: Screen; overlay: boolean } | null = null;
   private isSelecting = false;
+  /** The keyboard was up when the user switched tabs: the next screen's input of this kind takes it (`keepKeyboardOn`). */
+  private keeping: FocusTarget | null = null;
 
   constructor(
     private readonly input: InputPlatform,
@@ -57,9 +62,25 @@ export class FocusController extends Store<FocusView> implements FocusPort {
     this.mode = initialMode;
   }
 
+  /**
+   * A tab switch with the keyboard up (it is sticky): the input of `target` takes it. The terminal is mounted
+   * already, so it is focused after the switch renders, inside the tap's task; a Files tab's path field mounts
+   * with its screen and takes it when it registers. Leaving the terminal screen does not lower it meanwhile.
+   */
+  keepKeyboardOn(target: FocusTarget): void {
+    this.keeping = target;
+    // Two microtasks: the first runs before the render the switch queued next, the second after it.
+    if (target === "terminal") queueMicrotask(() => { queueMicrotask(() => { this.keeping = null; this.focusTarget("terminal", true); }); });
+    else setTimeout(() => { this.keeping = null; }, KEEP_KEYBOARD_MS);
+  }
+
   /** An element that can hold focus announces itself on mount. */
   register(target: FocusTarget, element: HTMLElement): void {
     this.targets.set(target, element);
+    if (this.keeping === target && target !== "terminal") {
+      this.keeping = null;
+      element.focus();
+    }
     if (target !== "terminal" && target !== "line") return;
     const focused = (): void => { this.update({ owner: target }); };
     // A blur that hands focus to the other input is a change of owner, not a release: the focus event that follows names the new owner.
@@ -87,17 +108,18 @@ export class FocusController extends Store<FocusView> implements FocusPort {
     if (this.snapshot.owner === target) this.update({ owner: "none" });
   }
 
-  /** A registered element, for placing something against it (a popover under the top row's +); focusing stays this controller's. */
-  elementOf(target: FocusTarget): HTMLElement | null {
-    return this.targets.get(target) ?? null;
-  }
-
   /** The toggle is the terminal opener and the closer for either target. */
   toggleKeyboard(): void {
     const { owner } = this.snapshot;
     if (owner === "none") this.focusTarget("terminal", true);
     else if (owner === "line" && this.isNative) this.nativeLineBlur();
     else this.targets.get(owner)?.blur();
+  }
+
+  /** A Files tab's keyboard control: its path field takes the keyboard when it is down, and gives it up when it is up. */
+  toggleFilesKeyboard(up: boolean): void {
+    if (up) this.targets.get("path")?.blur();
+    else this.focusTarget("path", true);
   }
 
   /** The non-editable app mirror chose the line target. */
@@ -122,7 +144,7 @@ export class FocusController extends Store<FocusView> implements FocusPort {
    */
   returnKeyboardInTap(from: Element): void {
     const dialog = from.closest("dialog");
-    if (this.held !== null && dialog) this.closeDialog(dialog, undefined, true);
+    if (this.held !== null && dialog) this.closeDialog(dialog, true);
   }
 
   /** `keyboard` falling while an input still holds focus means the system lowered it without telling the page: let go of the input. */
@@ -200,8 +222,8 @@ export class FocusController extends Store<FocusView> implements FocusPort {
     (first ?? dialog).focus();
   }
 
-  /** Closes a dialog and returns focus to `returnTo`, else to the exact control that opened it. `fromTap`: the keyboard goes back to the input that held it. */
-  closeDialog(dialog: HTMLDialogElement, returnTo?: HTMLElement | FocusTarget | null, fromTap = false): void {
+  /** Closes a dialog and returns focus to the exact control that opened it. `fromTap`: the keyboard goes back to the input that held it. */
+  closeDialog(dialog: HTMLDialogElement, fromTap = false): void {
     const opener = this.openers.get(dialog) ?? null;
     this.openers.delete(dialog);
     const heldOwner = this.held;
@@ -219,9 +241,7 @@ export class FocusController extends Store<FocusView> implements FocusPort {
       held.focus();
       return;
     }
-    const target = typeof returnTo === "string" ? this.targets.get(returnTo) : returnTo;
-    const back = target ?? opener;
-    if (back instanceof HTMLElement && back.isConnected) back.focus();
+    if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
   }
 
   /** The selection snapshot holds the touch (§7.6) while `on`: native's mode follows it. */
@@ -235,7 +255,7 @@ export class FocusController extends Store<FocusView> implements FocusPort {
     this.screen = { screen, overlay };
     const { owner } = this.snapshot;
     // Leaving the terminal screen lowers the keyboard (the dock is hidden there, which would drop it only later).
-    if ((screen !== "terminal" || overlay) && owner !== "none") {
+    if ((screen !== "terminal" || overlay) && owner !== "none" && this.keeping === null) {
       if (owner === "line" && this.isNative) this.update({ owner: "none" });
       else this.targets.get(owner)?.blur();
     }

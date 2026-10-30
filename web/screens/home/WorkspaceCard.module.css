@@ -1,0 +1,13 @@
+/* Raised rows on a sunken group: the card is the surface the row sits on, not another bordered box. */
+.card { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); border-radius: var(--radius-3); background: var(--color-bg-sunken); }
+.card > button { align-self: flex-start; }
+.card > :first-child { align-self: stretch; min-height: calc(var(--row-height) + var(--space-3)); }
+.text { display: flex; flex-direction: column; gap: 2px; padding: var(--space-1) 0; }
+.name { overflow: hidden; text-overflow: ellipsis; font-size: var(--text-heading); font-weight: var(--weight-bold); }
+/* Status and count are set apart by space alone. */
+.line { display: flex; gap: var(--space-3); font-size: var(--text-small); color: var(--color-text-muted); }
+.status { color: var(--color-status-gone); }
+.status[data-status="live"] { color: var(--color-status-live); }
+.status[data-status="checking"] { color: var(--color-status-reconnecting); }
+.status[data-status="attention"] { color: var(--color-status-error); }
+.note { padding: 0 var(--space-1); font-size: var(--text-small); color: var(--color-text-muted); }

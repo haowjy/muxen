@@ -18,37 +18,19 @@ const SEVERAL: TmuxListing = {
   ],
 };
 
-const SHEET = { screen: "sessions", name: "sheet" } as const;
+const OPEN = { screen: "sessions", name: "open", params: { workspace: "ws/h-pop" } } as const;
 
 export const fixtures: Fixtures = {
-  /** A live tab with two others open, in the phone layout: the dock at rest. */
+  /** A live tab with two others open, in the phone layout: the tab row at rest. */
   dock: { options: () => ({ workspace: SAVED }), openActive: true, daemon: (d) => { d.listing = LISTING; d.watch = "ok"; } },
-  /** No tab open: the dock's chip reads "Sessions". */
-  dockEmpty: { daemon: (d) => { d.listing = LISTING; } },
-  /** The sessions overlay over a live tab: several sessions, the active one with three windows ("here" and its windows), another open, a Files tab in the strip. The overlay name picks the form, so this is the half-height sheet in either layout. */
-  sessions: { options: () => ({ workspace: WITH_FILES }), openActive: true, overlay: SHEET, daemon: (d) => { d.listing = SEVERAL; d.watch = "ok"; serveTree(d); } },
-  /** The half-height sheet with two servers listed: each side groups its list by server. */
-  sessionsTwoServers: {
-    options: () => ({
-      workspace: WITH_FILES,
-      hosts: [
-        { handle: "h1", hostId: "h-pop", name: "pop-os", pageOrigin: null },
-        { handle: "h2", hostId: "h-mac", name: "jimmys-macbook-air", pageOrigin: null },
-      ],
-    }),
-    openActive: true,
-    overlay: SHEET,
-    daemon: (d) => { d.listing = SEVERAL; d.watch = "ok"; serveTree(d); },
-  },
-  /** The overlay over a Files tab: no session reads "here". */
-  sessionsOnFiles: {
-    options: () => ({ workspace: { ...WITH_FILES, active: "files-1" } }),
-    openActive: true,
-    overlay: SHEET,
-    daemon: (d) => { d.listing = SEVERAL; d.watch = "ok"; serveTree(d); },
-  },
-  /** No tab open and the server has no sessions. */
-  sessionsEmpty: { overlay: SHEET, daemon: (d) => { d.listing = { server: "main:1-1", version: "3.4", sessions: [] }; } },
+  /** The workspace's tab overview: terminal rows with their windows, a Files row, Open session and Open files. */
+  overview: { options: () => ({ workspace: WITH_FILES }), overview: true, daemon: (d) => { d.listing = SEVERAL; d.watch = "ok"; serveTree(d); } },
+  /** A workspace with no tab open. */
+  overviewEmpty: { overview: true, daemon: (d) => { d.listing = LISTING; } },
+  /** Open session over the overview: sessions not open here, filtered by the field, ending in the create row. */
+  openSession: { options: () => ({ workspace: WITH_FILES }), overview: true, overlay: OPEN, daemon: (d) => { d.listing = SEVERAL; d.watch = "ok"; serveTree(d); } },
+  /** The server has no tmux server: nothing to attach to or create. */
+  openSessionNoTmux: { options: () => ({ workspace: WITH_FILES }), overview: true, overlay: OPEN, daemon: (d) => { d.listing = null; serveTree(d); } },
   /** The server can't be reached: the saved tabs stay, the list says it can't load yet. */
-  sessionsOffline: { options: () => ({ workspace: WITH_FILES }), openActive: true, overlay: SHEET, daemon: (d) => { d.info = "down"; serveTree(d); } },
+  openSessionOffline: { options: () => ({ workspace: WITH_FILES }), overview: true, overlay: OPEN, daemon: (d) => { d.info = "down"; serveTree(d); } },
 };

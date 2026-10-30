@@ -6,8 +6,6 @@ import { folderKey } from "./pathfield";
 const many = (n: number): string[] => Array.from({ length: n }, (_, i) => `/home/j/repos/d${String(i).padStart(3, "0")}`);
 const tree = (extra: string[] = []): FakeTree => ({
   home: "/home/j",
-  favorites: ["/home/j/repos/tether"],
-  uploads: "/home/j/up",
   dirs: ["/home/j", "/home/j/repos", "/home/j/repos/tether", "/home/j/repos/tether/web", "/home/j/up", ...extra],
   files: { "/home/j/repos/tether/README.md": "text/markdown" },
 });

@@ -11,7 +11,6 @@ import { EmptyState } from "../../ui/primitives/EmptyState";
 import { IconButton } from "../../ui/primitives/IconButton";
 import { Spinner } from "../../ui/primitives/Spinner";
 import { shorten } from "../../files/format";
-import { FavoriteToggle } from "./FavoriteToggle";
 import { DirList, MissingFolder } from "./FolderList";
 import { PathField } from "./PathField";
 import { Preview } from "./Preview";
@@ -29,7 +28,7 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
   const { browser } = session;
   const view = useStore(browser, (s) => s);
   const wanted = tab.place;
-  const { place, pages, favorites, loading, error } = view;
+  const { place, pages, home, loading, error } = view;
   const scroller = useRef<HTMLDivElement>(null);
   // While the path field is being typed in, its completions are the list.
   const [finding, setFinding] = useState(false);
@@ -64,7 +63,6 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
     }
   };
 
-  const home = favorites?.home ?? null;
   const title = place.kind === "dir" ? baseName(place.path) : place.file.name;
   const rest = place.kind === "dir" ? shorten(place.path, home) : "";
 
@@ -93,13 +91,12 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
         </div>
         {place.kind !== "file" && (
           <div class={styles.actions}>
-            {listed && !error && <FavoriteToggle session={session} path={pages.path} />}
             <IconButton icon="refresh" label="Refresh" disabled={loading} onClick={() => { void browser.reload(); }} />
             <Button icon="upload" onClick={() => { startUpload(app, session); }}>Upload</Button>
           </div>
         )}
       </header>
-      {place.kind !== "file" && favorites && <PathField session={session} rest={rest} onEditing={setFinding} onOpen={open} />}
+      {place.kind !== "file" && home !== null && <PathField session={session} rest={rest} onEditing={setFinding} onOpen={open} />}
       {!finding && <UploadPanel session={session} onPreview={(path) => { open({ kind: "file", path }); }} />}
       {/* The list stays mounted under a preview, so Back returns to it as it was. */}
       {listed && !error && (

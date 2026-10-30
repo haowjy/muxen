@@ -18,7 +18,8 @@ import type { RowKey } from "../../touch/keyRoute";
 import { createOwnedInput } from "../../touch/owned-input";
 import { Store } from "../../ui/store";
 import { terminalTheme } from "../../ui/theme";
-import { screenOf, shownTab } from "../../workspace/state";
+import { allTabs, screenOf, shownTab, terminalTabOf } from "../../workspace/state";
+import { failureText } from "../sessions/createSession";
 import type { LineEditor } from "./dock/lineEditor";
 import { nativeLineEditor } from "./dock/lineEditor";
 import { interceptClipboard, Pastes } from "./paste";
@@ -197,8 +198,15 @@ export class Terminals extends Store<TerminalsView> {
     this.measure();
   }
 
-  /** Selects a tab. A tab that is waiting to reconnect retries now: a tap on its pill is the user asking. */
+  /**
+   * Selects a tab. A tab that is waiting to reconnect retries now: a tap on its pill is the user asking.
+   * Switching tabs in the tab row keeps a raised keyboard up: it goes to the new tab's input, which is
+   * the terminal, or a Files tab's path field (browser-behaviors.md "Phone dock").
+   */
   activate(id: string): void {
+    const { viewport, workspace } = this.app.snapshot;
+    const tab = allTabs(workspace).find((t) => t.id === id);
+    if (viewport.keyboard && workspace.route === "tab" && tab) this.app.focus.keepKeyboardOn(tab.kind === "terminal" ? "terminal" : "path");
     this.app.dispatch({ type: "activated", id });
     const status = this.snapshot.tabs[id];
     if (status?.state.kind === "reconnecting" || status?.state.kind === "limited") this.drivers.get(id)?.nudge();
@@ -207,6 +215,21 @@ export class Terminals extends Store<TerminalsView> {
   /** Makes `window` the tab's session's current window; the tab follows with the next `watching`. */
   selectWindow(id: string, window: number): void {
     if (!this.drivers.get(id)?.selectWindow(window)) this.app.notify("Couldn't switch window: the tab isn't connected");
+  }
+
+  /** The long-press menu's New window: `new-window` on the tab's session, whichever window it shows. The tab follows the session to it. */
+  async newWindow(id: string): Promise<void> {
+    const tab = terminalTabOf(this.app.snapshot.workspace, id);
+    const client = tab && this.app.hosts.byHostId(tab.host);
+    if (!tab || !client) return;
+    try {
+      await client.socket.request(
+        (req) => ({ type: "newWindow", data: { req, session: tab.key.session } }),
+        (reply) => (reply.type === "created" ? reply.data : undefined),
+      );
+    } catch (error) {
+      this.app.notify(failureText(error, client.name ?? "the server", "open a window"));
+    }
   }
 
   /** The band's Fit: sizes the window to this tab and so takes it from the other terminal. */
@@ -269,13 +292,14 @@ export class Terminals extends Store<TerminalsView> {
       if (chromeInputsChanged(before, viewport)) this.openChromeWindow();
       this.measure();
     }
-    for (const tab of workspace.tabs) {
+    const tabs = allTabs(workspace);
+    for (const tab of tabs) {
       if (tab.kind !== "terminal" || this.drivers.has(tab.id)) continue;
       const client = this.app.hosts.byHostId(tab.host);
       if (client) this.open(tab.id, tab.key.session, client);
     }
     for (const [id, driver] of this.drivers) {
-      if (workspace.tabs.some((t) => t.id === id)) continue;
+      if (tabs.some((t) => t.id === id)) continue;
       this.drivers.delete(id);
       if (this.painted === id) this.painted = null;
       driver.close();
@@ -301,7 +325,7 @@ export class Terminals extends Store<TerminalsView> {
   private showPainted(): void {
     const { workspace } = this.app.snapshot;
     const onTerminal = screenOf(workspace) === "terminal";
-    const blank = !workspace.tabs.some((t) => t.kind === "terminal") || (onTerminal && this.painted !== workspace.active);
+    const blank = !allTabs(workspace).some((t) => t.kind === "terminal") || (onTerminal && this.painted !== workspace.active);
     if (blank) this.element.dataset["blank"] = "true";
     else if (onTerminal) this.element.removeAttribute("data-blank");
   }

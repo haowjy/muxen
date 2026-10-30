@@ -1,0 +1,19 @@
+/* The tab row: ‹, the workspace's tabs, +, and on touch Show keyboard. Its controls are filled; the pills carry their own fill. */
+.row {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: 0 var(--space-2);
+  background: var(--color-bg-raised);
+}
+/* On the desktop it is the top row, under which the screen starts. */
+.row[data-place="top"] {
+  min-height: var(--toolbar-height);
+  border-bottom: 1px solid var(--color-border);
+}
+.row[data-place="dock"] { height: var(--dock-height); }
+/* The pills take what they need and scroll past the row; + follows the last one, and the keyboard control sits at the end. */
+.strip { display: flex; flex: 0 1 auto; min-width: 0; }
+.keyboard { margin-left: auto; }

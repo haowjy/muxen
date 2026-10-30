@@ -37,7 +37,7 @@ function Section({ title, children }: { title: string; children: preact.Componen
 
 /** Every primitive in every state: the design-system review's page, and the axe target for the primitives. */
 export function Gallery() {
-  const [dialog, setDialog] = useState<"dialog" | "sheet" | null>(null);
+  const [dialog, setDialog] = useState<"dialog" | "page" | null>(null);
   const [active, setActive] = useState("a");
   const [query, setQuery] = useState("");
   const [code, setCode] = useState("7KQ4");
@@ -80,7 +80,7 @@ export function Gallery() {
         </RovingList>
       </Section>
       <Section title="Tab strip">
-        <TabStrip pills={PILLS} active={active} onSelect={setActive} onClose={() => undefined} />
+        <TabStrip pills={PILLS} active={active} onSelect={setActive} onClose={() => undefined} onMenu={() => undefined} />
       </Section>
       <Section title="Status">
         <Banner title="Can't reach pop-os" tone="warning" action={{ label: "Retry", onAction: () => undefined }}>Check that Tailscale is on, then retry.</Banner>
@@ -98,7 +98,7 @@ export function Gallery() {
       <Section title="Dialogs">
         <div class={styles.wrap}>
           <Button onClick={() => { setDialog("dialog"); }}>Open dialog</Button>
-          <Button onClick={() => { setDialog("sheet"); }}>Open sheet</Button>
+          <Button onClick={() => { setDialog("page"); }}>Open page</Button>
         </div>
       </Section>
       <Toast message="2 tabs closed: their windows are gone" onDismiss={() => undefined} />

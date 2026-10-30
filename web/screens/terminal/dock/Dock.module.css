@@ -1,16 +1,20 @@
-/* The slot is in flow in the keyboard-hidden layout, so tmux is sized with it in place. The
-   safe area is its padding, which the keyboard covers when the row lifts onto it. */
+/* The slot is in flow in the keyboard-hidden layout, as tall as the tab row and the safe area, so tmux is
+   sized with it in place and what hangs under the row in the typing layout takes nothing from the terminal. */
 .slot {
   position: relative;
   z-index: 2;
   flex: none;
-  padding-bottom: var(--safe-bottom);
+  height: calc(var(--dock-height) + 1px + var(--safe-bottom));
   background: var(--color-bg-raised);
 }
-/* Rides on the keyboard: the row's bottom goes to the keyboard's top. The safe area below
-   the row is the slot's padding, which the keyboard covers, so only the rest of the inset lifts. */
+/* Anchored to the slot's bottom above the safe area, so the compose box and key row under the tab row push it up
+   (a hidden one adds nothing). It rides on the keyboard: the lowest control's bottom goes to the keyboard's top.
+   The safe area below is the slot's, which the keyboard covers, so only the rest of the inset lifts. */
 .lift {
-  position: relative;
+  position: absolute;
+  right: 0;
+  bottom: var(--safe-bottom);
+  left: 0;
   translate: 0 calc(-1 * max(0px, var(--keyboard-inset) - var(--safe-bottom)));
   background: var(--color-bg-raised);
   border-top: 1px solid var(--color-border);
@@ -35,7 +39,8 @@
 .note:empty { display: none; }
 .note[data-tone="error"] { color: var(--color-status-error); }
 
-/* The compose box, visible while any input holds the keyboard. */
+/* Under the tab row while an input holds the keyboard: the compose box, then the key row. */
+.under[hidden] { display: none; }
 .compose {
   display: flex;
   align-items: flex-end;
@@ -44,11 +49,11 @@
   background: var(--color-bg-raised);
   border-top: 1px solid var(--color-border);
 }
-.compose[hidden] { display: none; }
 .send { background: var(--color-accent); color: var(--color-on-accent); }
 
-/* The row is one height at rest and typing, so the keyboard never changes how tall tmux is. */
-.row {
+/* The tab row is the slot's one in-flow row, the same height with the keyboard down or up. */
+.row { height: var(--dock-height); }
+.keyRow {
   display: flex;
   align-items: center;
   gap: var(--space-2);

@@ -6,6 +6,7 @@ import { useApp, useAppView } from "../../app/context";
 import { hasControlChars } from "../../tabs/input";
 import { useStore } from "../../ui/store";
 import { tabLabels } from "../../workspace/labels";
+import { allTabs } from "../../workspace/state";
 import { terminalsOf } from "../terminal/terminals";
 
 export interface InsertTarget {
@@ -18,7 +19,7 @@ export interface InsertTarget {
 
 /** The tab named `id` if it is open and proven (not just restored from a saved workspace). Insert waits for its watch while it is connecting, and is `blocked` once its connection failed. */
 export function insertTarget(app: AppController, id: string | null): InsertTarget | null {
-  const { tabs } = app.snapshot.workspace;
+  const tabs = allTabs(app.snapshot.workspace);
   const tab = tabs.find((t) => t.id === id);
   if (tab?.kind !== "terminal" || tab.restoring) return null;
   const hosts = app.snapshot.hosts;
@@ -30,7 +31,7 @@ export function insertTarget(app: AppController, id: string | null): InsertTarge
 export function useInsertTarget(id: string | null): InsertTarget | null {
   const app = useApp();
   const terminals = terminalsOf(app);
-  useAppView((v) => v.workspace.tabs);
+  useAppView((v) => v.workspace);
   useStore(terminals, () => id !== null && terminals.canInsert(id));
   return insertTarget(app, id);
 }

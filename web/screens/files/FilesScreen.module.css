@@ -1,13 +1,11 @@
 .screen { display: flex; flex: 1; flex-direction: column; min-height: 0; min-width: 0; }
-/* The phone's resting bar: the dock's row without its keyboard controls. */
+/* Touch: the tab row at the bottom, riding the path field's keyboard in a browser (the app's web view ends above it). */
 .dock {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
   flex: none;
-  padding: var(--space-1) var(--space-2) calc(var(--space-1) + var(--safe-bottom));
+  padding-bottom: var(--safe-bottom);
   border-top: 1px solid var(--color-border);
   background: var(--color-bg-raised);
+  translate: 0 calc(-1 * max(0px, var(--keyboard-inset) - var(--safe-bottom)));
 }
 .files {
   /* Content sits in the same centred column as Home on a wide screen; the header, the preview bar and the lists all start at it.

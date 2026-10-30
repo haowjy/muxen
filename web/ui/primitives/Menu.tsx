@@ -1,0 +1,119 @@
+import { useLayoutEffect, useEffect, useRef } from "preact/hooks";
+import { createPortal } from "preact/compat";
+import { cx } from "../cx";
+import { useFocus } from "../focus";
+import { Icon, type IconName } from "./Icon";
+import styles from "./Menu.module.css";
+
+export interface MenuItem {
+  label: string;
+  icon?: IconName;
+  /** The window the tab shows: filled. */
+  selected?: boolean;
+  /** Ends something: the danger colour. */
+  danger?: boolean;
+  onSelect: () => void;
+}
+
+/** Sections are set apart by a rule; a titled one says what its rows are. */
+export interface MenuSection {
+  title?: string;
+  items: MenuItem[];
+}
+
+interface MenuProps {
+  /** The control it hangs from: it opens above when that control is in the lower half of the window, else below. */
+  anchor: HTMLElement;
+  label: string;
+  sections: MenuSection[];
+  onClose: () => void;
+  /** A fine pointer or a keyboard opened it: the first row takes focus. Touch never focuses, so a raised keyboard stays up. */
+  focusFirst: boolean;
+}
+
+/** Space between the menu and its anchor, and between it and the window's edge. */
+const GAP_PX = 8;
+
+/**
+ * A small non-modal menu in the popover look (Dialog's), placed against a control. Not a
+ * `<dialog>`: a modal would take focus and lower the keyboard. Every row cancels its pointerdown,
+ * like a dock control. A press outside, Escape (focus returns to the anchor), or a chosen row closes it.
+ */
+export function Menu({ anchor, label, sections, onClose, focusFirst }: MenuProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  const focus = useFocus();
+
+  useLayoutEffect(() => {
+    const menu = ref.current;
+    if (!menu) return;
+    const rect = anchor.getBoundingClientRect();
+    const { clientWidth, clientHeight } = document.documentElement;
+    const up = rect.top > clientHeight / 2;
+    menu.style.maxHeight = `${String(up ? rect.top - 2 * GAP_PX : clientHeight - rect.bottom - 2 * GAP_PX)}px`;
+    menu.style.top = up ? "" : `${String(rect.bottom + GAP_PX)}px`;
+    menu.style.bottom = up ? `${String(clientHeight - rect.top + GAP_PX)}px` : "";
+    menu.style.left = `${String(Math.max(GAP_PX, Math.min(rect.left, clientWidth - menu.offsetWidth - GAP_PX)))}px`;
+    if (focusFirst) {
+      const first = menu.querySelector<HTMLElement>("button");
+      if (first) focus.focusElement(first);
+    }
+  }, [anchor]);
+
+  useEffect(() => {
+    const away = (e: PointerEvent): void => {
+      const target = e.target as Node | null;
+      // The anchor's own click toggles the menu: closing here too would reopen it.
+      if (!ref.current?.contains(target) && !anchor.contains(target)) onClose();
+    };
+    const keys = (e: KeyboardEvent): void => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        // Focus goes back to the anchor only when the menu held it: on touch it never did, and a raised keyboard stays up.
+        const held = ref.current?.contains(document.activeElement) ?? false;
+        onClose();
+        if (held) focus.focusElement(anchor);
+        return;
+      }
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      const rows = [...(ref.current?.querySelectorAll<HTMLElement>("button") ?? [])];
+      const at = rows.indexOf(document.activeElement as HTMLElement);
+      const next = rows[(at + (e.key === "ArrowDown" ? 1 : -1) + rows.length) % rows.length];
+      if (next && ref.current?.contains(document.activeElement)) {
+        e.preventDefault();
+        focus.focusElement(next);
+      }
+    };
+    document.addEventListener("pointerdown", away, true);
+    document.addEventListener("keydown", keys, true);
+    return () => {
+      document.removeEventListener("pointerdown", away, true);
+      document.removeEventListener("keydown", keys, true);
+    };
+  }, [anchor, onClose]);
+
+  return createPortal(
+    <div ref={ref} class={styles.menu} role="menu" aria-label={label}>
+      {sections.map((section, i) => (
+        <div key={i} class={styles.section} role="group" aria-label={section.title}>
+          {section.title && <p class={styles.title}>{section.title}</p>}
+          {section.items.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              role="menuitem"
+              class={cx(styles.item, item.selected && styles.selected, item.danger && styles.danger)}
+              onPointerDown={(e) => { e.preventDefault(); }}
+              onClick={() => { onClose(); item.onSelect(); }}
+            >
+              {/* Rows without a glyph keep its slot, so the labels line up. */}
+              {item.icon ? <Icon name={item.icon} size={20} class={styles.icon} /> : <span class={styles.icon} />}
+              <span class={styles.text}>{item.label}</span>
+            </button>
+          ))}
+        </div>
+      ))}
+    </div>,
+    document.body,
+  );
+}

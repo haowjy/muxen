@@ -39,6 +39,7 @@ const app = await AppController.start(platform, { fetchFn: platform.fetch, apply
 window.__harness = { platform, app };
 if ((fixture.openActive || params.has("open")) && app.snapshot.workspace.active) app.dispatch({ type: "activated", id: app.snapshot.workspace.active });
 
+if (fixture.overview) app.router.toOverview(app.snapshot.workspace.workspaces[0]?.id ?? "");
 if (fixture.overlay) app.openOverlay(fixture.overlay);
 
 const root = document.getElementById("app");

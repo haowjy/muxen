@@ -48,8 +48,6 @@ export function filesTree(): FakeTree {
   const extra = Array.from({ length: 12 }, (_, i) => `${REPO}/notes/note-${String(i + 1).padStart(2, "0")}.txt`);
   return {
     home: HOME,
-    favorites: [REPO, `${HOME}/notes`],
-    uploads: UPLOADS,
     dirs: ["/", "/home", ETC, HOME, REPO, `${REPO}/src`, `${REPO}/docs`, `${REPO}/notes`, `${REPO}/.git`, `${REPO}/empty`, `${HOME}/notes`, UPLOADS, `${HOME}/other`, `${HOME}/other/deep`, `${HOME}/.config`],
     files: {
       [`${REPO}/README.md`]: MD,
@@ -77,8 +75,6 @@ export function findTree(): FakeTree {
   const many = Array.from({ length: 20 }, (_, i) => `${HOME}/repos/many/folder-${String(i + 1).padStart(2, "0")}`);
   return {
     home: HOME,
-    favorites: [FIND_ROOT],
-    uploads: UPLOADS,
     dirs: [
       "/", "/home", HOME, `${HOME}/repos`, FIND_ROOT, `${FIND_ROOT}/src`, `${FIND_ROOT}/web`, `${FIND_ROOT}/docs`, `${FIND_ROOT}/empty`, `${FIND_ROOT}/.git`, `${FIND_ROOT}/web/src`,
       `${HOME}/repos/tether-old`, `${HOME}/repos/test-data`, `${HOME}/repos/zebra`, `${HOME}/repos/many`, ...many,

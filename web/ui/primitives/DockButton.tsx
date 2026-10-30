@@ -3,7 +3,7 @@ import { cx } from "../cx";
 import styles from "./DockButton.module.css";
 
 interface DockButtonProps extends Omit<ButtonHTMLAttributes, "icon"> {
-  /** `key` is a terminal key (32 px, monospace); `control` a dock row control (34 px). */
+  /** `key` is a terminal key (32 px, monospace, no fill at rest); `control` a filled tab row control (34 px). */
   kind: "key" | "control";
   /** A held state: an armed modifier, the keyboard held up. */
   pressed?: boolean;

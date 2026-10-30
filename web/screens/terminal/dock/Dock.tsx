@@ -1,20 +1,18 @@
 // The phone dock (client-architecture.md §7.4), the bottom of Terminal on touch in the browser,
-// the PWA and the app. It is one of two things, from who holds the keyboard: resting (Home, the
-// current-tab button and Show keyboard) or typing (the key row and Hide keyboard, with the compose
-// box above). It rides on the keyboard but never resizes tmux: the row is the same height in both
-// and in flow in the keyboard-hidden layout, and the lifted dock is translated out of the slot by
+// the PWA and the app. Its one in-flow row is the tab row, the same height with the keyboard down or
+// up, so showing the keyboard never resizes tmux. While an input holds the keyboard the compose box and
+// the key row hang under the tab row and the whole dock rides the keyboard: it is anchored to the slot's
+// bottom, so what hangs under it pushes the row up, and translated out of the slot by
 // `--keyboard-inset` (Dock.module.css).
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { useApp, useAppView, useTabLabels } from "../../../app/context";
 import { Icon } from "../../../ui/primitives/Icon";
 import { DockButton } from "../../../ui/primitives/DockButton";
 import { useStore } from "../../../ui/store";
 import { terminalTabOf } from "../../../workspace/state";
 import { terminalsOf } from "../terminals";
-import { CurrentTabButton } from "./CurrentTabButton";
-import { HomeButton } from "./HomeButton";
+import { TabRow } from "../../shell/TabRow";
 import { KeyRow } from "./KeyRow";
-import { TabMenu } from "./TabMenu";
 import { LineField, type LocalNote } from "./LineField";
 import { lineDraftsOf } from "./lineDrafts";
 import { nativeLineOf } from "./nativeLine";
@@ -58,6 +56,7 @@ export function Dock({ active }: { active: boolean }) {
 
   const above = useRef<HTMLDivElement>(null);
   const row = useRef<HTMLDivElement>(null);
+  const under = useRef<HTMLDivElement>(null);
   const [local, setLocal] = useState<LocalNote | null>(null);
 
   const tab = terminalTabOf(workspace, workspace.active);
@@ -66,37 +65,31 @@ export function Dock({ active }: { active: boolean }) {
   const label = labels.find((l) => l.id === tab?.id);
   const nativeNote = useStore(nativeLine, (state) => state.note);
   const note = useNote(native ? nativeNote : local, tab?.id ?? null);
-  const phone = viewport.layout === "phone";
   // The one derived value: no input holds the keyboard (resting), or one does (typing).
   const typing = owner !== "none";
-
-  const [menu, setMenu] = useState(false);
-  const closeMenu = useCallback(() => { setMenu(false); }, []);
-  // The tab menu lives with the keyboard: it goes when typing stops.
-  useEffect(() => { if (!typing) setMenu(false); }, [typing]);
 
   // A note belongs to the field it came from.
   useEffect(() => { setLocal(null); }, [tab?.id]);
 
-  // The terminal pan ends above the compose box and key row, even when native shrinks the web view.
+  // The terminal pan ends above the tab row and its note, even when native shrinks the web view.
   useLayoutEffect(() => {
     const strip = above.current;
     const bar = row.current;
-    if (!active || !strip || !bar) {
+    const hung = under.current;
+    if (!active || !strip || !bar || !hung) {
       terminals.setPanArea(null);
       return;
     }
     const root = document.documentElement;
     const update = (): void => {
       const covered = strip.offsetHeight;
-      const rowTop = bar.getBoundingClientRect().top;
-      root.style.setProperty("--dock-above-height", `${String(covered)}px`);
-      // The row's own box already includes the CSS lift (--keyboard-inset), set before this render.
-      if (covered === 0 && viewport.keyboardInset === 0) {
+      root.style.setProperty("--dock-above-height", `${String(covered + hung.offsetHeight)}px`);
+      // The row's own box already includes what hangs under it and the CSS lift (--keyboard-inset), set before this render.
+      if (!typing && viewport.keyboardInset === 0) {
         terminals.setPanArea(null);
         return;
       }
-      terminals.setPanArea(Math.max(0, rowTop - covered - terminals.element.getBoundingClientRect().top));
+      terminals.setPanArea(Math.max(0, bar.getBoundingClientRect().top - covered - terminals.element.getBoundingClientRect().top));
     };
     update();
     // Defer layout writes until after ResizeObserver delivery. Growing the line changes this
@@ -109,6 +102,7 @@ export function Dock({ active }: { active: boolean }) {
     };
     const watch = new ResizeObserver(scheduleUpdate);
     watch.observe(strip);
+    watch.observe(hung);
     watch.observe(bar);
     return () => {
       watch.disconnect();
@@ -116,30 +110,28 @@ export function Dock({ active }: { active: boolean }) {
       root.style.removeProperty("--dock-above-height");
       terminals.setPanArea(null);
     };
-  }, [active, viewport.keyboardInset, viewport.visibleHeight, terminals]);
+  }, [active, typing, viewport.keyboardInset, viewport.visibleHeight, terminals]);
 
   return (
     <div class={styles.slot} data-keyboard={typing ? "" : undefined}>
       <div class={styles.lift}>
-        {menu && typing && <TabMenu onClose={closeMenu} />}
         <div class={styles.above} ref={above}>
           <p class={styles.note} data-tone={note?.tone} role="status">{note?.text}</p>
-          {/* Mounted at rest too, so the draft and the field's refs outlive the keyboard; hidden, so nothing can focus it. */}
-          <div class={styles.compose} hidden={!typing}>
-            <LineField tab={tab} label={label ? `Line for ${label.full}` : "Line"} onNote={setLocal} />
-          </div>
         </div>
         <div class={styles.row} ref={row}>
-          {typing ? <><KeyRow />{phone && <CurrentTabButton compact open={menu} onToggle={() => { setMenu((m) => !m); }} />}</> : phone && <><HomeButton /><CurrentTabButton /></>}
-          <DockButton
-            kind="control"
-            class={styles.toggle}
-            aria-label={typing ? "Hide keyboard" : "Show keyboard"}
-            disabled={!tab && !typing}
-            onClick={() => { app.focus.toggleKeyboard(); }}
-          >
-            <Icon name={typing ? "keyboardHide" : "keyboard"} size={20} />
-          </DockButton>
+          <TabRow place="dock" />
+        </div>
+        {/* Mounted at rest too, so the draft and the field's refs outlive the keyboard; hidden, so nothing can focus it. */}
+        <div class={styles.under} ref={under} hidden={!typing}>
+          <div class={styles.compose}>
+            <LineField tab={tab} label={label ? `Line for ${label.full}` : "Line"} onNote={setLocal} />
+          </div>
+          <div class={styles.keyRow}>
+            <KeyRow />
+            <DockButton kind="control" class={styles.toggle} aria-label="Hide keyboard" onClick={() => { app.focus.toggleKeyboard(); }}>
+              <Icon name="keyboardHide" size={20} />
+            </DockButton>
+          </div>
         </div>
       </div>
     </div>

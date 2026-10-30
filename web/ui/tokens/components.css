@@ -23,16 +23,11 @@
   --tab-bg: transparent;
   --tab-bg-active: var(--color-bg-hover);
   --dialog-width: 480px;
-  --popover-width: 28rem;
   /* Home's centred column and a page dialog's. */
   --page-width: 720px;
   /* Every screen's header row: back or title, and its controls. */
   --header-height: 44px;
-  --sheet-height: 62svh;
   --dialog-bg: var(--color-bg-raised);
-  /* The phone sheet follows the theme's raised surface, dark in dark mode and light in light mode. */
-  --sheet-bg: var(--color-bg-raised);
-  --sheet-radius: var(--radius-4);
   --band-bg: var(--color-bg-raised);
 
   /* The phone toast sits above the bottom bar (Home and Files' nav, the tools row, or the dock's row), never over its tabs. */
@@ -44,6 +39,7 @@
   --edit-menu-half: 88px;
 
   --z-band: 20;
+  --z-menu: 30;
   --z-toast: 40;
 }
 

@@ -6,20 +6,21 @@ import { NoServers } from "../enrol/NoServers";
 import { HostProblem } from "../enrol/HostProblem";
 import { FilesScreen } from "../files/FilesScreen";
 import { Home } from "../home/Home";
-import { Picker } from "../sessions/Picker";
+import { OpenSessionScreen } from "../sessions/OpenSessionScreen";
+import { Overview } from "../overview/Overview";
 import { Settings } from "../settings/Settings";
 import { TerminalScreen } from "../terminal/TerminalScreen";
 import { AppBanners } from "./AppBanners";
 import { HostBanner } from "./HostBanner";
-import { TopRow } from "./TopRow";
+import { TabRow } from "./TabRow";
 import styles from "./Shell.module.css";
 
-/** The frame: the top row where there is no dock, and the screen the route and the active tab show. Admission problems replace it. */
+/** The frame: the tab row on top where there is no dock, and the screen the route and the active tab show. Admission problems replace it. */
 export function Shell() {
   const app = useApp();
   const layout = useAppView((v) => v.viewport.layout);
   const screen = useAppView((v) => screenOf(v.workspace));
-  // Touch input ends in the dock (phone and iPad); a mouse keeps the top row, even in a narrow window.
+  // Touch input ends in the dock (phone and iPad); a mouse keeps the tab row on top, even in a narrow window. Home and the overview have none.
   const topRow = useAppView((v) => v.viewport.layout === "desktop" || v.viewport.directInput === "xterm");
   const hosts = useAppView((v) => v.hosts);
   // An app with no server yet has nothing to wait for: it offers to add one.
@@ -31,7 +32,7 @@ export function Shell() {
   return (
     <div class={styles.shell} data-layout={layout}>
       <div class={styles.column}>
-        {!blocking && topRow && <TopRow />}
+        {!blocking && topRow && (screen === "terminal" || screen === "files") && <TabRow place="top" />}
         <div class={styles.banners}>
           <AppBanners />
           {/* Home's cards carry their own host's notice. */}
@@ -45,6 +46,7 @@ export function Shell() {
               {hosts.length === 0 && !noServers && <div class={styles.waiting}><Spinner label="Checking access" /></div>}
               {noServers && <NoServers />}
               {!noServers && screen === "home" && <Home />}
+              {!noServers && screen === "overview" && <Overview />}
               {!noServers && screen === "files" && <FilesScreen />}
             </>
           )}
@@ -53,8 +55,7 @@ export function Shell() {
       </div>
       {!blocking && (
         <>
-          {/* Every sessions overlay name is this one picker, whatever the layout. */}
-          <Picker />
+          <OpenSessionScreen />
           <Settings />
         </>
       )}

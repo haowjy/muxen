@@ -18,26 +18,6 @@
 /* The top padding is the focus ring's room (2px outline + 2px offset): a scrolling body clips what is drawn outside it. */
 .body { flex: 1; overflow-y: auto; padding: var(--space-1) var(--space-4) var(--space-4); min-height: 0; scroll-padding: var(--space-1); }
 
-/* The phone's sessions sheet: half the screen over the page, safe-area padded, in the theme's raised surface. */
-.sheet {
-  width: 100%;
-  max-width: none;
-  max-height: none;
-  /* Sits on the keyboard and shrinks to the screen that is left. */
-  height: min(var(--sheet-height), calc(100svh - var(--keyboard-inset) - var(--safe-top)));
-  translate: 0 calc(-1 * var(--keyboard-inset));
-  margin: auto 0 0;
-  border-radius: var(--sheet-radius) var(--sheet-radius) 0 0;
-  border-bottom: 0;
-  background: var(--sheet-bg);
-}
-.sheet .body { padding-top: var(--space-3); padding-bottom: calc(var(--space-4) + var(--safe-bottom)); }
-/* A footer carries the safe area, which a lifted sheet has the keyboard under instead; the safe area is its bottom padding when it is deeper than --space-2. */
-.footer { flex: none; padding: 0 0 max(var(--space-2), calc(var(--safe-bottom) - var(--keyboard-inset))); border-top: 1px solid var(--color-border); }
-.panel:has(> .footer) .body { padding-bottom: var(--space-3); }
-.sheet[open] { animation: rise var(--duration-2) var(--ease-out); }
-@keyframes rise { from { translate: 0 24px; opacity: 0; } }
-
 /* A full-screen page: its header row (PageBar), then a body in the centred column. */
 .page {
   width: 100%;
@@ -52,12 +32,3 @@
 }
 .page[open] { animation: rise var(--duration-2) var(--ease-out); }
 .page .body { box-sizing: border-box; width: min(var(--page-width), 100%); margin: 0 auto; padding: var(--space-3) var(--space-gutter) calc(var(--space-4) + var(--safe-bottom)); }
-
-/* The desktop's + picker: placed against their anchor by script, over the page with no scrim. The scrim stays, clear, to catch a press outside. */
-.popover {
-  inset: auto;
-  margin: 0;
-  width: min(var(--popover-width), calc(100% - 2 * var(--space-gutter)));
-  box-shadow: var(--shadow-2);
-}
-.popover::backdrop { background: transparent; }

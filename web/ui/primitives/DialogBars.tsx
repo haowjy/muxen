@@ -25,11 +25,6 @@ export function TitleBar({ title, onClose }: { title: string; onClose: () => voi
   );
 }
 
-/** The controls a sheet or popover is given, in a row: Home and search, a search box. */
-export function ToolBar({ children }: { children: ComponentChildren }) {
-  return <header class={styles.tools}>{children}</header>;
-}
-
 /** A full-screen page's one 44 pt row: Back (named for where it goes), then the title and/or the controls it is given. */
 export function PageBar({ back, onBack, title, children }: { back: string; onBack: () => void; title?: string; children?: ComponentChildren }) {
   const closeByTap = useCloseByTap(onBack);
