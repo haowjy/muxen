@@ -17,7 +17,7 @@ import type {
   Platform,
   PlatformEvent,
   Preferences,
-  SavedWorkspace,
+  SavedWorkspaces,
   TabKey,
   UpdateState,
   Viewport,
@@ -76,7 +76,7 @@ export interface TestPlatformOptions {
   viewport?: Viewport;
   lifecycle?: Lifecycle;
   preferences?: Preferences;
-  workspace?: SavedWorkspace | null;
+  workspace?: SavedWorkspaces | null;
   /** `pageOrigin: null` stands in for a token-admitted host. */
   hosts?: HostEntry[];
   /** Offer `updates` and `install` capabilities. */
@@ -102,7 +102,7 @@ export interface TestPlatform extends Platform {
   opened: string[];
   haptics: HapticKind[];
   restarts: string[];
-  savedWorkspaces: SavedWorkspace[];
+  savedWorkspaces: SavedWorkspaces[];
   drafts: Map<string, DraftRecord>;
   /** What `install.installed()` reports, when the capability is offered. */
   installed: boolean;

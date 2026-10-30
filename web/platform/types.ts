@@ -91,15 +91,24 @@ export type SavedTab =
   | { kind: "terminal"; key: TabKey; session: string; window: string }
   | { kind: "files"; id: string; host: string; place: FilesPlace };
 
-/** What persists across a reload. `app/persist.ts` assembles it; `workspace/saved.ts` is the one parser. */
+/** One saved workspace: a server's tabs in the order the user gave them, and the tabs it last showed. */
 export interface SavedWorkspace {
-  version: 3;
+  id: string;
+  host: string;
   /** Terminal tabs carry the last names of their session and window, so restored pills have them before the listing. */
   tabs: SavedTab[];
+  /** The tab the workspace last showed: where Home opens it. */
+  last: string | null;
+  /** The terminal tab last activated: where Insert path and uploads go. */
+  lastTerminal: string | null;
+}
+
+/** What persists across a reload. `app/persist.ts` assembles it; `workspace/saved.ts` is the one parser. */
+export interface SavedWorkspaces {
+  version: 4;
+  workspaces: SavedWorkspace[];
   /** The active tab's id. */
   active: string | null;
-  /** Per host, the terminal tab last activated: where Insert path and uploads go. */
-  lastTerminal: Record<string, string>;
   /** The host's last known name: an offline launch cannot ask `/auth/info`, yet still says "Can't reach pop-os". */
   hostName?: string;
   /** Bell attention (sessions/bells.ts): the bell mark this device last showed, by tab id, for the sessions it has seen. */
@@ -122,7 +131,7 @@ export interface DraftStore {
 
 export interface PlatformStorage {
   /** Coalesced; the latest wins. */
-  saveWorkspace(ws: SavedWorkspace): void;
+  saveWorkspace(ws: SavedWorkspaces): void;
   drafts: DraftStore;
   clearLocalData(): Promise<void>;
 }

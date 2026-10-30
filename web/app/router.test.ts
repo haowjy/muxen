@@ -23,10 +23,10 @@ const dir = (path: string): FilesPlace => ({ kind: "dir", path });
 function setup(hash = "#/") {
   const h = fakeHistory(hash);
   const state = { active: null as string | null };
-  const router = new Router(h.port, () => state.active);
+  const router = new Router(h.port, () => state.active, (id) => id === "w1");
   const seen: Entry[] = [];
   router.subscribe((n) => seen.push(n));
-  const open = (tab: string, place: FilesPlace | null = null): void => { state.active = tab; router.openTab(tab, place); };
+  const open = (tab: string, place: FilesPlace | null = null): void => { state.active = tab; router.openTab("w1", tab, place); };
   return { h, router, seen, state, open, hashes: () => h.entries.slice(0, h.at + 1).map((e) => e.hash) };
 }
 
@@ -42,7 +42,7 @@ describe("Router", () => {
     const { router, open, hashes } = setup();
     open("f1", { kind: "dir", path: "~" });
     router.pushPlace("f1", { kind: "file", path: "/secret/path.txt" });
-    expect(hashes()).toEqual(["#/", "#/tab", "#/tab"]);
+    expect(hashes()).toEqual(["#/", "#/overview", "#/tab", "#/tab"]);
   });
 
   it("pushes on route changes and emits navigated each time", () => {
@@ -66,6 +66,8 @@ describe("Router", () => {
     h.port.go(-1);
     h.port.go(-1);
     expect(places).toEqual([dir("/a"), { kind: "dir", path: "~" }, null]);
+    expect(router.entry.route).toBe("overview");
+    h.port.go(-1);
     expect(router.entry.route).toBe("home");
   });
 
@@ -74,7 +76,7 @@ describe("Router", () => {
     open("f1", { kind: "dir", path: "~" });
     state.active = "f2"; // the controller switches tabs: the entry now names f2
     router.switchTab("f2", dir("/x"));
-    expect(h.entries).toHaveLength(2);
+    expect(h.entries).toHaveLength(3);
     router.pushPlace("f2", dir("/x/y"));
     h.port.go(-1);
     expect(router.entry).toMatchObject({ tab: "f2", place: dir("/x") });
@@ -90,9 +92,9 @@ describe("Router", () => {
       expect(router.entry).toMatchObject({ tab: "t2", overlay: { screen: "sessions" } });
       close(router, () => { h.port.go(-1); });
       expect(router.entry).toMatchObject({ route: "tab", tab: "t2", overlay: null });
-      expect(h.at).toBe(1);
+      expect(h.at).toBe(2);
       h.port.go(-1);
-      expect(router.entry.route).toBe("home");
+      expect(router.entry.route).toBe("overview");
     }
   });
 
@@ -112,7 +114,7 @@ describe("Router", () => {
     const { router, open, h } = setup();
     open("f1", { kind: "dir", path: "~" });
     router.pushPlace("f1", dir("/a"));
-    const after = new Router(h.port, () => null); // a reload: a new stack, no tab active
+    const after = new Router(h.port, () => null, () => false); // a reload: a new stack, no tab active
     h.port.go(-1);
     expect(after.entry.route).toBe("home");
   });
@@ -121,10 +123,10 @@ describe("Router", () => {
     const { router, open, h } = setup();
     open("t1");
     router.openOverlay({ screen: "sessions", name: "sheet" });
-    expect(h.entries).toHaveLength(3);
+    expect(h.entries).toHaveLength(4);
     router.closeOverlay();
     expect(router.entry.overlay).toBeNull();
-    expect(h.at).toBe(1);
+    expect(h.at).toBe(2);
   });
 
   it("runs what follows a close after the overlay is gone, or at once when none is open", () => {
@@ -149,19 +151,27 @@ describe("Router", () => {
   it("after a reload an overlay cannot be popped to: a new Router starts at Home with no overlay", () => {
     const { router, h } = setup();
     router.openOverlay({ screen: "settings", name: "x" });
-    const again = new Router(h.port, () => null);
+    const again = new Router(h.port, () => null, () => false);
     expect(again.entry.overlay).toBeNull();
   });
 
-  it("the in-app Home button goes back when the previous entry is Home, else replaces", () => {
+  it("a tab opened from Home sits above its overview: the tab's ‹ and Back go to the overview, whose Home goes to Home", () => {
     const { router, open, h } = setup();
     open("t1");
+    expect(h.entries.map((e) => e.hash)).toEqual(["#/", "#/overview", "#/tab"]);
+    router.toOverview("w1");
+    expect(router.entry.route).toBe("overview");
+    expect(h.at).toBe(1);
     router.toHome();
     expect(router.entry.route).toBe("home");
     expect(h.at).toBe(0);
 
     const deep = setup();
-    deep.router.replacePlace("t1", { kind: "dir", path: "~" }); // an entry with nothing below it
+    deep.router.replacePlace("t1", { kind: "dir", path: "~" });
+    deep.router.toOverview("w1");
+    expect(deep.router.entry).toMatchObject({ route: "overview", workspace: "w1" });
+    expect(deep.h.entries).toHaveLength(1);
+
     deep.router.toHome();
     expect(deep.router.entry.route).toBe("home");
     expect(deep.h.entries).toHaveLength(1);
@@ -174,10 +184,10 @@ describe("Router", () => {
     router.pushPlace("f1", { kind: "file", path: "/a/b" });
     router.toPlace("f1", dir("/a"));
     expect(router.entry).toMatchObject({ place: dir("/a") });
-    expect(h.at).toBe(2);
+    expect(h.at).toBe(3);
     router.toPlace("f1", dir("/"));
     expect(router.entry).toMatchObject({ place: dir("/") });
-    expect(h.at).toBe(2);
+    expect(h.at).toBe(3);
   });
 
   it("a state from an earlier page life of an active tab stands alone", () => {
@@ -196,7 +206,7 @@ describe("Router", () => {
     open("f1", dir("/link"));
     router.replacePlace("f1", dir("/real"));
     expect(router.entry).toMatchObject({ place: dir("/real") });
-    expect(h.entries).toHaveLength(2);
+    expect(h.entries).toHaveLength(3);
   });
 
   it("Home has no back", () => {

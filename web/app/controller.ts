@@ -9,8 +9,8 @@ import { BellMarks } from "../sessions/bells";
 import { SessionsCache } from "../sessions/cache";
 import { samePlace, type BootResult, type FilesPlace, type Lifecycle, type Platform, type Preferences, type UpdateState, type Viewport } from "../platform/types";
 import { Store } from "../ui/store";
-import { parseSavedWorkspace } from "../workspace/saved";
-import { activeTab, initialWorkspace, reduce, savedTabs, screenOf, shownTab, type Route, type Screen, type WorkspaceEffect, type WorkspaceEvent, type WorkspaceState } from "../workspace/state";
+import { parseSavedWorkspaces } from "../workspace/saved";
+import { activeTab, allTabs, initialWorkspace, reduce, savedWorkspaces, screenOf, shownTab, workspaceOfTab, type NavigateTo, type Screen, type WorkspaceEffect, type WorkspaceEvent, type WorkspaceState } from "../workspace/state";
 import { FocusController } from "./focus";
 import { ListingFetcher } from "./listing";
 import { Persist } from "./persist";
@@ -94,8 +94,8 @@ export class AppController extends Store<AppView> {
     const history = options.history ?? browserHistory();
     // Read before the Router: it replaces the link's `#code=…` with the entry hash, so a reload or Back cannot replay the code.
     const enrolCode = enrolCodeFromHash(history.current().hash);
-    const saved = parseSavedWorkspace(boot.workspace);
-    const router = new Router(history, () => this.snapshot.workspace.active);
+    const saved = parseSavedWorkspaces(boot.workspace);
+    const router = new Router(history, () => this.snapshot.workspace.active, (id) => this.snapshot.workspace.workspaces.some((w) => w.id === id));
     super({
       viewport: boot.viewport,
       preferences: boot.preferences,
@@ -126,10 +126,10 @@ export class AppController extends Store<AppView> {
       },
       ...(options.fetchFn && { fetchFn: options.fetchFn }),
     });
-    this.persist = new Persist(platform.storage, () => savedTabs(this.snapshot.workspace), () => this.bells.toSave(this.hosts.all().map((h) => h.hostId)));
+    this.persist = new Persist(platform.storage, () => savedWorkspaces(this.snapshot.workspace), () => this.bells.toSave(this.hosts.all().map((h) => h.hostId)));
     this.persist.provideHostName(() => this.hosts.all()[0]?.name ?? null);
     this.listing = new ListingFetcher({
-      restoring: () => this.snapshot.workspace.tabs.some((t) => t.kind === "terminal" && t.restoring),
+      restoring: () => allTabs(this.snapshot.workspace).some((t) => t.kind === "terminal" && t.restoring),
       visible: () => this.snapshot.lifecycle.visible,
     });
     this.sessions = new SessionsCache();
@@ -195,6 +195,8 @@ export class AppController extends Store<AppView> {
 
   /** A new Files tab on `hostId`, at `place` (every time: the tab is the place). */
   openFiles(hostId: string, place: FilesPlace): void {
+    // With the keyboard up it stays up: the new tab's path field takes it.
+    if (this.snapshot.viewport.keyboard && this.snapshot.workspace.route === "tab") this.focus.keepKeyboardOn("path");
     this.dispatch({ type: "filesOpened", id: `files-${crypto.randomUUID()}`, host: hostId, place });
     // Desktop focus lands on the new tab's pill, once it has rendered; touch never focuses outside a tap.
     queueMicrotask(() => { this.focus.focusTarget("tabs"); });
@@ -277,10 +279,11 @@ export class AppController extends Store<AppView> {
     }
   }
 
-  private navigate(to: Route): void {
+  private navigate(to: NavigateTo): void {
     const tab = activeTab(this.snapshot.workspace);
-    if (to === "home" || !tab) this.router.goHome();
-    else this.router.openTab(tab.id, tab.kind === "files" ? tab.place : null);
+    if (typeof to === "object") this.router.toOverview(to.overview);
+    else if (to === "home" || !tab) this.router.goHome();
+    else this.router.openTab(workspaceOfTab(this.snapshot.workspace, tab.id)?.id ?? "", tab.id, tab.kind === "files" ? tab.place : null);
   }
 
   private navigated(entry: Entry): void {
@@ -334,7 +337,7 @@ export class AppController extends Store<AppView> {
     for (const client of this.hosts.all()) {
       const { handle } = client.entry;
       const admitted = client.admission.kind === "admitted";
-      const hasTab = client.hostId !== null && workspace.tabs.some((t) => t.host === client.hostId);
+      const hasTab = client.hostId !== null && allTabs(workspace).some((t) => t.host === client.hostId);
       const listed = this.listing.setWanted(handle, admitted && (listingShown || hasTab));
       // Entering a listing surface lists afresh, unless joining the host just started a listing.
       if (entered && admitted && !listed) this.listing.refresh(handle);

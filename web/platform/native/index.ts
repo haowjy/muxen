@@ -4,16 +4,16 @@
 import { Bridge, installReceiver, webkitPost, type Post } from "./bridge";
 import { createNativeTransport } from "./transport";
 import { createNativeUploads } from "./uploads";
-import type { BootResult, Platform, PlatformEvent, Preferences, SavedWorkspace } from "../types";
+import type { BootResult, Platform, PlatformEvent, Preferences, SavedWorkspaces } from "../types";
 
-const EMPTY_WORKSPACE: SavedWorkspace = { version: 3, tabs: [], active: null, lastTerminal: {} };
+const EMPTY_WORKSPACE: SavedWorkspaces = { version: 4, workspaces: [], active: null };
 
 export function createNativePlatform(post: Post = webkitPost): Platform {
   const bridge = new Bridge(post);
   const uploads = createNativeUploads(bridge);
   const listeners = new Set<(event: PlatformEvent) => void>();
   let booted = false;
-  let pending: SavedWorkspace | null = null;
+  let pending: SavedWorkspaces | null = null;
 
   const emit = (event: PlatformEvent): void => {
     for (const l of [...listeners]) l(event);

@@ -1,5 +1,5 @@
 // Browser history is the navigation stack, and this is its only writer (client-architecture.md
-// §6.6). Each entry's state holds the route (Home or a tab), the overlay open on it, and a
+// §6.6). Each entry's state holds the route (Home, a workspace's overview, or a tab), the overlay open on it, and a
 // record of the tab's Files place. The URL carries the route only, so file paths never enter
 // it. Everyone else learns of navigation one way: `navigated`, after every push, replace and pop.
 import { samePlace, type FilesPlace } from "../platform/types";
@@ -37,7 +37,7 @@ export interface HistoryPort {
   onPop(listener: () => void): () => void;
 }
 
-const HASHES: Record<Route, string> = { home: "#/", tab: "#/tab" };
+const HASHES: Record<Route, string> = { home: "#/", overview: "#/overview", tab: "#/tab" };
 
 /** The enrolment code in a setup link's fragment (`#code=7KQ4-XM2P`), or null. Normalised to the bare characters the code field holds. */
 export function enrolCodeFromHash(hash: string): string | null {
@@ -47,8 +47,10 @@ export function enrolCodeFromHash(hash: string): string | null {
 
 /** `history.state` is a trust boundary: an earlier page life, maybe an older build, wrote it. */
 function isEntry(state: unknown): state is Entry {
-  const e = state as Partial<Record<keyof Entry | "place" | "tab", unknown>> | null;
-  return typeof e?.id === "number" && (e.route === "home" || (e.route === "tab" && typeof e.tab === "string" && (e.place === null || isPlace(e.place))));
+  const e = state as Partial<Record<keyof Entry | "place" | "tab" | "workspace", unknown>> | null;
+  if (typeof e?.id !== "number") return false;
+  if (e.route === "overview") return typeof e.workspace === "string";
+  return e.route === "home" || (e.route === "tab" && typeof e.tab === "string" && (e.place === null || isPlace(e.place)));
 }
 
 const HOME: Next = { route: "home", overlay: null };
@@ -62,9 +64,10 @@ export class Router {
 
   /**
    * A clean launch opens Home, even with saved tabs: the first entry is replaced with Home's.
-   * `activeTab` is the workspace's active tab id: a pop to an entry of any other tab is stale.
+   * `activeTab` is the active tab id: a pop to an entry of any other tab is stale, and so is
+   * a pop to the overview of a workspace that `hasWorkspace` no longer finds.
    */
-  constructor(private readonly port: HistoryPort, private readonly activeTab: () => string | null) {
+  constructor(private readonly port: HistoryPort, private readonly activeTab: () => string | null, private readonly hasWorkspace: (id: string) => boolean) {
     const entry = { id: this.nextId++, ...HOME };
     this.stack = [entry];
     port.replace(entry, HASHES.home);
@@ -86,16 +89,27 @@ export class Router {
     this.push(HOME);
   }
 
-  /** Shows the active tab from Home: pushes an entry for it. Switching tabs on a tab route adds none. */
-  openTab(tab: string, place: FilesPlace | null): void {
-    const { overlay } = this.entry;
-    if (overlay === null) {
-      this.push({ route: "tab", tab, place, overlay: null });
+  /**
+   * Shows the active tab. From Home the overview is pushed first, so Back from the tab lands on its
+   * workspace's overview and Back from there on Home (Home, overview, tab are three levels).
+   * Switching tabs on a tab route adds no entry.
+   */
+  openTab(workspace: string, tab: string, place: FilesPlace | null): void {
+    if (this.entry.route === "home") this.push({ route: "overview", workspace, overlay: null }, false);
+    this.push({ route: "tab", tab, place, overlay: null });
+  }
+
+  /** Shows `workspace`'s overview: pushed from Home, the entry below when the tab came from it, else the current entry replaced (after a reload or a deep link), so Back never leaves the app unexpectedly. */
+  toOverview(workspace: string): void {
+    const { entry } = this;
+    if (entry.route === "overview" && entry.workspace === workspace) return;
+    if (entry.route === "home") {
+      this.push({ route: "overview", workspace, overlay: null });
       return;
     }
-    // An overlay open over Home (the picker) stays open over the tab: the entry under it becomes the tab's, so closing it lands on the tab.
-    this.replace({ route: "tab", tab, place, overlay: null });
-    this.push({ route: "tab", tab, place, overlay });
+    const previous = this.stack[this.at - 1];
+    if (previous?.route === "overview" && previous.workspace === workspace && previous.overlay === null) this.port.go(-1);
+    else this.replace({ route: "overview", workspace, overlay: null });
   }
 
   openOverlay(overlay: Overlay): void {
@@ -160,11 +174,7 @@ export class Router {
     this.replace({ route: "tab", tab, place, overlay: this.entry.overlay });
   }
 
-  /**
-   * An in-app back button to Home. If the previous entry is Home this is `history.back()`;
-   * after a reload or a deep link the entry is replaced with Home, so Back never leaves the
-   * app unexpectedly.
-   */
+  /** The overview's back button to Home: `history.back()` when the previous entry is Home, else the entry is replaced with it. */
   toHome(): void {
     if (this.entry.route === "home") return;
     const previous = this.stack[this.at - 1];
@@ -179,12 +189,12 @@ export class Router {
     else this.replace({ route: "tab", tab, place, overlay: null });
   }
 
-  private push(next: Next): void {
+  private push(next: Next, emit = true): void {
     const entry = { ...next, id: this.nextId++ };
     this.stack.splice(this.at + 1, Infinity, entry);
     this.at++;
     this.port.push(entry, HASHES[entry.route]);
-    this.emit();
+    if (emit) this.emit();
   }
 
   private replace(next: Next): void {
@@ -215,8 +225,8 @@ export class Router {
         return;
       }
     }
-    // An entry for a tab that is gone or not the active one is stale: skip to Home without announcing it.
-    if (entry.route === "tab" && entry.tab !== this.activeTab()) {
+    // An entry for a tab that is gone or not the active one, or for a workspace that is gone, is stale: skip to Home without announcing it.
+    if ((entry.route === "tab" && entry.tab !== this.activeTab()) || (entry.route === "overview" && !this.hasWorkspace(entry.workspace))) {
       const home = this.stack.slice(0, this.at + 1).findLastIndex((e) => e.route === "home" && e.overlay === null);
       if (home < 0) this.replace(HOME);
       else this.port.go(home - this.at);

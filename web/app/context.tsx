@@ -4,6 +4,7 @@ import type { BellsState } from "../sessions/bells";
 import { FocusContext } from "../ui/focus";
 import { useStore } from "../ui/store";
 import { tabLabels, type TabLabel } from "../workspace/labels";
+import { allTabs } from "../workspace/state";
 import type { AppController, AppView } from "./controller";
 
 const AppContext = createContext<AppController | null>(null);
@@ -55,6 +56,6 @@ export function useHostName(): (hostId: string) => string {
 
 /** The open tabs' labels, one place for every pill, chip and list that names a tab. */
 export function useTabLabels(): TabLabel[] {
-  const tabs = useAppView((v) => v.workspace.tabs);
-  return tabLabels(tabs, useHostName());
+  const workspace = useAppView((v) => v.workspace);
+  return tabLabels(allTabs(workspace), useHostName());
 }

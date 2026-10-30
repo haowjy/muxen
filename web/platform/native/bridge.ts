@@ -1,7 +1,7 @@
 // The only place the web UI talks to native (ios-shell.md "The bridge"). One method per
 // web → native request, each returning what native replies; `parseEvent` checks what native
 // sends. The shapes are pinned against ios/TetherKit/Tests/Fixtures/bridge/ by bridge.test.ts.
-import type { DraftRecord, FocusMode, HostEntry, InputEvent, Lifecycle, NativeLineSnapshot, Preferences, SavedWorkspace, TabKey, TextRange, Viewport } from "../types";
+import type { DraftRecord, FocusMode, HostEntry, InputEvent, Lifecycle, NativeLineSnapshot, Preferences, SavedWorkspaces, TabKey, TextRange, Viewport } from "../types";
 
 /** Bumped with every incompatible change here and in ios/TetherKit/.../Bridge.swift. */
 export const BRIDGE_VERSION = 7;
@@ -127,7 +127,7 @@ export class Bridge {
     this.fire({ type: "recreateWebView" });
   }
 
-  saveWorkspace(workspace: SavedWorkspace): void {
+  saveWorkspace(workspace: SavedWorkspaces): void {
     this.fire({ type: "saveWorkspace", workspace });
   }
 
