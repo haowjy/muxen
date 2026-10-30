@@ -101,13 +101,13 @@ export interface SavedWorkspace {
   last: string | null;
   /** The terminal tab last activated: where Insert path and uploads go. */
   lastTerminal: string | null;
+  /** The server's canonical `$HOME`, once known: a Files tab there reads "~". */
+  home: string | null;
 }
 
 /** What persists across a reload. `app/persist.ts` assembles it; `workspace/saved.ts` is the one parser. */
 export interface SavedWorkspaces {
   version: 5;
-  /** The server's canonical `$HOME`, once known: a Files tab there reads "~". */
-  home: string | null;
   workspaces: SavedWorkspace[];
   /** The host's last known name: an offline launch cannot ask `/auth/info`, yet still says "Can't reach pop-os". */
   hostName?: string;
