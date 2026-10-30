@@ -96,7 +96,8 @@ directory"). It reads no config, so a broken `config.toml` never blocks a new wi
 Every route sits in the `devices` router in `src/http/`, behind both auth layers
 ([auth.md](auth.md#endpoints)). A path rides in the URL path, not the query:
 `/fs/raw/home/jimmy/repo/clip.mov`. The client percent-encodes each segment and joins
-them with `/`; the daemon decodes and prepends `/`. `{*path}` doesn't match an empty path, so `/fs/list/` is registered as its own route,
+them with `/`; the daemon decodes and prepends `/`. `~` and `~/…` ride bare after the route's own `/`
+(`/fs/list/~`) and keep no leading `/`. `{*path}` doesn't match an empty path, so `/fs/list/` is registered as its own route,
 listing `/`. The
 native player then sees the file's extension in the URL, and the Markdown viewer
 resolves a relative `![](img.png)` against the document's own raw URL. A path that

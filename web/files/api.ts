@@ -59,7 +59,8 @@ export function rawPathOf(urlPath: string): string | null {
   const prefix = "/fs/raw/";
   if (!urlPath.startsWith(prefix)) return null;
   try {
-    return "/" + urlPath.slice(prefix.length).split("/").map(decodeURIComponent).join("/");
+    const path = urlPath.slice(prefix.length).split("/").map(decodeURIComponent).join("/");
+    return path.startsWith("~") ? path : `/${path}`;
   } catch {
     return null;
   }
@@ -76,7 +77,8 @@ function totalOf(contentRange: string | null): number | null {
  * server's proxy on the desktop. Native (or the proxy) adds the Bearer token.
  */
 export function httpFsApi(origin: string, fetchFn?: typeof fetch): FsApi {
-  const url = (route: string, path: string, query = ""): string => `${origin}/fs/${route}${encodePath(path)}${query}`;
+  // An absolute path's own `/` is the route's; `~` and `~/…` ride bare after one (fs.md "Routes").
+  const url = (route: string, path: string, query = ""): string => `${origin}/fs/${route}${path.startsWith("~") ? "/" : ""}${encodePath(path)}${query}`;
   const json = async <T>(target: string, init?: RequestInit): Promise<T> => (await (await send(target, init, BUSY_RETRIES, fetchFn)).json()) as T;
   const page = (offset: number, hidden: boolean): string => `?offset=${String(offset)}&hidden=${hidden ? "1" : "0"}`;
 
