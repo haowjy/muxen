@@ -53,7 +53,7 @@ function TabMenu({ id, anchor, workspace, onClose }: { id: string; anchor: HTMLE
   const active = useAppView((v) => activeTab(v.workspace)?.id === id);
   const focusFirst = useFocusFirst();
   // The windows are asked for when the menu opens, unless a listing newer than the last change is in.
-  useEffect(() => { if (host) app.listing.refresh(host.entry.handle); }, [host]);
+  useEffect(() => { if (host) app.listing.refreshIfStale(host.entry.handle); }, [host]);
   if (!tab) return null;
 
   const at = workspace.tabs.findIndex((t) => t.id === id);
