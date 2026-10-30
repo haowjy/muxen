@@ -321,11 +321,10 @@ for (const version of VERSIONS) {
       await finger.drag(at.x, at.y, at.x, at.y + 200, 5, 6);
       await finger.up();
       await paneIncludes(s, "^[[A");
-      await page.getByRole("button", { name: /, \d+ tabs?, open sessions and files$/ }).tap();
-      const sheet = page.getByRole("dialog", { name: "Open" });
-      await sheet.getByRole("button", { name: new RegExp(`^${next} \\d+ window`) }).tap();
-      await page.keyboard.press("Escape");
-      await expect(sheet).toBeHidden();
+      await page.getByRole("button", { name: "Back to the tab overview" }).tap();
+      await page.getByRole("button", { name: "Open session" }).tap();
+      await page.getByRole("dialog", { name: "Open session" }).getByRole("button", { name: new RegExp(`^${next} \\d+ window`) }).tap();
+      await expect(page.getByRole("dialog")).toHaveCount(0);
       const sent = count(s, "^[[A");
       await page.waitForTimeout(2500);
       expect(pane(next)).not.toContain("^[[");

@@ -28,7 +28,7 @@ by a server, so a second one on the same server later is another record, not a r
 Back steps up one level: from a tab to its overview, from the overview to Home.
 
 **Workspace state.** A workspace record has its own id, its server's host id, its tabs in order and
-its last-shown tab; today each host has exactly one, created with its first tab. The route is Home,
+its last-shown tab; today each host has exactly one, made when the server is first known. The route is Home,
 a workspace's overview, or a tab (which names its workspace). Reordering is one event that moves a
 tab to an index; the order and the last tab are saved per device with the rest of the workspace.
 Each workspace's last terminal tab is where Insert path and uploads go, from a Files tab too. When
@@ -144,9 +144,9 @@ Escape or Back closes it.
 
 **Long press on a pill** opens the tab's menu, anchored to the pill. A terminal tab's menu:
 
-- **Windows**: for a session with more than one window, its windows in index order,
-  “index: name”, the shown one filled; a tap runs tmux's `select-window` on the session, so every
-  attached client moves with it. Then **New window** (`new-window`), for any session.
+- **Windows**: on the tab on screen, for a session with more than one window, its windows in index
+  order, “index: name”, the shown one filled; a tap runs tmux's `select-window` on the session, so every
+  attached client moves with it (it rides the tab's watch, which only the shown tab has). Then **New window** (`new-window`), for any session.
 - **Rename session** (`rename-session`), edited in place, with the daemon's reason on refusal.
 - **Move to start**, **Move to end**.
 - **Close tab**: detaches only (`unwatch`); tmux keeps the session.

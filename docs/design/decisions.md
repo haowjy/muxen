@@ -4170,3 +4170,16 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   is the window shown. The fill no longer means "has a tab": it means "is the thing you are looking
   at", which is what a fill means on the pills too. Rejected: a checkmark for the row on screen
   (a third mark beside the fill and the word).
+
+## Web build of the tab row: two reads of the spec (2026-10-30)
+
+- **A server's workspace is made when the server is first known, not with its first tab.** Home
+  lists a row per server and a server with no tab still has an overview to open (Open session lives
+  there), so the record has to exist first. The id is derived from the host id (`ws/<host id>`) and is
+  opaque to everything else. Rejected: a `workspaceOpened` event on the first tap of an empty row (a
+  state between "no workspace" and "empty workspace" that nothing else needs).
+- **A pill's menu lists the session's windows only for the tab on screen.** `select-window` is sent
+  on the tab's watch (`selectWindow` needs `watch`), and only the shown tab has one. Every terminal
+  tab's menu has New window (`newWindow` takes a session). Rejected: activating the tab first and
+  selecting on its next `watching` (a menu row that moves the user to another tab).
+

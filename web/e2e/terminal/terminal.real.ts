@@ -5,6 +5,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test, type Browser, type Page } from "@playwright/test";
+import { openSessionRow } from "../shared/home";
 import { startStack, type Laptop, type Stack, type TmuxVersion } from "../shared/stack";
 
 const VERSIONS = (process.env["TETHER_E2E_TMUX"] ?? "3.4,3.7b").split(",") as TmuxVersion[];
@@ -39,16 +40,8 @@ for (const version of VERSIONS) {
     async function openTerminal(page: Page, session: string, connected = true, viewport = DESKTOP): Promise<void> {
       await page.setViewportSize(viewport);
       await page.goto(`${stack.url}/#/`);
-      // The desktop + popover lists every session without opening one first; Home's card row lands on the
-      // first session, which would hold this tier's single watcher.
-      await page.getByRole("button", { name: "Open a session or folder" }).click();
-      await page.getByRole("dialog", { name: "Open" }).getByRole("button", { name: new RegExp(`^${session} \\d+ windows?`) }).first().click();
-      if (connected) {
-        // Let the tab connect (and register its input) behind the open popover, so closing it hands the
-        // keyboard to the terminal rather than the + it opened from.
-        await expect(page.locator("[aria-current='true']").first()).toHaveAttribute("aria-label", /, connected$/);
-      }
-      await page.keyboard.press("Escape");
+      // Home's row opens the overview (no tabs yet); Open session lists every session without opening one first.
+      await openSessionRow(page, session);
       if (!connected) {
         await expect(page.locator("[aria-current='true']").first()).toBeVisible();
         return;
