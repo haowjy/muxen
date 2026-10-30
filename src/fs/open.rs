@@ -31,13 +31,11 @@ pub struct Opened {
 /// user can read: there is no scope.
 /// Blocks: run it on a lane (`crate::blocking`).
 pub fn open(path: &str, home: &Path, want: Want) -> Result<Opened, FsError> {
-    let path = if path.starts_with('~') {
-        // `~user` and the like are not a home.
-        expand(path, home).and_then(|path| path.into_os_string().into_string().ok())
-    } else {
-        Some(path.to_owned())
-    };
-    open_absolute(&path.ok_or(FsError::BadRequest)?, want)
+    // `~user`, a relative path and the like are not a path.
+    let path = expand(path, home)
+        .and_then(|path| path.into_os_string().into_string().ok())
+        .ok_or(FsError::BadRequest)?;
+    open_absolute(&path, want)
 }
 
 /// `open` for a path already known to be absolute (`/complete`'s directories).

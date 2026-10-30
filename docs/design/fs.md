@@ -52,7 +52,8 @@ config. The other config keys are still read once, at startup.
 ## Path resolution: `fs::open`
 
 ```text
-fs::open(path: &str, want: Want) -> Result<Opened, FsError>
+fs::open(path: &str, home: &Path, want: Want) -> Result<Opened, FsError>
+fs::open_absolute(path: &str, want: Want) -> Result<Opened, FsError>   // path already absolute
 Want   = Dir | File
 Opened = { file: File, path: String /* canonical */, meta: Metadata }
 ```
@@ -62,7 +63,7 @@ and doesn't exist yet. `open` runs on the fs lane (the dir lane for completion
 listings), and does, in order:
 
 1. **Shape.** `path` must be absolute, or `~` or start with `~/`, which is the daemon user's
-   `$HOME` (`fs::expand`, as `uploads_dir` uses); at most 4,096 bytes and free of NUL; otherwise
+   `$HOME` (`fs::expand`, as `uploads_dir` uses; `open` is `expand` then `open_absolute`, the one open path); at most 4,096 bytes and free of NUL; otherwise
    `bad_request`. The client learns the canonical home from a listing of `~`, whose `path` is
    canonical: Open files lists `~` anyway, so knowing home costs no request of its own. Paths on the wire are UTF-8 strings, so a non-UTF-8 name can't be
    requested ([listing](#get-fslistpath)).
@@ -261,7 +262,8 @@ the cap against `Content-Length` up front, when sent, and against the running co
    lost to a power cut is re-sent.
 
 If cleanup cannot get a thread from the fs lane, a `.part` file is left behind; startup
-sweeps stale part files from the uploads directory.
+sweeps stale part files from the `uploads_dir` read at startup (uploads re-read the file on
+every request, so a later edit isn't swept until the next start).
 6. Answer `201 { path, size }`, `path` the absolute canonical path, which native
    inserts, quoted, into the tab ([ios-shell.md](ios-shell.md#files-and-sharing)).
 

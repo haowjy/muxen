@@ -15,7 +15,7 @@ use futures_util::{Stream, StreamExt as _};
 use rustix::io::Errno;
 use tracing::debug;
 
-use super::{FsError, Opened, Want, expand, open};
+use super::{FsError, Opened, Want, expand, open_absolute};
 use crate::blocking::Lane;
 use crate::config::ConfigFile;
 use crate::files::{Dir, Temp};
@@ -52,7 +52,7 @@ pub fn open_dir(file: &ConfigFile, home: &Path) -> Result<Opened, FsError> {
         .ok()
         .and_then(|dir| dir.into_os_string().into_string().ok())
         .ok_or(FsError::NotADirectory)?;
-    let opened = open(&dir, home, Want::Dir)?;
+    let opened = open_absolute(&dir, Want::Dir)?;
     if memory_backed(&opened.file)? {
         return Err(FsError::MemoryBacked);
     }
@@ -308,7 +308,7 @@ mod tests {
     use crate::fs::test_tree::Tree;
 
     fn dir(tree: &Tree) -> Opened {
-        open(&tree.str(""), Path::new("/"), Want::Dir).expect("the folder")
+        open_absolute(&tree.str(""), Want::Dir).expect("the folder")
     }
 
     fn names(tree: &Tree) -> Vec<String> {
