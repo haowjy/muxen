@@ -1,4 +1,4 @@
-import { Terminal } from "@xterm/xterm";
+import { Terminal, type ITheme } from "@xterm/xterm";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
@@ -28,7 +28,7 @@ export function createXtermRenderer(container: HTMLElement, options: RendererOpt
     scrollback: 5000,
     fontFamily: options.fontFamily,
     fontSize: options.fontSize,
-    theme: options.theme,
+    theme: withoutScrollbar(options.theme),
   });
   term.loadAddon(new Unicode11Addon());
   term.unicode.activeVersion = "11";
@@ -144,7 +144,7 @@ export function createXtermRenderer(container: HTMLElement, options: RendererOpt
     snapshot: (snapshot: Snapshot) => pipeline.snapshot(snapshot),
     cellSize,
     fontCell,
-    setTheme: (theme) => { term.options.theme = theme; },
+    setTheme: (theme) => { term.options.theme = withoutScrollbar(theme); },
     onScrolledUp: (listener) => { scrollListeners.push(listener); },
     scrollToBottom: () => { term.scrollToBottom(); },
     onPromptLine: (listener) => { prompt.onLine(listener); },
@@ -203,4 +203,12 @@ export function createXtermRenderer(container: HTMLElement, options: RendererOpt
     },
     setInactiveCursor: (style) => { term.options.cursorInactiveStyle = style; },
   };
+}
+
+/** xterm 6 draws its own scrollbar slider; tether scrolls by touch and shows none. A clear slider leaves
+ *  xterm's scrolling alone. The colour is 8-digit hex because xterm's parser rejects any colour it can't
+ *  read as opaque except `#rrggbbaa` and `rgba()`: `"transparent"` falls back to the default grey. */
+const CLEAR = "#00000000";
+function withoutScrollbar(theme: ITheme): ITheme {
+  return { ...theme, scrollbarSliderBackground: CLEAR, scrollbarSliderHoverBackground: CLEAR, scrollbarSliderActiveBackground: CLEAR };
 }
