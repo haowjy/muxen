@@ -27,10 +27,6 @@ export class FakeFs implements FsApi {
     for (const go of waiting) go();
   }
 
-  home(): Promise<string> {
-    return this.answer("home", () => this.tree.home);
-  }
-
   list(path: string, offset: number, hidden: boolean): Promise<Listing> {
     // `~` names the home folder, as the real list route is assumed to answer it.
     return this.answer(`list ${path} ${String(offset)}`, () => this.listing(path === "~" ? this.tree.home : path, offset, hidden));

@@ -7,8 +7,8 @@ import type { PasteResult } from "../../net/host";
 import type { UploadEvent } from "../../platform/types";
 import type { InsertResult, TabDriver } from "../../tabs/driver";
 import { cannotInsert, shellQuote } from "../../tabs/input";
-import { tabLabels } from "../../workspace/labels";
-import { allTabs, terminalTabOf } from "../../workspace/state";
+import { labelOf } from "../../workspace/labels";
+import { terminalTabOf } from "../../workspace/state";
 
 /** Over this many UTF-8 bytes a paste is refused, never split: splitting breaks bracketing. */
 export const MAX_PASTE_BYTES = 256 * 1024;
@@ -165,8 +165,8 @@ export class Pastes {
   result(id: string, result: PasteResult): void {
     if (this.claimant(id, result) || result.type === "pasted") return;
     const { app } = this.deps;
-    const tab = tabLabels(allTabs(app.snapshot.workspace), (hostId) => app.hosts.byHostId(hostId)?.name ?? hostId)
-      .find((label) => label.id === id)?.full ?? "the closed tab";
+    const closed = terminalTabOf(app.snapshot.workspace, id);
+    const tab = closed ? labelOf(closed, null).full : "the closed tab";
     if (result.type === "pasteLost") {
       app.notify(`May not have been sent to ${tab}: the connection was lost before tmux confirmed the paste`);
       return;

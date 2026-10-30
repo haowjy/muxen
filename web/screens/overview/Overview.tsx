@@ -4,6 +4,7 @@
 import type { TargetedPointerEvent } from "preact";
 import { useRef, useState } from "preact/hooks";
 import { useApp, useAppView, useBells, useHostName } from "../../app/context";
+import { shorten } from "../../files/format";
 import { bellsUnavailable } from "../../sessions/bells";
 import { ago, findSession } from "../../sessions/groups";
 import { Button } from "../../ui/primitives/Button";
@@ -13,7 +14,7 @@ import { Row } from "../../ui/primitives/Row";
 import { BellDot } from "../../ui/primitives/BellDot";
 import { useStore } from "../../ui/store";
 import { routeWorkspace, type Tab, type Workspace } from "../../workspace/state";
-import { pillMeta, tabPills } from "../terminal/tabView";
+import { pillMeta, pillOf } from "../terminal/tabView";
 import { terminalsOf } from "../terminal/terminals";
 import { useAddActions } from "../shell/tabMenus";
 import styles from "./Overview.module.css";
@@ -33,7 +34,7 @@ function WorkspacePage({ workspace }: { workspace: Workspace }) {
   const hostName = useHostName();
   const bells = useBells();
   const add = useAddActions(workspace);
-  const pills = tabPills(workspace.tabs, statuses, hostName, null, Date.now(), bells);
+  const env = { home: workspace.home, statuses, hostName, onScreen: null, now: Date.now(), bells };
   const name = hostName(workspace.host);
   const listing = sessions?.listing ?? null;
 
@@ -41,8 +42,12 @@ function WorkspacePage({ workspace }: { workspace: Workspace }) {
   const [drag, setDrag] = useState<{ id: string; from: number; to: number; dy: number; pitch: number } | null>(null);
   const rows = useRef(new Map<string, HTMLElement>());
 
-  // A Files row's label is its folder's name: the full path goes under it only when that adds something.
-  const detail = (tab: Tab, label: string): string => (tab.kind === "files" && tab.place.path !== label ? tab.place.path : "");
+  // A Files row's label is its folder's name: the path, shortened under home, goes under it only when that adds something.
+  const detail = (tab: Tab, label: string): string => {
+    if (tab.kind !== "files") return "";
+    const path = shorten(tab.place.path, workspace.home);
+    return path === label ? "" : path;
+  };
   const terminalDetail = (tab: Tab): { window: string; since: string; hidden: boolean } | null => {
     if (tab.kind !== "terminal" || !listing) return null;
     const session = findSession(listing, tab.key.session);
@@ -94,8 +99,8 @@ function WorkspacePage({ workspace }: { workspace: Workspace }) {
             <p class={styles.note}>No tabs open.</p>
           ) : (
             <ul class={styles.list} aria-label={`Tabs in ${name}`}>
-              {pills.map((pill, i) => {
-                const tab = workspace.tabs[i] as Tab;
+              {workspace.tabs.map((tab, i) => {
+                const pill = pillOf(tab, env);
                 const terminal = terminalDetail(tab);
                 // The dragged row follows the finger; the rows it passes make room.
                 const shift = drag === null ? 0 : pill.id === drag.id ? drag.dy : (i > drag.from && i <= drag.to ? -drag.pitch : i < drag.from && i >= drag.to ? drag.pitch : 0);

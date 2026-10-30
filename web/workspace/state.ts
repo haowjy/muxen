@@ -47,6 +47,8 @@ export interface Workspace {
   last: string | null;
   /** Its terminal tab last activated and still open: where Insert path and uploads go. */
   lastTerminal: string | null;
+  /** The server's canonical `$HOME`, once a listing of `~` has said: a Files tab there reads "~". */
+  home: string | null;
 }
 
 export interface WorkspaceState {
@@ -63,6 +65,8 @@ export type WorkspaceEvent =
   | { type: "opened"; workspace: string; key: TabKey; session: string; window: string }
   /** A Files tab in workspace `workspace`. */
   | { type: "filesOpened"; workspace: string; id: string; place: FilesPlace }
+  /** A Files tab's listing of `~` named the host's canonical home. */
+  | { type: "homeKnown"; host: string; home: string }
   | { type: "closed"; id: string }
   | { type: "activated"; id: string }
   /** The tab takes position `to` in its workspace's order; the tabs between shift by one. */
@@ -157,7 +161,7 @@ function plural(n: number): string {
   return `${String(n)} ${n === 1 ? "tab" : "tabs"}`;
 }
 
-const newWorkspace = (host: string): Workspace => ({ id: `ws/${host}`, host, tabs: [], last: null, lastTerminal: null });
+const newWorkspace = (host: string): Workspace => ({ id: `ws/${host}`, host, tabs: [], last: null, lastTerminal: null, home: null });
 
 /** `host`'s workspace, made if it has none. */
 function withWorkspace(state: WorkspaceState, host: string): WorkspaceState {
@@ -232,6 +236,7 @@ function step(state: WorkspaceState, event: WorkspaceEvent): Step {
           last: has(w.last) ? w.last : (tabs[0]?.id ?? null),
           // A saved id that is not a restored terminal tab of this workspace is dropped.
           lastTerminal: has(w.lastTerminal) && tabs.some((t) => t.kind === "terminal" && t.id === w.lastTerminal) ? w.lastTerminal : null,
+          home: w.home,
         };
       });
       return { state: { ...state, workspaces }, notices: [] };
@@ -276,6 +281,10 @@ function step(state: WorkspaceState, event: WorkspaceEvent): Step {
       const tabs = ws.tabs.slice();
       tabs.splice(to, 0, ...tabs.splice(from, 1));
       return { state: amend(state, ws.id, (w) => ({ ...w, tabs })), notices: [] };
+    }
+    case "homeKnown": {
+      const next = { ...state, workspaces: state.workspaces.map((w) => (w.host === event.host && w.home !== event.home ? { ...w, home: event.home } : w)) };
+      return next.workspaces.some((w, i) => w !== state.workspaces[i]) ? { state: next, notices: [] } : none;
     }
     case "closed": {
       if (!allTabs(state).some((t) => t.id === event.id)) return none;
@@ -367,7 +376,7 @@ export const savedWorkspaces = (state: WorkspaceState): SavedWorkspace[] => stat
 const savedTab = (t: Tab): SavedTab =>
   t.kind === "terminal" ? { kind: "terminal", key: t.key, session: t.session, window: t.window } : { kind: "files", id: t.id, host: t.host, place: t.place };
 
-const savedWorkspace = (w: Workspace): SavedWorkspace => ({ id: w.id, host: w.host, tabs: w.tabs.map(savedTab), last: w.last, lastTerminal: w.lastTerminal });
+const savedWorkspace = (w: Workspace): SavedWorkspace => ({ id: w.id, host: w.host, tabs: w.tabs.map(savedTab), last: w.last, lastTerminal: w.lastTerminal, home: w.home });
 
 /** Whether the saved form differs: `restoring` is not saved, so changing only it writes nothing. */
 const savedChanged = (a: WorkspaceState, b: WorkspaceState): boolean => JSON.stringify(savedWorkspaces(a)) !== JSON.stringify(savedWorkspaces(b));

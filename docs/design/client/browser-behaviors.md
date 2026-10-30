@@ -9,7 +9,7 @@ Interactive mockup: [mockups/index.html](mockups/index.html). It predates this r
 - Phone browser must support installation as a PWA with standalone launch; installation is optional for use, not for implementation scope. It shares browser behavior, preserves local drafts offline, and never queues terminal commands for later execution. See [browser setup](browser-setup.md) for research and gates.
 - Three environments: desktop browser, mobile browser, native iPhone app. Shared workspace behavior; platform-specific navigation and input. No three independent terminal implementations. The native app has a host registry; a browser/PWA is currently bound to its page origin. A unified multi-server browser workspace and its Add server route need an origin/auth design before implementation; do not relax the existing browser boundary ([connection roadmap](connection-roadmap.md)).
 - Host is the server, e.g. pop-os. Session is a real tmux session, e.g. a1 or bio2. A session contains windows; one of them is its current window. A terminal tab opens one tmux session, as `tmux attach` does: it shows the session's current window (that window's active pane) and follows it when the current window changes, whichever client changed it. A Files tab holds one folder or file preview on a host.
-- Session lists use actual session names. A terminal tab's label is the session name, then the current window's name in regular weight; a Files tab uses its current folder or file name. Host is separate context.
+- Session lists use actual session names. A terminal tab's label is the session name, then the current window's name in regular weight; a Files tab uses its current folder or file name, and "~" at the host's home. One function names a tab, so it reads the same in its pill, the overview, the dock's line field and a notice. A workspace is one server's, so a label never names the host.
 - Minimal initial product. No custom shortcut system, command palette, expanded desktop sidebar, split-pane management, SSH/SFTP/serial connection choices, or app-drawn keyboard: the dock's key row supplements the system keyboard and never replaces it.
 - Existing-session selection must be clearly distinct from session creation. Opening an existing session never creates another shell. Closing a tether tab only detaches; only Kill window and Kill session, each behind a confirmation, end tmux state.
 - Connecting may resize a real tmux window. The setup must not suggest tether is read-only or isolated when connected to the user's server.
@@ -77,8 +77,7 @@ between the key row and keyboard. Standalone PWA mode has no Safari toolbar.
   and a 17 pt title; no large titles.
 - A terminal tab's session name is bold and its current window name regular, separated
   by spacing, including for a one-window session; a phone pill shows the session alone. Truncate the window name first. A Files
-  tab is labelled by its folder or open file. When multiple hosts are available, keep host
-  context accessible for otherwise ambiguous tabs. Icon-only controls have accessible
+  tab is labelled by its folder or open file, and a tab at the host's home reads "~". Icon-only controls have accessible
   names and tooltips on hover and keyboard focus.
 - Interactive controls share a 2 px focus ring with a 2 px offset. Spacing, type, radii
   and icon sizes use one scale per property; icons are 16, 20 or 24 px.
@@ -175,7 +174,7 @@ The tab overview is one workspace's page, reached by the tab row's ‹ or from H
 has ‹ Home and the workspace's name (the server's name for now). Below it, one row per tab in
 workspace order: an icon for the kind, the label, and a line of detail (a terminal's window and
 how long since its last activity or bell, from the latest listing, with no request of its own; a
-Files tab's folder); the active tab's row is filled.
+Files tab's path, shortened under home, when that says more than the label); the workspace's last-shown tab's row is filled.
 A list of rows, never previews of the terminals: a preview would stream every tab's screen
 (Jimmy, 2026-10-30).
 
@@ -292,7 +291,7 @@ phone, at rest                           phone, typing (keyboard up)
 
 - Navigation between Home, the tab overview and tabs preserves open tabs and process state. Each Files tab retains its own folder or preview, including across reload, locally on that device.
 - Home/list refresh runs on entry and on debounced sessionsChanged while visible; there is no polling or network search per keystroke. Fetch when Open session opens, when a long-press menu opens without a listing newer than the last `sessionsChanged`, and on reconnect, and prune tabs only from authoritative listings for the matching host and tmux endpoint. A listing from the same endpoint decides all that endpoint's tabs, including live tabs: matching sessions from the same tmux run remain; a different run at that endpoint closes the old run's tabs. A scratch endpoint is never touched by the main-endpoint listing, and a null listing (no server) decides nothing. One notice reports closures. The hub serializes one-shot requests and answers an overlapping request with `busy`, so a listing cannot straddle a window-creation reply. Explicit user retry handles list errors.
-- Restore terminal tabs after reload using validated session identities and Files tabs with their own host and saved folder or preview. An unavailable session must not be silently replaced with a same-named session from another server. A workspace saved before tabs followed sessions (format version 1, window tabs) is discarded whole at boot, and so are drafts keyed by its window tabs: tether starts at Home with no tabs. Each workspace's last terminal tab is saved too, so Insert path after a reload still goes where it went before.
+- Restore terminal tabs after reload using validated session identities and Files tabs with their own host and saved folder or preview. An unavailable session must not be silently replaced with a same-named session from another server. A workspace saved before tabs followed sessions (format version 1, window tabs) is discarded whole at boot, and so are drafts keyed by its window tabs: tether starts at Home with no tabs. Each workspace's last terminal tab is saved too, so Insert path after a reload still goes where it went before, and so is its server's home folder (learned from the listing of `~` that Open files makes anyway), so a Files tab at home reads "~" at once.
 - Mockup state is deliberately in-memory. Changing preview-platform selector is a presentation-only reset to Home, not a production control. Full reload returns fictional defaults.
 - Touch input follows Phone dock below. Desktop click-to-focus is unchanged.
 - Tab display keeps the session name visible and spends what width is left on the current window's name, which truncates first. Full combined name is the tooltip and accessible label. Window rows use the actual tmux window index, not array position; mock indices are illustrative. The server/session identity, not label, owns tab state through renames and window changes.

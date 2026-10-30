@@ -32,7 +32,7 @@ function parseWorkspace(v: unknown): SavedWorkspace | null {
   if (parsed.some((t) => t === null)) return null;
   const seen = new Set<string>();
   const tabs = (parsed as SavedTab[]).filter((t) => !seen.has(savedTabId(t)) && seen.add(savedTabId(t)));
-  return { id: v["id"], host: v["host"], tabs, last: idOrNull(v["last"]), lastTerminal: idOrNull(v["lastTerminal"]) };
+  return { id: v["id"], host: v["host"], tabs, last: idOrNull(v["last"]), lastTerminal: idOrNull(v["lastTerminal"]), home: idOrNull(v["home"]) };
 }
 
 /** The current version, or null for anything else: an older version (one strip of tabs), or a record that is not saved workspaces. */

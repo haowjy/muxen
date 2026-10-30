@@ -28,7 +28,7 @@ describe("FileBrowser", () => {
     expect(browser.snapshot.home).toBe("/home/j");
     await browser.follow({ kind: "dir", path: "/home/j/repo/src" });
     expect(browser.snapshot.pages?.entries.map((e) => e.name)).toEqual(["main.rs"]);
-    expect(fs.calls).toEqual(["home", "list /home/j 0", "list /home/j/repo/src 0"]);
+    expect(fs.calls).toEqual(["list ~ 0", "list /home/j/repo/src 0"]);
   });
 
   it("lists directories first, pages on demand, and keeps hidden files out until asked", async () => {
@@ -38,7 +38,7 @@ describe("FileBrowser", () => {
     await browser.more();
     expect(browser.snapshot.pages?.entries.map((e) => e.name)).toEqual(["src", "README.md", "a.ts", "b.png", "c.rs"]);
     await browser.more(); // nothing left: no request
-    expect(fs.calls.filter((c) => c.startsWith("list"))).toEqual(["list /home/j/repo 0", "list /home/j/repo 3"]);
+    expect(fs.calls.filter((c) => c.startsWith("list"))).toEqual(["list ~ 0", "list /home/j/repo 0", "list /home/j/repo 3"]);
     await browser.toggleHidden();
     expect(browser.snapshot.pages?.entries.map((e) => e.name)).toContain(".git");
   });

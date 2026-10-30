@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { SavedWorkspaces, TabKey } from "../platform/types";
 import type { TmuxListing } from "../proto/generated/messages";
-import { tabLabels } from "./labels";
+import { labelOf } from "./labels";
 import { tabId } from "../platform/tabKey";
 import { allTabs, initialWorkspace, reduce, savedWorkspaces, shownTab, type WorkspaceEvent, type WorkspaceState } from "./state";
 
@@ -26,7 +26,7 @@ const listing = (server: string, ids: number[]): TmuxListing => ({
 });
 const saved = (ids: number[], active: number): SavedWorkspaces => ({
   version: 5,
-  workspaces: [{ id: "ws/h1", host: "h1", tabs: ids.map((i) => ({ kind: "terminal", key: key(i), session: "s", window: `w${String(i)}` })), last: tabId(key(active)), lastTerminal: null }],
+  workspaces: [{ id: "ws/h1", host: "h1", tabs: ids.map((i) => ({ kind: "terminal", key: key(i), session: "s", window: `w${String(i)}` })), last: tabId(key(active)), lastTerminal: null, home: null }],
 });
 
 describe("opening and closing", () => {
@@ -169,7 +169,7 @@ describe("restore and pruning", () => {
   });
 
   it("a listing refreshes the session name and, off screen, the current window's name", () => {
-    const s = reduce(initialWorkspace, { type: "restored", saved: { ...saved([1], 1), workspaces: [{ id: "ws/h1", host: "h1", tabs: [{ kind: "terminal", key: key(1), session: "old", window: "older" }], last: tabId(key(1)), lastTerminal: null }] } }).state;
+    const s = reduce(initialWorkspace, { type: "restored", saved: { ...saved([1], 1), workspaces: [{ id: "ws/h1", host: "h1", tabs: [{ kind: "terminal", key: key(1), session: "old", window: "older" }], last: tabId(key(1)), lastTerminal: null, home: null }] } }).state;
     const r = reduce(s, { type: "listing", hostId: "h1", listing: listing("main:1-1", [1]) });
     expect(allTabs(r.state)[0]).toMatchObject({ session: "s", window: "w1", restoring: false });
   });
@@ -193,25 +193,15 @@ describe("savedWorkspaces", () => {
   });
 });
 
-describe("tabLabels", () => {
-  const host = (id: string): string => (id === "h1" ? "pop-os" : "mac");
+describe("labelOf", () => {
   it("is the session, then its current window, with no separator", () => {
     const tabs = run([
       { type: "opened", workspace: "ws/h1", key: key(1), session: "tether", window: "shell" },
       { type: "opened", workspace: "ws/h1", key: key(2), session: "notes", window: "shell" },
     ]).state.workspaces.flatMap((w) => w.tabs);
-    expect(tabLabels(tabs, host).map((l) => [l.session, l.window, l.full])).toEqual([
+    expect(tabs.map((t) => labelOf(t, null)).map((l) => [l.session, l.window, l.full])).toEqual([
       ["tether", "shell", "tether shell"],
       ["notes", "shell", "notes shell"],
     ]);
-  });
-  it("names the host only when several are open", () => {
-    const one = allTabs(open(base, 1).state);
-    expect(tabLabels(one, host)[0]?.host).toBeNull();
-    const two = run([
-      { type: "opened", workspace: "ws/h1", key: key(1), session: "a", window: "x" },
-      { type: "opened", workspace: "ws/h2", key: key(1, "main:1-1", "h2"), session: "b", window: "y" },
-    ]).state.workspaces.flatMap((w) => w.tabs);
-    expect(tabLabels(two, host).map((l) => l.full)).toEqual(["a x on pop-os", "b y on mac"]);
   });
 });

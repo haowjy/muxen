@@ -40,8 +40,6 @@ export interface TextPreview {
 export type Probe = { kind: "file"; mime: string | null; size: number | null } | { kind: "dir" };
 
 export interface FsApi {
-  /** The canonical `$HOME`, which `~` names; only the host can say. */
-  home(): Promise<string>;
   list(path: string, offset: number, hidden: boolean): Promise<Listing>;
   probe(path: string): Promise<Probe>;
   text(path: string, limit: number, signal?: AbortSignal): Promise<TextPreview>;
@@ -83,8 +81,7 @@ export function httpFsApi(origin: string, fetchFn?: typeof fetch): FsApi {
   const page = (offset: number, hidden: boolean): string => `?offset=${String(offset)}&hidden=${hidden ? "1" : "0"}`;
 
   return {
-    // `~` is the daemon's $HOME (fs.md "Path resolution"), and the listing's path is canonical: Open files lists `~` anyway.
-    home: async () => (await json<Listing>(url("list", "~", page(0, false)))).path,
+    // `~` is the daemon's $HOME (fs.md "Path resolution"), and a listing's path is canonical.
     list: (path, offset, hidden) => json<Listing>(url("list", path, page(offset, hidden))),
 
     async probe(path) {

@@ -20,7 +20,7 @@ export interface FileRef {
 /** Where the file manager is: the active Files tab's place, with the viewed file's details. */
 export type Place = { kind: "dir"; path: string } | { kind: "file"; file: FileRef };
 
-/** The folder a new Files tab opens: the host's home, which only the host can name. */
+/** The folder a new Files tab opens: the host's home, which only the host can name. Listing it names the canonical home too. */
 const HOME = "~";
 
 /** A directory's pages loaded so far. */
@@ -43,6 +43,8 @@ export interface FilesView {
 export interface BrowserOptions {
   api: FsApi;
   hidden: boolean;
+  /** The host's canonical `$HOME` if an earlier page life learned it. */
+  home?: string | null;
 }
 
 /** The place a listing entry opens, for the router to push; null for what cannot open. */
@@ -84,19 +86,29 @@ export class FileBrowser extends Store<FilesView> {
   private asked: Promise<string> | null = null;
 
   constructor(opts: BrowserOptions) {
-    super({ place: { kind: "dir", path: HOME }, home: null, pages: null, loading: true, error: null, hidden: opts.hidden });
+    super({ place: { kind: "dir", path: HOME }, home: opts.home ?? null, pages: null, loading: true, error: null, hidden: opts.hidden });
     this.api = opts.api;
     this.folders = new Folders(opts.api);
   }
 
-  /** The host's home folder, asked for once and kept. */
+  /** The host's home folder: known from a listing of `~`, else asked for once by listing it, which browsing shows again without a request. */
   home(): Promise<string> {
-    if (this.asked) return this.asked;
-    this.asked = this.api.home().then(
-      (home) => { this.update({ home }); return home; },
+    const { home } = this.snapshot;
+    if (home !== null) return Promise.resolve(home);
+    this.asked ??= this.listing(HOME, false).then(
+      (listing) => {
+        this.folders.loaded(listing, false, HOME);
+        this.update({ home: listing.path });
+        return listing.path;
+      },
       (error: unknown) => { this.asked = null; throw error; },
     );
     return this.asked;
+  }
+
+  /** A folder's first page: the fetch the path field has under way, else a request. */
+  private async listing(path: string, hidden: boolean): Promise<Listing> {
+    return (await this.folders.settled(path, hidden)) ?? this.api.list(path, 0, hidden);
   }
 
   /**
@@ -117,7 +129,8 @@ export class FileBrowser extends Store<FilesView> {
 
   private show(want: FilesPlace): Promise<void> {
     const { place, pages, error } = this.snapshot;
-    void this.home().catch(() => undefined);
+    // Listing `~` names home itself; any other place needs it asked for, once.
+    if (want.kind === "file" || want.path !== HOME) void this.home().catch(() => undefined);
     if (want.kind === "dir") {
       if (pages?.path !== want.path || error) return this.load(want);
       if (place.kind !== "dir" || place.path !== want.path) this.go({ place: want, loading: false });
@@ -203,21 +216,17 @@ export class FileBrowser extends Store<FilesView> {
     const { hidden } = this.snapshot;
     const cached = this.folders.peek(place.path, hidden);
     if (cached) {
-      this.go({ place: { ...place, path: cached.path }, pages: { ...cached, hidden }, loading: false, error: null });
+      this.go({ place: { ...place, path: cached.path }, pages: { ...cached, hidden }, loading: false, error: null, ...(place.path === HOME && { home: cached.path }) });
       return Promise.resolve();
     }
     // The same folder's pages stay up (greyed by `loading`) while it reloads; another folder's go.
     return this.run(
       { place, pages: this.snapshot.pages?.path === place.path ? this.snapshot.pages : null, loading: true, error: null },
-      async () => {
-        const path = place.path === HOME ? await this.home() : place.path;
-        // A fetch the path field has under way serves this too.
-        return (await this.folders.settled(path, hidden)) ?? this.api.list(path, 0, hidden);
-      },
-      // The daemon answers with the canonical path; the place follows it.
+      () => this.listing(place.path, hidden),
+      // The daemon answers with the canonical path; the place follows it, and a listing of `~` is the host's home.
       (listing) => {
         this.folders.loaded(listing, hidden, place.path);
-        this.update({ place: { ...place, path: listing.path }, pages: { ...listing, hidden }, loading: false });
+        this.update({ place: { ...place, path: listing.path }, pages: { ...listing, hidden }, loading: false, ...(place.path === HOME && { home: listing.path }) });
       },
     );
   }

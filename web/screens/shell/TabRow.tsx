@@ -6,7 +6,7 @@ import { Icon } from "../../ui/primitives/Icon";
 import { TabStrip } from "../../ui/primitives/TabStrip";
 import { useStore } from "../../ui/store";
 import { activeTab, routeWorkspace, screenOf } from "../../workspace/state";
-import { tabPills } from "../terminal/tabView";
+import { pillOf } from "../terminal/tabView";
 import { terminalsOf } from "../terminal/terminals";
 import { useNow } from "../terminal/useNow";
 import { TabMenus, type MenuTarget } from "./tabMenus";
@@ -37,7 +37,8 @@ export function TabRow({ place }: { place: "top" | "dock" }) {
   const running = screen === "terminal" && statuses[active ?? ""]?.state.kind !== "live";
   const now = useNow(running);
   if (!space) return null;
-  const pills = tabPills(space.tabs, statuses, hostName, screen === "terminal" ? active : null, now, bells);
+  const env = { home: space.home, statuses, hostName, onScreen: screen === "terminal" ? active : null, now, bells };
+  const pills = space.tabs.map((tab) => pillOf(tab, env));
   const files = screen === "files";
   // A Files tab has no terminal input to raise: its keyboard control is its path field, which lowers with its keyboard.
   const typing = !files && owner !== "none";

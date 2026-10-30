@@ -29,7 +29,7 @@ const FILES_TAB = { kind: "files" as const, id: "files-1", host: "h-pop", place:
 /** One host's workspace holding `tabs`, whose last shown is `last`. */
 export const savedWith = (tabs: SavedTab[], last: string): SavedWorkspaces => ({
   version: 5,
-  workspaces: [{ id: "ws/h-pop", host: "h-pop", tabs, last, lastTerminal: FIRST }],
+  workspaces: [{ id: "ws/h-pop", host: "h-pop", tabs, last, lastTerminal: FIRST, home: null }],
 });
 
 /** Two tabs saved by a previous page load; the third names a session the daemon no longer has. */

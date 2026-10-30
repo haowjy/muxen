@@ -5,10 +5,11 @@
 // bottom, so what hangs under it pushes the row up, and translated out of the slot by
 // `--keyboard-inset` (Dock.module.css).
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
-import { useApp, useAppView, useTabLabels } from "../../../app/context";
+import { useApp, useAppView } from "../../../app/context";
 import { Icon } from "../../../ui/primitives/Icon";
 import { DockButton } from "../../../ui/primitives/DockButton";
 import { useStore } from "../../../ui/store";
+import { labelOf } from "../../../workspace/labels";
 import { activeTerminal } from "../../../workspace/state";
 import { terminalsOf } from "../terminals";
 import { TabRow } from "../../shell/TabRow";
@@ -61,8 +62,6 @@ export function Dock({ active }: { active: boolean }) {
 
   const tab = activeTerminal(workspace);
   const native = viewport.directInput === "native";
-  const labels = useTabLabels();
-  const label = labels.find((l) => l.id === tab?.id);
   const nativeNote = useStore(nativeLine, (state) => state.note);
   const note = useNote(native ? nativeNote : local, tab?.id ?? null);
   // The one derived value: no input holds the keyboard (resting), or one does (typing).
@@ -124,7 +123,7 @@ export function Dock({ active }: { active: boolean }) {
         {/* Mounted at rest too, so the draft and the field's refs outlive the keyboard; hidden, so nothing can focus it. */}
         <div class={styles.under} ref={under} hidden={!typing}>
           <div class={styles.compose}>
-            <LineField tab={tab} label={label ? `Line for ${label.full}` : "Line"} onNote={setLocal} />
+            <LineField tab={tab} label={tab ? `Line for ${labelOf(tab, null).full}` : "Line"} onNote={setLocal} />
           </div>
           <div class={styles.keyRow}>
             <KeyRow />
