@@ -24,8 +24,21 @@ final class KeyboardInput: UITextField, UITextFieldDelegate {
     private var lineTab: TabKey?
     private var lastLineEdit: LineEdit?
     private var suppressLineEdit = false
-    /// The line's text and caret while another mode holds the field.
-    private var parkedLine: (text: String, selection: NSRange)?
+    /// The line while another mode holds the field: outside `line` this is the line's only copy, and the
+    /// field holds the sentinel alone. `line` moves it into the field and back out.
+    private var storedLine = StoredLine(text: "", selection: NSRange(location: 0, length: 0))
+
+    private struct StoredLine {
+        var text: String
+        var selection: NSRange
+
+        var length: Int { (text as NSString).length }
+
+        mutating func place(_ location: Int, length: Int = 0) {
+            let start = min(max(location, 0), self.length)
+            selection = NSRange(location: start, length: min(max(length, 0), self.length - start))
+        }
+    }
 
     private struct LineEdit: Equatable {
         let text: String
@@ -35,7 +48,6 @@ final class KeyboardInput: UITextField, UITextFieldDelegate {
 
     override var canBecomeFirstResponder: Bool { true }
     override var canResignFirstResponder: Bool { focusController?.canResignInput ?? true }
-    override var hasText: Bool { mode != .line || !(text?.isEmpty ?? true) }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -57,6 +69,7 @@ final class KeyboardInput: UITextField, UITextFieldDelegate {
         textContentType = .none
         delegate = self
         addTarget(self, action: #selector(editingChanged), for: .editingChanged)
+        resetToSentinel()
         NotificationCenter.default.addObserver(self, selector: #selector(stopAllRepeats), name: UIApplication.willResignActiveNotification, object: nil)
     }
 
@@ -74,33 +87,25 @@ final class KeyboardInput: UITextField, UITextFieldDelegate {
         // A held hardware key was routed for the old mode (Esc in the line returns to the terminal): repeats must not go on under the new one.
         stopAllRepeats()
         let previous = self.mode
-        self.mode = mode
-        // Only the line keeps its text in the field. Its draft is parked on the way out and put back,
-        // caret and all, on the way in: left in the field, it went to tmux with the next key.
-        if mode == .line {
-            restoreParkedLine()
-        } else if previous == .line {
-            parkedLine = (lineEdit.text, lineEdit.selection)
-            resetToSentinel()
-        } else {
-            resetToSentinel()
+        // Only `line` keeps the line in the field. It is stored on the way out and put back, caret and all,
+        // on the way in: left in the field, it went to tmux with the next terminal key.
+        if previous == .line {
+            let edit = lineEdit
+            storedLine = StoredLine(text: edit.text, selection: edit.selection)
         }
+        self.mode = mode
+        if mode == .line { showStoredLine() } else { resetToSentinel() }
         inputView = mode == .hidden ? emptyInputView : nil
         returnKeyType = mode == .line ? .send : .default
         reloadInputViews()
     }
 
     func setLine(text: String, caret: Int, tab: TabKey) -> NativeLineSnapshot {
-        parkedLine = nil
         generation += 1
         lineTab = tab
-        self.text = text
-        let length = (text as NSString).length
-        let offset = min(max(caret, 0), length)
-        if let start = position(from: beginningOfDocument, offset: offset) {
-            selectedTextRange = textRange(from: start, to: start)
-        }
-        lastLineEdit = lineEdit
+        storedLine.text = text
+        storedLine.place(caret)
+        if mode == .line { showStoredLine() } else { lastLineEdit = lineEdit }
         return snapshot(tab: tab)
     }
 
@@ -118,6 +123,10 @@ final class KeyboardInput: UITextField, UITextFieldDelegate {
     }
 
     func setLineCaret(_ index: Int) {
+        guard mode == .line else {
+            storedLine.place(index)
+            return
+        }
         let length = ((text ?? "") as NSString).length
         let offset = min(max(index, 0), length)
         guard let caret = position(from: beginningOfDocument, offset: offset) else { return }
@@ -140,12 +149,26 @@ final class KeyboardInput: UITextField, UITextFieldDelegate {
     }
 
     func selectAllLine() {
+        guard mode == .line else {
+            storedLine.place(0, length: storedLine.length)
+            return
+        }
         selectedTextRange = textRange(from: beginningOfDocument, to: endOfDocument)
     }
 
     func insertLine(_ text: String) {
         guard !text.contains(where: { $0.isNewline }) else { return }
         armedModifier = nil
+        guard mode == .line else {
+            storedLine.text = (storedLine.text as NSString).replacingCharacters(in: storedLine.selection, with: text)
+            storedLine.place(storedLine.selection.location + (text as NSString).length)
+            if let lineTab {
+                let edit = lineEdit
+                lastLineEdit = edit
+                output?.keyboardInputLineEdit(gen: generation, text: edit.text, tab: lineTab, selection: edit.selection, marked: nil)
+            }
+            return
+        }
         guard let range = selectedTextRange ?? textRange(from: endOfDocument, to: endOfDocument) else { return }
         replace(range, withText: text)
     }
@@ -273,16 +296,12 @@ final class KeyboardInput: UITextField, UITextFieldDelegate {
     /// delete only while the field has text before the caret; `deleteBackward` sends BSpace and keeps it.
     private static let sentinel = "\u{200B}"
 
-    private func restoreParkedLine() {
-        guard let parked = parkedLine else {
-            if text == Self.sentinel { text = "" }
-            return
-        }
-        parkedLine = nil
+    /// Puts the stored line in the field for `line`, without reporting it: the web already has it.
+    private func showStoredLine() {
         suppressLineEdit = true
-        text = parked.text
-        if let start = position(from: beginningOfDocument, offset: parked.selection.location),
-           let end = position(from: start, offset: parked.selection.length) {
+        text = storedLine.text
+        if let start = position(from: beginningOfDocument, offset: storedLine.selection.location),
+           let end = position(from: start, offset: storedLine.selection.length) {
             selectedTextRange = textRange(from: start, to: end)
         }
         suppressLineEdit = false
@@ -295,7 +314,9 @@ final class KeyboardInput: UITextField, UITextFieldDelegate {
         selectedTextRange = textRange(from: end, to: end)
     }
 
+    /// The line as it stands: the field's in `line`, the stored copy otherwise.
     private var lineEdit: LineEdit {
+        guard mode == .line else { return LineEdit(text: storedLine.text, selection: storedLine.selection, marked: nil) }
         let start = selectedTextRange?.start ?? beginningOfDocument
         let end = selectedTextRange?.end ?? start
         let selection = NSRange(location: offset(from: beginningOfDocument, to: start), length: offset(from: start, to: end))
