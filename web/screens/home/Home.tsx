@@ -1,4 +1,4 @@
-// Home (client-architecture.md §6.3, browser-behaviors.md "Home"): one row per workspace, which today is
+// Home (browser-behaviors.md "Home"): one row per workspace, which today is
 // one per server: its name, status and tab count. A row opens the workspace on the tab it last showed, or on
 // its overview when it has none. Server-first: one server is not opened for you. The gear opens Settings.
 // Add server exists only where the platform manages servers (the app); the browser has its one page origin.

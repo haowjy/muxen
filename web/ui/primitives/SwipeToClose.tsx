@@ -1,4 +1,4 @@
-// One open-tab row of the phone sheet, iOS style: a touch drag left reveals Close behind it,
+// One open-tab row of the tab overview, iOS style: a touch drag left reveals Close behind it,
 // past half the row it closes on release, and a tap on the revealed Close closes too. On a
 // pointer that hovers there is no swipe; × shows at the row's end instead. Close is always in
 // the DOM and named, so assistive tech reaches it without swiping.

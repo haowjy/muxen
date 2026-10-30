@@ -55,7 +55,7 @@ export class BellMarks extends Store<BellsState> {
   /**
    * `saved` is what the saved workspace holds: marks this device showed in an earlier page life.
    * `shownTab` is the tab on screen on a visible page, if any: it counts as shown (and so does a
-   * terminal tab under the sessions sheet, which leaves it visible).
+   * terminal tab under an overlay such as Open session, which leaves it visible).
    */
   constructor(saved: Readonly<Record<string, number>>, private readonly shownTab: () => string | null) {
     super({ marks: {}, seen: saved, hosts: {} });

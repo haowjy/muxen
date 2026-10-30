@@ -1,6 +1,5 @@
-// The cache over the listing fetcher's events (client-architecture.md §6.3): one listing per
-// host and what state it is in. It never fetches. Home, the picker and the switcher render
-// it, so all three show the same rows.
+// The cache over the listing fetcher's events: one listing per host and what state it is in.
+// It never fetches. Home and Open session render it, so both show the same rows.
 import type { TmuxListing } from "../proto/generated/messages";
 import { Store } from "../ui/store";
 

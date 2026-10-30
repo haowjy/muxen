@@ -324,15 +324,15 @@ export class AppController extends Store<AppView> {
     this.dispatch({ type: "hostsKnown", ids, complete: hosts.length > 0 && ids.length === hosts.length });
   }
 
-  /** A host stays joined while Home or the sessions overlay is on screen, a tab on it exists, or one is restoring. This is the one place that asks for a listing on entering one of them. */
+  /** A host stays joined while Home or Open session is on screen, a tab on it exists, or one is restoring. This is the one place that asks for a listing on entering one of them. */
   private syncListing(): void {
     const { entry, workspace } = this.snapshot;
     const home = screenOf(workspace) === "home";
     const { overlay } = entry;
     const sessionsOverlay = overlay?.screen === "sessions" ? overlay : null;
     const listingShown = home || sessionsOverlay !== null;
-    // Each surface asks afresh when it is entered, for every host it shows: the picker, the sheet and
-    // Home all list every listable server. Returning from an overlay to the screen under it is not entering.
+    // Each surface asks afresh when it is entered, for every host it shows: Open session and
+    // Home both list every listable server. Returning from an overlay to the screen under it is not entering.
     const surface: ListingSurface | null = sessionsOverlay ? { kind: "sessions", name: sessionsOverlay.name } : home ? { kind: "home", name: "" } : null;
     const before = this.listingSurface;
     const returning = surface?.kind === "home" && before?.kind === "sessions";

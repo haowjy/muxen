@@ -40,7 +40,7 @@ export function useAppView<S>(select: (view: AppView) => S, equal?: (a: S, b: S)
   return useStore(useApp(), select, equal);
 }
 
-/** The bell marks and what this device has seen of them: the dots on pills, rows and the current-tab button. */
+/** The bell marks and what this device has seen of them: the dots on pills and rows. */
 export function useBells(): BellsState {
   const app = useApp();
   return useStore(app.bells, (s) => s);

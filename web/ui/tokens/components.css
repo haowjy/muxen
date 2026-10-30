@@ -5,7 +5,7 @@
   --row-pad-x: var(--space-3);
   --tab-height: 32px;
   --toolbar-height: 44px;
-  /* The phone dock's row, resting (current-tab button, Show keyboard) or typing (key row, Hide keyboard): one height. */
+  /* The phone dock's row, resting (the tab row, Show keyboard) or typing (key row, Hide keyboard): one height. */
   --dock-height: 42px;
   --dock-control-height: 34px;
   --dock-key-height: 32px;
@@ -34,7 +34,7 @@
   --dialog-bg: var(--color-bg-raised);
   --band-bg: var(--color-bg-raised);
 
-  /* The phone toast sits above the bottom bar (Home and Files' nav, the tools row, or the dock's row), never over its tabs. */
+  /* The phone toast sits above the bottom bar (Home and Files' nav, or the dock's row), never over its tabs. */
   --toast-offset: 0px;
 
   /* The terminal surface's own stacking, inside its host: the selection snapshot. */

@@ -67,7 +67,7 @@ export function filesTree(): FakeTree {
 }
 
 /**
- * A home folder for finding folders by path: one favorite (`~/repos/tether`) inside a `~/repos` that
+ * A home folder for finding folders by path: a project folder (`~/repos/tether`) inside a `~/repos` that
  * holds more, a folder of twenty subfolders (three pages), and ones to refuse, hang on and cap.
  */
 export const FIND_ROOT = `${HOME}/repos/tether`;
@@ -94,7 +94,7 @@ const CONTENT: Record<string, string> = {
   [`${REPO}/Cargo.toml`]: '[package]\nname = "tether"\nversion = "0.1.0"\n',
   [`${REPO}/src/main.rs`]: MAIN_RS,
   [`${REPO}/docs/plan.md`]: "# Plan\n\nThe product and UX spec.\n",
-  [`${REPO}/docs/fs.md`]: "# File API\n\nFavorites, listing, raw reads.\n",
+  [`${REPO}/docs/fs.md`]: "# File API\n\nListing, raw reads.\n",
   [`${REPO}/.env`]: "TOKEN=hidden\n",
 };
 

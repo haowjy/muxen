@@ -1,6 +1,6 @@
-// The terminal screen (client-architecture.md §6.1, §6.4, §7): the surface the renderer draws
+// The terminal screen (client-architecture.md §6.4, §7): the surface the renderer draws
 // into, with the status band over its top edge, and on touch the dock below it. Its tabs are
-// the shell's top row (desktop) or the dock's current-tab button (touch). The screen is
+// the tab row: the shell's top row (desktop) or the dock's bottom row (touch). The screen is
 // mounted once and hidden rather than unmounted (§6.5); the renderer, the drivers and tmux's
 // size belong to `terminals.ts`, so this file only places things and draws state.
 import { useEffect, useRef } from "preact/hooks";

@@ -7,7 +7,7 @@ import { useApp, useAppView } from "../../app/context";
 import { findSession } from "../../sessions/groups";
 import { Menu, type MenuSection } from "../../ui/primitives/Menu";
 import { useStore } from "../../ui/store";
-import { activeTab, allTabs, type Workspace } from "../../workspace/state";
+import { activeTab, type Workspace } from "../../workspace/state";
 import { baseName } from "../../files/paths";
 import { terminalsOf } from "../terminal/terminals";
 
@@ -46,7 +46,7 @@ function AddMenu({ anchor, workspace, onClose }: { anchor: HTMLElement; workspac
 function TabMenu({ id, anchor, workspace, onClose }: { id: string; anchor: HTMLElement; workspace: Workspace; onClose: () => void }) {
   const app = useApp();
   const terminals = terminalsOf(app);
-  const tab = allTabs(app.snapshot.workspace).find((t) => t.id === id);
+  const tab = workspace.tabs.find((t) => t.id === id);
   const host = useAppView((v) => v.hosts.find((h) => h.hostId === tab?.host));
   const listing = useStore(app.sessions, (s) => (host ? s.hosts[host.entry.handle]?.listing : undefined));
   const shown = useStore(terminals, (s) => s.tabs[id]?.shown?.id ?? null);
