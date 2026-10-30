@@ -31,7 +31,7 @@ auth is [auth.md](auth.md). Decisions and the alternatives rejected are in
 | upload flush | every 2 MiB: `fdatasync`, then drop the written pages | the dirty pages in between are charged to the unit, and the [ceiling](#limits-and-the-memory-ceiling) counts them |
 | page drop during a raw read | files over 8 MiB: after each chunk, everything from the response's first byte to the current position | |
 | socket buffers, every accepted socket | `SO_SNDBUF` and `SO_RCVBUF` 64 KiB (Linux doubles them); Serve reaches the daemon over a local Unix-socket hop, not another network round trip | the writer waits |
-| path in a request | 4,096 bytes, UTF-8, absolute, no NUL | `400 bad_request` |
+| path in a request | 4,096 bytes, UTF-8, absolute or `~`-prefixed, no NUL | `400 bad_request` |
 
 ## The uploads folder
 
@@ -61,8 +61,10 @@ A third `Want`, `Parent`, belongs to v2's writes ([below](#v2-what-this-must-not
 and doesn't exist yet. `open` runs on the fs lane (the dir lane for completion
 listings), and does, in order:
 
-1. **Shape.** `path` must be absolute, at most 4,096 bytes and free of NUL; otherwise
-   `bad_request`. Paths on the wire are UTF-8 strings, so a non-UTF-8 name can't be
+1. **Shape.** `path` must be absolute, or `~` or start with `~/`, which is the daemon user's
+   `$HOME` (`fs::expand`, as `uploads_dir` uses); at most 4,096 bytes and free of NUL; otherwise
+   `bad_request`. The client learns the canonical home from a listing of `~`, whose `path` is
+   canonical: Open files lists `~` anyway, so knowing home costs no request of its own. Paths on the wire are UTF-8 strings, so a non-UTF-8 name can't be
    requested ([listing](#get-fslistpath)).
 2. **Canonicalize** with `realpath`: every symlink and every `..` is resolved against
    the real tree, so `..` needs no lexical rule and a symlink is followed like any
