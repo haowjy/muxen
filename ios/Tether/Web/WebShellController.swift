@@ -13,7 +13,7 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
     private let uploader = Uploader()
     private let terminalInput = KeyboardInput(frame: .zero)
     private var focus: FocusController!
-    private var webView: WKWebView!
+    private var webView: TetherWebView!
     private var webViewConstraints: [NSLayoutConstraint] = []
     private var bottomConstraint: NSLayoutConstraint!
     private var pendingInput: [InputEvent] = []
@@ -256,14 +256,15 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         loadUI(fragment: fragment)
     }
 
-    private func makeWebView() -> WKWebView {
+    private func makeWebView() -> TetherWebView {
         let configuration = WKWebViewConfiguration()
         configuration.setURLSchemeHandler(schemeHandler, forURLScheme: "tether-app")
         configuration.allowsInlineMediaPlayback = true
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         configuration.userContentController.addScriptMessageHandler(messageHandlerProxy, contentWorld: .page, name: "tether")
 
-        let result = WKWebView(frame: .zero, configuration: configuration)
+        let result = TetherWebView(frame: .zero, configuration: configuration)
+        result.suppressesEditMenu = { [weak self] in self?.focus.mode == .select }
         result.translatesAutoresizingMaskIntoConstraints = false
         result.navigationDelegate = self
         result.uiDelegate = self
@@ -678,5 +679,18 @@ private final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandlerWi
             return
         }
         target.userContentController(userContentController, didReceive: message, replyHandler: replyHandler)
+    }
+}
+
+/// While the terminal's selection is up (`.select`), the page draws tether's own Copy and Paste: only its
+/// Paste reaches tmux. WebKit's menu for the same selection would stack under it, so it is emptied then.
+/// Web text fields keep the system menu.
+final class TetherWebView: WKWebView {
+    var suppressesEditMenu: () -> Bool = { false }
+
+    // WebKit's content view asks the web view whether each edit action may run; refusing them all leaves
+    // its menu empty, so it never shows. (Removing menus in `buildMenu` left it up.)
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        suppressesEditMenu() ? false : super.canPerformAction(action, withSender: sender)
     }
 }
