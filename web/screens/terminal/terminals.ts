@@ -112,8 +112,6 @@ export class Terminals extends Store<TerminalsView> {
   private paneLarge = false;
   /** The shell's command line under the cursor, for a tap on the prompt row. */
   private promptLine: PromptLine | null = null;
-  /** The colour scheme changed and the renderer has not taken the new theme yet. */
-  private themeStale = false;
   /** The touch side of looking at the shown tab: scroll, history, selection, gestures. */
   private readonly view: TerminalView;
   /** Paste, copy and inserted paths. */
@@ -169,7 +167,6 @@ export class Terminals extends Store<TerminalsView> {
     new ResizeObserver(() => { this.measure(); }).observe(this.element);
     app.subscribe(() => { this.sync(); });
     app.focus.subscribe(() => { this.drawCursor(); });
-    document.addEventListener("selectionchange", () => { this.applyTheme(); });
     app.platform.subscribe((event) => {
       // The app's edit menu over the mark, or over iOS's own selection.
       if (event.type === "menuCopy") this.pastes.copySelection();
@@ -306,8 +303,7 @@ export class Terminals extends Store<TerminalsView> {
       this.viewport = viewport;
       this.sizer.setViewport(viewport);
       if (viewport.scheme !== before.scheme) {
-        this.themeStale = true;
-        this.applyTheme();
+        this.surface?.xterm?.setTheme(terminalTheme()); // the list's colours are CSS variables and follow the scheme by themselves
       }
       if (viewport.density !== before.density) this.refont();
       if (viewport.directInput !== before.directInput) this.applyInput();
@@ -492,13 +488,6 @@ export class Terminals extends Store<TerminalsView> {
     this.chromeWindow = "closed";
     this.update({ ready: true });
     this.sync();
-  }
-
-  /** A new theme redraws every row of xterm's view, and a redraw replaces the text a selection is on: it waits for the selection to close. The list's colours are CSS variables, which follow the scheme by themselves. */
-  private applyTheme(): void {
-    if (!this.themeStale || this.view.selected) return;
-    this.themeStale = false;
-    this.surface?.xterm?.setTheme(terminalTheme());
   }
 
   /** One cell's size from the font alone, for the view that draws now. */

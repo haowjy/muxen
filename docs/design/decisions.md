@@ -24,9 +24,12 @@ Decided by Jimmy, 2026-10-21 unless an entry gives another date.
   keyboard down, muxen's with the mark). A row is redrawn only when its text changes, so output that rewrites
   a selected row closes the selection and nothing else does. Desktop moves to the same list after the phone:
   one implementation everywhere, with WebGL, the history slide, the trackpad switch and `@xterm/xterm` going
-  in phase 6 and desktop typing on muxen's own input (phases 5–6). Until then desktop is drawn by xterm as
-  before.
-- **Decided:** Jimmy, 2026-10-31. Selection while scrolling and autoscroll reverse the J8 rule ("a selection
+  in phase 6 and desktop typing on muxen's own input (phases 5–6). Until then desktop is drawn by xterm, except that a
+  finger no longer scrolls it (a touchscreen laptop, an iPad with a trackpad): the wheel and trackpad work, and
+  finger scrolling returns with the list in phase 6. Phase 4 removed it; Jimmy accepted the loss for the merge (2026-10-31).
+- **Decided:** Jimmy, 2026-10-31. Typing while scrolled up jumps to latest (`Terminals.typeTo`, unchanged), so the typed
+  text shows; "yeah, jump i think". Merging with desktop's finger scrolling gone until phase 6: "ok to merge".
+  Selection while scrolling and autoscroll reverse the J8 rule ("a selection
   covers what's on screen plus the history already shown; scrolling closes it") and plan.md's "no autoscroll
   at the edges". "yes, 1 implementation everywhere" for the single list.
 - **Why:** the selection needed rows that stay put under scrolling, and autoscroll needs a scroller the
@@ -359,8 +362,8 @@ Decided by Jimmy, 2026-10-21 unless an entry gives another date.
 - **What:** `TerminalModel` (`term/`) parses a pane's output into frames and owns no DOM; the row list draws
   them with muxen's own run-based rows (`rowList.ts`). tmux's older rows are fetched in chunks, decoded with a
   short-lived xterm instance, and anchored against the list's oldest rows so a chunk that no longer lines up
-  is dropped. A gap stops fetching until the next snapshot. The merge was gated on screenshots of vim splits,
-  htop, tmux borders, Claude Code and CJK text against a `main` build.
+  is dropped. A gap stops fetching until the next snapshot. The merge is gated on screenshots of vim splits,
+  htop, tmux borders, Claude Code and CJK text against a `main` build, taken on the phone (not yet done).
 - **Why:** the list must own its rows to keep them in place. The earlier choice, "Touch scroll is JS momentum
   over xterm and a DOM history view" (2026-10-24, no decider named), was an implementation choice made to let
   one recognizer tell a tap, a scroll and a hold apart. It is superseded: the browser's scroll leaves the

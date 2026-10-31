@@ -138,11 +138,6 @@ export class TerminalView {
     this.wheel.stop();
   }
 
-  /** Whether the page's selection is up on the rows. */
-  get selected(): boolean {
-    return this.page.exists();
-  }
-
   /** The page selection's text, soft wraps joined; empty with none. */
   pageText(): string {
     return this.page.text();

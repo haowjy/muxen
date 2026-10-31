@@ -55,8 +55,8 @@ rebuilding the app.
 
 | Native (Swift) | Web (`web/`, in the WKWebView) |
 |---|---|
-| Keyboard: the first responder, software and hardware keys | Terminal rendering (xterm.js), touch gestures, selection overlay |
-| Nothing drawn above the keyboard: one native `UITextField` responder with terminal/line targets and system keyboard traits | The dock: the tab row (‹, tabs, +) and keyboard control at rest; the tab row, line mirror and key row while the keyboard is up; the + and long-press menus; the terminal's edit menu (Copy, Paste) |
+| Keyboard: the first responder, software and hardware keys | Terminal rendering (the row list on touch, xterm.js on desktop), touch gestures, the keyboard-up mark |
+| Nothing drawn above the keyboard: one native `UITextField` responder with terminal/line targets and system keyboard traits | The dock: the tab row (‹, tabs, +) and keyboard control at rest; the tab row, line mirror and key row while the keyboard is up; the + and long-press menus |
 | Focus: who holds the keyboard; native owns terminal and line editing, WebKit owns sheet fields | File manager and viewers; the editor (v2) |
 | Keyboard geometry: measuring the keyboard and reporting what it covers | Host protocol: WebSocket per host, tabs, reconnect |
 | Auth: Face ID lock, tokens in the Keychain, lock screen | |
@@ -364,18 +364,18 @@ responder. Terminal's native responder stays the same object while its target ch
   used, the web asks for `webText`, which resigns `KeyboardInput`; WebKit then owns the
   sheet field and its ordinary keyboard chrome. On close the held Terminal target is
   restored synchronously; the app does not require a new tap to raise the keyboard.
-- **Selection** ([plan.md](plan.md#select-copy-and-paste)) uses the web selection layer.
-  (Since 2026-10-31 the web never sends `focus select`; the paragraph below describes what native still accepts.)
+- **Selection** ([plan.md](plan.md#select-copy-and-paste)) is iOS's own on the row list with the keyboard down,
+  and the web's mark with it up. Since 2026-10-31 the web never sends `focus select`; native still accepts it
+  because an older page, served by an older daemon, can send it (removal is tracked for the next bridge bump).
   `focus select` sets `FocusController.selecting` and leaves the target alone: the keyboard
   stays as it was, typing goes where it went, and only the hide button lowers it. Resigning
   the field there dropped the keyboard, and on the phone WebKit cleared the page's
   selection 1–100 ms later, so the long press selected nothing. The next target the web
   sends clears the flag; a cover and uncover restore the target and leave the flag. While
-  it is on, WebKit's edit menu is emptied, and the layer sets `-webkit-touch-callout: none`
-  (muxen draws Copy and Paste; iOS otherwise offers AutoFill for the native field). The line mirror has its own
+  it is on, WebKit's edit menu is emptied (iOS otherwise offers AutoFill for the native field). The line mirror has its own
   tap-to-place caret and Paste / Select all / Clear menu; it has no handles and does not
   borrow WebKit focus.
-- **Edit menus over the terminal under the web keyboard switch** (`directInput: "owned"`). With
+- **Edit menus over the mark** (any input with the keyboard up: the web keyboard switch and the app's default input). With
   the keyboard up the page's mark is a CSS highlight, not a DOM selection, so WebKit offers no
   menu; the page sends `editMenu { rect }` and `MuxenWebView` presents its own
   `UIEditMenuInteraction` (Copy, Paste) there, and reports the choice as `menuCopy` or
@@ -385,7 +385,7 @@ responder. Terminal's native responder stays the same object while its target ch
   WebKit's, and `buildMenu` adds a Paste item (sending `menuPaste`) whenever no keyboard
   covers the web view, on a terminal or not: native keeps no terminal state for it, and the
   page ignores a Paste when no terminal is shown (`pasteFromMenu`). The web view's `tintColor` is the accent (`--blue-7` light, `--blue-9`
-  dark), so iOS's handles match muxen's. `suppressesEditMenu` stays for native input only.
+  dark), so iOS's handles match muxen's. `suppressesEditMenu` is on only while a `focus select` is, which the web no longer sends.
 - **Native coverage gates focus and input.** While the lock screen or native server
   sheet covers the app, `FocusController.set` records requested state rather than
   changing the responder; uncovering applies the latest requested destination. A queued
@@ -455,14 +455,14 @@ and a docked keyboard covers its bottom, as in a browser.
   dev shim) and none in landscape, where the side insets are larger.
 - **The pan.** With the keyboard up, and with the strip showing, the terminal area
   (above the dock and strip) is shorter than the terminal's rows, and the terminal
-  keeps its rows ([plan.md](plan.md#layout)). The renderer (`web/term/xterm.ts`, `terminalBottomPan`)
-  slides the terminal so the last row meets the bottom of that area. If that would put
-  the cursor above the area's top, it instead puts the cursor row's bottom there. It
-  never pans down or past the last row, and does not pan while every row fits or while
-  scrolled into history. The area's height and cursor row decide the pan; the web keeps
-  no keyboard flag for it. The dock recomputes the area when `keyboardInset` changes, from where its row will
-  be once the lift ends, not where it is mid-slide. The slide animates with the keyboard
-  (`--keyboard-timing`) when the area changes size; a cursor move jumps, as text does.
+  keeps its rows ([plan.md](plan.md#layout)). On touch the row list (`rowList.ts`,
+  `terminalBottomPan`) does not slide anything: it grows a spacer under the rows by the covered height and
+  scrolls so the last row meets the bottom of the visible area; if that would put the cursor above the area's
+  top, the cursor row's bottom meets it instead. Every row of a tall screen scrolls into view, nothing
+  pans past the last row, and a list scrolled into history is left where it is. The visible height and
+  cursor row decide the position; the web keeps no keyboard flag for it. The dock recomputes the area when
+  `keyboardInset` changes, from where its row will be once the lift ends, not where it is mid-slide. Only
+  desktop's xterm view still slides (a pane larger than its box), and desktop has no keyboard.
 - `webView.scrollView`: `contentInsetAdjustmentBehavior = .never`, `bounces = false`,
   `keyboardDismissMode = .none`; zoom off in the viewport meta.
 

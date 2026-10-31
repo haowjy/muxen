@@ -43,7 +43,7 @@ The Terminal destination. The design is client-architecture.md §5.4, §5.5, §5
   and closed refuse), the result is `typed`, `queued` or `refused`, and a refusal gets one
   notice. A screen that disables the action selects `canInsert` from the `terminalsOf(app)`
   store. P3 reads `term/index.ts`:
-  `selectionText`, `mouseMode`, `setVisible`; and `tabs/keymap.ts` (`decideKey(event, "owned")`).
+  `selectionText` and `mouseMode`, and `Terminals.setVisible`; and `tabs/keymap.ts` (`decideKey(event, "owned")`).
 - **Ctrl+Shift+F leaves the terminal** (`decideKey` returns `leave`; the sink focuses the `tabs` target, the active pill's select button). Cmd combinations are the browser's, everywhere, and Ctrl+Shift+C copies everywhere.** Telling
   macOS from the rest needs `navigator`, which only `platform/` may read; no terminal key is lost
   by this (nobody sends Super+key to a shell, and `^C` still is Ctrl+C).
@@ -54,7 +54,7 @@ The Terminal destination. The design is client-architecture.md §5.4, §5.5, §5
   arrows), the selection (`selection/`: the page's, and the mark) and, for desktop's xterm view only,
   `scroll.ts` (the wheel past xterm's top onto the history rows) with `history.ts` (tmux's older rows as DOM,
   chunked with a run of overlap rows that the chunk is searched for, `anchor.ts`). `Terminals` tells it the
-  shown tab; a tab change, a snapshot, `visibilitychange` and a lost pointer all end in `reset()`, and its
+  shown tab; a tab change, a snapshot, `visibilitychange` and a lost touch all end in `reset()`, and its
   sends are bound to the tab they began on. Add new per-tab touch state there, never on `Terminals`.
   "Shown" is one rule: selected and not covered by a native screen (`shownTerminalTab`); the view resets when
   it changes. Mouse input comes from `term/mouse.ts` (`mouseInput` holds the per-mode policy) with the
@@ -78,7 +78,7 @@ The Terminal destination. The design is client-architecture.md §5.4, §5.5, §5
   tmux's older rows through `historyFetcher.ts`, the procedure `history.ts` also runs: when the view is
   within four screens of its oldest row (its scroll events, or a swipe beginning, since a list shorter than its
   box never scrolls), and only below the 10,000-row cap, while not pinned, with no chunk waiting to land
-  (`landing`: a chunk deferred by a bounce) and no gap row (`historyDone`: after a gap nobody knows how far
+  (`pending`: the one chunk a bounce defers; trims never wait, they retry next frame) and no gap row (`historyDone`: after a gap nobody knows how far
   tmux's numbering is). A chunk lands only if the oldest row is still the one it was anchored to; two misses in
   a row stop fetching until the next reset. Prepends go through `editAbove`. Desktop (`"xterm"`) keeps xterm's
   view, `scroll.ts` and `history.ts` until phase 6 of the touch-rows work; a finger does not scroll there. The
@@ -86,14 +86,12 @@ The Terminal destination. The design is client-architecture.md §5.4, §5.5, §5
   it keeps pulling frames while hidden.
 - **Nothing redraws a still screen on touch.** A redraw replaces a row's text and a selection on it. The list
   rewrites only the rows whose text differs, and the cursor is an overlay whose look is CSS on
-  `data-cursor`; xterm's view (desktop) still never takes a theme while a selection is up
-  (`term/xterm.ts`). A resize, font change, snapshot or input switch closes a selection first.
+  `data-cursor`, and its colours are CSS variables, so a theme change redraws no row. A resize, font change, snapshot or input switch closes a selection first.
 - **Rows are runs.** `term/rows.ts` `Row`: every row comes from xterm (`term/lines.ts`; history is
   decoded by `term/decode.ts`); a wide character is a run of its own (`wide`), which the view draws two cells
   wide. The prompt-row tap counts characters (`touch/selection.ts` `charsAcross`), never `String.length`.
-- **The grid is the contract.** History rows and the canvas are each
-  one cell tall per row; copy joins rows at wrap flags, never by length. Change the font or cell
-  size and both follow `renderer.cellSize()`.
+- **The grid is the contract.** Rows are one cell tall; copy joins rows at wrap flags, never by length.
+  On desktop the history rows and the canvas both follow `renderer.cellSize()`; the list sizes from its own cell.
 - **xterm's terminal may be slid and panned (desktop).** `renderer.shift` (history slide, `translate`) and the
   pan for a pane larger than the box (`transform`) both move the screen. Nothing converts a client point to a
   cell on desktop: the mouse is xterm's, and the wheel past the top is `scroll.ts`.

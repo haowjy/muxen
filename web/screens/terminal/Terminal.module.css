@@ -12,8 +12,8 @@
 }
 /* The renderer's element, placed by terminals.ts. It is the stable box tmux is sized from: the
    status band and the empty state float over it and reserve nothing, so showing either never
-   resizes tmux. The surface owns every touch (a recognizer decides tap, scroll and hold), and
-   iOS shows no callout or text selection of its own. */
+   resizes tmux. Desktop's xterm view owns every touch here (a recognizer decides tap, scroll
+   and hold), and iOS shows no callout or text selection of its own; every other input is overridden below. */
 .host {
   position: absolute;
   inset: var(--space-2) var(--space-3);

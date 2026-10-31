@@ -778,7 +778,7 @@ private final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandlerWi
 /// nothing there and the page asks for `toggleMarkMenu`; native knows whether the menu is up, since iOS can dismiss it
 /// itself. With the keyboard down iOS's own selection menu gets a Paste, on a terminal or not: the page drops a Paste
 /// that has no terminal to go to.
-/// In native input mode the page draws its own menu over a snapshot selection and WebKit's is emptied
+/// While a `focus select` is on (the web no longer sends it; an older page can) WebKit's menu is emptied
 /// (`suppressesEditMenu`); web text fields keep the system menu.
 final class MuxenWebView: WKWebView, UIEditMenuInteractionDelegate {
     var suppressesEditMenu: () -> Bool = { false }

@@ -102,7 +102,7 @@ export class TouchControl {
   constructor(private readonly deps: TouchDeps) {
     const { element } = deps;
     element.addEventListener("touchstart", this.touchStart, { passive: true });
-    // The rest of a touch's events go to its own target (`follow`), not the surface: a touch that began on a row xterm
+    // The rest of a touch's events go to its own target (`follow`), not the surface: a touch that began on a row a redraw
     // then replaced goes on being dispatched to that detached node, and never bubbles to the surface or the document.
     for (const type of MOUSE_EVENTS) element.addEventListener(type, this.blockMouse, true);
     document.addEventListener("visibilitychange", () => {
@@ -139,7 +139,7 @@ export class TouchControl {
   }
 
   /**
-   * Listens on the node a touch began on, which keeps receiving its events after xterm replaces it. `touchend` is
+   * Listens on the node a touch began on, which keeps receiving its events after a redraw replaces it. `touchend` is
    * non-passive to cancel a tap; `touchmove` only where a move may need cancelling (the mark, a pinned swipe), so
    * that elsewhere a native scroll never waits on this code. The list is held while any such touch is down.
    */
@@ -191,7 +191,13 @@ export class TouchControl {
     // Every finger on the surface holds the list, the mark's handles included: output must not slide the text under a drag.
     for (const touch of event.changedTouches) if (inside(touch)) this.follow(touch);
     if (this.handedOver) return;
-    const first = event.changedTouches[0];
+    // A mark handle's finger is the handle's: it starts no gesture here, and sets none of the flags below.
+    const first = Array.from(event.changedTouches).find((touch) => inside(touch) && !this.deps.mark.owns(touch.target));
+    if (this.fingers.size === 0 && first) {
+      // Per-gesture state is reset where a gesture starts, so a finger whose end never came leaves nothing set.
+      this.dismissing = false;
+      this.onMark = false;
+    }
     if (this.fingers.size === 0 && first && this.deps.page.exists()) {
       // A touch on the selection is WebKit's (handle drags and its menu); a touch elsewhere only closes it, if it is a tap.
       if (this.deps.page.contains(first.clientX, first.clientY)) {
@@ -253,10 +259,6 @@ export class TouchControl {
     }
     if (!ours) return;
     this.lastTouchAt = performance.now();
-    if (this.fingers.size === 0) {
-      this.dismissing = false;
-      this.onMark = false;
-    }
     this.schedule();
   }
 
@@ -268,7 +270,7 @@ export class TouchControl {
     if (Array.from(event.changedTouches).some((touch) => this.fingers.has(touch.identifier))) this.cancel();
   };
 
-  /** Mouse events imitating a touch (a mouse-move over a link underlines it, and redraws rows) go no further than the surface. */
+  /** Mouse events iOS synthesizes after a touch go no further than the surface, so they never reach the page's own handlers. */
   private readonly blockMouse = (event: MouseEvent): void => {
     if (performance.now() - this.lastTouchAt < MOUSE_AFTER_TOUCH_MS) event.stopPropagation();
   };
