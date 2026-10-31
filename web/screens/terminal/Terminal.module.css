@@ -26,11 +26,14 @@
 .host[data-blank] { opacity: 0; } /* not visibility: its input must stay focusable */
 .empty { position: absolute; z-index: var(--z-band); inset: 0; display: grid; place-items: center; pointer-events: none; }
 
-/* Jump to latest: over the surface's bottom right, in the one place the dock's keys never reach. */
+/* Jump to latest: over the surface's bottom right, just above whatever of the dock covers it (its note,
+   compose box and key row, and the keyboard's lift), riding up with the dock. 0 without a dock. */
 .latest {
   position: absolute;
   z-index: var(--z-band);
   right: var(--space-3);
   bottom: var(--space-3);
+  translate: 0 calc(-1 * (var(--dock-above-height) + max(0px, var(--keyboard-inset) - var(--safe-bottom))));
+  transition: translate var(--keyboard-timing);
   box-shadow: var(--shadow-1);
 }
