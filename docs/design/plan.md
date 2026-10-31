@@ -759,7 +759,7 @@ web/           one Preact app embedded by the daemon and bundled into the iOS ap
     browser/      index.ts assembles and boots the Platform; transport.ts, viewport.ts,
                   lifecycle.ts, storage.ts, uploads.ts, clipboard.ts, links.ts,
                   restart.ts, pwa.ts (updates and install)
-    native/       bridge v4 and adapter for the Swift shell
+    native/       the bridge (`BRIDGE_VERSION`) and adapter for the Swift shell
     test/         in-memory Platform for vitest and the harness
   proto/          generated wire types, binary frames, HostLink and session identity
   net/            host.ts, http.ts, hosts.ts (registry), admission.ts (pure)

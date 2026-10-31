@@ -206,6 +206,11 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         didReceive message: WKScriptMessage,
         replyHandler: @escaping (Any?, String?) -> Void
     ) {
+        // A message queued by a web view `recreateWebView` already replaced must not change the new one's state.
+        guard message.webView === webView else {
+            replyHandler(nil, "this web view was replaced")
+            return
+        }
         guard message.frameInfo.isMainFrame,
               message.frameInfo.securityOrigin.protocol == "tether-app",
               message.frameInfo.securityOrigin.host == "ui" else {
