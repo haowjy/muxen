@@ -80,7 +80,7 @@ between the key row and keyboard. Standalone PWA mode has no Safari toolbar.
   tab is labelled by its folder or open file, and a tab at the host's home reads "~". Icon-only controls have accessible
   names and tooltips on hover and keyboard focus.
 - Interactive controls share a 2 px focus ring with a 2 px offset. Spacing, type, radii
-  and icon sizes use one scale per property; icons are 16, 20 or 24 px.
+  and icon sizes use one scale per property; icons are Lucide's (`lucide-preact`), 16, 20 or 24 px.
 - Loading, empty, offline, error, refused-session, enrolment and permission states are
   distinct; failures must not look like empty content. Reduced motion shortens duration
   tokens. Do not globally force transitions to 1 ms.

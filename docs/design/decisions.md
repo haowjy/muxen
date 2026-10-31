@@ -4249,3 +4249,11 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   remain on the tabs bar... so that its consistent and doesn't move". The key row gains that width for
   keys. Rejected: Hide keyboard at the key row's end (Termius's place, taken earlier the same day),
   which moved the control between rows as the keyboard rose.
+
+## Icons come from Lucide (2026-10-31)
+
+- **Every icon is a Lucide icon** (`lucide-preact`, ISC, imported one by one), behind tether's own names
+  in `web/ui/primitives/Icon.tsx`. The hand-drawn set it replaces drew Settings as a circle with rays,
+  which read as a sun (Jimmy: "the setings icon is hard to read - its not a freaking gear icon"; then
+  "yeah just Lucide"). Same 24-unit grid and 2 px stroke as before. Hide keyboard is Lucide's
+  keyboard-off: Lucide has no keyboard with a down arrow. Rejected: drawing more icons by hand.
