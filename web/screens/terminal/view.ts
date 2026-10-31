@@ -5,13 +5,14 @@
 // pane. Nothing here outlives the view it began on: a coast, a held drag or a
 // selection never reaches another tab's pane.
 import type { Owner } from "../../app/focus";
-import type { HapticKind, InputEvent } from "../../platform/types";
+import type { HapticKind, InputEvent, MenuRect } from "../../platform/types";
 import type { HistoryRow } from "../../tabs/driver";
 import type { PromptLine, TerminalRenderer, TerminalTheme } from "../../term";
 import { rowText } from "../../term/rows";
 import { HistoryView } from "./history";
 import { ScrollControl } from "./scroll";
 import { SelectionControl, type MenuState } from "./selection/control";
+import { Mark } from "./selection/mark";
 import { PageSelection } from "./selection/pageSelection";
 import { TouchControl } from "./touchControl";
 
@@ -34,6 +35,8 @@ interface ViewDeps {
   owner(): Owner;
   /** Native keeps the web view's selection while a snapshot is up (`setFocus("select")`). */
   selecting(on: boolean): void;
+  /** The platform's edit menu, where it has one (the app). */
+  editMenu(): ((rect: MenuRect | null) => void) | undefined;
   /** The view is above the newest line. */
   onScrolled(scrolled: boolean): void;
   /** The edit menu opened, moved or closed. */
@@ -47,6 +50,8 @@ export class TerminalView {
   private readonly selection: SelectionControl;
   /** The phone's own selection of the rows' text (owned input). */
   private readonly page: PageSelection;
+  /** The app's keyboard-up mark over the same rows. */
+  private readonly mark: Mark;
   private readonly touch: TouchControl;
 
   constructor(private readonly deps: ViewDeps) {
@@ -78,8 +83,9 @@ export class TerminalView {
       roots: () => [deps.renderer()?.textRoot() ?? null, this.history.element],
       rows: () => this.history.pageRows(deps.renderer()?.textRows() ?? []),
     });
+    this.mark = new Mark({ layer: () => element.parentElement ?? element, page: this.page, editMenu: () => deps.editMenu(), tick: () => { deps.haptic("key"); } });
     // The recognizer owns every touch on the surface (§7.6): none moves focus, and what a touch means is decided when it resolves.
-    this.touch = new TouchControl({ ...deps, scroll: this.scroll, selection: this.selection, page: this.page, send: (events) => { this.send(events); } });
+    this.touch = new TouchControl({ ...deps, scroll: this.scroll, selection: this.selection, page: this.page, mark: this.mark, send: (events) => { this.send(events); } });
     // A mouse wheel past the buffer's top goes on into the history, as a swipe does.
     element.addEventListener("wheel", this.wheel, { capture: true, passive: false });
   }
@@ -108,17 +114,19 @@ export class TerminalView {
     return this.page.text();
   }
 
-  /** Closes the selection and returns its logical text: the edit menu's Copy. */
+  /** Closes the mark or the snapshot's selection and returns its logical text: the edit menu's Copy. */
   takeSelection(): string {
-    const text = this.selection.text();
+    const text = this.mark.text() || this.selection.text();
+    this.mark.clear();
     this.selection.dismiss();
     return text;
   }
 
-  /** Closes whichever selection is up: the snapshot's (native input) or the page's. */
+  /** Closes whichever selection is up: the snapshot's (native input), the page's, or the mark. */
   dismissSelection(): void {
     this.selection.dismiss();
     this.page.clear();
+    this.mark.clear();
   }
 
   private send(events: InputEvent[]): void {

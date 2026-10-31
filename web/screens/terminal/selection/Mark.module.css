@@ -1,0 +1,24 @@
+/* The keyboard-up mark (mark.ts): tether's own highlight, which is no DOM selection, so focus and the keyboard
+   stay. Look: ios-simplify/selection-look.md. The colour is the one selection colour (`--term-selection`),
+   and sets no text colour, so ANSI colours show through. */
+::highlight(tsel) { background-color: var(--term-selection); }
+
+/* A handle sits on its stem: `left` is the stem's x, `top` and `height` are its line's. The knob is a
+   10 px circle 2 px past the line (above for the start, below for the end); the hit area is 44 × 44 centred
+   on the knob and transparent. The layer is the host's child, so the rows' own touch rules don't reach it. */
+.handle {
+  position: absolute;
+  z-index: var(--z-term-selection);
+  width: 2px;
+  margin-left: -1px;
+  touch-action: none;
+}
+.stem { position: absolute; inset: 0; background: var(--color-accent); }
+.knob { position: absolute; left: 50%; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; background: var(--color-accent); }
+.hit { position: absolute; left: 50%; width: 44px; height: 44px; margin-left: -22px; }
+.handle[data-end="start"] .knob { bottom: calc(100% + 2px); }
+.handle[data-end="start"] .hit { top: -29px; }
+.handle[data-end="end"] .knob { top: calc(100% + 2px); }
+.handle[data-end="end"] .hit { top: calc(100% - 15px); }
+/* While a finger is down hit-testing for the character under it, the handles must not be what it hits. */
+.handle[data-inert] { pointer-events: none; }

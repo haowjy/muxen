@@ -1,7 +1,7 @@
-// The page's own selection over the terminal's text (phone, `directInput: "owned"`). On touch xterm's
-// rows and the history view are page text, so iOS's long press selects them with its own handles and
-// menu. tether draws nothing of it: this only reads the selection, joins its text across soft wraps
-// for Copy, and closes it.
+// The page's text of the terminal (phone, `directInput: "owned"`). On touch xterm's rows and the history
+// view are page text: iOS's long press selects them with its own handles and menu (this reads that
+// selection and closes it), and the keyboard-up mark (`mark.ts`) is a range over the same rows. One rule
+// says what "selected" is, and one join turns a range into Copy's text across soft wraps.
 import { logicalLines } from "../../../touch/selection";
 
 /** A row of the selectable text: its element, and whether it continues the row above (a soft wrap). */
@@ -34,10 +34,19 @@ export class PageSelection {
     return [...rects].some((r) => x >= r.left - REACH && x <= r.right + REACH && y >= r.top - REACH && y <= r.bottom + REACH);
   }
 
+  /** Whether `node` is inside the rows' text. */
+  holds(node: Node): boolean {
+    return this.deps.roots().some((root) => root?.contains(node));
+  }
+
   /** The selected text with soft wraps joined, one line per logical line; empty with no selection. */
   text(): string {
     const range = this.range();
-    if (!range) return "";
+    return range ? this.textOf(range) : "";
+  }
+
+  /** `range`'s text with soft wraps joined, one line per logical line: Copy's text for the selection and the mark alike. */
+  textOf(range: Range): string {
     const pieces = this.deps.rows()
       .filter(({ element }) => range.intersectsNode(element))
       .map(({ element, wrapped }) => ({ text: clipped(range, element).replaceAll("\u00a0", " "), wrapped }));
@@ -45,6 +54,22 @@ export class PageSelection {
     while (pieces.at(-1)?.text === "") pieces.pop();
     while (pieces[0]?.text === "") pieces.shift();
     return logicalLines(pieces).lines.map((line) => line.trimEnd()).join("\n");
+  }
+
+  /**
+   * Calls `onRedraw` once, when output redraws the rows `range` touches or adds or drops rows: the text the
+   * range marked is gone. Rows the range doesn't touch may redraw. Returns the cancel.
+   */
+  watch(range: Range, onRedraw: () => void): () => void {
+    const touched = this.deps.rows().filter(({ element }) => range.intersectsNode(element)).map(({ element }) => element);
+    const roots = this.deps.roots().filter((root) => root !== null);
+    const observer = new MutationObserver((records) => {
+      if (!records.some(({ target }) => roots.includes(target as HTMLElement) || touched.some((row) => row.contains(target)))) return;
+      observer.disconnect();
+      onRedraw();
+    });
+    for (const root of roots) observer.observe(root, { childList: true, characterData: true, subtree: true });
+    return () => { observer.disconnect(); };
   }
 
   clear(): void {
@@ -60,10 +85,9 @@ export class PageSelection {
     const first = touched[0]?.element;
     const last = touched.at(-1)?.element;
     if (!first || !last) return null;
-    const inside = (node: Node): boolean => this.deps.roots().some((root) => root?.contains(node));
     const cut = range.cloneRange();
-    if (!inside(range.startContainer)) cut.setStart(first, 0);
-    if (!inside(range.endContainer)) cut.setEnd(last, last.childNodes.length);
+    if (!this.holds(range.startContainer)) cut.setStart(first, 0);
+    if (!this.holds(range.endContainer)) cut.setEnd(last, last.childNodes.length);
     return cut;
   }
 }

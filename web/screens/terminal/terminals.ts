@@ -153,6 +153,7 @@ export class Terminals extends Store<TerminalsView> {
       fetchHistory: (start, end) => this.shownDriver()?.history(start, end) ?? null,
       send: (id, events) => { this.typeTo(id, events); },
       haptic: (kind) => { this.app.platform.haptic(kind); },
+      editMenu: () => this.app.platform.editMenu,
       directInput: () => this.viewport.directInput,
       focusTerminal: () => { this.app.focus.focusTarget("terminal", true); },
       prompt: () => this.promptLine,
@@ -166,6 +167,9 @@ export class Terminals extends Store<TerminalsView> {
     app.focus.subscribe(() => { this.drawCursor(); });
     document.addEventListener("selectionchange", () => { this.applyTheme(); });
     app.platform.subscribe((event) => {
+      // The app's edit menu over the mark, or over iOS's own selection: its choices are the same as tether's own menu had.
+      if (event.type === "menuCopy") this.pastes.copySelection();
+      if (event.type === "menuPaste") this.pastes.pasteFromMenu();
       // Native's responder: only the tab on screen still takes input.
       if (event.type !== "input") return;
       const id = tabId(event.tab);
