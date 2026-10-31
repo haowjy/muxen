@@ -6,7 +6,7 @@ import type { Owner } from "../../app/focus";
 import type { HapticKind, InputEvent } from "../../platform/types";
 import type { PromptLine, TerminalRenderer } from "../../term";
 import { mouseInput } from "../../term/mouse";
-import { GestureRecognizer, type GestureAction } from "../../touch/gesture";
+import { DEFAULT_GESTURE, GestureRecognizer, type GestureAction } from "../../touch/gesture";
 import { charsAcross } from "../../touch/selection";
 import type { ScrollControl } from "./scroll";
 import type { SelectionControl } from "./selection/control";
@@ -65,6 +65,8 @@ export class TouchControl {
   private stoppedCoast = false;
   /** The last tap, so a second one close by in time and place selects the word (as a long-press does) instead of zooming. */
   private lastTap: { x: number; y: number; at: number } | null = null;
+  /** A touch on the selection snapshot: if it lifts as a tap, the selection closes. */
+  private snapshotTouch: { id: number; x: number; y: number; at: number } | null = null;
 
   constructor(private readonly deps: TouchDeps) {
     const { element } = deps;
@@ -90,8 +92,13 @@ export class TouchControl {
 
   private readonly down = (event: PointerEvent): void => {
     if (event.pointerType !== "touch") return; // a mouse is xterm's
-    // The selection snapshot's own touches are the system's: handles, and scrolling its rows.
-    if (this.deps.selection.owns(event.target)) return;
+    // The selection snapshot's own touches are the system's: handles, and scrolling its rows. A tap on it
+    // closes the selection, wherever it lands: WebKit kept the selection on a tap over the selected text,
+    // and every long press after it then landed on the snapshot and did nothing.
+    if (this.deps.selection.owns(event.target)) {
+      this.snapshotTouch = { id: event.pointerId, x: event.clientX, y: event.clientY, at: performance.now() };
+      return;
+    }
     event.preventDefault();
     if (this.fingers.size === 0 && this.deps.selection.active) {
       // The touch that closes the edit menu is that, and nothing else.
@@ -111,18 +118,27 @@ export class TouchControl {
   };
 
   private readonly move = (event: PointerEvent): void => {
+    const touch = this.snapshotTouch;
+    if (touch?.id === event.pointerId && Math.hypot(event.clientX - touch.x, event.clientY - touch.y) > DEFAULT_GESTURE.slop) this.snapshotTouch = null;
     if (!this.fingers.has(event.pointerId)) return;
     this.run(this.recognizer.move(event.pointerId, event.clientX, event.clientY, performance.now()));
     this.schedule();
   };
 
   private readonly up = (event: PointerEvent): void => {
+    const touch = this.snapshotTouch;
+    if (touch?.id === event.pointerId) {
+      this.snapshotTouch = null;
+      if (performance.now() - touch.at < DEFAULT_GESTURE.longPressMs) this.deps.selection.dismiss();
+      return;
+    }
     if (this.spent.delete(event.pointerId) || !this.fingers.delete(event.pointerId)) return;
     this.run(this.recognizer.up(event.pointerId, performance.now()));
     this.schedule();
   };
 
   private readonly cancelled = (event: PointerEvent): void => {
+    if (this.snapshotTouch?.id === event.pointerId) this.snapshotTouch = null;
     if (event.pointerType !== "touch" || !(this.fingers.has(event.pointerId) || this.spent.has(event.pointerId))) return;
     this.cancel();
   };
