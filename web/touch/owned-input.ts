@@ -1,9 +1,9 @@
 // The phone browser's terminal input (client-architecture.md §7.3): a textarea tether owns,
 // because xterm's diffs its own value and relies on composition events iOS and Android
 // keyboards don't always send. `beforeinput` decides what each edit means and cancels what it
-// doesn't map, so the element only ever holds a sentinel and never committed text.
+// doesn't map, so the element only ever holds a sentinel and never committed text. Hardware keys
+// (chords, Escape, Tab, arrows) fire keydown and no beforeinput: `Terminals.hardwareKey` routes them.
 import type { InputEvent } from "../platform/types";
-import { decideKey } from "../tabs/keymap";
 import { applyFieldSettings } from "../ui/primitives/fieldSettings";
 
 /** Two spaces with the caret at the end: a delete always has a target, and the OS repeats it while Backspace is held. */
@@ -78,15 +78,6 @@ export function createOwnedInput(input: (events: InputEvent[]) => void): HTMLTex
         break;
     }
     restore();
-  });
-
-  // A hardware keyboard's Ctrl and Alt chords fire keydown and no beforeinput; so do Escape, Tab and the arrows.
-  el.addEventListener("keydown", (event) => {
-    const decision = decideKey(event, "owned");
-    if (decision.kind === "key") input([{ key: decision.name }]);
-    else if (decision.kind === "bytes") input([{ bytes: decision.bytes }]);
-    else return;
-    event.preventDefault();
   });
 
   return el;

@@ -5,6 +5,7 @@ version section on release.
 
 ## [Unreleased]
 
+- In phone Safari and the app's web keyboard test, hardware Ctrl chords, Tab and the up and down arrows typed in the line box go to the terminal, as in the app; with no box focused, a hardware keyboard's chords, Escape, Tab and arrows go to the terminal too.
 - In phone Safari and the app's web keyboard test, a hardware Ctrl+[, Ctrl+/ and Option+punctuation (Option+. in bash) now reach tmux as they do in the app, and the key row's armed ctrl and alt do the same for the next punctuation key. Ctrl+Shift+letter is named with the capital (`C-A`), as in the app.
 - Icons are now Lucide's: Settings is a gear (it was a sun-like circle with rays), and Hide keyboard is a keyboard with a slash through it.
 - On an iPhone in Safari (and in the app's web keyboard test), every text box (the line box, the Files path box, the enrol screen's code box, and the Device name, Session name and search fields) no longer shows a row of word predictions or autocorrects your typing: autocorrect was meant to be off on the first three, and was being switched on; the others never turned it off. The line box's Return key reads return instead of Send.

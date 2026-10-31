@@ -10,6 +10,7 @@ import { tabId } from "../../platform/tabKey";
 import type { InputEvent, TextSize, Viewport } from "../../platform/types";
 import { acceptsInsert, type ConnectionState } from "../../tabs/connection";
 import { TabDriver } from "../../tabs/driver";
+import { decideKey } from "../../tabs/keymap";
 import type { SessionRef, ShownWindow } from "../../proto/generated/messages";
 import { createXtermRenderer, type PromptLine, type TerminalRenderer } from "../../term";
 import { TerminalSizer } from "../../term/size";
@@ -526,12 +527,39 @@ export class Terminals extends Store<TerminalsView> {
     const helper = renderer.inputElement();
     if (xterm) helper?.removeAttribute("aria-hidden");
     else helper?.setAttribute("aria-hidden", "true");
+    // On a phone browser the keys beside the text (below) go to tmux from here.
+    if (directInput === "owned") document.addEventListener("keydown", this.hardwareKey, true);
+    else document.removeEventListener("keydown", this.hardwareKey, true);
     this.registered = xterm ? renderer.inputElement() : directInput === "owned" ? this.ownedInput() : this.app.focus.nativeTerminal();
     this.drawCursor();
     if (!this.registered) return;
     this.app.focus.register("terminal", this.registered);
     if (xterm) this.focusIfIdle();
   }
+
+  /**
+   * Where a hardware key goes while input is `owned`, one capture-phase listener for every box. A
+   * chord, Escape, Tab or an arrow fires keydown and no beforeinput, so nothing else would send it.
+   * The terminal's input sends all of them; the line box only the ones tmux has a use for (Control
+   * chords, Escape, Tab, up and down) and keeps the rest to edit its text; with no box focused they
+   * go to the terminal on screen. Any other focused element, an open dialog or edit menu, and an IME
+   * composing keep their keys.
+   */
+  private readonly hardwareKey = (event: KeyboardEvent): void => {
+    const decision = decideKey(event, "owned");
+    if (decision.kind !== "key" && decision.kind !== "bytes") return;
+    const { owner } = this.app.focus.snapshot;
+    if (owner === "none") {
+      const held = document.activeElement;
+      if (this.shownTerminalTab() === null || this.app.snapshot.entry.overlay !== null || this.snapshot.menu !== null) return;
+      if (held && held !== document.body) return;
+    } else if (owner === "line" && !event.ctrlKey && !["Escape", "Tab", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+    event.preventDefault();
+    if (decision.kind === "bytes") this.modifiers.input([{ bytes: decision.bytes }]);
+    // The line box's Escape goes where the key row's esc does: back to the terminal.
+    else if (owner === "line") this.key({ name: decision.name });
+    else this.modifiers.input([{ key: decision.name }]);
+  };
 
   /** The owned input lives in the surface, so the capture-phase paste listener sees its pastes; the keyboard toggle focuses it. */
   private ownedInput(): HTMLTextAreaElement {
