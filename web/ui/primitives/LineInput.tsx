@@ -67,7 +67,6 @@ export function LineInput({ label, value, onInput, focusTarget, inputRef, class:
   return (
     <textarea
       rows={1}
-      enterkeyhint="send"
       autocapitalize="off"
       autocomplete="off"
       autocorrect="off"
