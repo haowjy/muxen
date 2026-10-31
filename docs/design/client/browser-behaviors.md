@@ -34,6 +34,13 @@ reached from Home; a tab opened from there takes its place, so it is never a sto
 Back from a tab is Home. It lands on the nearest earlier Home entry, so folders drilled into on the
 way never add a stop.
 
+**Swipe back.** In the app, a swipe from the left edge is Back everywhere except on a terminal tab with
+nothing over it, where it is off (Jimmy, 2026-10-31: "that obiously shouldn't happen at the terminal"): the
+web tells the shell with `backSwipe { enabled }` as the screen changes, and the shell turns WebKit's
+back-forward gesture on or off. Over a terminal (the tab list, Open session, Settings) it closes what is
+over it; a Files tab steps out to the parent folder, then Home. Phone Safari owns its edge swipe and
+cannot be told no, so there a swipe on a terminal goes Home, as ‹ does.
+
 **Back's place.** Where a tab has the dock (touch), every screen puts Back and its controls in a bottom
 bar the dock's height, where the dock's tab row has its ‹: Home (Settings, at the row's end), the tab
 overview and page dialogs (Settings, Open session); their titles stay at the top. With a mouse, Back is
