@@ -62,6 +62,14 @@ const sameRow = (a: Row, b: Row): boolean =>
     return other !== undefined && run.text === other.text && !run.wide === !other.wide && sameStyle(run.style, other.style);
   });
 
+/** A block of rows already made: one place for its class, so `append` and `prepend` build alike. */
+function newBlock(rows: HTMLElement[]): Block {
+  const element = document.createElement("div");
+  element.className = styles.block ?? "";
+  element.append(...rows);
+  return { element, rows };
+}
+
 export class RowList {
   /** The scroller. */
   readonly element: HTMLDivElement = document.createElement("div");
@@ -76,11 +84,14 @@ export class RowList {
   private seq = 0;
   /** The gap row, while the last frame was a gap frame: the next gap frame reuses it. */
   private gapRow: HTMLElement | null = null;
-  /** Every gap row the list may still hold: tmux's numbering is unknown past one, so nothing is fetched while one is here. */
-  private gaps: HTMLElement[] = [];
   private readonly history: HistoryFetcher;
-  /** tmux has no older rows, or a fetch missed twice: nothing more is fetched until a reset. */
+  /**
+   * Nothing more is fetched until a reset: tmux has no older rows, a fetch missed twice, or a gap row came
+   * (after one nobody knows how far tmux's numbering is, and a gap row only leaves with a reset or the cap).
+   */
   private historyDone = false;
+  /** A fetched chunk is queued behind a bounce and not yet landed: asking again would fetch the same rows. */
+  private landing = false;
   private lastFrame: Frame | null = null;
   private cell: CellSize | null = null;
   private font: { family: string; size: number } | null = null;
@@ -226,6 +237,7 @@ export class RowList {
   toLatest(): void {
     this.following = true;
     this.deferred = [];
+    this.landing = false;
     this.follow(true);
     this.setScrolledUp(false);
   }
@@ -297,10 +309,8 @@ export class RowList {
   private append(row: Row): ScreenRow {
     let block = this.blocks.at(-1);
     if (!block || block.rows.length >= BLOCK_ROWS) {
-      const element = document.createElement("div");
-      element.className = styles.block ?? "";
-      this.run.append(element);
-      block = { element, rows: [] };
+      block = newBlock([]);
+      this.run.append(block.element);
       this.blocks.push(block);
     }
     const created = this.makeRow(row, this.seq++);
@@ -325,7 +335,7 @@ export class RowList {
     element.dataset["gap"] = "";
     element.classList.add(styles.gap ?? "");
     this.gapRow = element;
-    this.gaps = [...this.gaps.filter((gap) => gap.isConnected), element];
+    this.historyDone = true;
   }
 
   /** Removes every row after `row`. */
@@ -352,7 +362,7 @@ export class RowList {
 
   private draw(screen: ScreenRow, row: Row): void {
     drawRow(screen.element, row, VARIABLE_THEME);
-    screen.element.toggleAttribute("data-wrap", row.wrapped);
+    screen.element.toggleAttribute("data-wrap", row.wrapped || screen.element.hasAttribute("data-seam"));
     screen.drawn = row;
   }
 
@@ -371,10 +381,10 @@ export class RowList {
     this.grown.clear();
     this.screen = [];
     this.count = 0;
-    this.gaps = [];
     this.historyDone = false;
     this.history.reset();
     this.deferred = [];
+    this.landing = false;
     this.following = true;
   }
 
@@ -590,20 +600,16 @@ export class RowList {
    * knows how far the numbers are), no miss, and below the cap, which would trim the chunk the moment it landed.
    */
   wantOlder(): void {
-    if (this.historyDone || this.element.hidden || this.count >= CAP_ROWS || !this.history.idle) return;
-    if (this.element.scrollTop >= PREFETCH_SCREENS * this.height || this.hasGap()) return;
+    if (this.historyDone || this.landing || this.pinned || this.element.hidden || this.count >= CAP_ROWS || !this.history.idle) return;
+    if (this.element.scrollTop >= PREFETCH_SCREENS * this.height) return;
     void this.fetchOlder();
-  }
-
-  private hasGap(): boolean {
-    return this.gaps.some((gap) => gap.isConnected);
   }
 
   private async fetchOlder(): Promise<void> {
     // A miss retries once with a fresh count; a second one stops fetching. Rows are never dropped for a miss.
     for (let attempt = 0; attempt < 2; attempt++) {
       const oldest = this.blocks[0]?.rows[0];
-      if (!oldest || this.hasGap()) return; // a gap may have come while the first request was out: the count is no longer tmux's
+      if (!oldest || this.historyDone) return; // a gap may have come while the first request was out: the count is no longer tmux's
       const anchor: string[] = [];
       for (const block of this.blocks) {
         for (const row of block.rows) if (anchor.length < ANCHOR_ROWS) anchor.push(row.textContent.trimEnd());
@@ -629,20 +635,19 @@ export class RowList {
     const seam = chunk.rows[found];
     if (chunk.fetched.length < CHUNK || rows.length === 0) this.historyDone = true;
     if (rows.length === 0) return;
+    this.landing = true;
     this.editAbove(() => {
+      this.landing = false;
       if (this.blocks[0]?.rows[0] !== oldest) return false;
-      if (seam) oldest.toggleAttribute("data-wrap", seam.wrapped); // a soft wrap across the seam
+      if (seam?.wrapped) { // a soft wrap across the seam; `draw` keeps it if a frame redraws this row
+        oldest.dataset["seam"] = "";
+        oldest.dataset["wrap"] = "";
+      }
       const first = Number(oldest.dataset["seq"]) - rows.length;
       const made = rows.map((row, i) => this.makeRow(row, first + i).element);
       const blocks: Block[] = [];
       // Whole blocks from the newest end, so only the oldest is short.
-      for (let end = made.length; end > 0; end -= BLOCK_ROWS) {
-        const element = document.createElement("div");
-        element.className = styles.block ?? "";
-        const inBlock = made.slice(Math.max(0, end - BLOCK_ROWS), end);
-        element.append(...inBlock);
-        blocks.unshift({ element, rows: inBlock });
-      }
+      for (let end = made.length; end > 0; end -= BLOCK_ROWS) blocks.unshift(newBlock(made.slice(Math.max(0, end - BLOCK_ROWS), end)));
       this.run.prepend(...blocks.map((block) => block.element));
       this.blocks.unshift(...blocks);
       this.count += rows.length;
