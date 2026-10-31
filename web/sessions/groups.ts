@@ -18,3 +18,12 @@ export function findSession(listing: TmuxListing, ref: SessionRef): SessionListi
 export function windowCount(n: number): string {
   return `${String(n)} ${n === 1 ? "window" : "windows"}`;
 }
+
+/** How long ago `then` (ms since the epoch) was, in the words a status line uses. */
+export function ago(then: number): string {
+  const minutes = Math.floor((Date.now() - then) / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${String(minutes)} min ago`;
+  const hours = Math.floor(minutes / 60);
+  return hours < 24 ? `${String(hours)} ${hours === 1 ? "hour" : "hours"} ago` : `${String(Math.floor(hours / 24))} days ago`;
+}

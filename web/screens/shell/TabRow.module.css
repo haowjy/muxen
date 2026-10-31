@@ -1,0 +1,23 @@
+/* The tab row: ‹, the workspace's tabs, +, and on touch Show keyboard. Its controls are filled; the pills carry their own fill. */
+.row {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: 0 var(--space-2);
+  background: var(--color-bg-raised);
+}
+/* On the desktop it is the top row, under which the screen starts. */
+.row[data-place="top"] {
+  min-height: var(--toolbar-height);
+  border-bottom: 1px solid var(--color-border);
+}
+.row[data-place="dock"] { height: var(--dock-height); --tab-height: var(--dock-control-height); }
+/* ‹, + and the keyboard control share the pills' height and corners, so the row reads as one set. */
+.control { height: var(--tab-height); min-width: var(--tab-height); border-radius: var(--radius-3); }
+/* On the desktop the strip is as wide as its pills and + follows the last one; on the phone the strip
+   fills the row, so + and the keyboard control sit at its end. Past the pills' minimum it scrolls. */
+.strip { display: flex; flex: 0 1 auto; min-width: 0; }
+.row[data-place="dock"] .strip { flex: 1 1 auto; }
+.keyboard { margin-left: auto; }

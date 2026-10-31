@@ -79,7 +79,7 @@ describe("decideKey, desktop", () => {
 describe("decideKey, owned input", () => {
   it("names Ctrl and Alt chords from the physical key, so Option's characters and Shift's case don't leak in", () => {
     expect(name(decideKey(ev("c", { ctrlKey: true, code: "KeyC" }), "owned"))).toBe("C-c");
-    expect(name(decideKey(ev("X", { ctrlKey: true, shiftKey: true, code: "KeyX" }), "owned"))).toBe("C-x");
+    expect(name(decideKey(ev("X", { ctrlKey: true, shiftKey: true, code: "KeyX" }), "owned"))).toBe("C-X");
     expect(name(decideKey(ev("å", { altKey: true, code: "KeyA" }), "owned"))).toBe("M-a");
     expect(name(decideKey(ev("A", { altKey: true, shiftKey: true, code: "KeyA" }), "owned"))).toBe("M-A");
     expect(name(decideKey(ev("2", { altKey: true, code: "Digit2" }), "owned"))).toBe("M-2");
@@ -96,8 +96,85 @@ describe("decideKey, owned input", () => {
     expect(name(decideKey(ev("Escape"), "owned"))).toBe("Escape");
   });
 
-  it("does not name punctuation the daemon would refuse", () => {
-    expect(decideKey(ev("[", { ctrlKey: true, code: "BracketLeft" }), "owned")).toEqual({ kind: "default" });
+  it("keeps the case Shift gives a letter, for Ctrl as for Alt", () => {
+    expect(name(decideKey(ev("A", { ctrlKey: true, shiftKey: true, code: "KeyA" }), "owned"))).toBe("C-A");
+    expect(name(decideKey(ev("A", { ctrlKey: true, altKey: true, shiftKey: true, code: "KeyA" }), "owned"))).toBe("C-M-A");
+  });
+
+  it("names a Ctrl letter from the layout, not the physical key", () => {
+    // AZERTY: the physical Q types a, W types z, M types a comma, and the digit row types symbols.
+    expect(name(decideKey(ev("a", { ctrlKey: true, code: "KeyQ" }), "owned"))).toBe("C-a");
+    expect(name(decideKey(ev("z", { ctrlKey: true, code: "KeyW" }), "owned"))).toBe("C-z");
+    expect(decideKey(ev(",", { ctrlKey: true, code: "KeyM" }), "owned")).toEqual({ kind: "default" });
+    expect(decideKey(ev("&", { ctrlKey: true, code: "Digit1" }), "owned")).toEqual({ kind: "default" });
+    expect(name(decideKey(ev("A", { ctrlKey: true, shiftKey: true, code: "KeyQ" }), "owned"))).toBe("C-A");
+    expect(name(decideKey(ev("a", { altKey: true, code: "KeyQ" }), "owned"))).toBe("M-a");
+  });
+
+  it("falls back to the physical key when `key` is no ASCII character", () => {
+    expect(name(decideKey(ev("с", { ctrlKey: true, code: "KeyC" }), "owned"))).toBe("C-c");
+    expect(name(decideKey(ev("¡", { altKey: true, code: "Digit1" }), "owned"))).toBe("M-1");
+  });
+});
+
+// The rules of the app's native KeyMapper (ios/TetherKit), which these cases came from.
+describe("decideKey, owned input: punctuation chords", () => {
+  const bytes = (...codes: number[]): KeyDecision => ({ kind: "bytes", bytes: btoa(String.fromCharCode(...codes)) });
+  /** The US-layout physical keys the punctuation characters come from, so events carry the `code` a browser reports. */
+  const CODES: Record<string, string> = {
+    "[": "BracketLeft", "{": "BracketLeft", "]": "BracketRight", "}": "BracketRight", "\\": "Backslash", "|": "Backslash", "/": "Slash", "?": "Slash",
+    ".": "Period", ">": "Period", ",": "Comma", "<": "Comma", ";": "Semicolon", ":": "Semicolon", "'": "Quote", '"': "Quote", "`": "Backquote", "~": "Backquote",
+    "-": "Minus", "_": "Minus", "=": "Equal", "+": "Equal", "^": "Digit6", "&": "Digit7", "*": "Digit8", "(": "Digit9", ")": "Digit0",
+    "!": "Digit1", "@": "Digit2", "#": "Digit3", "$": "Digit4", "%": "Digit5",
+  };
+  const owned = (key: string, over: Partial<KeyFacts> = {}): KeyDecision => decideKey(ev(key, { code: CODES[key] ?? "", ...over }), "owned");
+
+  it("sends Ctrl on [ \\ ] ^ _ / ? as the control byte", () => {
+    expect(owned("[", { ctrlKey: true })).toEqual(bytes(0x1b));
+    expect(owned("\\", { ctrlKey: true })).toEqual(bytes(0x1c));
+    expect(owned("]", { ctrlKey: true })).toEqual(bytes(0x1d));
+    expect(owned("^", { ctrlKey: true, shiftKey: true })).toEqual(bytes(0x1e));
+    expect(owned("_", { ctrlKey: true, shiftKey: true })).toEqual(bytes(0x1f));
+    expect(owned("/", { ctrlKey: true })).toEqual(bytes(0x1f));
+    expect(owned("?", { ctrlKey: true, shiftKey: true })).toEqual(bytes(0x7f));
+  });
+
+  it("puts ESC before the control byte when Alt is held too", () => {
+    expect(owned("[", { ctrlKey: true, altKey: true })).toEqual(bytes(0x1b, 0x1b));
+    expect(owned("/", { ctrlKey: true, altKey: true })).toEqual(bytes(0x1b, 0x1f));
+  });
+
+  it("sends Alt on every printable ASCII punctuation as ESC and the character", () => {
+    for (let code = 0x21; code <= 0x7e; code++) {
+      const char = String.fromCharCode(code);
+      if (/[A-Za-z0-9]/.test(char)) continue;
+      expect(owned(char, { altKey: true }), `Alt+${char}`).toEqual(bytes(0x1b, code));
+    }
+  });
+
+  it("reads Option+punctuation on macOS from the physical key, where `key` is a symbol", () => {
+    expect(owned("≥", { altKey: true, code: "Period" })).toEqual(bytes(0x1b, 0x2e));
+    expect(owned("¯", { altKey: true, shiftKey: true, code: "Comma" })).toEqual(bytes(0x1b, 0x3c));
+  });
+
+  it("names Space with its modifiers and leaves a plain or Ctrl-only punctuation key alone", () => {
+    expect(name(owned(" ", { ctrlKey: true }))).toBe("C-Space");
+    expect(name(owned(" ", { altKey: true }))).toBe("M-Space");
+    expect(owned(".", { ctrlKey: true })).toEqual({ kind: "default" });
+    expect(owned(".")).toEqual({ kind: "default" });
+  });
+
+  it("leaves Cmd combinations to the browser and Shift+Enter as CSI u", () => {
+    expect(owned("[", { metaKey: true, altKey: true })).toEqual({ kind: "browser" });
+    expect(owned("Enter", { shiftKey: true })).toEqual({ kind: "bytes", bytes: btoa("\x1b[13;2u") });
+  });
+
+  it("names the control keys KeyMapper does: Tab, Shift+Tab, Esc, arrows with modifiers", () => {
+    expect(name(owned("Tab"))).toBe("Tab");
+    expect(name(owned("Tab", { shiftKey: true }))).toBe("BTab");
+    expect(name(owned("Escape", { altKey: true }))).toBe("M-Escape");
+    expect(name(owned("ArrowUp", { ctrlKey: true, shiftKey: true }))).toBe("C-S-Up");
+    expect(name(owned("Backspace", { ctrlKey: true }))).toBe("C-BSpace");
   });
 });
 

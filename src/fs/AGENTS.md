@@ -1,10 +1,10 @@
 # fs
 
-The file API's core ([fs.md](../../docs/design/fs.md)): favorites, `open`, listings, raw
-reads, uploads and `config.toml` writes. Plain functions over files re-read per
+The file API's core ([fs.md](../../docs/design/fs.md)): `open`, listings, raw
+reads and uploads. Plain functions over files re-read per
 request; no cache, no cursor, no descriptor kept between requests. It knows nothing of
 axum: `http/fs.rs` parses requests, takes slots and builds responses. `mod.rs` holds
-`Favorites` and `FsError`; `slots.rs` the limits and the fs lane; the rest one route family
+`FsError`; `slots.rs` the limits and the fs lane; the rest one route family
 each.
 
 Rules the code relies on, which are easy to break:
@@ -20,16 +20,10 @@ Rules the code relies on, which are easy to break:
   lane's queue. clippy forbids `spawn_blocking`, and tokio's `fs` feature is off
   (`tokio::fs::File`'s buffer grows to 2 MiB). Take an fs thread last and release it
   before waiting for any other slot.
-- `Favorites::load` reads `config.toml` each time; a file that exists and doesn't parse
-  fails `/fs/favorites`, the config writes and uploads with `config_unavailable` and is never written.
-  `config_write::apply` holds the state directory's lock (`files::lock`, which auth's
-  writers hold too) for the whole read-modify-write and changes only `favorites` or
-  `uploads_dir`. It writes a symlinked file at its target and refuses
-  (`config_read_only`) a link to nothing, the file's or a directory's on the way:
-  `canonicalize` failing doesn't mean the file is absent. The new file keeps the old
-  one's mode and lands with `files::Temp::replace_if`, against the stamp it read.
-- Every file written whole goes through `files::Temp` (`src/files.rs`): `config.toml`,
-  an upload's part file (`land`, never replacing), auth's files. Linux uploads reject
+- Uploads read `config.toml`'s `uploads_dir` on every request (`upload::open_dir`); a file
+  that exists and doesn't parse fails them with `config_unavailable`. Nothing in the
+  daemon writes `config.toml`: Jimmy edits it by hand.
+- Every file written whole goes through `files::Temp` (`src/files.rs`): an upload's part file (`land`, never replacing), auth's files. Linux uploads reject
   tmpfs/ramfs with `memory_backed` from the opened destination descriptor before the
   part file exists. `Temp` isn't deleted
   on drop, since a drop may happen on the runtime thread: a part file is discarded on
@@ -45,5 +39,4 @@ Rules the code relies on, which are easy to break:
   by the parser's message, which quotes the text.
 
 Tests: `open.rs` (links, FIFOs, the swapped component), `list.rs`, `raw.rs`
-(Range, ETag), `mime.rs` (the allowlist), `upload.rs`, `config_write.rs` (comments and
-unknown keys kept); `tests/http_fs.rs` and `tests/http_auth.rs` over a real socket.
+(Range, ETag), `mime.rs` (the allowlist), `upload.rs`; `tests/http_fs.rs` and `tests/http_auth.rs` over a real socket.

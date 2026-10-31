@@ -56,10 +56,23 @@ The Terminal destination. The design is client-architecture.md §5.4, §5.5, §5
   menu). `Terminals` tells it the shown tab; a tab change, a snapshot, `visibilitychange` and a
   lost pointer all end in `reset()`, and its sends are bound to the tab they began on. Add new
   per-tab touch state there, never on `Terminals`. "Shown" is one rule: selected and not
-  covered by a native screen (`shownTerminalTab`); the view resets when it changes. Touch `pointerdown` is cancelled on the surface
-  (no focus change, no xterm mouse event) except on the selection layer, whose touches are the
-  system's. A mouse pointer is xterm's. Mouse input comes from `term/mouse.ts` (`mouseInput`
-  holds the per-mode policy) with the encoding `term/xterm.ts` saw in DECSET.
+  covered by a native screen (`shownTerminalTab`); the view resets when it changes. Mouse input
+  comes from `term/mouse.ts` (`mouseInput` holds the per-mode policy) with the encoding
+  `term/xterm.ts` saw in DECSET.
+- **Two touch paths, keyed on `directInput`, until ios-simplify step 4 deletes the second.**
+  `"owned"` (phone Safari, the PWA, the app's web keyboard test): xterm's DOM renderer draws page
+  text and the host is selectable (`Terminal.module.css`, keyed on `data-direct-input`), so the long
+  press is WebKit's and the selection is the page's (`selection/pageSelection.ts` only reads, joins
+  and clears it). `touchControl.ts` listens to touch events: `touchstart` is never cancelled,
+  `touchmove` is once the recognizer is scrolling, `touchend` is for a tap, a touch on a live
+  selection is not the recognizer's, a tap elsewhere only clears it, and mouse events stop at the
+  host for 800 ms after a touch. Nothing on or above the host may set `user-select: none`,
+  `touch-action: none` or `-webkit-touch-callout: none`, or cancel `touchstart`: the long press would
+  never begin. A tap never moves focus. `"native"` (the app): `pointerdown` is cancelled and a long
+  press builds the immutable snapshot (`selection/`, EditMenu). `"xterm"`: a mouse is xterm's.
+- **Nothing redraws a still screen on touch.** A redraw replaces a row's text and a selection on it.
+  The cursor's solid/hollow look is CSS on `data-cursor`, never an xterm option; a theme waits for the
+  selection to close (`term/xterm.ts`); a resize, font change, snapshot or input switch closes it first.
 - **Rows carry cells.** `term/rows.ts` `Row`: xterm rows get exact cells from `getWidth()`
   (`term/lines.ts`); history rows work them out from the text. Words and the prompt-row tap use
   cells, never `String.length`.

@@ -1,5 +1,12 @@
 # Client architecture: the rebuilt web client
 
+> **Partly superseded (2026-10-30).** The workspace redesign replaced the current-tab button, the
+> sessions picker, sheet and switcher, `active` and the per-host `lastTerminal` of §3.2, §6.1, §6.3,
+> §6.6 and §7.4. Those sections describe the earlier build. The rule now is in
+> [browser-behaviors.md](../../../../docs/design/client/browser-behaviors.md): Platform layout (workspace
+> state), Tab row, Tab overview, Adding tabs, Persistence and input. §4, §5, §7.1 to 7.3, §7.5, §7.6, §8
+> and §9 still stand.
+
 Status: current client architecture, revision 6, 2026-10-26. Revision 6 settles the
 app-started native line owner, native-owned generations and draft-to-native sync rule for
 the one-keyboard flow. Revision 5 settles the native line editor, mirror and growing

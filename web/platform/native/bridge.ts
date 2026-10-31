@@ -1,10 +1,10 @@
 // The only place the web UI talks to native (ios-shell.md "The bridge"). One method per
 // web → native request, each returning what native replies; `parseEvent` checks what native
 // sends. The shapes are pinned against ios/TetherKit/Tests/Fixtures/bridge/ by bridge.test.ts.
-import type { DraftRecord, FocusMode, HostEntry, InputEvent, Lifecycle, NativeLineSnapshot, Preferences, SavedWorkspace, TabKey, TextRange, Viewport } from "../types";
+import type { DraftRecord, MenuRect, FocusMode, HostEntry, InputEvent, Lifecycle, NativeLineSnapshot, Preferences, SavedWorkspaces, TabKey, TextRange, Viewport } from "../types";
 
 /** Bumped with every incompatible change here and in ios/TetherKit/.../Bridge.swift. */
-export const BRIDGE_VERSION = 7;
+export const BRIDGE_VERSION = 9;
 
 export interface Boot {
   bridgeVersion: number;
@@ -39,9 +39,11 @@ export type NativeMsg =
   | { type: "viewport"; viewport: Viewport }
   | { type: "lifecycle"; lifecycle: Lifecycle }
   | { type: "hosts"; hosts: HostEntry[] }
+  | { type: "menuCopy" }
+  | { type: "menuPaste" }
   | ({ type: "upload" } & UploadMsg);
 
-const EVENT_TYPES: readonly string[] = ["input", "lineEdit", "lineReturn", "viewport", "lifecycle", "hosts", "upload"];
+const EVENT_TYPES: readonly string[] = ["input", "lineEdit", "lineReturn", "viewport", "lifecycle", "hosts", "menuCopy", "menuPaste", "upload"];
 
 /** Native's events are first-party, but the page is the trust boundary: an unknown or malformed one is dropped. */
 export function parseEvent(raw: unknown): NativeMsg | null {
@@ -67,6 +69,8 @@ export function parseEvent(raw: unknown): NativeMsg | null {
     case "viewport": return has("viewport") ? (raw as NativeMsg) : null;
     case "lifecycle": return has("lifecycle") ? (raw as NativeMsg) : null;
     case "hosts": return Array.isArray(msg["hosts"]) ? (raw as NativeMsg) : null;
+    case "menuCopy":
+    case "menuPaste": return raw as NativeMsg;
     default: return typeof msg["id"] === "string" && typeof msg["progress"] === "number" ? (raw as NativeMsg) : null;
   }
 }
@@ -127,7 +131,7 @@ export class Bridge {
     this.fire({ type: "recreateWebView" });
   }
 
-  saveWorkspace(workspace: SavedWorkspace): void {
+  saveWorkspace(workspace: SavedWorkspaces): void {
     this.fire({ type: "saveWorkspace", workspace });
   }
 
@@ -195,6 +199,15 @@ export class Bridge {
 
   haptic(kind: string): void {
     this.fire({ type: "haptic", kind });
+  }
+
+  backSwipe(enabled: boolean): void {
+    this.fire({ type: "backSwipe", enabled });
+  }
+
+  /** Native presents its Copy and Paste menu over `rect`, or dismisses it with null. */
+  editMenu(rect: MenuRect | null): void {
+    this.fire({ type: "editMenu", rect });
   }
 
   /** Synchronously inside the tap: native presents its picker and uploads the pick to `host`, reporting it under `id`. */

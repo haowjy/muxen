@@ -16,7 +16,9 @@
 }
 /* The visible button is smaller than the row it sits in; its touch area runs to the row's height. */
 .button::after { content: ""; position: absolute; inset: calc(-1 * var(--space-1)) -2px; }
+/* Keys are plain text until pressed; the tab row's controls are filled, so the two never read alike. */
 .button[data-kind="key"] {
+  background: none;
   min-width: var(--dock-control-height);
   height: var(--dock-key-height);
   padding: 0 var(--space-2);

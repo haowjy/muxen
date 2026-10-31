@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use rustix::fs::{Mode, OFlags};
 use rustix::io::Errno;
 
-use super::{FsError, MAX_PATH};
+use super::{FsError, MAX_PATH, expand};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Want {
@@ -27,9 +27,19 @@ pub struct Opened {
     pub meta: Metadata,
 }
 
-/// Resolves `path` and opens it. Any path the daemon's user can read: there is no scope.
+/// Resolves `path` (absolute, `~` or `~/…` for `home`) and opens it. Any path the daemon's
+/// user can read: there is no scope.
 /// Blocks: run it on a lane (`crate::blocking`).
-pub fn open(path: &str, want: Want) -> Result<Opened, FsError> {
+pub fn open(path: &str, home: &Path, want: Want) -> Result<Opened, FsError> {
+    // `~user`, a relative path and the like are not a path.
+    let path = expand(path, home)
+        .and_then(|path| path.into_os_string().into_string().ok())
+        .ok_or(FsError::BadRequest)?;
+    open_absolute(&path, want)
+}
+
+/// `open` for a path already known to be absolute (`/complete`'s directories).
+pub fn open_absolute(path: &str, want: Want) -> Result<Opened, FsError> {
     check_shape(path).map_err(|_| FsError::BadRequest)?;
     let canonical = std::fs::canonicalize(path).map_err(FsError::io)?;
     if canonical.to_str().is_none() {
@@ -157,7 +167,7 @@ mod tests {
     }
 
     fn opened(path: &Path, want: Want) -> Result<Opened, FsError> {
-        open(path.to_str().expect("UTF-8"), want)
+        open(path.to_str().expect("UTF-8"), Path::new("/"), want)
     }
 
     #[test]
@@ -183,18 +193,23 @@ mod tests {
             ),
             (tree.str("root/d/../g"), tree.str("root/g")),
         ] {
-            let file = open(&path, Want::File).expect("opened");
+            let file = open(&path, Path::new("/"), Want::File).expect("opened");
             assert_eq!(file.path, canonical, "{path}");
         }
-        assert!(open("/", Want::Dir).is_ok());
+        assert!(open("/", Path::new("/"), Want::Dir).is_ok());
+        let home = tree.path("root");
+        for (path, canonical) in [("~", "root"), ("~/d/f", "root/d/f")] {
+            let file = open(path, &home, Want::Dir).or_else(|_| open(path, &home, Want::File));
+            assert_eq!(file.expect("opened").path, tree.str(canonical), "{path}");
+        }
     }
 
     #[test]
     fn bad_shapes_and_wrong_kinds_are_refused() {
         let tree = tree();
         let long = format!("/{}", "a".repeat(MAX_PATH));
-        for path in ["relative/path", "", "/a\0b", long.as_str()] {
-            let refused = open(path, Want::File);
+        for path in ["relative/path", "~user", "~x/y", "", "/a\0b", long.as_str()] {
+            let refused = open(path, Path::new("/"), Want::File);
             assert!(matches!(refused, Err(FsError::BadRequest)), "{path:?}");
         }
         let missing = opened(&tree.path("root/missing"), Want::File);

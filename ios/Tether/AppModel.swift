@@ -29,6 +29,7 @@ struct AddHostRequest: Identifiable {
 @MainActor
 final class TetherAppModel: ObservableObject {
     private static let preferencesKey = "tether.preferences"
+    private static let webKeyboardKey = "tether.webKeyboard"
 
     @Published private(set) var hosts: [HostEntry]
     @Published private(set) var isLocked: Bool
@@ -36,6 +37,15 @@ final class TetherAppModel: ObservableObject {
     @Published private(set) var preferences: Preferences
     @Published private(set) var pendingAddRequest: AddHostRequest?
     @Published var showingServers = false
+    /// Test switch: the page's own text boxes hold the keyboard, as in phone Safari, instead of the native field.
+    /// Read when the web view is made; flipping it makes a new one.
+    @Published var webKeyboard: Bool {
+        didSet {
+            guard webKeyboard != oldValue else { return }
+            defaults.set(webKeyboard, forKey: Self.webKeyboardKey)
+            shell?.webKeyboardChanged()
+        }
+    }
     @Published var errorMessage: String?
 
     let hostStore = HostStore()
@@ -67,6 +77,7 @@ final class TetherAppModel: ObservableObject {
 
     init() {
         preferences = Preferences.restore(from: defaults.data(forKey: Self.preferencesKey))
+        webKeyboard = defaults.bool(forKey: Self.webKeyboardKey)
         let storedHosts = hostStore.load()
         hosts = storedHosts
         let expectsTokenItem = defaults.object(forKey: expectedTokenItemKey) as? Bool ?? !storedHosts.isEmpty

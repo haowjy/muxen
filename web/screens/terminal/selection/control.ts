@@ -6,6 +6,7 @@
 import type { TerminalRenderer, TerminalTheme } from "../../../term";
 import { rowCells, rowText, type Row } from "../../../term/rows";
 import { budgetStart, cellSpan, MAX_SNAPSHOT_HISTORY_ROWS, wordAt } from "../../../touch/selection";
+import { fitText } from "../rows/rowsDom";
 import { SelectionLayer } from "./SelectionLayer";
 
 /** The edit menu: where it points, in the surface's coordinates, and whether there is a selection to copy. */
@@ -28,7 +29,7 @@ interface SelectionDeps {
   joinHistory(buffer: readonly Row[]): Row[];
   theme(): TerminalTheme;
   menu(menu: MenuState | null): void;
-  /** Native keeps the web view's selection while this is on (`setFocus("select")`). */
+  /** From the long press until dismiss (`setFocus("select")`): native empties the system edit menus meanwhile. */
   selecting(on: boolean): void;
 }
 
@@ -83,28 +84,36 @@ export class SelectionControl {
     // The window is anchored on what is in view: from MAX_SNAPSHOT_HISTORY_ROWS above its top to a row below its bottom.
     // On the normal screen with the whole buffer in, what was fetched above it joins in.
     const { rows: buffer, from } = renderer.rows(alt ? 0 : Math.max(0, top - MAX_SNAPSHOT_HISTORY_ROWS), alt ? undefined : top + visible + 1);
-    let rows = alt || from > 0 ? buffer : this.deps.joinHistory(buffer);
-    const history = rows.length - buffer.length;
-    const keep = keepFrom(rows, visible);
-    rows = rows.slice(keep);
-    // The row at the top of the host: the screen's first, less the rows the history slide or the pan moved it by.
-    const topRow = history + (top - from) - keep + (hostRect.top - origin.top) / cell.height;
+    const joined = alt || from > 0 ? buffer : this.deps.joinHistory(buffer);
+    const history = joined.length - buffer.length;
+    // The (fractional) joined row at the top of the host: the screen's first, less the rows the history slide or the pan moved it by.
+    const hostRow = history + (top - from) + (hostRect.top - origin.top) / cell.height;
+    // What is in view stays whole; the budget is spent above it. A wrapped row cut off at the top keeps its flag.
+    const inView = { from: Math.max(0, Math.floor(hostRow)), to: Math.min(joined.length, Math.ceil(hostRow + hostRect.height / cell.height)) };
+    const keep = budgetStart(joined.map((row) => rowText(row).length), Math.min(inView.from, inView.to), inView.to);
+    const rows = joined.slice(keep, inView.to);
+    const topRow = hostRow - keep;
     const index = Math.floor(topRow + (y - hostRect.top) / cell.height);
     const row = rows[index];
     const word = row && wordAt(rowCells(row), Math.floor((x - origin.left) / cell.width));
     this.released = false;
+    // Native's flag is on before the finger lifts, when WebKit builds its edit menu for the selection: told
+    // only on release, the menu sometimes beat it and iOS's AutoFill showed over tether's.
     if (!word) {
       this.menuOnly = { x, y };
+      this.deps.selecting(true);
       return;
     }
     const layer = new SelectionLayer(rows, this.deps.theme(), cell.height);
     this.layer = layer;
     this.drag = { rows, topRow, hostTop: hostRect.top, left: origin.left, cell, anchor: { row: index, from: word.from, to: word.to } };
     host.append(layer.element);
+    fitText(layer.element, cell.width);
     layer.align(topRow);
     layer.select({ row: index, offset: word.from }, { row: index, offset: word.to });
     this.unsubscribe = layer.onChange(() => { this.changed(); });
     document.addEventListener("keydown", this.escape);
+    this.deps.selecting(true);
   }
 
   /** The held finger moved to (`x`, `y`): the selection's far end follows it, by cell. */
@@ -123,8 +132,6 @@ export class SelectionControl {
   /** The finger lifted: the edit menu opens on what is selected, or over a blank cell. */
   release(): void {
     this.released = true;
-    // Native hands the touch to the web view's selection only now: while the finger is down the host owns it.
-    this.deps.selecting(true);
     this.layer?.element.removeAttribute("data-held");
     const { menuOnly } = this;
     if (!menuOnly) {
@@ -172,11 +179,4 @@ export class SelectionControl {
   private readonly escape = (event: KeyboardEvent): void => {
     if (event.key === "Escape") this.dismiss();
   };
-}
-
-/** Where the snapshot starts: `rows` end at the view's bottom, so this is the budget's worth of rows above it, never inside a wrapped line. */
-function keepFrom(rows: readonly Row[], visibleRows: number): number {
-  let keep = budgetStart(rows.map((row) => ({ rows: 1, bytes: rowText(row).length })), visibleRows);
-  while (rows[keep]?.wrapped) keep++;
-  return keep;
 }

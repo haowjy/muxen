@@ -17,7 +17,7 @@ import type {
   Platform,
   PlatformEvent,
   Preferences,
-  SavedWorkspace,
+  SavedWorkspaces,
   TabKey,
   UpdateState,
   Viewport,
@@ -76,7 +76,7 @@ export interface TestPlatformOptions {
   viewport?: Viewport;
   lifecycle?: Lifecycle;
   preferences?: Preferences;
-  workspace?: SavedWorkspace | null;
+  workspace?: SavedWorkspaces | null;
   /** `pageOrigin: null` stands in for a token-admitted host. */
   hosts?: HostEntry[];
   /** Offer `updates` and `install` capabilities. */
@@ -101,8 +101,10 @@ export interface TestPlatform extends Platform {
   clipboardWrites: string[];
   opened: string[];
   haptics: HapticKind[];
+  /** Every `setBackSwipe` call, newest last. */
+  backSwipes: boolean[];
   restarts: string[];
-  savedWorkspaces: SavedWorkspace[];
+  savedWorkspaces: SavedWorkspaces[];
   drafts: Map<string, DraftRecord>;
   /** What `install.installed()` reports, when the capability is offered. */
   installed: boolean;
@@ -225,6 +227,7 @@ export function createTestPlatform(options: TestPlatformOptions = {}): TestPlatf
     clipboardWrites: [],
     opened: [],
     haptics: [],
+    backSwipes: [],
     restarts: [],
     savedWorkspaces: [],
     drafts: new Map(),
@@ -328,6 +331,7 @@ export function createTestPlatform(options: TestPlatformOptions = {}): TestPlatf
     openURL: (url) => { platform.opened.push(url); },
     playVideo: () => "inline",
     haptic: (kind) => { platform.haptics.push(kind); },
+    setBackSwipe: (enabled) => { platform.backSwipes.push(enabled); },
     restart: (reason) => { platform.restarts.push(reason); },
   };
 

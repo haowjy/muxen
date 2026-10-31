@@ -72,6 +72,7 @@ export function createBrowserPlatform(): Platform {
     ...(canOpenApp() && { openInApp }),
     playVideo: () => "inline",
     haptic: () => undefined,
+    setBackSwipe: () => undefined,
     restart,
     ...createPwa(emit),
   };

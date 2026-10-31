@@ -1,0 +1,34 @@
+/* The Dialog popover's look (radius-3, dialog-bg, shadow-2), placed by script against its anchor. */
+.menu {
+  position: fixed;
+  z-index: var(--z-menu);
+  min-width: 12rem;
+  max-width: calc(100% - 2 * var(--space-2));
+  overflow-y: auto;
+  padding: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-3);
+  background: var(--dialog-bg);
+  box-shadow: var(--shadow-2);
+}
+.section + .section { margin-top: var(--space-1); padding-top: var(--space-1); border-top: 1px solid var(--color-border); }
+.title { padding: var(--space-1) var(--space-3); font-size: var(--text-small); color: var(--color-text-muted); }
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--row-height);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-2);
+  background: none;
+  color: var(--color-text);
+  text-align: left;
+}
+.item:hover, .item:focus-visible { background: var(--color-bg-hover); }
+.item:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: -2px; }
+.selected { background: var(--color-bg-selected); font-weight: var(--weight-medium); }
+.danger { color: var(--color-status-error); }
+.icon { flex: none; width: 20px; height: 20px; color: var(--color-text-muted); }
+.text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

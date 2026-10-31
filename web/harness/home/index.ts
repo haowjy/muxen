@@ -3,7 +3,6 @@ import { serveTree } from "../files/fakes";
 import type { TmuxListing } from "../../proto/generated/messages";
 import type { Fixtures } from "../fixture";
 import { Cards } from "./Cards";
-import { States } from "./States";
 
 const win = (id: number, index: number, name: string) => ({ id, index, name, active: index === 0, activity: 0 });
 
@@ -35,11 +34,9 @@ export const fixtures: Fixtures = {
   emptyServer: { daemon: (d) => { d.listing = { server: "main:1-1", version: "3.4", sessions: [] }; } },
   /** Offline with a saved workspace: open tabs show as checking, drafts stay reachable. */
   offlineTabs: { options: () => ({ workspace: SAVED }), daemon: (d) => { d.info = "down"; } },
-  /** Every state of the sessions list at once. */
-  homeStates: { render: States },
-  /** Every state of a Home server card at once. */
+  /** Every state of a Home workspace row at once. */
   homeCards: { render: Cards },
-  /** Saved terminal tabs and a Files tab on a live server: rows on the card and "All sessions and files". */
+  /** Saved terminal tabs and a Files tab on a live server: one row with its tab count. */
   homeTabs: { options: () => ({ workspace: WITH_FILES }), daemon: (d) => { d.listing = SEVERAL; serveTree(d); } },
   /** Two servers, one card each, in the app (Add server shown). */
   homeTwoServers: {

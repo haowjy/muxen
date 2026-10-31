@@ -1,4 +1,4 @@
-// The one listing fetcher (client-architecture.md §6.3): the only code that sends
+// The one listing fetcher (browser-behaviors.md "Persistence and input"): the only code that sends
 // `listSessions`. It joins each host as a TabPort and reports each reply once, to whoever
 // subscribes: the controller turns it into the workspace's `listing` event (pruning), the bell
 // marks, and sessions/ renders it (Home and the sessions overlay), so all see the same listing.
@@ -24,6 +24,8 @@ interface HostState {
   port: TabPort;
   wanted: boolean;
   joined: boolean;
+  /** The host's tmux may have changed since the last listing was sent: set by a hint, a lost link, or leaving the host; cleared when a listing is sent. */
+  stale: boolean;
   inFlight: boolean;
   /** A trigger arrived during the request in flight: one more follows, announced if any trigger was. */
   queued: "quiet" | "loud" | null;
@@ -67,6 +69,7 @@ export class ListingFetcher {
       port: undefined as never,
       wanted: false,
       joined: false,
+      stale: true,
       inFlight: false,
       queued: null,
       attempt: 0,
@@ -78,13 +81,16 @@ export class ListingFetcher {
       linkUp: () => { this.fetch(handle); },
       linkLost: () => {
         clearTimeout(state.relist);
+        state.stale = true;
         // A request in flight fails on its own; with none, cached rows would otherwise stay unmarked.
         if (!state.inFlight) this.emit({ type: "failed", handle, reason: "lost" });
       },
       paused: () => { clearTimeout(state.relist); },
       frame: () => undefined,
       message: (msg: ServerMsg) => {
-        if (msg.type === "sessionsChanged" && this.opts.visible()) {
+        if (msg.type === "sessionsChanged") {
+          state.stale = true;
+          if (!this.opts.visible()) return;
           clearTimeout(state.relist);
           state.relist = setTimeout(() => { this.fetch(handle, false); }, RELIST_DELAY_MS);
         } else if (msg.type === "bell") {
@@ -127,6 +133,7 @@ export class ListingFetcher {
       state.linger = setTimeout(() => {
         if (state.joined) state.host.leave(state.port);
         state.joined = false;
+        state.stale = true;
         this.clear(state);
       }, LINGER_MS);
     }
@@ -141,6 +148,11 @@ export class ListingFetcher {
    */
   refresh(handle: string): void {
     if (this.hosts.get(handle)?.host.ready) this.fetch(handle);
+  }
+
+  /** A long-press menu opening: lists unless the cached listing is current, that is, no hint, lost link or absence has come since it was asked for. */
+  refreshIfStale(handle: string): void {
+    if (this.hosts.get(handle)?.stale) this.refresh(handle);
   }
 
   private clear(state: HostState): void {
@@ -158,6 +170,7 @@ export class ListingFetcher {
       return;
     }
     state.inFlight = true;
+    state.stale = false;
     clearTimeout(state.retry);
     if (announce) this.emit({ type: "requested", handle });
     state.host
@@ -171,6 +184,7 @@ export class ListingFetcher {
           this.emit({ type: "listed", handle, listing });
         },
         (error: unknown) => {
+          state.stale = true;
           this.emit({ type: "failed", handle, reason: error instanceof RequestError ? error.reason : "lost" });
           // A busy daemon is retried soon and silently; a restoring tab retries on any failure.
           if (this.opts.restoring() || (error instanceof RequestError && error.reason === "busy")) {

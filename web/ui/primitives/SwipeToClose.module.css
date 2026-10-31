@@ -1,0 +1,17 @@
+/* Its row is opaque in the fill of whatever it sits on: the owner of the list sets it. */
+.box { position: relative; overflow: hidden; border-radius: var(--radius-2); background: inherit; }
+/* Behind the row, at its right end: the swipe reveals it. */
+.close {
+  position: absolute; inset: 0 0 0 auto; width: 100%;
+  display: flex; align-items: center; justify-content: flex-end; padding-right: var(--space-4);
+  border: 0; background: var(--color-status-error); color: var(--color-on-accent); font-weight: var(--weight-bold);
+}
+.front { position: relative; display: flex; align-items: center; gap: var(--space-1); background: inherit; transition: transform 180ms ease-out; touch-action: pan-y; }
+.front[data-dragging] { transition: none; }
+.front > :first-child { flex: 1; min-width: 0; }
+/* × only where a pointer hovers (desktop); touch swipes instead. */
+.x { display: none; flex: none; width: 32px; height: 32px; border: 0; background: none; color: var(--color-text-muted); font-size: 18px; border-radius: 6px; }
+@media (hover: hover) and (pointer: fine) {
+  .x { display: block; }
+  .x:hover { background: var(--color-bg-hover); color: var(--color-text); }
+}

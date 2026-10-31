@@ -4,7 +4,7 @@ import type { AppController } from "../../../app/controller";
 import type { NativeLineSnapshot, PlatformEvent, TabKey, TextRange } from "../../../platform/types";
 import { tabId } from "../../../platform/tabKey";
 import { Store } from "../../../ui/store";
-import { terminalTabOf, type TerminalTab } from "../../../workspace/state";
+import { activeTerminal, type TerminalTab } from "../../../workspace/state";
 import type { LineDrafts } from "./lineDrafts";
 import { terminalsOf } from "../terminals";
 
@@ -162,7 +162,7 @@ export class NativeLineInput extends Store<NativeLineView> {
   private reconcileTarget(): void {
     if (this.app.snapshot.viewport.directInput !== "native" || this.app.focus.snapshot.owner !== "line") return;
     const workspace = this.app.snapshot.workspace;
-    const tab = terminalTabOf(workspace, workspace.active);
+    const tab = activeTerminal(workspace);
     if (!tab || !this.drafts.snapshot.ready) return;
     const text = this.drafts.snapshot.drafts[tab.id]?.text ?? "";
     if (this.target?.id !== tab.id) this.bind(tab.key, text, text.length);

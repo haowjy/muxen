@@ -3,22 +3,30 @@
   "message": {
     "type": "saveWorkspace",
     "workspace": {
-      "version": 2,
-      "tabs": [
+      "version": 5,
+      "workspaces": [
         {
-          "key": {
-            "host": "host-01",
-            "session": {
-              "server": "main:42-7",
-              "session": 2
+          "id": "ws/host-01",
+          "host": "host-01",
+          "tabs": [
+            {
+              "kind": "terminal",
+              "key": {
+                "host": "host-01",
+                "session": {
+                  "server": "main:42-7",
+                  "session": 2
+                }
+              },
+              "session": "main",
+              "window": "shell"
             }
-          },
-          "session": "main",
-          "window": "shell"
+          ],
+          "last": "host-01/main:42-7/$2",
+          "lastTerminal": "host-01/main:42-7/$2",
+          "home": "/home/jimmy"
         }
       ],
-      "active": "host-01/main:42-7/$2",
-      "files": null,
       "hostName": "pop-os"
     }
   },

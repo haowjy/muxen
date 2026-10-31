@@ -10,15 +10,17 @@ import { tabId } from "../../platform/tabKey";
 import type { InputEvent, TextSize, Viewport } from "../../platform/types";
 import { acceptsInsert, type ConnectionState } from "../../tabs/connection";
 import { TabDriver } from "../../tabs/driver";
+import { decideKey } from "../../tabs/keymap";
 import type { SessionRef, ShownWindow } from "../../proto/generated/messages";
 import { createXtermRenderer, type PromptLine, type TerminalRenderer } from "../../term";
 import { TerminalSizer } from "../../term/size";
 import { ArmedModifiers } from "../../touch/armed";
-import type { RowKey } from "../../touch/keyRoute";
+import { routeHardwareKey, type RowKey } from "../../touch/keyRoute";
 import { createOwnedInput } from "../../touch/owned-input";
 import { Store } from "../../ui/store";
 import { terminalTheme } from "../../ui/theme";
-import { screenOf, shownTab } from "../../workspace/state";
+import { activeTab, allTabs, screenOf, shownTab, terminalTabOf } from "../../workspace/state";
+import { failureText } from "../sessions/createSession";
 import type { LineEditor } from "./dock/lineEditor";
 import { nativeLineEditor } from "./dock/lineEditor";
 import { interceptClipboard, Pastes } from "./paste";
@@ -102,8 +104,12 @@ export class Terminals extends Store<TerminalsView> {
   /** tether's own input on a phone browser; created the first time it is needed. */
   private owned: HTMLTextAreaElement | null = null;
   private panArea: number | null = null;
+  /** The shown pane is larger than the box: the renderer stays DOM. */
+  private paneLarge = false;
   /** The shell's command line under the cursor, for a tap on the prompt row. */
   private promptLine: PromptLine | null = null;
+  /** The colour scheme changed and the renderer has not taken the new theme yet. */
+  private themeStale = false;
   /** The touch side of looking at the shown tab: scroll, history, selection, gestures. */
   private readonly view: TerminalView;
   /** Paste, copy and inserted paths. */
@@ -121,7 +127,11 @@ export class Terminals extends Store<TerminalsView> {
     this.element.dataset["blank"] = "true"; // until the first snapshot: no pretend-live empty terminal
     this.sizer = new TerminalSizer({
       cell: () => this.renderer?.fontCell() ?? null,
-      onChange: (size) => { this.shownDriver()?.resize(size); },
+      // A new size redraws the rows, and a selection on them goes first.
+      onChange: (size) => {
+        this.view.dismissSelection();
+        this.shownDriver()?.resize(size);
+      },
     });
     this.pastes = new Pastes({
       app,
@@ -133,7 +143,8 @@ export class Terminals extends Store<TerminalsView> {
     });
     interceptClipboard(this.element, {
       onPaste: (pasted) => { this.pastes.paste(pasted); },
-      selectionText: () => this.renderer?.selectionText() ?? "",
+      // The phone's selection is page text; desktop's is xterm's own.
+      selectionText: () => this.view.pageText() || (this.renderer?.selectionText() ?? ""),
     });
     this.view = new TerminalView({
       element: this.element,
@@ -142,6 +153,7 @@ export class Terminals extends Store<TerminalsView> {
       fetchHistory: (start, end) => this.shownDriver()?.history(start, end) ?? null,
       send: (id, events) => { this.typeTo(id, events); },
       haptic: (kind) => { this.app.platform.haptic(kind); },
+      editMenu: () => this.app.platform.editMenu,
       directInput: () => this.viewport.directInput,
       focusTerminal: () => { this.app.focus.focusTarget("terminal", true); },
       prompt: () => this.promptLine,
@@ -153,7 +165,11 @@ export class Terminals extends Store<TerminalsView> {
     new ResizeObserver(() => { this.measure(); }).observe(this.element);
     app.subscribe(() => { this.sync(); });
     app.focus.subscribe(() => { this.drawCursor(); });
+    document.addEventListener("selectionchange", () => { this.applyTheme(); });
     app.platform.subscribe((event) => {
+      // The app's edit menu over the mark, or over iOS's own selection: its choices are the same as tether's own menu had.
+      if (event.type === "menuCopy") this.pastes.copySelection();
+      if (event.type === "menuPaste") this.pastes.pasteFromMenu();
       // Native's responder: only the tab on screen still takes input.
       if (event.type !== "input") return;
       const id = tabId(event.tab);
@@ -197,8 +213,15 @@ export class Terminals extends Store<TerminalsView> {
     this.measure();
   }
 
-  /** Selects a tab. A tab that is waiting to reconnect retries now: a tap on its pill is the user asking. */
+  /**
+   * Selects a tab. A tab that is waiting to reconnect retries now: a tap on its pill is the user asking.
+   * Switching tabs in the tab row keeps a raised keyboard up: it goes to the new tab's input, which is
+   * the terminal, or a Files tab's path field (browser-behaviors.md "Phone dock").
+   */
   activate(id: string): void {
+    const { viewport, workspace } = this.app.snapshot;
+    const tab = allTabs(workspace).find((t) => t.id === id);
+    if (viewport.keyboard && workspace.route.kind === "tab" && tab) this.app.focus.keepKeyboardOn(tab.kind === "terminal" ? "terminal" : "path");
     this.app.dispatch({ type: "activated", id });
     const status = this.snapshot.tabs[id];
     if (status?.state.kind === "reconnecting" || status?.state.kind === "limited") this.drivers.get(id)?.nudge();
@@ -207,6 +230,21 @@ export class Terminals extends Store<TerminalsView> {
   /** Makes `window` the tab's session's current window; the tab follows with the next `watching`. */
   selectWindow(id: string, window: number): void {
     if (!this.drivers.get(id)?.selectWindow(window)) this.app.notify("Couldn't switch window: the tab isn't connected");
+  }
+
+  /** The long-press menu's New window: `new-window` on the tab's session, whichever window it shows. The tab follows the session to it. */
+  async newWindow(id: string): Promise<void> {
+    const tab = terminalTabOf(this.app.snapshot.workspace, id);
+    const client = tab && this.app.hosts.byHostId(tab.host);
+    if (!tab || !client) return;
+    try {
+      await client.socket.request(
+        (req) => ({ type: "newWindow", data: { req, session: tab.key.session } }),
+        (reply) => (reply.type === "created" ? reply.data : undefined),
+      );
+    } catch (error) {
+      this.app.notify(failureText(error, client.name ?? "the server", "open a window"));
+    }
   }
 
   /** The band's Fit: sizes the window to this tab and so takes it from the other terminal. */
@@ -263,19 +301,23 @@ export class Terminals extends Store<TerminalsView> {
       const before = this.viewport;
       this.viewport = viewport;
       this.sizer.setViewport(viewport);
-      if (viewport.scheme !== before.scheme) this.renderer?.setTheme(terminalTheme());
+      if (viewport.scheme !== before.scheme) {
+        this.themeStale = true;
+        this.applyTheme();
+      }
       if (viewport.density !== before.density) this.refont();
       if (viewport.directInput !== before.directInput) this.applyInput();
       if (chromeInputsChanged(before, viewport)) this.openChromeWindow();
       this.measure();
     }
-    for (const tab of workspace.tabs) {
+    const tabs = allTabs(workspace);
+    for (const tab of tabs) {
       if (tab.kind !== "terminal" || this.drivers.has(tab.id)) continue;
       const client = this.app.hosts.byHostId(tab.host);
       if (client) this.open(tab.id, tab.key.session, client);
     }
     for (const [id, driver] of this.drivers) {
-      if (workspace.tabs.some((t) => t.id === id)) continue;
+      if (tabs.some((t) => t.id === id)) continue;
       this.drivers.delete(id);
       if (this.painted === id) this.painted = null;
       driver.close();
@@ -301,7 +343,7 @@ export class Terminals extends Store<TerminalsView> {
   private showPainted(): void {
     const { workspace } = this.app.snapshot;
     const onTerminal = screenOf(workspace) === "terminal";
-    const blank = !workspace.tabs.some((t) => t.kind === "terminal") || (onTerminal && this.painted !== workspace.active);
+    const blank = !allTabs(workspace).some((t) => t.kind === "terminal") || (onTerminal && this.painted !== activeTab(workspace)?.id);
     if (blank) this.element.dataset["blank"] = "true";
     else if (onTerminal) this.element.removeAttribute("data-blank");
   }
@@ -316,10 +358,11 @@ export class Terminals extends Store<TerminalsView> {
           // The renderer follows the snapshot's pane alone, never the tab's own resizes: DOM before xterm grows to a pane larger
           // than the box (a canvas that size runs the phone out of memory), WebGL again only once a fitting pane is in place.
           const box = this.sizer.sizeForWatch();
-          const large = snapshot.cols > box.cols || snapshot.rows > box.rows;
-          if (large) this.renderer?.setWebgl(false);
+          this.view.dismissSelection();
+          this.paneLarge = snapshot.cols > box.cols || snapshot.rows > box.rows;
+          if (this.paneLarge) this.renderer?.setWebgl(false);
           await this.renderer?.snapshot(snapshot);
-          if (!large) this.renderer?.setWebgl(true);
+          if (!this.paneLarge && this.viewport.directInput === "xterm") this.renderer?.setWebgl(true);
           // What was fetched or selected sat above the buffer this snapshot replaced.
           this.view.reset();
           // The surface now holds this tab's content, whichever tab is on screen by the time xterm finished parsing.
@@ -446,6 +489,13 @@ export class Terminals extends Store<TerminalsView> {
     this.sync();
   }
 
+  /** A new theme redraws every row, and a redraw replaces the text a selection is on: it waits for the selection to close. */
+  private applyTheme(): void {
+    if (!this.themeStale || this.view.selected) return;
+    this.themeStale = false;
+    this.renderer?.setTheme(terminalTheme());
+  }
+
   private async createRenderer(): Promise<void> {
     if (this.creating) return;
     this.creating = true;
@@ -458,6 +508,8 @@ export class Terminals extends Store<TerminalsView> {
       fontFamily: font.fontFamily,
       fontSize: parseFloat(font.fontSize),
       theme: terminalTheme(),
+      // Desktop draws the screen as a picture. A phone draws it as page text, which iOS can select.
+      webgl: this.viewport.directInput === "xterm",
       openLink: (url) => { this.app.platform.openURL(url); },
     });
     this.renderer = renderer;
@@ -473,6 +525,7 @@ export class Terminals extends Store<TerminalsView> {
   private refont(): void {
     const renderer = this.renderer;
     if (!renderer) return;
+    this.view.dismissSelection(); // a new font redraws every row
     const style = getComputedStyle(this.element);
     renderer.setFont(style.fontFamily, parseFloat(style.fontSize));
     requestAnimationFrame(() => { this.measure(); });
@@ -484,6 +537,10 @@ export class Terminals extends Store<TerminalsView> {
     if (!renderer) return;
     const { directInput } = this.viewport;
     const xterm = directInput === "xterm";
+    // The surface's own look follows the input (Terminal.module.css); a trackpad appearing on an iPad closes a phone's selection.
+    this.element.dataset["directInput"] = directInput;
+    this.view.dismissSelection();
+    renderer.setWebgl(xterm && !this.paneLarge);
     renderer.setInput(
       xterm
         ? {
@@ -502,12 +559,33 @@ export class Terminals extends Store<TerminalsView> {
     const helper = renderer.inputElement();
     if (xterm) helper?.removeAttribute("aria-hidden");
     else helper?.setAttribute("aria-hidden", "true");
+    // On a phone browser the keys beside the text (below) go to tmux from here.
+    if (directInput === "owned") document.addEventListener("keydown", this.hardwareKey);
+    else document.removeEventListener("keydown", this.hardwareKey);
     this.registered = xterm ? renderer.inputElement() : directInput === "owned" ? this.ownedInput() : this.app.focus.nativeTerminal();
     this.drawCursor();
     if (!this.registered) return;
     this.app.focus.register("terminal", this.registered);
     if (xterm) this.focusIfIdle();
   }
+
+  /**
+   * The hardware keys that do not type text go to tmux (`routeHardwareKey`). The listener is on the
+   * document's bubble phase and stands down for a key already claimed (`defaultPrevented`, or a
+   * stopPropagation), so the line box's Enter and a menu's Escape keep theirs. Another focused
+   * element, an open dialog and an IME composing keep their keys; with no box focused, so does the
+   * terminal's edit menu. A tab menu is not modal: its other keys go to the terminal.
+   */
+  private readonly hardwareKey = (event: KeyboardEvent): void => {
+    if (event.defaultPrevented) return;
+    const held = document.activeElement;
+    const free = this.shownTerminalTab() !== null && this.app.snapshot.entry.overlay === null && this.snapshot.menu === null && (!held || held === document.body);
+    const route = routeHardwareKey(decideKey(event, "owned"), event, this.app.focus.snapshot.owner, free);
+    if (route.to === "ignore") return;
+    event.preventDefault();
+    if (route.to === "row") this.key(route.key);
+    else this.modifiers.input(route.events);
+  };
 
   /** The owned input lives in the surface, so the capture-phase paste listener sees its pastes; the keyboard toggle focuses it. */
   private ownedInput(): HTMLTextAreaElement {
@@ -518,10 +596,15 @@ export class Terminals extends Store<TerminalsView> {
     return this.owned;
   }
 
-  /** Solid block while the terminal holds the keyboard, hollow otherwise (§7.4); a desktop's real xterm focus draws itself. */
+  /**
+   * Solid block while the terminal holds the keyboard, hollow otherwise (§7.4); a desktop's real xterm focus
+   * draws itself. The look is CSS keyed to an attribute: an xterm option change would redraw every row, and
+   * a selection on the rows with them.
+   */
   private drawCursor(): void {
     const solid = this.viewport.directInput !== "xterm" && this.app.focus.snapshot.owner === "terminal";
-    this.renderer?.setInactiveCursor(solid ? "block" : "outline");
+    if (solid) this.element.dataset["cursor"] = "solid";
+    else delete this.element.dataset["cursor"];
   }
 
   /**

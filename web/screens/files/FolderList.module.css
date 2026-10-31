@@ -16,14 +16,8 @@
   border-bottom: 1px solid var(--color-border);
 }
 .list .item:last-child { border-bottom: 0; }
-/* A favorite row: the row and its Remove button share one hairline. */
-.line { display: flex; align-items: center; border-bottom: 1px solid var(--color-border); }
-.line:last-child { border-bottom: 0; }
-.list .line .item { flex: 1; min-width: 0; width: auto; border-bottom: 0; }
-.line .remove { flex: none; margin-right: var(--space-2); }
 .list .item:disabled { color: var(--color-text-muted); cursor: default; }
 .list .item:disabled:hover { background: var(--color-bg-raised); }
 .more { display: flex; justify-content: center; padding: var(--space-2) 0; }
 .note { font-size: var(--text-small); color: var(--color-text-muted); text-wrap: pretty; }
 .footer { display: flex; justify-content: center; padding-bottom: var(--space-3); }
-.refused { font-size: var(--text-small); color: var(--color-status-error); }

@@ -1,4 +1,4 @@
-import { Terminal } from "@xterm/xterm";
+import { Terminal, type ITheme } from "@xterm/xterm";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
@@ -28,19 +28,22 @@ export function createXtermRenderer(container: HTMLElement, options: RendererOpt
     scrollback: 5000,
     fontFamily: options.fontFamily,
     fontSize: options.fontSize,
-    theme: options.theme,
+    theme: withoutScrollbar(options.theme),
   });
   term.loadAddon(new Unicode11Addon());
   term.unicode.activeVersion = "11";
   // A tapped URL leaves the app through native, never `window.open` (ios-shell.md "Web content security").
   term.loadAddon(new WebLinksAddon((_event, url) => { options.openLink(url); }));
   term.open(container);
+  // The DOM rows draw no cursor until the terminal first takes focus or switches buffers, and a phone's input never
+  // focuses xterm. Selecting the normal buffer, which is already showing, marks the cursor drawable.
+  if (!options.webgl) term.write("\x1b[?47l");
   const setDesktopInput = createDesktopInput(term);
   setDesktopInput(null);
 
   let recreations = 0;
   let webgl: WebglAddon | undefined;
-  let webglWanted = true;
+  let webglWanted = options.webgl;
   const attachWebgl = (): void => {
     try {
       const addon = new WebglAddon();
@@ -56,7 +59,7 @@ export function createXtermRenderer(container: HTMLElement, options: RendererOpt
       webgl = undefined; // no WebGL here: stay on the DOM renderer
     }
   };
-  attachWebgl();
+  if (webglWanted) attachWebgl();
 
   // xterm keeps the report format private; the parser sees the same DECSET that sets it.
   let encoding: MouseEncoding = "x10";
@@ -102,6 +105,8 @@ export function createXtermRenderer(container: HTMLElement, options: RendererOpt
     return { width: (webgl ? Math.floor(width) : width) / dpr, height: Math.ceil(height * dpr) / dpr };
   };
 
+  const textRoot = (): HTMLElement | null => term.element?.querySelector<HTMLElement>(".xterm-rows") ?? null;
+
   // The keyboard shortens what is visible but never tmux: the terminal keeps its rows and
   // slides to put the last row at the pan area's bottom. If that would hide the cursor above
   // the area, the cursor row meets the bottom instead. The browser's container never shrinks.
@@ -117,7 +122,8 @@ export function createXtermRenderer(container: HTMLElement, options: RendererOpt
     const next = scrolledUp ? 0 : terminalBottomPan(term.buffer.active.cursorY, term.rows, cell.height, panArea ?? container.clientHeight);
     if (next === panned) return;
     panned = next;
-    element.style.transition = animate ? "" : "none";
+    // The pan's slide follows the keyboard's (ui/theme.ts writes its duration beside the inset).
+    element.style.transition = animate ? "transform var(--keyboard-timing)" : "none";
     element.style.transform = next ? `translateY(${String(-next)}px)` : "";
   };
   const scrollListeners: ((scrolledUp: boolean) => void)[] = [];
@@ -144,7 +150,7 @@ export function createXtermRenderer(container: HTMLElement, options: RendererOpt
     snapshot: (snapshot: Snapshot) => pipeline.snapshot(snapshot),
     cellSize,
     fontCell,
-    setTheme: (theme) => { term.options.theme = theme; },
+    setTheme: (theme) => { term.options.theme = withoutScrollbar(theme); },
     onScrolledUp: (listener) => { scrollListeners.push(listener); },
     scrollToBottom: () => { term.scrollToBottom(); },
     onPromptLine: (listener) => { prompt.onLine(listener); },
@@ -165,6 +171,11 @@ export function createXtermRenderer(container: HTMLElement, options: RendererOpt
     setInput: setDesktopInput,
     inputElement: () => term.textarea ?? null,
     selectionText: () => term.getSelection(),
+    textRoot,
+    textRows: () => {
+      const buffer = term.buffer.active;
+      return [...(textRoot()?.children ?? [])].map((element, i) => ({ element: element as HTMLElement, wrapped: buffer.getLine(buffer.viewportY + i)?.isWrapped ?? false }));
+    },
     mouseMode: () => term.modes.mouseTrackingMode,
     mouseEncoding: () => encoding,
     altScreen: () => term.buffer.active.type === "alternate",
@@ -201,6 +212,13 @@ export function createXtermRenderer(container: HTMLElement, options: RendererOpt
       panArea = px;
       pan(true);
     },
-    setInactiveCursor: (style) => { term.options.cursorInactiveStyle = style; },
   };
+}
+
+/** xterm 6 draws its own scrollbar slider; tether scrolls by touch and shows none. A clear slider leaves
+ *  xterm's scrolling alone. The colour is 8-digit hex because xterm's parser rejects any colour it can't
+ *  read as opaque except `#rrggbbaa` and `rgba()`: `"transparent"` falls back to the default grey. */
+const CLEAR = "#00000000";
+function withoutScrollbar(theme: ITheme): ITheme {
+  return { ...theme, scrollbarSliderBackground: CLEAR, scrollbarSliderHoverBackground: CLEAR, scrollbarSliderActiveBackground: CLEAR };
 }

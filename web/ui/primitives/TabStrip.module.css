@@ -1,5 +1,6 @@
 .strip {
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
   gap: var(--space-1);
   min-width: 0;
@@ -15,21 +16,30 @@
 
 /* The strip scrolls, so it clips on both axes: rings sit inside the pill. */
 .pill :focus-visible { outline-offset: -2px; }
+/* Every pill is the same width, whatever its label (Jimmy, 2026-10-30, after Termius): they share
+   the row equally between the min and max widths, and past the minimum the strip scrolls. */
 .pill {
   display: flex;
-  flex: none;
+  flex: 0 1 auto;
   align-items: center;
-  max-width: 16rem;
+  /* A width, not a flex basis: the strip sizes itself from it, so pills start at the max and shrink together. */
+  width: var(--tab-max-width);
+  min-width: var(--tab-min-width);
   height: var(--tab-height);
-  border-radius: var(--radius-2);
+  border-radius: var(--radius-3);
   background: var(--tab-bg);
   color: var(--pill-color, var(--color-text-muted));
 }
-.pill[data-tone="live"] { --pill-color: var(--color-status-live); }
-.pill[data-tone="reconnecting"] { --pill-color: var(--color-status-reconnecting); }
-.pill[data-tone="error"] { --pill-color: var(--color-status-error); }
-.pill[data-tone="gone"] { --pill-color: var(--color-status-gone); }
-.active { background: var(--tab-bg-active); }
+/* An idle tab (Files) has no status colour: its active tint and label are the plain text colour.
+   Without a default the mix is invalid and the active pill loses its fill. */
+.active { --pill-color: var(--color-text); }
+.active[data-tone="live"] { --pill-color: var(--color-status-live); }
+.active[data-tone="reconnecting"] { --pill-color: var(--color-status-reconnecting); }
+.active[data-tone="error"] { --pill-color: var(--color-status-error); }
+.active[data-tone="gone"] { --pill-color: var(--color-status-gone); }
+/* sRGB, not OKLCH: the grey has a hue of 0, which OKLCH mixing turned the green brown. */
+.active { background: color-mix(in srgb, var(--pill-color) var(--tab-tint), var(--tab-bg)); }
+/* Only the active pill carries its status colour, as a tint, a label and its close. */
 
 .select {
   display: flex;
@@ -44,11 +54,22 @@
   color: inherit;
   font-weight: inherit;
   white-space: nowrap;
+  -webkit-touch-callout: none;
+  user-select: none;
 }
 /* The session name is bold and the window's regular, set apart by space alone. Both shrink, the window far faster: it truncates first, then the session, so the label stays inside the pill and never runs under the ×. (A shrink factor near 0 on the session left it overflowing.) */
 .session { min-width: 0; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; font-weight: var(--weight-bold); }
 .window { min-width: 0; overflow: hidden; text-overflow: ellipsis; flex: 0 100 auto; margin-left: var(--space-2); font-weight: normal; }
+.kind { flex: none; margin-right: var(--space-2); }
 .bell { margin-left: var(--space-2); }
-.close { width: var(--tab-height); height: var(--tab-height); flex: none; color: var(--color-text-muted); }
+/* Narrower than tall, so the label keeps the width: the pill's full height is still the touch target. */
+.close { width: var(--dock-control-height); height: var(--tab-height); flex: none; color: var(--color-text-muted); }
 /* Hidden, not removed: the slot keeps every pill's width, and a hidden button takes no tap or focus. */
 .pill:not(.active) .close { visibility: hidden; }
+/* On the phone the tabs fill the row between ‹ and +, as Termius's do. */
+:root[data-layout="phone"] .pill { flex: 1 1 0; }
+/* A phone pill is too narrow for two names: it shows the session (or folder), as Termius shows the host;
+   the window is in the tab overview and the pill's long-press menu. */
+:root[data-layout="phone"] .window { display: none; }
+:root[data-layout="phone"] .select { padding: 0 var(--space-2); }
+.active .close { color: var(--pill-color); }

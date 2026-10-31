@@ -20,7 +20,7 @@ interface Options {
 
 export function useCompletion({ session, text, setText, onOpen, enterOpens }: Options) {
   const { browser } = session;
-  const favorites = useStore(browser, (s) => s.favorites);
+  const home = useStore(browser, (s) => s.home);
   const showHidden = useStore(browser, (s) => s.hidden);
   const held = useStore(browser.folders, (s) => s.held);
   const listId = useId();
@@ -32,8 +32,7 @@ export function useCompletion({ session, text, setText, onOpen, enterOpens }: Op
   latest.current = text;
 
   // A form asks for the host's home, which `~` names, itself: no Files tab has opened it.
-  useEffect(() => { void browser.favorites().catch(() => undefined); }, [browser]);
-  const home = favorites?.home ?? null;
+  useEffect(() => { void browser.home().catch(() => undefined); }, [browser]);
   const ctx: CompleteContext | null = home === null ? null : { home, showHidden, folder: (key) => held.get(key)?.names ?? undefined };
   const c: Completion | null = ctx && text !== null ? complete(text, ctx) : null;
   const highlighted = c && (c.rows.find((row) => row.name === chosen) ?? c.predicted);
@@ -58,7 +57,10 @@ export function useCompletion({ session, text, setText, onOpen, enterOpens }: Op
     if ("wait" in result && c.ask) {
       await browser.folders.load(c.ask.path, c.ask.hidden);
       if (latest.current !== text) return;
-      result = go(text, target, { ...ctx, folder: (key) => browser.folders.snapshot.held.get(key)?.names ?? undefined });
+      const arrived: CompleteContext = { ...ctx, folder: (key) => browser.folders.snapshot.held.get(key)?.names ?? undefined };
+      // The highlight is read again: before the listing arrived there was no prediction to Go to.
+      const now = complete(text, arrived);
+      result = go(text, row ?? now.rows.find((r) => r.name === chosen) ?? now.predicted, arrived);
     }
     if ("open" in result) await onOpen(result.open);
     else if ("say" in result) setSaid(result.say);

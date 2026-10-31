@@ -4,8 +4,6 @@ import { FakeFs, type FakeTree } from "../platform/test/fs";
 
 const tree = (): FakeTree => ({
   home: "/home/j",
-  favorites: ["/home/j/repo"],
-  uploads: "/home/j/up",
   dirs: ["/", "/home", "/etc", "/home/j", "/home/j/repo", "/home/j/repo/src", "/home/j/repo/.git", "/home/j/up", "/home/j/other", "/home/j/repo2"],
   files: {
     "/home/j/repo/README.md": "text/markdown; charset=utf-8",
@@ -23,14 +21,14 @@ function setup(t = tree()) {
 }
 
 describe("FileBrowser", () => {
-  it("opens ~ as the home the favorites name, and a folder the tab names", async () => {
+  it("opens ~ as the home the host names, and a folder the tab names", async () => {
     const { browser, fs } = setup();
     await browser.follow({ kind: "dir", path: "~" });
     expect(browser.snapshot.place).toEqual({ kind: "dir", path: "/home/j" });
-    expect(browser.snapshot.favorites?.favorites.map((r) => r.path)).toEqual(["/home/j/repo"]);
+    expect(browser.snapshot.home).toBe("/home/j");
     await browser.follow({ kind: "dir", path: "/home/j/repo/src" });
     expect(browser.snapshot.pages?.entries.map((e) => e.name)).toEqual(["main.rs"]);
-    expect(fs.calls).toEqual(["favorites", "list /home/j 0", "list /home/j/repo/src 0"]);
+    expect(fs.calls).toEqual(["list ~ 0", "list /home/j/repo/src 0"]);
   });
 
   it("lists directories first, pages on demand, and keeps hidden files out until asked", async () => {
@@ -40,7 +38,7 @@ describe("FileBrowser", () => {
     await browser.more();
     expect(browser.snapshot.pages?.entries.map((e) => e.name)).toEqual(["src", "README.md", "a.ts", "b.png", "c.rs"]);
     await browser.more(); // nothing left: no request
-    expect(fs.calls.filter((c) => c.startsWith("list"))).toEqual(["list /home/j/repo 0", "list /home/j/repo 3"]);
+    expect(fs.calls.filter((c) => c.startsWith("list"))).toEqual(["list ~ 0", "list /home/j/repo 0", "list /home/j/repo 3"]);
     await browser.toggleHidden();
     expect(browser.snapshot.pages?.entries.map((e) => e.name)).toContain(".git");
   });

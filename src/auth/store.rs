@@ -361,7 +361,7 @@ impl Store {
         Ok(result)
     }
 
-    /// The state directory's lock (`files::lock`), which `config.toml`'s writes hold too.
+    /// The state directory's lock (`files::lock`).
     fn lock(&self) -> Result<File, StoreError> {
         files::lock(&self.dir).map_err(io_at(&self.dir))
     }

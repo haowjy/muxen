@@ -20,7 +20,7 @@ export class SelectionLayer {
   private readonly rows: HTMLDivElement[];
   private readonly logical: Logical;
 
-  constructor(rows: readonly Row[], theme: TerminalTheme, readonly cellHeight: number) {
+  constructor(rows: readonly Row[], theme: TerminalTheme, cellHeight: number) {
     this.element.className = styles.layer ?? "";
     // Inert until the finger lifts (control.ts `release`), so WebKit's own long-press can't take the touch.
     this.element.dataset["held"] = "";
@@ -37,13 +37,27 @@ export class SelectionLayer {
   }
 
   /**
-   * Scrolls so the row `top` (fractional) is at the layer's top edge. The rows end where the
-   * screen's do, so below them it pads out whatever the scroll needs to get there.
+   * Scrolls so the row `top` (fractional) is at the layer's top edge. Rows lay out at a height
+   * the browser rounds, not the cell height, so the position comes from the row `top` falls in,
+   * measured, rather than from `top` times the cell height. What the scroll position cannot hold (the browser
+   * may round it) is moved by a transform. The rows end where the screen's do, so below them it
+   * pads out whatever the scroll needs to get there.
    */
   align(top: number): void {
-    const scroll = top * this.cellHeight;
-    this.element.style.paddingBottom = `${String(Math.max(0, scroll + this.element.clientHeight - this.rows.length * this.cellHeight))}px`;
-    this.element.scrollTop = scroll;
+    const { element } = this;
+    const at = Math.min(this.rows.length - 1, Math.max(0, Math.floor(top)));
+    const anchor = this.rows[at];
+    const first = this.rows[0];
+    const last = this.rows[this.rows.length - 1];
+    if (!anchor || !first || !last) return;
+    first.style.marginTop = "";
+    const origin = element.getBoundingClientRect().top - element.scrollTop;
+    const anchorRect = anchor.getBoundingClientRect();
+    const scroll = anchorRect.top - origin + (top - at) * anchorRect.height;
+    element.style.paddingBottom = `${String(Math.max(0, scroll + element.clientHeight - (last.getBoundingClientRect().bottom - origin)))}px`;
+    element.scrollTop = scroll;
+    // The scroll lands on a whole pixel: the rest moves the rows, not the scroller, so no canvas shows at its edge.
+    first.style.marginTop = `${String(Math.max(0, element.scrollTop) - scroll)}px`;
   }
 
   /** Selects from one point to another, in either order. */

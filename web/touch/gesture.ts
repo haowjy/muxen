@@ -38,7 +38,8 @@ export const DEFAULT_GESTURE: GestureConfig = {
 
 type State =
   | { kind: "idle" }
-  | { kind: "pending"; id: number; x: number; y: number; t: number }
+  /** `x`, `y`: where the press began, the origin of the slop; `at`: where the finger is now. */
+  | { kind: "pending"; id: number; x: number; y: number; t: number; at: { x: number; y: number } }
   | { kind: "scrolling"; id: number; y: number; samples: Sample[] }
   | { kind: "held"; id: number }
   /** Horizontal travel, a second finger or a cancelled touch: nothing resolves until every finger lifts. */
@@ -61,10 +62,15 @@ export class GestureRecognizer {
     return null;
   }
 
+  /** The finger has passed the slop vertically: the touch is a scroll, and the shell may cancel its moves. */
+  get scrolling(): boolean {
+    return this.state.kind === "scrolling";
+  }
+
   down(id: number, x: number, y: number, t: number): GestureAction[] {
     const s = this.state;
     if (s.kind === "idle") {
-      this.state = { kind: "pending", id, x, y, t };
+      this.state = { kind: "pending", id, x, y, t, at: { x, y } };
       return [];
     }
     // A second finger: whatever the first was becoming is not that any more.
@@ -82,6 +88,7 @@ export class GestureRecognizer {
     switch (s.kind) {
       case "pending": {
         if (s.id !== id) return [];
+        s.at = { x, y };
         const dx = x - s.x;
         const dy = y - s.y;
         if (Math.hypot(dx, dy) <= config.slop) return [];
@@ -147,7 +154,7 @@ export class GestureRecognizer {
     const s = this.state;
     if (s.kind === "pending" && t >= s.t + this.config.longPressMs) {
       this.state = { kind: "held", id: s.id };
-      return [{ type: "longPress", x: s.x, y: s.y }];
+      return [{ type: "longPress", x: s.at.x, y: s.at.y }];
     }
     return [];
   }

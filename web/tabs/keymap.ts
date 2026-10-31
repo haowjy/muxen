@@ -1,7 +1,9 @@
 // KeyboardEvent to tmux key names (client-architecture.md §7.2, §7.3). Pure: the DOM
 // handlers in term/xterm-input.ts and touch/owned-input.ts feed it plain facts, and it says
 // what to do. Every name it can produce is in tests/fixtures/proto/keys.json, which the
-// daemon's tests check against its allowlist regex (`is_key_name`).
+// daemon's tests check against its allowlist regex (`is_key_name`). A Ctrl or Alt chord on a
+// character is `chord()` in touch/modifiers.ts, shared with the armed key row.
+import { chord } from "../touch/modifiers";
 
 /** The facts of a `KeyboardEvent` this decision reads. */
 export interface KeyFacts {
@@ -60,13 +62,24 @@ function modified(e: KeyFacts, name: string, shiftable: boolean): string {
   return `${e.ctrlKey ? "C-" : ""}${e.altKey ? "M-" : ""}${shiftable && e.shiftKey ? "S-" : ""}${name}`;
 }
 
-/** The letter or digit a Ctrl or Alt chord means, from the physical key: Option on macOS changes `key`. */
+/** The punctuation keys of a US layout, unshifted and shifted, for when `key` is no ASCII character (Option on macOS). */
+const PUNCTUATION: Record<string, readonly [string, string]> = {
+  Backquote: ["`", "~"], Minus: ["-", "_"], Equal: ["=", "+"], BracketLeft: ["[", "{"], BracketRight: ["]", "}"],
+  Backslash: ["\\", "|"], Semicolon: [";", ":"], Quote: ["'", '"'], Comma: [",", "<"], Period: [".", ">"], Slash: ["/", "?"],
+};
+
+/**
+ * The character a Ctrl or Alt chord means: what the layout typed (`key`), so Ctrl+A is `C-a` on AZERTY
+ * where A is the physical Q. Only when `key` is no ASCII character does the physical key stand in: Option
+ * on macOS turns `key` into a symbol, and a Cyrillic or Greek layout types no Latin letter.
+ */
 function printable(e: KeyFacts): string | null {
+  if (/^[\x21-\x7e]$/.test(e.key)) return e.key;
   const letter = /^Key([A-Z])$/.exec(e.code)?.[1];
-  if (letter) return e.shiftKey ? letter : letter.toLowerCase();
+  if (letter) return letter.toLowerCase();
   const digit = /^Digit(\d)$/.exec(e.code)?.[1];
   if (digit) return digit;
-  return /^[A-Za-z0-9]$/.test(e.key) ? e.key : null;
+  return PUNCTUATION[e.code]?.[e.shiftKey ? 1 : 0] ?? null;
 }
 
 export function decideKey(e: KeyFacts, mode: KeyMode): KeyDecision {
@@ -102,10 +115,9 @@ function decideOwned(e: KeyFacts): KeyDecision {
       return { kind: "key", name: modified(e, "Enter", false) };
     case "Backspace":
       return { kind: "key", name: modified(e, "BSpace", false) };
-    case " ":
-      return { kind: "key", name: modified(e, "Space", false) };
   }
-  const key = printable(e);
-  // Ctrl+Shift+A is Ctrl+A to a terminal, so the letter's case follows Shift only for Alt.
-  return key ? { kind: "key", name: modified(e, e.ctrlKey ? key.toLowerCase() : key, false) } : { kind: "default" };
+  const key = e.key === " " ? " " : printable(e);
+  const event = key && chord({ ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey }, key);
+  if (!event) return { kind: "default" };
+  return "bytes" in event ? { kind: "bytes", bytes: event.bytes } : { kind: "key", name: event.key };
 }

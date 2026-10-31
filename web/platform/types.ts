@@ -37,14 +37,19 @@ export interface Viewport {
   /**
    * How far the keyboard, or Safari's form bar with a hardware keyboard, covers the bottom of
    * the page the web can see; 0 with none. The dock, sheets and toasts rise by this much (CSS
-   * reads it as `--keyboard-inset`). The app's shell moves its web view above a docked
-   * keyboard instead, so it reports 0 and nothing rises. Smaller than the `keyboard` threshold
-   * for the bar.
+   * reads it as `--keyboard-inset`). The app's web view fills the screen too, so a docked
+   * keyboard covers it the same way. Smaller than the `keyboard` threshold for the bar.
    */
   keyboardInset: number;
   /** Of the keyboard-hidden layout. */
   safeArea: SafeArea;
   keyboard: boolean;
+  /**
+   * Seconds the keyboard takes to reach `keyboardInset`, sent by the app as the keyboard starts
+   * to move, so what rises with it moves with it (`--keyboard-duration`). Absent in a browser,
+   * which learns the inset only once the keyboard is there.
+   */
+  keyboardDuration?: number;
 }
 
 export type Appearance = "system" | "light" | "dark";
@@ -71,6 +76,12 @@ export interface Lifecycle {
 }
 
 export type Unsubscribe = () => void;
+export interface MenuRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 export type HapticKind = "selection" | "rigid" | "key" | "modifier";
 export type FocusMode = "terminal" | "line" | "hidden" | "webText" | "select";
 
@@ -91,15 +102,24 @@ export type SavedTab =
   | { kind: "terminal"; key: TabKey; session: string; window: string }
   | { kind: "files"; id: string; host: string; place: FilesPlace };
 
-/** What persists across a reload. `app/persist.ts` assembles it; `workspace/saved.ts` is the one parser. */
+/** One saved workspace: a server's tabs in the order the user gave them, and the tabs it last showed. */
 export interface SavedWorkspace {
-  version: 3;
+  id: string;
+  host: string;
   /** Terminal tabs carry the last names of their session and window, so restored pills have them before the listing. */
   tabs: SavedTab[];
-  /** The active tab's id. */
-  active: string | null;
-  /** Per host, the terminal tab last activated: where Insert path and uploads go. */
-  lastTerminal: Record<string, string>;
+  /** The tab the workspace last showed: where Home opens it. */
+  last: string | null;
+  /** The terminal tab last activated: where Insert path and uploads go. */
+  lastTerminal: string | null;
+  /** The server's canonical `$HOME`, once known: a Files tab there reads "~". */
+  home: string | null;
+}
+
+/** What persists across a reload. `app/persist.ts` assembles it; `workspace/saved.ts` is the one parser. */
+export interface SavedWorkspaces {
+  version: 5;
+  workspaces: SavedWorkspace[];
   /** The host's last known name: an offline launch cannot ask `/auth/info`, yet still says "Can't reach pop-os". */
   hostName?: string;
   /** Bell attention (sessions/bells.ts): the bell mark this device last showed, by tab id, for the sessions it has seen. */
@@ -122,7 +142,7 @@ export interface DraftStore {
 
 export interface PlatformStorage {
   /** Coalesced; the latest wins. */
-  saveWorkspace(ws: SavedWorkspace): void;
+  saveWorkspace(ws: SavedWorkspaces): void;
   drafts: DraftStore;
   clearLocalData(): Promise<void>;
 }
@@ -220,6 +240,9 @@ export type PlatformEvent =
   | { type: "lineEdit"; gen: number; text: string; tab: TabKey; selection: TextRange; marked: TextRange | null }
   | { type: "lineReturn"; gen: number; text: string; tab: TabKey }
   | { type: "draftChanged"; key: TabKey }
+  /** The app's edit menu over the terminal's mark: Copy or Paste was chosen (`Platform.editMenu`), or Paste on iOS's own menu over a terminal selection. */
+  | { type: "menuCopy" }
+  | { type: "menuPaste" }
   | { type: "storage"; state: "closing" | "closed" }
   | { type: "update"; state: UpdateState };
 
@@ -238,7 +261,11 @@ export interface Platform {
   openURL(url: string): void;
   playVideo(handle: string, path: string): "handled" | "inline";
   haptic(kind: HapticKind): void;
+  /** Whether the platform's own back swipe may run (native: WebKit's left-edge swipe, which pops the page's history). Browser: no-op, since Safari owns the edge swipe. */
+  setBackSwipe(enabled: boolean): void;
   restart(reason: "stuck" | "update"): void;
+  /** Shows the platform's edit menu (Copy, Paste) over `rect`, in the page's client px, or hides it with null. Choices come back as `menuCopy` and `menuPaste`. The app only: it is what lets the terminal mark text while the keyboard is up. */
+  editMenu?: (rect: MenuRect | null) => void;
   /** Opens the platform's own screen for adding, pairing and removing servers. Native only. */
   manageHosts?: () => void;
   /** Chooses when Face ID asks again. Native only. A longer interval needs a fresh Face ID there, so the answer may be the unchanged `preferences`. */

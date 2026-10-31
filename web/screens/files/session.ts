@@ -32,7 +32,16 @@ const sessions = new WeakMap<FsApi, FilesSession>();
 export function filesSession(app: AppController, host: HostClient): FilesSession {
   const existing = sessions.get(host.fs);
   if (existing) return existing;
-  const browser = new FileBrowser({ api: host.fs, hidden: false });
+  const known = app.snapshot.workspace.workspaces.find((w) => w.host === host.hostId)?.home ?? null;
+  const browser = new FileBrowser({ api: host.fs, hidden: false, home: known });
+  // The workspace keeps the host's home, so a Files tab there is labelled "~" on every screen and after a reload.
+  let told = known;
+  browser.subscribe(() => {
+    const { home } = browser.snapshot;
+    if (home === told || home === null || host.hostId === null) return;
+    told = home;
+    app.dispatch({ type: "homeKnown", host: host.hostId, home });
+  });
   const session: FilesSession = {
     handle: host.entry.handle,
     get hostName() { return app.hosts.get(host.entry.handle)?.name ?? "the server"; },

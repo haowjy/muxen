@@ -1,5 +1,6 @@
-/* Rows drawn as DOM at the terminal's grid: each is exactly one cell tall, however wide its
-   text, so the history view and the selection snapshot line up with the canvas. */
+/* Rows drawn as DOM at the terminal's grid: each is one cell tall, however wide its text. The
+   browser rounds each row's height to its layout unit, so code that places rows measures them
+   rather than multiplying by the cell height; `fitText` matches their advance to the cell's. */
 .row {
   height: var(--cell-height);
   line-height: var(--cell-height);

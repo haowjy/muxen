@@ -196,11 +196,11 @@ export class ScrollControl {
     // The history may have been dropped under the view (its rows no longer lined up).
     this.shift = Math.min(this.shift, this.deps.history.px);
     renderer.shift(this.shift);
-    this.deps.history.place(this.shift, cell.height);
+    this.deps.history.place(this.shift, cell);
     // A first swipe up on a short buffer is still at latest and needs the fetch; coming back to latest does not.
     const returned = this.scrolled && this.atLatest;
     this.scrolledChanged();
-    if (!returned) this.deps.history.want(this.shift, renderer.viewportTop() * cell.height, cell.height, this.screenRows);
+    if (!returned) this.deps.history.want(this.shift, renderer.viewportTop() * cell.height, cell, this.screenRows);
   }
 
   /** Wheel events (or arrows) for `dy` px; returns whether any row's worth was due. */

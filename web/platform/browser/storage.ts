@@ -3,7 +3,7 @@
 // tab key. Every write is one small record. A page writes its workspace only while it has
 // focus, so the saved workspace is the one from the page used last.
 import { isTabKey, tabId } from "../tabKey";
-import type { DraftRecord, DraftStore, PlatformEvent, PlatformStorage, SavedWorkspace, TabKey } from "../types";
+import type { DraftRecord, DraftStore, PlatformEvent, PlatformStorage, SavedWorkspaces, TabKey } from "../types";
 
 const DB_NAME = "tether";
 const DB_VERSION = 1;
@@ -59,7 +59,7 @@ export function createBrowserStorage(): BrowserStorage {
   const memory = { drafts: new Map<string, DraftRecord>() };
   let closed = false;
   let persistAsked = false;
-  let pending: SavedWorkspace | null = null;
+  let pending: SavedWorkspaces | null = null;
   let flushQueued = false;
   let emitEvent: (event: PlatformEvent) => void = () => undefined;
   const channel = typeof BroadcastChannel === "function" ? new BroadcastChannel(CHANNEL) : null;

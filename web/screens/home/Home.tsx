@@ -1,56 +1,49 @@
-// Home (client-architecture.md §6.3, browser-behaviors.md "Home"): one card per server, with its
-// open tabs and what its state offers. Server-first: one server is not opened for you. The
-// gear opens Settings. Add server exists only where the platform manages servers (the app);
-// the browser has its one page origin.
-import { useApp, useAppView, useBells, useHostName } from "../../app/context";
+// Home (browser-behaviors.md "Home"): one row per workspace, which today is
+// one per server: its name, status and tab count. A row opens the workspace on the tab it last showed, or on
+// its overview when it has none. Server-first: one server is not opened for you. The gear opens Settings: in
+// the header, or docked (touch) in the bottom bar where a tab has its dock.
+// Add server exists only where the platform manages servers (the app); the browser has its one page origin.
+import { useApp, useAppView, useBells, useDocked } from "../../app/context";
 import type { HostClient } from "../../net/hosts";
-import { bellsUnavailable } from "../../sessions/bells";
+import { bellLook, bellsUnavailable } from "../../sessions/bells";
+import { BottomBar } from "../../ui/primitives/BottomBar";
 import { Button } from "../../ui/primitives/Button";
+import { DockButton } from "../../ui/primitives/DockButton";
+import { Icon } from "../../ui/primitives/Icon";
 import { IconButton } from "../../ui/primitives/IconButton";
 import { useStore } from "../../ui/store";
-import { NewSession } from "../sessions/NewSession";
-import { openSession } from "../sessions/openSession";
-import { pillMeta, tabPills } from "../terminal/tabView";
-import { terminalsOf } from "../terminal/terminals";
+import { workspaceOfHost, type Workspace, type WorkspaceState } from "../../workspace/state";
 import { HostBanner } from "../shell/HostBanner";
-import { cardOf } from "./card";
+import { cardBody } from "./card";
 import { Install } from "./Install";
-import { ServerCard, type CardTab } from "./ServerCard";
+import { WorkspaceCard } from "./WorkspaceCard";
 import styles from "./Home.module.css";
 
-/** The card a tab sits on: its host's. A lone host whose id is still unknown (offline at launch) stands for the saved tab's (§9.4: offline tabs read as reconnecting). */
-function hostOf(hostId: string, hosts: HostClient[]): HostClient | undefined {
-  return hosts.find((h) => h.hostId === hostId) ?? (hosts.length === 1 && hosts[0]?.hostId === null ? hosts[0] : undefined);
+/** The workspace a host's row opens. A lone host whose id is still unknown (offline at launch) stands for the saved workspace's (§9.4: offline tabs read as reconnecting). */
+function workspaceOf(state: WorkspaceState, host: HostClient, hosts: HostClient[]): Workspace | null {
+  return workspaceOfHost(state, host.hostId) ?? (hosts.length === 1 && host.hostId === null ? (state.workspaces[0] ?? null) : null);
 }
 
-function HostCard({ host, tabs }: { host: HostClient; tabs: CardTab[] }) {
+function Row({ host }: { host: HostClient }) {
   const app = useApp();
   const handle = host.entry.handle;
   const sessions = useStore(app.sessions, (s) => s.hosts[handle]);
-  const { body, pickable, count } = cardOf(host, sessions);
-  const workspaceTabs = useAppView((v) => v.workspace.tabs);
-  const unreadable = bellsUnavailable(useBells(), host.hostId);
+  const workspace = useAppView((v) => workspaceOf(v.workspace, host, v.hosts));
+  const bells = useBells();
+  const body = cardBody(host, sessions);
   return (
-    <ServerCard
+    <WorkspaceCard
       name={host.name ?? "the server"}
-      tabs={tabs}
+      tabs={workspace?.tabs.length ?? 0}
+      bell={workspace?.tabs.some((t) => bellLook(bells, t.id).ring) ?? false}
       body={body}
-      bellsUnavailable={unreadable}
+      bellsUnavailable={bellsUnavailable(bells, host.hostId)}
       notice={body.kind !== "offline" && <HostBanner host={host} />}
       onRetry={() => { app.retryHost(handle); }}
-      picker={pickable ? {
-        count,
-        onOpen: (opener) => {
-          // The row lands on a tab, then opens the sheet over it: this server's tab if there is one, else its
-          // first session's tab. With neither, the sheet opens over Home (a later pick still moves the route under it).
-          const onHost = host.hostId !== null ? workspaceTabs.find((t) => t.host === host.hostId) : undefined;
-          const listing = sessions?.listing;
-          if (onHost) app.dispatch({ type: "activated", id: onHost.id });
-          else if (listing && listing.sessions[0]) openSession(app, host, listing, listing.sessions[0]);
-          app.openOverlay({ screen: "sessions", name: "sheet" }, opener);
-        },
+      onOpen={workspace ? () => {
+        if (workspace.last) app.dispatch({ type: "activated", id: workspace.last });
+        else app.router.toOverview(workspace.id);
       } : undefined}
-      newSession={<NewSession host={host} />}
     />
   );
 }
@@ -58,43 +51,30 @@ function HostCard({ host, tabs }: { host: HostClient; tabs: CardTab[] }) {
 export function Home() {
   const app = useApp();
   const hosts = useAppView((v) => v.hosts);
-  const workspace = useAppView((v) => v.workspace);
-  const statuses = useStore(terminalsOf(app), (s) => s.tabs);
-  const hostName = useHostName();
-  const bells = useBells();
   const manageHosts = app.platform.manageHosts;
-
-  const rows = tabPills(workspace.tabs, statuses, hostName, null, Date.now(), bells).flatMap((pill) => {
-    const host = hostOf(pill.host, hosts);
-    if (!host) return [];
-    const row: CardTab = {
-      id: pill.id,
-      icon: pill.kind === "files" ? "folder" : "terminal",
-      label: pill.full,
-      meta: pillMeta(pill),
-      selected: pill.id === workspace.active,
-      bell: pill.bell,
-      onOpen: () => { app.dispatch({ type: "activated", id: pill.id }); },
-      onClose: () => { app.dispatch({ type: "closed", id: pill.id }); },
-    };
-    return [{ host, row }];
-  });
+  const docked = useDocked();
+  const openSettings = (opener: Element): void => { app.openOverlay({ screen: "settings", name: "settings" }, opener); };
 
   return (
     <div class={styles.home}>
       <header class={styles.header}>
         <div class={styles.bar}>
           <h1 class={styles.title}>tether</h1>
-          <IconButton icon="settings" label="Settings" onClick={(e) => { app.openOverlay({ screen: "settings", name: "settings" }, e.currentTarget); }} />
+          {!docked && <IconButton icon="settings" label="Settings" onClick={(e) => { openSettings(e.currentTarget); }} />}
         </div>
       </header>
       <div class={styles.body}>
         <div class={styles.column}>
-          {hosts.map((h) => <HostCard key={h.entry.handle} host={h} tabs={rows.filter((r) => r.host === h).map((r) => r.row)} />)}
+          {hosts.map((h) => <Row key={h.entry.handle} host={h} />)}
           {manageHosts && <Button variant="quiet" icon="plus" class={styles.add} onClick={manageHosts}>Add server</Button>}
           <Install />
         </div>
       </div>
+      {docked && (
+        <BottomBar label="Home">
+          <DockButton kind="control" data-end="" aria-label="Settings" onClick={(e) => { openSettings(e.currentTarget); }}><Icon name="settings" size={20} /></DockButton>
+        </BottomBar>
+      )}
     </div>
   );
 }

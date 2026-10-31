@@ -13,12 +13,38 @@ export function toggle(armed: Armed, key: "ctrl" | "alt"): Armed {
 /** Keys tmux names that take a C- or M- prefix (the daemon's allowlist, `is_key_name`). */
 const PREFIXABLE = /^(?:Enter|Escape|Tab|BSpace|Space|Up|Down|Left|Right|Home|End|PageUp|PageDown|IC|DC)$/;
 
-function chordName(armed: "ctrl" | "alt", text: string): string | null {
-  const prefix = armed === "ctrl" ? "C-" : "M-";
-  if (text === " ") return `${prefix}Space`;
-  if (!/^[A-Za-z0-9]$/.test(text)) return null;
-  // Ctrl+Shift+A is Ctrl+A to a terminal; Alt keeps the case.
-  return prefix + (armed === "ctrl" ? text.toLowerCase() : text);
+export interface Chord {
+  ctrl: boolean;
+  alt: boolean;
+  shift: boolean;
+}
+
+/** What Ctrl does to a punctuation key: `[ \ ] ^ _` are 0x1b to 0x1f, `/` is `_`'s byte, `?` is DEL. */
+function controlByte(char: string): number | null {
+  const code = char.charCodeAt(0);
+  if (char === "/") return 0x1f;
+  if (char === "?") return 0x7f;
+  return code >= 0x5b && code <= 0x5f ? code & 0x1f : null;
+}
+
+const bytesOf = (...bytes: number[]): { bytes: string } => ({ bytes: btoa(String.fromCharCode(...bytes)) });
+
+/**
+ * What a held Ctrl and/or Alt makes of one typed character: the one rule for a hardware chord
+ * (`decideKey`) and an armed key-row modifier (`apply`), the same as the app's native `KeyMapper`.
+ * Space, letters and digits take a `C-`/`M-` name; Ctrl on a punctuation key is its control byte
+ * (Ctrl+[ is ESC); Alt on one is ESC then the character (Alt+. in bash); Ctrl+Alt adds the ESC.
+ * Shift matters only for a letter, where it makes the name uppercase. `null`: not a chord.
+ */
+export function chord({ ctrl, alt, shift }: Chord, char: string): { key: string } | { bytes: string } | null {
+  if (!ctrl && !alt) return null;
+  const prefix = `${ctrl ? "C-" : ""}${alt ? "M-" : ""}`;
+  if (char === " ") return { key: `${prefix}Space` };
+  const control = ctrl ? controlByte(char) : null;
+  if (control !== null) return alt ? bytesOf(0x1b, control) : bytesOf(control);
+  if (alt && /^[\x21-\x7e]$/.test(char) && !/^[A-Za-z0-9]$/.test(char)) return bytesOf(0x1b, char.charCodeAt(0));
+  if (!/^[A-Za-z0-9]$/.test(char)) return null;
+  return { key: prefix + (shift ? char.toUpperCase() : char.toLowerCase()) };
 }
 
 /**
@@ -29,8 +55,13 @@ function chordName(armed: "ctrl" | "alt", text: string): string | null {
 export function apply(armed: Armed, events: InputEvent[]): { events: InputEvent[]; armed: Armed } {
   const first = events[0];
   if (armed === null || first === undefined) return { events, armed };
-  let name: string | null = null;
-  if ("text" in first) name = chordName(armed, first.text);
-  else if ("key" in first && PREFIXABLE.test(first.key)) name = `${armed === "ctrl" ? "C-" : "M-"}${first.key}`;
-  return { events: name === null ? events : [{ key: name }, ...events.slice(1)], armed: null };
+  let event: InputEvent | null = null;
+  // A capital typed on the soft keyboard is a shifted letter, but an armed ctrl still sends Ctrl-C for it: the hardware chord
+  // keeps Shift (`C-C`, as KeyMapper does), and an app reading extended keys would not take `C-C` for Ctrl-C.
+  if ("text" in first) {
+    const shift = armed === "alt" && first.text !== first.text.toLowerCase();
+    event = chord({ ctrl: armed === "ctrl", alt: armed === "alt", shift }, first.text);
+  }
+  else if ("key" in first && PREFIXABLE.test(first.key)) event = { key: `${armed === "ctrl" ? "C-" : "M-"}${first.key}` };
+  return { events: event === null ? events : [event, ...events.slice(1)], armed: null };
 }

@@ -1,0 +1,14 @@
+.handle {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--row-height);
+  height: var(--row-height);
+  border: 0;
+  background: none;
+  color: var(--color-text-muted);
+  /* The drag starts here and nowhere else. */
+  touch-action: none;
+  cursor: grab;
+}
+.handle:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: -2px; }

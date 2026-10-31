@@ -1,8 +1,7 @@
-# File API: favorites, listing, raw reads, uploads
+# File API: listing, raw reads, uploads
 
 `src/fs/` serves the phone's file manager: directory listings, file bytes with Range
-for the viewers and the native video player, photo uploads, and the favorites that
-shortcut to folders. It reads any path the daemon's user can read: there is no scope.
+for the viewers and the native video player, and photo uploads. It reads any path the daemon's user can read: there is no scope.
 A device token already runs any command in tmux as Jimmy, so a boundary here would
 guard against nothing but Jimmy. Every path the file API touches passes through one
 function, `fs::open`, which canonicalizes the path and returns an open descriptor with
@@ -32,96 +31,29 @@ auth is [auth.md](auth.md). Decisions and the alternatives rejected are in
 | upload flush | every 2 MiB: `fdatasync`, then drop the written pages | the dirty pages in between are charged to the unit, and the [ceiling](#limits-and-the-memory-ceiling) counts them |
 | page drop during a raw read | files over 8 MiB: after each chunk, everything from the response's first byte to the current position | |
 | socket buffers, every accepted socket | `SO_SNDBUF` and `SO_RCVBUF` 64 KiB (Linux doubles them); Serve reaches the daemon over a local Unix-socket hop, not another network round trip | the writer waits |
-| path in a request | 4,096 bytes, UTF-8, absolute, no NUL | `400 bad_request` |
-| JSON request body (`/fs/favorites/*`, `/fs/uploads-dir`) | 4 KiB | `413` |
-| config write retries on a concurrent edit | 3 | `503 busy` |
+| path in a request | 4,096 bytes, UTF-8, absolute or `~`-prefixed, no NUL | `400 bad_request` |
 
-## Favorites
+## The uploads folder
 
-A **favorite** is a shortcut to a directory: the `favorites` entries in `config.toml`,
-each canonicalized, plus `uploads_dir` (default `~/tether-uploads`), which the picker
-lists too. Favorites are not a boundary; reading never consults them. Entries are
-absolute or start with `~/`; anything else is ignored with a warning. An entry that
-doesn't exist or isn't a directory is reported `ok: false` and otherwise ignored.
-`uploads_dir` follows the same rule, with one difference: a missing absolute path is
-created by the next upload, but one that is neither absolute nor `~/` shows `ok: false`
-and every upload answers `409 not_a_directory`.
+Uploads go to `uploads_dir` in `config.toml` (default `~/tether-uploads`), absolute or
+starting with `~/`. A missing absolute path is created by the next upload; one that is
+neither absolute nor `~/` makes every upload answer `409 not_a_directory`. There are no
+favorites and no route that writes `config.toml`: Jimmy edits it by hand
+([decisions.md](decisions.md#no-favorites-2026-10-30)).
 
-**The config routes re-read `favorites` and `uploads_dir` on every request**, as auth
-re-reads `auth.toml` ([auth.md](auth.md#state-on-disk)): the file is small, so a hand
-edit or a Settings change applies to the next request with no watcher, cache or
-restart. They read the path `Config::load` resolved at startup (`--config`, else the
-default), kept in `App`, with the same rule: a missing default file means the
-defaults. A file that exists but can't be read or parsed **fails closed**:
-`/fs/favorites`, the writes and uploads answer `503 config_unavailable`, and nothing
-writes the file until it parses. Listing and raw reads don't read the config. The
-other config keys are still read once, at startup.
-
-### Favorites routes
-
-| Route | Body | Response | Rule |
-|---|---|---|---|
-| `GET /fs/favorites` | | `Favorites` | |
-| `POST /fs/favorites/add` | `{path}` | `Favorites` | canonicalized; must be an existing directory; stored canonical; a no-op if a favorite already has that canonical path |
-| `POST /fs/favorites/remove` | `{path}` | `Favorites` | removes every entry whose stored text or canonical path equals `path`; a no-op if none |
-| `POST /fs/uploads-dir` | `{path}` | `Favorites` | as `add`, then replaces `uploads_dir` |
-
-```text
-Favorites = { home: string,                      // canonical $HOME
-              favorites: [{ path: string,        // as stored in config.toml
-                            canonical: string | null,  // null: missing or not a directory
-                            ok: bool }],
-              uploadsDir: { path, canonical, ok } }
-```
-
-The picker's Files side lists `home` first (built in, never stored), then every
-favorite (an entry that isn't `ok` shows as Missing, with a remove), sorted by the
-client, then `uploadsDir` when it is `ok`
-([browser-behaviors.md](client/browser-behaviors.md#files)). The daemon returns the
-favorites in config order. Path completion, in the Files tab and the picker, uses
-`/fs/list` like any folder.
-
-### Writing `config.toml`
-
-Writers are the daemon (the routes above) and Jimmy's editor; a future CLI command
-would follow the same steps. The daemon runs this blocking work on the fs lane.
-`files::lock` provides the shared state-directory flock; `files::Temp` writes the
-replacement:
-
-1. Take the `flock` on `$XDG_STATE_HOME/tether/lock`, the one auth's writers hold
-   ([auth.md](auth.md#state-on-disk)), for the whole read-modify-write.
-2. Find the real file with `canonicalize`, so a symlinked `config.toml` (dotfiles)
-   keeps its link and the target is written. A missing file starts empty; its
-   directory is created 0700. **A link that leads to nothing is not written
-   through:** a `config.toml` that is a dangling symlink, or one whose directory (or a
-   directory above it) is a dangling symlink, is `409 config_read_only`, and nothing
-   changes: the link, its target (still absent) and the directories on the way. The
-   write would otherwise create a file, and perhaps directories, wherever the link
-   points (a moved dotfiles checkout, say), from a tap on the phone. Reads are
-   unchanged.
-3. Read it, note its `(dev, ino, size, mtime)`, and parse it with `toml_edit`. A file
-   that doesn't parse, or that `Config` would refuse, is left alone: `503
-   config_unavailable`.
-4. Change only the top-level `favorites` or `uploads_dir`. `toml_edit` keeps comments,
-   order and unknown keys, so a newer daemon's keys survive an older one's write.
-5. Remove a stale `<name>.tmp`, then create it relative to the open directory with
-   `openat`, `O_EXCL` and the exact original mode (new files 0600); write the text and
-   `fsync` it. `files::Temp` compares the target stamp without following a symlink: if
-   it changed since step 3,
-   delete the temp and start over from step 3 (at most 3 tries, then `503 busy`).
-   Otherwise rename the temp over it and `fsync` the directory. A `Temp` is not deleted
-   by `Drop`; cleanup runs on a blocking lane, never on the runtime thread.
-
-A target on a read-only filesystem, one Jimmy can't write (a home-manager link into
-`/nix/store`), or a symlink to nothing (step 2), is `409 config_read_only`. Readers never see a partial file, since each
-write is one rename. An editor that saves between the re-stat and the rename loses
-one side's change; one that rewrites the file in place can be read mid-write and its
-truncated text written back. Both windows are microseconds wide; accepted.
+**Uploads re-read `uploads_dir` on every request**, as auth re-reads `auth.toml`
+([auth.md](auth.md#state-on-disk)): the file is small, so a hand edit applies to the next
+upload with no watcher, cache or restart. They read the path `Config::load` resolved at
+startup (`--config`, else the default), kept in `App`, with the same rule: a missing
+default file means the defaults. A file that exists but can't be read or parsed **fails
+closed**: uploads answer `503 config_unavailable`. Listing and raw reads don't read the
+config. The other config keys are still read once, at startup.
 
 ## Path resolution: `fs::open`
 
 ```text
-fs::open(path: &str, want: Want) -> Result<Opened, FsError>
+fs::open(path: &str, home: &Path, want: Want) -> Result<Opened, FsError>
+fs::open_absolute(path: &str, want: Want) -> Result<Opened, FsError>   // path already absolute
 Want   = Dir | File
 Opened = { file: File, path: String /* canonical */, meta: Metadata }
 ```
@@ -130,8 +62,10 @@ A third `Want`, `Parent`, belongs to v2's writes ([below](#v2-what-this-must-not
 and doesn't exist yet. `open` runs on the fs lane (the dir lane for completion
 listings), and does, in order:
 
-1. **Shape.** `path` must be absolute, at most 4,096 bytes and free of NUL; otherwise
-   `bad_request`. Paths on the wire are UTF-8 strings, so a non-UTF-8 name can't be
+1. **Shape.** `path` must be absolute, or `~` or start with `~/`, which is the daemon user's
+   `$HOME` (`fs::expand`, as `uploads_dir` uses; `open` is `expand` then `open_absolute`, the one open path); at most 4,096 bytes and free of NUL; otherwise
+   `bad_request`. The client learns the canonical home from a listing of `~`, whose `path` is
+   canonical: Open files lists `~` anyway, so knowing home costs no request of its own. Paths on the wire are UTF-8 strings, so a non-UTF-8 name can't be
    requested ([listing](#get-fslistpath)).
 2. **Canonicalize** with `realpath`: every symlink and every `..` is resolved against
    the real tree, so `..` needs no lexical rule and a symlink is followed like any
@@ -163,7 +97,8 @@ directory"). It reads no config, so a broken `config.toml` never blocks a new wi
 Every route sits in the `devices` router in `src/http/`, behind both auth layers
 ([auth.md](auth.md#endpoints)). A path rides in the URL path, not the query:
 `/fs/raw/home/jimmy/repo/clip.mov`. The client percent-encodes each segment and joins
-them with `/`; the daemon decodes and prepends `/`. `{*path}` doesn't match an empty path, so `/fs/list/` is registered as its own route,
+them with `/`; the daemon decodes and prepends `/`. `~` and `~/…` ride bare after the route's own `/`
+(`/fs/list/~`) and keep no leading `/`. `{*path}` doesn't match an empty path, so `/fs/list/` is registered as its own route,
 listing `/`. The
 native player then sees the file's extension in the URL, and the Markdown viewer
 resolves a relative `![](img.png)` against the document's own raw URL. A path that
@@ -327,7 +262,8 @@ the cap against `Content-Length` up front, when sent, and against the running co
    lost to a power cut is re-sent.
 
 If cleanup cannot get a thread from the fs lane, a `.part` file is left behind; startup
-sweeps stale part files from the uploads directory.
+sweeps stale part files from the `uploads_dir` read at startup (uploads re-read the file on
+every request, so a later edit isn't swept until the next start).
 6. Answer `201 { path, size }`, `path` the absolute canonical path, which native
    inserts, quoted, into the tab ([ios-shell.md](ios-shell.md#files-and-sharing)).
 
@@ -356,10 +292,9 @@ The auth middleware also uses this body for `forbidden`, `auth_required`,
 | 404 | `not_found` | `ENOENT`, `ENOTDIR` while resolving, `ELOOP` at open |
 | 409 | `not_a_directory`, `not_a_file` | the wrong kind for the route; a FIFO, socket or device is `not_a_file`; an upload when `uploads_dir` isn't an absolute or `~/` path or isn't a directory |
 | 409 | `memory_backed` | on Linux, an upload destination directory on tmpfs or ramfs; its pages would remain charged to tether's unit while the file exists |
-| 409 | `config_read_only` | `config.toml` (or its link target) can't be written: `EROFS`, `EACCES`; or `config.toml`, its directory or one above it is a symlink to nothing |
 | 413 | `too_large` | an upload over the cap |
 | 416 | `bad_range` | a range starting past the end |
-| 503 | `busy` | no slot within the wait, too many waiting, the upload slot taken, or config write retries spent; `Retry-After: 1` |
+| 503 | `busy` | no slot within the wait, too many waiting, or the upload slot taken; `Retry-After: 1` |
 | 503 | `config_unavailable` | `config.toml` exists but can't be read or parsed |
 | 503 | `identity_unavailable` | LocalAPI could not establish the current Tailscale identity |
 | 507 | `no_space` | `ENOSPC` or `EDQUOT` during an upload |
@@ -402,8 +337,7 @@ which is why they have a row and why the flush interval is 2 MiB, not larger.
 ## Logging
 
 - **Writes at `info`, by action and canonical path:** an upload's final path and
-  size, a favorite added or removed, `uploads_dir` changed, a config write retried or
-  refused.
+  size.
 - **Refusals** (`denied`) at `warn` with the path
   asked for.
 - **Reads** (listings, raw ranges) at `debug` only: one video is dozens of requests.
@@ -419,19 +353,17 @@ without a disk.
 
 | File | Contents |
 |---|---|
-| `fs/mod.rs` | `Favorites::load()` (config read, canonicalization), `FsError` with its status and code |
+| `fs/mod.rs` | the `uploads_dir` read, `FsError` with its status and code |
 | `fs/open.rs` | `fs::open`, `fs::check_dir`, the platform descriptor-path lookup |
 | `fs/slots.rs` | scan, raw-response and upload permits, with waits counted against the fs lane |
 | `fs/list.rs` | the scan; pure sort and page |
 | `fs/raw.rs` | pure `parse_range` and `If-Range`; the chunk producer; ETags come from `files::Stamp` |
 | `fs/mime.rs` | the extension table |
 | `fs/upload.rs` | pure name generation; part file, flush, rename, startup sweep |
-| `fs/config_write.rs` | the `toml_edit` change (pure, string in, string out) and locked write through `files::Temp` |
 
 Wire types go in `src/proto/fs.rs` and are generated for TypeScript like the WebSocket
 messages ([daemon-core.md §5.5](daemon-core.md#55-type-generation)); Swift hand-writes
-only the upload response. New dependencies: the `toml_edit` crate and axum's `query`
-feature. Tests run `fs::open` against a temp tree with symlinks, `..`, a FIFO and a non-UTF-8
+only the upload response. New dependency: axum's `query` feature. Tests run `fs::open` against a temp tree with symlinks, `..`, a FIFO and a non-UTF-8
 name, and swap a component for a symlink between canonicalize and open to exercise
 step 4.
 

@@ -30,7 +30,7 @@ class Finger {
   async drag(x0: number, y0: number, x1: number, y1: number, steps = 10, gap = 12): Promise<void> {
     for (let i = 1; i <= steps; i++) {
       await this.move(x0 + ((x1 - x0) * i) / steps, y0 + ((y1 - y0) * i) / steps);
-      await this.page.waitForTimeout(gap);
+      if (i < steps) await this.page.waitForTimeout(gap); // no wait after the last move: a fling needs the lift close behind it
     }
   }
 }
@@ -80,127 +80,84 @@ for (const version of VERSIONS) {
       return await cellCentre(page, session, Math.floor((cols ?? 40) / 2), row);
     };
 
-    test("long-press highlights the word at once, dragging extends it by cell, release shows the menu, Copy copies, and no mouse event or key reaches the pane", async ({ page, context }) => {
-      await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-      const s = newSession();
-      const finger = await open(page, s);
-      stack.tmux("send-keys", "-t", s, "echo alpha beta gamma", "Enter");
-      await paneIncludes(s, /^alpha beta gamma$/m);
-      const row = stack.tmux("capture-pane", "-p", "-t", s).split("\n").findIndex((l) => l === "alpha beta gamma");
-      const start = await cellCentre(page, s, 2, row); // inside "alpha"
-      const before = pane(s);
-      await finger.down(start.x, start.y);
-      await page.waitForTimeout(550);
-      // Still held: the word is highlighted, the menu waits for the release.
-      expect(await page.evaluate(() => getSelection()?.toString())).toBe("alpha");
-      await expect(page.getByRole("menuitem", { name: "Copy" })).toHaveCount(0);
-      const end = await cellCentre(page, s, 13, row); // the "m" of "gamma"
-      await finger.drag(start.x, start.y, end.x, end.y, 6, 20);
-      expect(await page.evaluate(() => getSelection()?.toString())).toBe("alpha beta gam");
-      await finger.up();
-      await expect(page.getByRole("menuitem", { name: "Copy" })).toBeVisible();
-      await page.getByRole("menuitem", { name: "Copy" }).tap();
-      await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("alpha beta gam");
-      expect(pane(s)).toBe(before);
-    });
+    /** The page's selection from the start of the row holding `from` to `offset` characters into the row holding `to`. */
+    async function select(page: Page, from: string, to: string, offset: number): Promise<void> {
+      await page.evaluate(([fromRow, toRow, end]) => {
+        const rows = [...document.querySelectorAll<HTMLElement>(".xterm-rows > div")];
+        const text = (needle: string | undefined): Node => {
+          const row = rows.find((r) => r.textContent.includes(needle ?? ""));
+          const node = row && document.createTreeWalker(row, NodeFilter.SHOW_TEXT).nextNode();
+          if (!node) throw new Error(`no row with ${needle ?? ""}`);
+          return node;
+        };
+        getSelection()?.setBaseAndExtent(text(fromRow), 0, text(toRow), Number(end));
+      }, [from, to, String(offset)]);
+    }
 
-    test("long-press released over a word selects it, Copy puts it on the clipboard, and nothing reaches the pane", async ({ page, context }) => {
-      await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-      const s = newSession();
-      const finger = await open(page, s);
-      stack.tmux("send-keys", "-t", s, "echo alpha beta gamma", "Enter");
-      await paneIncludes(s, /^alpha beta gamma$/m);
-      const row = stack.tmux("capture-pane", "-p", "-t", s).split("\n").findIndex((l) => l === "alpha beta gamma");
-      const at = await cellCentre(page, s, 7, row); // inside "beta"
-      const before = pane(s);
-      await finger.down(at.x, at.y);
-      await page.waitForTimeout(550);
-      await finger.up();
-      await expect(page.getByRole("menuitem", { name: "Copy" })).toBeVisible();
-      await expect(page.getByRole("menuitem", { name: "Paste" })).toBeVisible();
-      expect(await page.evaluate(() => getSelection()?.toString())).toBe("beta");
-      await page.getByRole("menuitem", { name: "Copy" }).tap();
-      await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("beta");
-      await expect(page.getByRole("menuitem", { name: "Copy" })).toHaveCount(0);
-      expect(pane(s)).toBe(before);
-    });
-
-    test("Copy keeps the logical line across a soft wrap; a touch on the snapshot scrolls it and leaves the selection alone", async ({ page, context }) => {
-      await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-      const s = newSession();
-      stack.tmux("send-keys", "-t", s, "seq 1 60", "Enter");
-      await paneIncludes(s, /^60$/m);
-      const finger = await open(page, s);
-      const words = Array.from({ length: 24 }, (_, i) => `word${String(i).padStart(2, "0")}`).join(" ");
-      stack.tmux("send-keys", "-t", s, `echo '${words}'`, "Enter");
-      await paneIncludes(s, /word23\n?/);
-      const flat = stack.tmux("capture-pane", "-p", "-t", s).split("\n");
-      const first = flat.findIndex((l) => l.startsWith("word00"));
-      expect(first).toBeGreaterThanOrEqual(0);
-      const at = await cellCentre(page, s, 2, first + 1); // a word on the continuation row
-      await finger.down(at.x, at.y);
-      await page.waitForTimeout(550);
-      await finger.up();
-      await expect(page.getByRole("menuitem", { name: "Copy" })).toBeVisible();
-      const word = (await page.evaluate(() => getSelection()?.toString())) ?? "";
-      expect(word.length).toBeGreaterThan(0);
-      // The snapshot's own touches are the system's: a swipe scrolls its rows and neither ends selection nor reaches the pane.
-      const layer = page.locator("[data-row]").first().locator("..");
-      const scrollTop = (): Promise<number> => layer.evaluate((el) => el.scrollTop);
-      const before = await scrollTop();
-      expect(before).toBeGreaterThan(0);
-      const grip = { x: 360, y: 450 }; // the right edge, clear of the edit menu
-      await finger.down(grip.x, grip.y);
-      await finger.drag(grip.x, grip.y, grip.x, grip.y + 150, 8, 12);
-      await finger.up();
-      await expect.poll(scrollTop).toBeLessThan(before);
-      expect(await page.evaluate(() => getSelection()?.toString())).toBe(word);
-      await expect(page.getByRole("menuitem", { name: "Copy" })).toBeVisible();
-      // A handle drag is the selection's focus moving: extend it to the end of the line.
-      await page.evaluate(() => {
-        const rowEls = [...document.querySelectorAll<HTMLElement>("[data-row]")];
-        const last = rowEls.findLast((r) => r.textContent.includes("word23"))?.firstChild;
-        if (!last) throw new Error("row not found");
-        getSelection()?.extend(last, (last.textContent ?? "").length);
-      });
-      await page.getByRole("menuitem", { name: "Copy" }).tap();
-      expect(words.split(word)).toHaveLength(2);
-      await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(words.slice(words.indexOf(word)));
-    });
-
-    test("a tap on the snapshot clears the selection and ends selection mode", async ({ page }) => {
+    test("a long press is the system's: no snapshot, no menu of tether's, and nothing reaches the pane", async ({ page }) => {
       const s = newSession();
       const finger = await open(page, s);
       stack.tmux("send-keys", "-t", s, "echo alpha beta gamma", "Enter");
       await paneIncludes(s, /^alpha beta gamma$/m);
       const row = stack.tmux("capture-pane", "-p", "-t", s).split("\n").findIndex((l) => l === "alpha beta gamma");
       const at = await cellCentre(page, s, 7, row);
+      const before = pane(s);
       await finger.down(at.x, at.y);
       await page.waitForTimeout(550);
-      await finger.up();
-      await expect(page.getByRole("menuitem", { name: "Copy" })).toBeVisible();
-      const away = await cellCentre(page, s, 40, row + 3);
-      await finger.down(away.x, away.y);
       await finger.up();
       await expect(page.locator("[data-row]")).toHaveCount(0);
       await expect(page.getByRole("menuitem", { name: "Copy" })).toHaveCount(0);
+      expect(pane(s)).toBe(before);
     });
 
-    test("long-press released over a blank cell opens Paste alone, and Paste sends one paste without Enter", async ({ page, context }) => {
-      await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-      const s = newSession("cat -vt");
+    test("Copy joins a soft-wrapped command into one line, from the page's selection of the rows", async ({ page }) => {
+      const s = newSession();
+      await open(page, s);
+      const words = Array.from({ length: 24 }, (_, i) => `word${String(i).padStart(2, "0")}`).join(" ");
+      // The command line holds neither the words nor the tail as typed, so the output's rows are the only matches.
+      stack.tmux("send-keys", "-t", s, "echo $(seq -f 'word%02g' 0 23); printf 'ta%s\\n' il-line", "Enter");
+      await paneIncludes(s, /^tail-line$/m);
+      await expect(page.locator(".xterm-rows")).toContainText("tail-line");
+      await select(page, "word00", "tail-line", 4);
+      const copied = await page.evaluate(() => {
+        const data = new DataTransfer();
+        const rows = document.querySelectorAll(".xterm-rows > div");
+        rows[rows.length - 1]?.dispatchEvent(new ClipboardEvent("copy", { clipboardData: data, bubbles: true, cancelable: true }));
+        return data.getData("text/plain");
+      });
+      expect(copied).toBe(`${words}\ntail`);
+      // A range dragged out of the terminal keeps what is inside it; one ending at the next row's start adds no blank line.
+      const copyAfter = (extend: string): Promise<string> => page.evaluate((how) => {
+        const selection = getSelection();
+        const rows = [...document.querySelectorAll(".xterm-rows > div")];
+        const tail = rows.find((r) => r.textContent.includes("tail-line"));
+        if (!selection || !tail?.nextElementSibling) throw new Error("no tail row");
+        if (how === "out") selection.extend(document.body, document.body.childNodes.length);
+        else selection.setBaseAndExtent(tail.firstChild ?? tail, 0, tail.nextElementSibling, 0);
+        const data = new DataTransfer();
+        tail.dispatchEvent(new ClipboardEvent("copy", { clipboardData: data, bubbles: true, cancelable: true }));
+        return data.getData("text/plain");
+      }, extend);
+      expect(await copyAfter("row-end")).toBe("tail-line");
+      await select(page, "word00", "tail-line", 4);
+      expect((await copyAfter("out")).startsWith(`${words}\ntail-line`)).toBe(true);
+    });
+
+    test("a tap elsewhere closes a selection of the rows and does nothing else", async ({ page }) => {
+      const s = newSession();
       const finger = await open(page, s);
-      await page.evaluate(() => navigator.clipboard.writeText("pasted-text"));
-      const at = await mid(page, s, 12);
-      await finger.down(at.x, at.y);
-      await page.waitForTimeout(550);
+      stack.tmux("send-keys", "-t", s, "printf 'alp%s\\n' ha-beta", "Enter");
+      await paneIncludes(s, /^alpha-beta$/m);
+      await expect(page.locator(".xterm-rows")).toContainText("alpha-beta");
+      const row = stack.tmux("capture-pane", "-p", "-t", s).split("\n").findIndex((l) => l === "alpha-beta");
+      const before = pane(s);
+      await select(page, "alpha-beta", "alpha-beta", 5);
+      expect(await page.evaluate(() => getSelection()?.toString())).toBe("alpha");
+      const away = await cellCentre(page, s, 40, row + 3);
+      await finger.down(away.x, away.y);
       await finger.up();
-      await expect(page.getByRole("menuitem", { name: "Paste" })).toBeVisible();
-      await expect(page.getByRole("menuitem", { name: "Copy" })).toHaveCount(0);
-      await page.getByRole("menuitem", { name: "Paste" }).tap();
-      await paneIncludes(s, "pasted-text");
-      expect(pane(s)).not.toMatch(/pasted-text\n.*pasted-text/);
-      await expect(page.getByRole("menuitem", { name: "Paste" })).toHaveCount(0);
+      expect(await page.evaluate(() => getSelection()?.toString())).toBe("");
+      expect(pane(s)).toBe(before);
     });
 
     test("a tap in an application with mouse mode sends a click at the cell", async ({ page }) => {
@@ -212,25 +169,26 @@ for (const version of VERSIONS) {
       await paneIncludes(mouse, "^[[<0;10;8M^[[<0;10;8m");
     });
 
-    test("a tap on the cursor's row or one beside it raises the keyboard; a tap elsewhere or with it up never lowers it", async ({ page }) => {
+    test("a tap on the terminal never raises or lowers the keyboard", async ({ page }) => {
       const shell = newSession();
       const finger = await open(page, shell);
       await paneIncludes(shell, /\$ /);
       const before = pane(shell);
       const keyboard = page.getByRole("textbox", { name: "Terminal keyboard" });
       const far = await mid(page, shell, 8);
-      await finger.down(far.x, far.y);
-      await finger.up();
+      const near = await mid(page, shell, 1); // the row under the prompt
+      for (const at of [far, near]) {
+        await finger.down(at.x, at.y);
+        await finger.up();
+      }
       await page.waitForTimeout(500);
       expect(pane(shell)).toBe(before);
       await expect(keyboard).not.toBeFocused();
-      const below = await mid(page, shell, 1); // the row under the prompt
-      await finger.down(below.x, below.y);
-      await finger.up();
-      await expect(keyboard).toBeFocused();
-      // With the keyboard up, a tap far away keeps it up.
-      await finger.down(far.x, far.y);
-      await finger.up();
+      await keyboard.focus();
+      for (const at of [far, near]) {
+        await finger.down(at.x, at.y);
+        await finger.up();
+      }
       await expect(keyboard).toBeFocused();
     });
 
@@ -264,17 +222,82 @@ for (const version of VERSIONS) {
       await expect(page.getByRole("button", { name: "Jump to latest" })).toBeVisible();
       const history = await page.locator("[data-history]").innerText();
       expect(history).toMatch(/row 3\d\d/);
+      // Copy across the seam between the history view and xterm's first row takes the rows in order.
+      const seam = await page.evaluate(() => {
+        const last = document.querySelector("[data-history]")?.lastElementChild;
+        const first = document.querySelector(".xterm-rows")?.firstElementChild;
+        const from = last && document.createTreeWalker(last, NodeFilter.SHOW_TEXT).nextNode();
+        const to = first && document.createTreeWalker(first, NodeFilter.SHOW_TEXT).nextNode();
+        if (!from || !to) throw new Error("no rows at the seam");
+        getSelection()?.setBaseAndExtent(from, 0, to, to.textContent?.length ?? 0);
+        const data = new DataTransfer();
+        first.dispatchEvent(new ClipboardEvent("copy", { clipboardData: data, bubbles: true, cancelable: true }));
+        return data.getData("text/plain");
+      });
+      const [above, below] = seam.split("\n").map((line) => Number(/row (\d+)/.exec(line)?.[1]));
+      expect(seam.split("\n")).toHaveLength(2);
+      expect(below).toBe((above ?? 0) + 1);
       // Momentum: a flick keeps going after the finger lifts.
       const top = async (): Promise<number> => (await page.locator("[data-history]").boundingBox())?.y ?? 0;
       await finger.down(at.x, at.y + 200);
       await finger.drag(at.x, at.y + 200, at.x, at.y + 380, 6, 8);
       await finger.up();
+      // The fling counts only if the last move was within 80 ms of the lift, so lift at once, then poll: the coast
+      // moves the history again and again after the finger is gone.
       const lifted = await top();
-      await page.waitForTimeout(120);
-      const later = await top();
-      expect(later).toBeGreaterThan(lifted);
+      await expect.poll(top).toBeGreaterThan(lifted);
+      const coasting = await top();
+      await expect.poll(top).toBeGreaterThan(coasting);
       await page.getByRole("button", { name: "Jump to latest" }).tap();
       await expect(page.getByRole("button", { name: "Jump to latest" })).toHaveCount(0);
+    });
+
+    test("a finger whose end never arrived is forgotten: the next one-finger swipe still scrolls", async ({ page }) => {
+      const s = newSession();
+      stack.tmux("send-keys", "-t", s, "seq 1 400 | sed 's/^/row /'", "Enter");
+      await paneIncludes(s, /row 400/);
+      const finger = await open(page, s);
+      const at = await mid(page, s, 4);
+      // A touch that began on a row xterm then replaced: its end went to a detached node, so none reached the surface.
+      await page.evaluate(({ x, y }) => {
+        const touch = new Touch({ identifier: 777, target: document.body, clientX: x, clientY: y });
+        const host = document.elementFromPoint(x, y) ?? document.body;
+        host.dispatchEvent(new TouchEvent("touchstart", { bubbles: true, touches: [touch], targetTouches: [touch], changedTouches: [touch] }));
+      }, at);
+      for (let i = 0; i < 2; i++) {
+        await finger.down(at.x, at.y);
+        await finger.drag(at.x, at.y, at.x, at.y + 300, 8, 6);
+        await finger.up();
+        await page.waitForTimeout(700);
+        await expect(page.getByRole("button", { name: "Jump to latest" })).toBeVisible();
+        await page.getByRole("button", { name: "Jump to latest" }).tap();
+        await expect(page.getByRole("button", { name: "Jump to latest" })).toHaveCount(0);
+      }
+    });
+
+    test("a swipe keeps scrolling when the touched span is removed mid-swipe, and the next swipe is not ignored", async ({ page }) => {
+      const s = newSession();
+      stack.tmux("send-keys", "-t", s, "seq 1 400 | sed 's/^/row /'", "Enter");
+      await paneIncludes(s, /row 400/);
+      const finger = await open(page, s);
+      const at = await mid(page, s, 4);
+      for (let i = 0; i < 2; i++) {
+        await finger.down(at.x, at.y);
+        // What xterm's row redraw does: the node the touch began on leaves the document, and its events go on to that node.
+        const detached = await page.evaluate(({ x, y }) => {
+          const node = document.elementFromPoint(x, y);
+          if (!node || node.closest(".xterm-rows") === null || node.classList.contains("xterm-rows")) return false;
+          node.remove();
+          return !node.isConnected;
+        }, at);
+        expect(detached).toBe(true);
+        await finger.drag(at.x, at.y, at.x, at.y + 300, 8, 6);
+        await finger.up();
+        await page.waitForTimeout(700);
+        await expect(page.getByRole("button", { name: "Jump to latest" })).toBeVisible();
+        await page.getByRole("button", { name: "Jump to latest" }).tap();
+        await expect(page.getByRole("button", { name: "Jump to latest" })).toHaveCount(0);
+      }
     });
 
     test("horizontal swipes send nothing", async ({ page }) => {
@@ -321,11 +344,10 @@ for (const version of VERSIONS) {
       await finger.drag(at.x, at.y, at.x, at.y + 200, 5, 6);
       await finger.up();
       await paneIncludes(s, "^[[A");
-      await page.getByRole("button", { name: /, \d+ tabs?, open sessions and files$/ }).tap();
-      const sheet = page.getByRole("dialog", { name: "Open" });
-      await sheet.getByRole("button", { name: new RegExp(`^${next} \\d+ window`) }).tap();
-      await page.keyboard.press("Escape");
-      await expect(sheet).toBeHidden();
+      await page.getByRole("button", { name: "All tabs" }).tap();
+      await page.getByRole("button", { name: "Open session" }).tap();
+      await page.getByRole("dialog", { name: "Open session" }).getByRole("button", { name: new RegExp(`^${next} \\d+ window`) }).tap();
+      await expect(page.getByRole("dialog")).toHaveCount(0);
       const sent = count(s, "^[[A");
       await page.waitForTimeout(2500);
       expect(pane(next)).not.toContain("^[[");
@@ -334,33 +356,6 @@ for (const version of VERSIONS) {
       await page.waitForTimeout(500);
       expect(count(s, "^[[A")).toBe(settled);
       expect(settled).toBeGreaterThanOrEqual(sent);
-    });
-
-    test("a long-press more than 2,000 rows above the newest line still selects there", async ({ page, context }) => {
-      await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-      const s = newSession();
-      const finger = await open(page, s);
-      // 3,500 rows arrive live, so they are xterm's own scrollback (5,000 rows), not tmux's history.
-      stack.tmux("send-keys", "-t", s, "seq 1 3500 | sed 's/^/row /'", "Enter");
-      await paneIncludes(s, /row 3500/);
-      await page.waitForTimeout(500);
-      const box = await page.locator(".xterm-screen").boundingBox();
-      if (!box) throw new Error("no screen");
-      // 2,200 rows up: past the 2,000 a snapshot keeps above the newest line.
-      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-      // xterm takes about three rows from a wheel event, whatever its size.
-      for (let i = 0; i < 800; i++) await page.mouse.wheel(0, -100);
-      await page.waitForTimeout(500);
-      const at = await cellCentre(page, s, 6, 4); // inside the number of "row N"
-      await finger.down(at.x, at.y);
-      await page.waitForTimeout(550);
-      await finger.up();
-      await expect(page.getByRole("menuitem", { name: "Copy" })).toBeVisible();
-      const picked = Number(await page.evaluate(() => getSelection()?.toString() ?? ""));
-      expect(picked).toBeGreaterThan(500);
-      expect(picked).toBeLessThan(1500);
-      await page.getByRole("menuitem", { name: "Copy" }).tap();
-      await expect(page.getByRole("menuitem", { name: "Copy" })).toHaveCount(0);
     });
 
     test.describe("a mouse wheel on a desktop", () => {

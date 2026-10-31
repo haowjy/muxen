@@ -48,8 +48,6 @@ export function filesTree(): FakeTree {
   const extra = Array.from({ length: 12 }, (_, i) => `${REPO}/notes/note-${String(i + 1).padStart(2, "0")}.txt`);
   return {
     home: HOME,
-    favorites: [REPO, `${HOME}/notes`],
-    uploads: UPLOADS,
     dirs: ["/", "/home", ETC, HOME, REPO, `${REPO}/src`, `${REPO}/docs`, `${REPO}/notes`, `${REPO}/.git`, `${REPO}/empty`, `${HOME}/notes`, UPLOADS, `${HOME}/other`, `${HOME}/other/deep`, `${HOME}/.config`],
     files: {
       [`${REPO}/README.md`]: MD,
@@ -69,7 +67,7 @@ export function filesTree(): FakeTree {
 }
 
 /**
- * A home folder for finding folders by path: one favorite (`~/repos/tether`) inside a `~/repos` that
+ * A home folder for finding folders by path: a project folder (`~/repos/tether`) inside a `~/repos` that
  * holds more, a folder of twenty subfolders (three pages), and ones to refuse, hang on and cap.
  */
 export const FIND_ROOT = `${HOME}/repos/tether`;
@@ -77,8 +75,6 @@ export function findTree(): FakeTree {
   const many = Array.from({ length: 20 }, (_, i) => `${HOME}/repos/many/folder-${String(i + 1).padStart(2, "0")}`);
   return {
     home: HOME,
-    favorites: [FIND_ROOT],
-    uploads: UPLOADS,
     dirs: [
       "/", "/home", HOME, `${HOME}/repos`, FIND_ROOT, `${FIND_ROOT}/src`, `${FIND_ROOT}/web`, `${FIND_ROOT}/docs`, `${FIND_ROOT}/empty`, `${FIND_ROOT}/.git`, `${FIND_ROOT}/web/src`,
       `${HOME}/repos/tether-old`, `${HOME}/repos/test-data`, `${HOME}/repos/zebra`, `${HOME}/repos/many`, ...many,
@@ -98,7 +94,7 @@ const CONTENT: Record<string, string> = {
   [`${REPO}/Cargo.toml`]: '[package]\nname = "tether"\nversion = "0.1.0"\n',
   [`${REPO}/src/main.rs`]: MAIN_RS,
   [`${REPO}/docs/plan.md`]: "# Plan\n\nThe product and UX spec.\n",
-  [`${REPO}/docs/fs.md`]: "# File API\n\nFavorites, listing, raw reads.\n",
+  [`${REPO}/docs/fs.md`]: "# File API\n\nListing, raw reads.\n",
   [`${REPO}/.env`]: "TOKEN=hidden\n",
 };
 

@@ -1,15 +1,15 @@
 import { createContext, type ComponentChildren } from "preact";
-import { useContext } from "preact/hooks";
+import { useContext, useEffect } from "preact/hooks";
 import type { BellsState } from "../sessions/bells";
 import { FocusContext } from "../ui/focus";
 import { useStore } from "../ui/store";
-import { tabLabels, type TabLabel } from "../workspace/labels";
 import type { AppController, AppView } from "./controller";
 
 const AppContext = createContext<AppController | null>(null);
 
 /** Provides the controller, and its focus controller to the primitives. */
 export function AppProvider({ app, children }: { app: AppController; children: ComponentChildren }) {
+  useEffect(() => app.focus.attach(), [app]);
   return (
     <AppContext.Provider value={app}>
       <FocusContext.Provider value={app.focus}>{children}</FocusContext.Provider>
@@ -41,7 +41,7 @@ export function useAppView<S>(select: (view: AppView) => S, equal?: (a: S, b: S)
   return useStore(useApp(), select, equal);
 }
 
-/** The bell marks and what this device has seen of them: the dots on pills, rows and the current-tab button. */
+/** The bell marks and what this device has seen of them: the dots on pills and rows. */
 export function useBells(): BellsState {
   const app = useApp();
   return useStore(app.bells, (s) => s);
@@ -53,8 +53,7 @@ export function useHostName(): (hostId: string) => string {
   return (hostId) => hosts.find((h) => h.hostId === hostId)?.name ?? hostId;
 }
 
-/** The open tabs' labels, one place for every pill, chip and list that names a tab. */
-export function useTabLabels(): TabLabel[] {
-  const tabs = useAppView((v) => v.workspace.tabs);
-  return tabLabels(tabs, useHostName());
+/** Touch input ends in the dock (phone and iPad), so its screens put back and their controls in a bottom bar, where the dock's tab row is. */
+export function useDocked(): boolean {
+  return useAppView((v) => v.viewport.directInput !== "xterm");
 }

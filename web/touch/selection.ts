@@ -6,7 +6,7 @@ import { cellsOf } from "../term/rows";
 /** xterm's own word separators, so a word means the same on the phone as on the desktop. */
 const SEPARATORS = " ()[]{}',\"`";
 
-/** The snapshot holds the visible rows plus this many rows of scrollback and history. */
+/** The snapshot holds the visible rows plus up to this many rows of scrollback and history above them. */
 export const MAX_SNAPSHOT_HISTORY_ROWS = 2000;
 export const MAX_SNAPSHOT_BYTES = 512 * 1024;
 
@@ -83,18 +83,20 @@ export function selectedText(lines: readonly string[], from: TextPoint, to: Text
   return out.join("\n");
 }
 
-/** The index of the first of `sizes` a snapshot keeps: counting up from the last, `visibleRows` plus the row budget, and the byte budget. */
-export function budgetStart(sizes: readonly { rows: number; bytes: number }[], visibleRows: number): number {
-  let rows = 0;
-  let bytes = 0;
-  for (let i = sizes.length - 1; i >= 0; i--) {
-    const size = sizes[i];
-    if (!size) continue;
-    rows += size.rows;
-    bytes += size.bytes;
-    if (rows > visibleRows + MAX_SNAPSHOT_HISTORY_ROWS || bytes > MAX_SNAPSHOT_BYTES) return i + 1;
+/**
+ * The index of the first row a snapshot keeps. `bytes` is each row's size; rows `from` to `to`
+ * are in view and always stay, then up to MAX_SNAPSHOT_HISTORY_ROWS rows above them, while the
+ * byte budget holds.
+ */
+export function budgetStart(bytes: readonly number[], from: number, to: number): number {
+  let total = bytes.slice(from, to).reduce((sum, size) => sum + size, 0);
+  let start = from;
+  while (start > 0 && from - start < MAX_SNAPSHOT_HISTORY_ROWS) {
+    total += bytes[start - 1] ?? 0;
+    if (total > MAX_SNAPSHOT_BYTES) break;
+    start--;
   }
-  return 0;
+  return start;
 }
 
 /** A snapshot's rows joined at their soft wraps. */

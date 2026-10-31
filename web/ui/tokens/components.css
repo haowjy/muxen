@@ -5,7 +5,7 @@
   --row-pad-x: var(--space-3);
   --tab-height: 32px;
   --toolbar-height: 44px;
-  /* The phone dock's row, resting (current-tab button, Show keyboard) or typing (key row, Hide keyboard): one height. */
+  /* The phone dock's row, resting (the tab row, Show keyboard) or typing (key row, Hide keyboard): one height. */
   --dock-height: 42px;
   --dock-control-height: 34px;
   --dock-key-height: 32px;
@@ -20,22 +20,21 @@
 }
 
 :root {
-  --tab-bg: transparent;
-  --tab-bg-active: var(--color-bg-hover);
+  /* Pills are equal width: they share the strip between these two. */
+  --tab-min-width: 7.5rem;
+  --tab-max-width: 14rem;
+  /* Every pill is filled; the active one is tinted with its status colour (Jimmy, after Termius). */
+  --tab-bg: var(--color-bg-hover);
+  --tab-tint: 18%;
   --dialog-width: 480px;
-  --popover-width: 28rem;
   /* Home's centred column and a page dialog's. */
   --page-width: 720px;
   /* Every screen's header row: back or title, and its controls. */
   --header-height: 44px;
-  --sheet-height: 62svh;
   --dialog-bg: var(--color-bg-raised);
-  /* The phone sheet follows the theme's raised surface, dark in dark mode and light in light mode. */
-  --sheet-bg: var(--color-bg-raised);
-  --sheet-radius: var(--radius-4);
   --band-bg: var(--color-bg-raised);
 
-  /* The phone toast sits above the bottom bar (Home and Files' nav, the tools row, or the dock's row), never over its tabs. */
+  /* The phone toast sits above the bottom bar (Home and Files' nav, or the dock's row), never over its tabs. */
   --toast-offset: 0px;
 
   /* The terminal surface's own stacking, inside its host: the selection snapshot. */
@@ -44,10 +43,11 @@
   --edit-menu-half: 88px;
 
   --z-band: 20;
+  --z-menu: 30;
   --z-toast: 40;
 }
 
-:root[data-layout="phone"] { --toast-offset: var(--toolbar-height); }
+:root[data-layout="phone"] { --toast-offset: var(--toolbar-height); --tab-min-width: 9rem; }
 :root[data-layout="phone"]:has([data-dock]) { --toast-offset: var(--dock-height); }
 /* The compose box, shown while an input holds the keyboard, is above the row. */
 :root[data-layout="phone"]:has([data-keyboard]) { --toast-offset: calc(var(--dock-height) + var(--dock-above-height)); }

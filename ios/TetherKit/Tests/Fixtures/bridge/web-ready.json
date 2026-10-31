@@ -4,7 +4,7 @@
     "type": "ready"
   },
   "reply": {
-    "bridgeVersion": 7,
+    "bridgeVersion": 9,
     "hosts": [
       {
         "handle": "host-01",

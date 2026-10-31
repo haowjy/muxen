@@ -1,4 +1,4 @@
-import type { SavedWorkspace, TabKey } from "../../platform/types";
+import type { SavedTab, SavedWorkspaces, TabKey } from "../../platform/types";
 import type { TmuxListing } from "../../proto/generated/messages";
 import type { Fixtures } from "../fixture";
 import { serveTree } from "../files/fakes";
@@ -23,23 +23,30 @@ export const LISTING: TmuxListing = {
   ],
 };
 
+const FIRST = "h-pop/main:1-1/$1";
+const FILES_TAB = { kind: "files" as const, id: "files-1", host: "h-pop", place: { kind: "dir" as const, path: "~" } };
+
+/** One host's workspace holding `tabs`, whose last shown is `last`. */
+export const savedWith = (tabs: SavedTab[], last: string): SavedWorkspaces => ({
+  version: 5,
+  workspaces: [{ id: "ws/h-pop", host: "h-pop", tabs, last, lastTerminal: FIRST, home: null }],
+});
+
 /** Two tabs saved by a previous page load; the third names a session the daemon no longer has. */
-export const SAVED: SavedWorkspace = {
-  version: 3,
-  tabs: [
+export const SAVED: SavedWorkspaces = savedWith(
+  [
     { kind: "terminal", key: key(1), session: "tether", window: "agent" },
     { kind: "terminal", key: key(2), session: "notes", window: "shell" },
     { kind: "terminal", key: key(99), session: "gone", window: "window" },
   ],
-  active: "h-pop/main:1-1/$1",
-  lastTerminal: { "h-pop": "h-pop/main:1-1/$1" },
-};
+  FIRST,
+);
 
 /** `SAVED`'s tabs (the third names a session that is gone) and a Files tab after the first. */
-export const WITH_FILES: SavedWorkspace = {
-  ...SAVED,
-  tabs: SAVED.tabs.flatMap((t, i) => (i === 0 ? [t, { kind: "files" as const, id: "files-1", host: "h-pop", place: { kind: "dir" as const, path: "~" } }] : [t])),
-};
+export const WITH_FILES: SavedWorkspaces = savedWith(SAVED.workspaces[0]?.tabs.flatMap((t, i) => (i === 0 ? [t, FILES_TAB] : [t])) ?? [], FIRST);
+
+/** `SAVED` with one more tab, shown. */
+export const savedPlus = (tab: SavedTab, active: string): SavedWorkspaces => savedWith([...(SAVED.workspaces[0]?.tabs ?? []), tab], active);
 
 export const fixtures: Fixtures = {
   /** Admitted, no tabs. */

@@ -1,0 +1,8 @@
+{
+  "direction": "webToNative",
+  "message": {
+    "type": "backSwipe",
+    "enabled": true
+  },
+  "reply": null
+}

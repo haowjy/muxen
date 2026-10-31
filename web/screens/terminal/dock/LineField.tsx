@@ -66,7 +66,6 @@ export function LineField({ tab, label, onNote }: LineFieldProps) {
       return;
     }
     element.value = text;
-    element.style.height = `${String(Math.min(element.scrollHeight, 114))}px`;
     onNote({ tone: "error", text: result === "tooLarge" ? "Draft too large: the limit is 64 KiB" : "Too many saved drafts: clear one" });
   };
 
@@ -143,13 +142,6 @@ export function LineField({ tab, label, onNote }: LineFieldProps) {
       inputRef={inputRef}
       onInput={edit}
       onKeyDown={(event) => {
-        // A hardware Esc goes where the key row's esc does (the same dispatch as the app's native line).
-        // eslint-disable-next-line @typescript-eslint/no-deprecated
-        if (event.key === "Escape" && !event.isComposing && event.keyCode !== 229) {
-          event.preventDefault();
-          terminals.key({ name: "Escape" });
-          return;
-        }
         // Return confirming an IME candidate is the IME's, not a send. Safari reports it after
         // `compositionend`, as keyCode 229 with isComposing already false.
         if (event.key !== "Enter") return;

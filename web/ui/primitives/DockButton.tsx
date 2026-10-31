@@ -3,7 +3,7 @@ import { cx } from "../cx";
 import styles from "./DockButton.module.css";
 
 interface DockButtonProps extends Omit<ButtonHTMLAttributes, "icon"> {
-  /** `key` is a terminal key (32 px, monospace); `control` a dock row control (34 px). */
+  /** `key` is a terminal key (32 px, monospace, no fill at rest); `control` a filled tab row control (34 px). */
   kind: "key" | "control";
   /** A held state: an armed modifier, the keyboard held up. */
   pressed?: boolean;
@@ -12,8 +12,7 @@ interface DockButtonProps extends Omit<ButtonHTMLAttributes, "icon"> {
 
 /**
  * A button of the phone dock. Its `pointerdown` is cancelled, so a tap on any dock control
- * never moves focus: the input holding the keyboard keeps it, or the toggle and the sessions sheet
- * decide what happens to it.
+ * never moves focus: the input holding the keyboard keeps it, or the toggle decides what happens to it.
  */
 export function DockButton({ kind, pressed, class: className, children, onPointerDown, ...rest }: DockButtonProps) {
   return (

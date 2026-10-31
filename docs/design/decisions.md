@@ -16,6 +16,108 @@ naming the old option under Rejected; git history keeps the removed text.
 
 Decided by Jimmy, 2026-10-21 unless an entry gives another date.
 
+### Workspaces: Home, the tab overview, a tab with its tab row (2026-10-30)
+
+- **What:** a workspace is one server's open tabs, in the user's order, and the tab it last showed;
+  one per server for now, kept as a record of its own so a second workspace on a server later is
+  another record. Home lists the workspaces only and opens one on its last tab. The tab overview
+  lists a workspace's tabs as rows (tap to open, drag a handle to reorder, swipe to close) with Open
+  session and Open files. A tab shows the tab row: ‹ to the overview, the tabs as pills, + (Open
+  session, Open files), and on the phone Show keyboard. With the keyboard up the tab row stays and
+  the compose box and key row sit under it. Desktop and phone share the model
+  ([client/browser-behaviors.md](client/browser-behaviors.md#platform-layout)).
+- **Why:** Jimmy, after the `tab-chip` build on his iPhone ("there is a lot wrong with this") and a
+  recording of Termius: the tab chip blended into the key row, its keyboard-down and keyboard-up
+  forms differed and opened two pickers, and finding a file took four steps in a mostly empty
+  half sheet. "I think maybe we should consider the screen with all the terminals and tabs like a
+  'workspace'? (a collection of the tabs and open tab sessions) for a given server"; "maybe in the
+  future we can have multiple 'workspaces'"; Home "should only list the workspaces"; the overview
+  as a "list of rows"; ‹ "should go back to 2. tab overview".
+- **Rejected:** the half-height picker sheet with its open tabs and Add new tab; the tab chip and its
+  non-modal tab menu (two pickers for one job); one strip mixing every server's tabs; terminal
+  previews in the overview (they would stream every tab's screen); reordering by dragging pills in
+  the tab row (it scrolls sideways); Home listing sessions or files.
+
+### Open session is new-or-attach; Open files starts at ~/ (2026-10-30)
+
+- **What:** adding a tab is two actions, in the tab overview and in +'s menu. Open session is one
+  screen: a name field over this server's sessions not open in the workspace; a tap or a listed
+  name attaches, a name no session has creates it, an empty field creates one tmux names. A new
+  session starts in `~` (Jimmy: "yes"). New-or-attach is the client's rule over the listing, not
+  tmux's `new-session -A`, which fails from the daemon on an existing name ("open terminal
+  failed: not a terminal", tmux 3.8). Open
+  files opens a Files tab at `~/`; its path field works like a browser's address bar.
+- **Why:** Jimmy: tmux "should use the 'new or attach' command"; Files "should just always start at
+  ~/"; the search he meant was "search by path picker".
+- **The path field's tap** keeps tether's behaviour, the caret at the end after a trailing `/`, so
+  typing narrows the folder you are in (Jimmy: "maybe the 2nd one?"), not Safari's select-all.
+- **Rejected:** separate Attach session and New session actions; the New session form with a start
+  directory; Files remembering the workspace's last folder; search by file name (a tree walk on the
+  daemon).
+
+### No favorites (2026-10-30)
+
+- **What:** favorites are gone end to end: the star in a Files tab's header, the picker's Files side,
+  `GET /fs/favorites`, `POST /fs/favorites/add` and `/remove`, `POST /fs/uploads-dir` (which no
+  client called) and the `favorites` key in `config.toml`. With nothing left to write it, the
+  daemon's `config.toml` writer goes too. `uploads_dir` stays, set in `config.toml` by hand.
+- **Why:** Jimmy: "tbh, idk if we even need the favorites feature at all"; the path field, like an
+  address bar, is the way to a folder.
+- **Rejected:** favorites as suggestions under the empty path field; a list of recent folders kept
+  per device (Jimmy: "I think we just need to, in the workspace, remember where we last were",
+  then "it should just always start at ~/").
+
+### A tab's long press has the tmux commands; killing asks first (2026-10-30)
+
+- **What:** a long press on a terminal tab's pill opens: the session's windows (tap switches,
+  `select-window`) and New window, Rename session, Move to start or end, Close tab, then Kill
+  window (more than one window only) and Kill session, in the danger colour, each behind a
+  confirmation that names what ends. Close stays detach-only everywhere (the ×, a swipe, Close
+  tab). The daemon needs kill-session, kill-window and rename-session commands (`new-window`
+  exists); how they stay clear of tmux 3.4's crash is open (below).
+- **Why:** Jimmy: "long pressing a tab - we should be able to detach, or kill a session (what
+  else?)", then "consider the most important tmux commands"; on overriding "Closing a tab never
+  kills tmux": "yeah I think so... just they have to confirm it".
+- **Replaces** "Closing a tab never kills tmux" (2026-10-29), whose rule that no path from the tab
+  list runs `kill-session` it reverses; its rule that closing only detaches stands. **Amends the
+  invariant** "tmux is the source of truth" (plan.md), which said tether has no control that kills a
+  session or window; it now says tether never kills tmux on its own or without a confirmation that
+  names what ends (Jimmy: "change the invariant").
+- **Open:** the daemon side, with the tmux 3.4 crash risk
+  ([daemon-core.md](daemon-core.md#the-tabs-tmux-commands-open)).
+- **Rejected:** a kill without a confirmation; kill on a swipe or the ×.
+
+### The keyboard is sticky (2026-10-30)
+
+- **What:** only the keyboard control lowers the phone keyboard. Scrolling, tapping the terminal,
+  switching tabs in the tab row, the + and long-press menus and reconnects leave it up; the tab
+  overview and Home, which have no input, lower it.
+- **Why:** Jimmy: typing like Termius is the benchmark, and the keyboard must stay until he closes it.
+- **Rejected:** opening an overlay lowers the keyboard (the old picker sheet's rule).
+
+### Keys are plain text; controls are filled (2026-10-30)
+
+- **What:** the key row's keys have no fill until pressed; the tab row's ‹, pills, + and the
+  keyboard control are filled.
+- **Why:** Jimmy: the tab selector "blends in with the keys"; it should "clearly read as a control".
+- **Rejected:** a different colour for the tab chip alone.
+
+### The key row opens esc, tab; ^C last; no ^S or ^Q (2026-10-29)
+
+- **What:** the key row always opens esc, tab ("the first row should guarantee esc | tab"), then
+  the arrows; it keeps chords out of its first slots and ^Z away from ⏎; ^C is last; ^S and ^Q
+  are dropped ([client/browser-behaviors.md](client/browser-behaviors.md#phone-dock)).
+- **Why:** "^C ... is kinda dangerous to be put in the initial keyboard setup"; ⇧tab is rarely
+  used now.
+
+### Files reads any path the user can (2026-10-29)
+
+- **What:** Files has no roots or scope; any readable path opens
+  ([fs.md](fs.md)). Uploads still never replace a file and downloads are served sandboxed.
+- **Why:** a device that can use tether already has the user's terminal, which reads the same
+  files; a scope would add rules without removing any reach.
+- **Rejected:** keeping roots below `$HOME`.
+
 ### Device: iPhone 17 Pro only
 
 - **What:** one target device, iOS 26. The layout stays responsive for rotation and a
@@ -3245,7 +3347,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
     A tap never lowers the keyboard; taps elsewhere keep their meaning. The tap that
     raises the keyboard does not also move the prompt's cursor: that happens only when the
     terminal's input held the keyboard before the tap.
-  - **`focus select` goes to native when the finger lifts.** The highlight and the drag
+  - **`focus select` goes to native when the finger lifts** (superseded 2026-10-30: it goes when the long press selects). The highlight and the drag
     are the web's while the finger is down, over a snapshot layer that takes no pointer
     events, so WebKit's own long-press cannot take the touch and send `pointercancel`.
 - **Why:** the pad drew nothing, so a press meant to select looked like a dead control
@@ -3584,10 +3686,11 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 ### The current history entry names the active tab
 
 - **Decided:** 2026-10-27, slice 1 strict review (p330).
-- **What:** on a tab route the controller replaces the current history entry with
-  `{tab, place}` whenever the active tab changes (a replace adds no entry). The router's
-  entry is therefore never a stale copy of the workspace's active tab; a pop to an entry
-  of any other tab is stale and skips to Home. `Entry` is a union (`home`, or `tab` with
+- **What:** on a tab route the controller rewrites the current history entry to
+  `{tab, place}` whenever the active tab changes (no entry is added; since 2026-10-31 the
+  earlier tab's entries go too, see "A tab switch drops the earlier tab's entries"). The
+  router's entry names the active tab, except for the moment a switch's history step is in
+  flight; a pop to an entry of any other tab is stale and skips to Home. `Entry` is a union (`home`, or `tab` with
   its place), `history.state` is checked at the boundary including the place, and the
   router emits the `Entry` itself. A host's `Folders` holds one bounded record per folder
   (subfolder names and first page), and each Files session's scroll positions are bounded.
@@ -3608,7 +3711,22 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   follows that screen, not the route.
 - **Why:** browser-behaviors.md states "tab changes are not history" for terminal tabs
   only; extending it keeps Back meaning "leave this tab's folders, then leave to Home".
+  The folders are the shown tab's only: a switch drops the earlier tab's (below).
 - **Rejected:** an entry per tab switch (Back would replay every switch).
+
+### A tab switch drops the earlier tab's entries
+
+- **Decided:** 2026-10-31, ux-lead, from the swipe-back review (c419, p438) and its router review (p440).
+- **What:** a tab switch with no overlay open (and an overlay's close after a switch under it) goes back to the
+  entry under the workspace's run of tab entries, Home, and pushes the new tab there: history is Home, then the
+  tab, with nothing forward. The pop it waits for is named by entry id; a different traversal that lands first
+  (a quick Back or ‹ Home) wins and the switch's push is dropped. With nothing under the run (an entry from an
+  earlier page life) the entry is replaced.
+- **Why:** a Files tab's folders stayed below the tab switched to. A back swipe from it showed WebKit's snapshot
+  of the earlier tab, then the stale entry bounced to Home; Forward from Home did the same.
+- **Rejected:** leaving the stale entries with the bounce; skipping stale entries in the pop's direction (still two
+  steps, still the snapshot); a replace of the first entry of the run (left the earlier tab's entries forward of
+  it, so a second Forward bounced); tab entries that never stack (Files folders need their own entries for Back).
 
 ## Harness UI tests removed; real-daemon e2e kept as scripts
 
@@ -4001,68 +4119,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 - **A tap on a completion row opens the folder** (it is Go on that row), instead of filling the field and waiting for a Return the phone's user does not know about. Drilling deeper is a tap in the opened folder's list. Go on a row that is a step toward a root (`Users` above `~/repos`) fills the field instead, as Tab does, for tap and Enter alike. Tab and → on a hardware keyboard still accept in place. Rejected: a visible "Open" button beside the field (a second step for the common case).
 - **A disabled `Button` shows its reason beside it**, from the one `disabledReason` prop that already named it to screen readers; the visible span is also the button's `aria-describedby`. Rejected: a per-screen caption (each screen would repeat the rule). Busy is its own state (`busy`: blocked by work in flight, `aria-busy`, no reason), since the label already says "Adding…". Rejected: showing a reason for busy too (the label and the reason would say the same thing twice). The sessions picker and + menu show one server reason in place of their two dead buttons, since it is about the server and not either button.
 - **A previewed file's path line wraps** (the title still truncates), so its full name is readable without a new control; matches the code and Markdown viewers, which wrap on a phone. Rejected: tap-to-expand title (a hidden gesture for text that can simply be shown).
-- **The current-tab button is `width: 100%` and both its labels shrink** (the window far faster), so it is never wider than its host and the count and chevron stay, whether the host is a flex row or not.
 - **A Mermaid block reads "Loading diagram…" until it draws**, its source hidden; a failure restores the source with the reason.
-
-### 2026-10-28: One picker, Sessions | Files, on every surface
-
-- **Decided:** 2026-10-28, Jimmy, on a real iPhone: Home had separate "All N sessions" and "Files" rows,
-  the phone sheets hid Browse files behind a + that sat at the bottom of one sheet and the top of the
-  other, the desktop popover kept it in a footer, and a pick left the half sheet open but closed the
-  others. He wanted "1 shared thing that can open a session or a file".
-- **What:** (1) one picker, a Sessions / Files switch (a tablist, 44 px tabs), a search that filters
-  the side showing ("Find a session" / "Find a folder"), rows grouped by server, and one + beside the
-  switch: New session on Sessions, New Files tab on Files. It is the desktop popover, the phone half
-  sheet and the full-height sheet from Home: one component, three containers. (2) The Files side
-  lists each server's roots (Uploads included) with the Files tab's own roots list; a root opens a
-  **new** Files tab at that folder; open Files tabs are not listed. Folder editing stays in the Files
-  tab: the picker's list has no × and no Add folder button, and its + ("New Files tab") opens a new Files tab at the
-  folder list, where Add folder is. The roots are asked for when the side is shown (`fs.roots()`
-  per server), never per keystroke. (3) A pick closes the picker on every surface, then acts. (4) Home's
-  card has one row, "Sessions and files", with the session count as its meta, opening the full-height
-  picker on the side last used (in memory; it also serves the phone sheet and the desktop popover).
-  It shows for any server that answers, including an empty one and one with no tmux running (roots
-  need no tmux). (5) "Browse files" is gone; the phone empty-terminal text names the current-tab button; the
-  desktop popover is titled "Open".
-- **Reverses** "a session-row tap opens or activates that tab behind the sheet and the sheet stays
-  open" (2026-10-27, above) for rows and for Browse files. Why: a pick means "take me there", the
-  half sheet covers half of what you opened, and a new Files tab is for browsing. Peeking at open
-  tabs survives in the bottom strip, whose pills still switch the tab behind the sheet and keep it open.
-- **Home button** (Jimmy, same day): the phone sheet's Home moves to the resting dock row, before
-  the current-tab button, on Terminal and Files alike (the keyboard-up row is unchanged). The
-  current-tab button shrinks to fit; the row keeps its height. The strip's + is gone: + sits beside the switch (as moved in "Density" below).
-- **Rejected:** a footer or menu per container (three places for one verb); listing open Files tabs
-  in the picker (they are tabs: the strip and Home hold them); a second roots list for the picker;
-  keeping × in the picker (a second editing surface for the roots, and a fetch-then-remove flow in an overlay that
-  closes on a pick); fetching roots at app start (every byte costs on a bad link); leaving the half sheet open on a pick for sessions only.
-- **Density** (Jimmy, same day, real iPhone: "so much lost space"; about 200 pt before the first row):
-  the switch is a segmented control, 32 pt tall on touch with a 44 pt hit area (the Choice
-  primitive, so Settings' choices match); the + moves beside the switch and the search gets its own
-  full-width row (switch and search read as one group; ~8 pt between rows). With one server shown
-  (one listable, or a server's own sheet, whose title already names it) the list has no "On X"
-  heading; with several it stays, tighter. A root that is Missing or unopenable is left out of the
-  picker (the Files tab keeps it to fix or remove); with none usable the side says "No folders to show".
-  The half sheet's tab strip has 8 pt above its pills and only the safe-area inset below. With no
-  heading, "Updating" is not shown (it would shift the rows). **Rejected:** a one-row header with the
-  switch beside the search (too tight at 390 pt); a heading kept for one server (the lost space).
-- **Controls at the bottom on the phone** (Jimmy, same day, real iPhone: thumb reach; matches the dock
-  and Home at the bottom): the control block (switch + `+`, then search) moves below the list on the
-  half sheet (above the open-tab strip) and the full-height sheet (whose top bar is Back and the
-  server's name); the desktop popover keeps it on top. One block placed by container: the Dialog's
-  footer slot on the phone, its header on desktop. The sheet already lifts above the keyboard, so
-  the block rides on it; the half sheet's tab strip hides while the keyboard is up. **Rejected:** only
-  the switch at the bottom (splits it from the search again); keeping the block at the top.
-- **Review fixes** (same day): the Files-side + is named for what it does, "New Files tab" (Add folder
-  lives in the Files tab; on desktop focus lands on the new tab's pill). The remembered side is one value for the page,
-  shared by the three containers (`sessions/pickerMemory.ts`), not one per container. Each server's roots are
-  kept until the picker closes, so switching sides doesn't ask again or flash "Loading folders". A pick leaves
-  no picker entry in history, so Back from the opened tab never reopens it (the earlier "returns to what was
-  under the picker" was wrong: switching tabs replaces the history entry). The switch is a full tablist
-  (`aria-controls`, a labelled panel, Home and End). + is disabled with "Checking access" while the server's id is unknown.
-  The current-tab button is named "…, open sessions and files".
-- **Budget:** initial JS 201 to 202 KB (201.1 measured): the switch, the roots side and the dock's Home button are
-  launch code, and the cuts the change could make (the dead menu variant, `RovingList`'s role prop) did not cover them.
-  Rejected: splitting screens into lazy chunks in this change (its own piece of work, in `web/.context/TODO`).
 
 ### 2026-10-28: Files without a scope
 
@@ -4079,7 +4136,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   from one `/fs/list` per folder. Kept: the hidden-files toggle, sandboxed previews and
   sanitized Markdown and Mermaid, the scan, page and upload caps, the descriptor-checked
   no-follow open (so the reported path is real, and a FIFO never blocks), non-UTF-8 names, the
-  upload destination and naming, and atomic config writes.
+  upload destination and naming. (Favorites were removed on 2026-10-30, "No favorites".)
 - **Why:** Jimmy, on a real iPhone at `~` that said "Open a folder inside your home folder
   first": "u already have terminal access... why tf are we restricting this?". A device token
   already runs any command in tmux, so the scope guarded against nothing but Jimmy, and it
@@ -4093,60 +4150,6 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   lists of one thing, since the picker lists them); keeping `roots` as the config name or
   accepting it as an alias (two names for one concept, and a compatibility layer for one user:
   the CHANGELOG says to rename the key).
-
-#### The same day: how the picker lists, opens and creates (Jimmy, on the device)
-
-- **Order and missing.** Favorites are listed alphabetically by path (Home first, Uploads last),
-  as sessions come in tmux's alphabetical order. The client sorts, from the daemon's config
-  order, since only the picker lists them and nothing else needs the order; there is no
-  reordering. A favorite whose folder is gone stays, dimmed and "Missing", with a × that removes
-  it (the star lives inside the folder, so a missing one has no other way out); a missing Home
-  or Uploads is hidden. A Files tab whose folder vanished says "This folder no longer exists",
-  and its up row (the parent of its path, since `Listing.parent` is not available) still works.
-- **A folder row behaves like a session row.** It activates the Files tab on that server whose
-  place is that folder (canonical path), else opens one, and carries "here" and "open" like
-  session rows, with the same mark rendering. A tab browsed elsewhere no longer matches.
-- **No + in the picker; creating is each list's last row.** Sessions: "New session" per server
-  group (`New session "<query>"`, Name prefilled, when the search matches nothing), which
-  replaces the list in the same container with the form. Files: the search is also the path
-  field (text starting `~` or `/` shows completions; a tap or Go opens a new tab), and the last
-  row "Open a folder…" (one per server group, like New session) starts a path on that server inside the tap. Rejected: a dialog over the picker (a second
-  surface to dismiss), an "Add favorite" + (favorites are starred in the folder), an Open folder
-  form (the search already is the field).
-- **No pick closes the picker** (Jimmy: "inconsistent behavior for 2 things that look similar is bad"; reverses "a pick closes the picker"). Session, window, folder, strip, Create and a typed path all put a tab on screen behind the picker, which stays on its list; one behaviour, no `commit`-then-close path. Earlier text for Create and Open: The tab opens behind it and the picker returns to
-  its list (the new row reads "here"); row picks still close it. Over Home too (Jimmy: "why don't we
-  have tabs under the home one?"): the route under the full sheet switches to the new tab and the
-  sheet stays open, so Create and Open behave the same in every container. ‹ still goes Home;
-  closing the sheet otherwise leaves you on the tab. The form page is a router entry of its own, so Back and
-  Escape leave it before they close the picker; `Router.closeOverlay(then)` therefore waits for the
-  entry it pops, not for "no overlay".
-- **One sheet, two heights.** The half-height sheet and the full-height sheet from Home are one
-  component: same list, search, switch, end-of-list rows and open-tab strip. The full sheet adds
-  a Back to Home and the server's name, and lists only that server. Phone control order, top to
-  bottom: search, switch, strip; the desktop popover keeps switch then search.
-- **One completing field.** `useCompletion` (`screens/files/completion.ts`) is the path field's
-  behaviour for the Files tab, the picker's search and New session's Start directory, so all type
-  paths alike. Start directory accepts `~/…` and sends the absolute path (`parseCreation` is
-  unchanged). Path field details (Jimmy): the caret goes to the end when an edit starts, set
-  again after iOS places it; no "in <folder>" line; "‹ .." steps to the parent folder.
-
-### 2026-10-28: Home's picker row lands on a tab; the full-height sheet is gone
-
-- **Decided:** 2026-10-28, Jimmy. Home's "All sessions and files" row opened a full-height picker
-  page over Home, with "Back to Home", filtered to the one server. Nothing sat behind it, so a pick
-  looked like a no-op.
-- **What:** the full-height container is gone; there is one picker, the desktop popover and the phone
-  half-height sheet. Home's row lands on a tab first — the server's open tab if there is one, else its
-  first session's tab, else Home for a server with none — then opens the sheet over it. The sheet and
-  the popover list every listable server, grouped when several, as the half sheet already did. Home's
-  empty-card New session opens the sheet on its form page. Every pick still leaves the picker open,
-  the tab it put on screen behind it.
-- **Deletes:** `Picker`'s `full` kind — the `server` overlay, `useContainer`'s `only` and host params,
-  the "server removed while open" effect, `fullTitle`, the "Back to Home" `PageBar` and `toHome` — and
-  the `only` prop threaded through `SessionPicks`, `HostSessionLists`, `HostFavoriteLists` and
-  `HostSection.useListedHosts`; the `serverSheet` harness fixture goes with it.
-- **Reverses** "One sheet, two heights" and the over-Home route switch: closing the sheet leaves you
-  on the tab it opened over, and the browser Back returns Home, not a dedicated full-height sheet.
 
 ## The key row's order, and Home's card
 
@@ -4187,6 +4190,178 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   is the window shown. The fill no longer means "has a tab": it means "is the thing you are looking
   at", which is what a fill means on the pills too. Rejected: a checkmark for the row on screen
   (a third mark beside the fill and the word).
+
+## Web build of the tab row: two reads of the spec (2026-10-30)
+
+- **A server's workspace is made when the server is first known, not with its first tab.** Home
+  lists a row per server and a server with no tab still has an overview to open (Open session lives
+  there), so the record has to exist first. The id is derived from the host id (`ws/<host id>`) and is
+  opaque to everything else. Rejected: a `workspaceOpened` event on the first tap of an empty row (a
+  state between "no workspace" and "empty workspace" that nothing else needs).
+- **A pill's menu lists the session's windows only for the tab on screen.** `select-window` is sent
+  on the tab's watch (`selectWindow` needs `watch`), and only the shown tab has one. Every terminal
+  tab's menu has New window (`newWindow` takes a session). Rejected: activating the tab first and
+  selecting on its next `watching` (a menu row that moves the user to another tab).
+
+
+## The app's keyboard covers the web view; the dock rides it (2026-10-30)
+
+- **The app's web view always fills the screen, and a docked keyboard covers its bottom, as in a
+  browser.** Native reports the covered height as `keyboardInset`, with `keyboardDuration`, the
+  seconds of the keyboard's animation left, as the keyboard starts to move. The dock, Files' tab row,
+  full-screen sheets and the terminal's pan move by the inset with that duration on a curve fitted to
+  the keyboard's measured motion (`cubic-bezier(0.25, 0.6, 0.1, 1)`, within 7 pt of the keyboard's
+  top over its travel in the iOS 26.5 Simulator). This supersedes "The app reports no keyboard inset,
+  because its view moves" (2026-10-26): the inset now means the same thing on both platforms, and nothing
+  shrinks underneath it, so the gap that entry fixed can't return. WebKit lays a resized web view out at its final size at
+  once, so the dock jumped to its keyboard-up height before the keyboard moved and the keyboard slid
+  into an empty band; closing, the dock dropped out and snapped back (Jimmy: "opening the keyboard
+  animates horribly"; reproduced in the Simulator). Rejected: keeping the resize and sending the
+  viewport at the start (the jump is WebKit's layout, not the message); sending the keyboard's
+  position every frame (one bridge message per frame lags and jitters); a fixed CSS duration (the
+  keyboard's own duration is in its notification, and Jimmy's ux-lead asked for it).
+- **A keyboard rising for WebKit is held 60 ms before the page hears of it; every other change is
+  sent at once.** Handing first responder from the native field to WebKit with no keyboard wanted (a tab
+  switch to Files) posts a full-height frame and a zero one 20 to 50 ms later, and no keyboard shows;
+  sent through, the page lurched up and back (Jimmy: "swapping to a folder tap looks like it tries to
+  bring up the keyboard"). Holding every frame instead made the dock trail the terminal's keyboard by
+  80 to 140 ms. Not taken for now: the web resting Files in `hidden` while no field is focused would
+  avoid the handoff altogether; the native hold already keeps the page still, and the web's focus flow
+  is the ux-lead's to change.
+
+## The terminal's selection keeps the keyboard; `select` is a flag (2026-10-30)
+
+- **`focus select` no longer changes first responder or the keyboard.** Native's `FocusController`
+  keeps the keyboard's target (`hidden`, `terminal`, `line`, `webText`) and a separate `selecting`
+  flag; `select` sets the flag and any other mode clears it. Resigning the native field there dropped
+  the keyboard (Jimmy: "if i long press with the keyboard up... it actually closes the keyboard... the
+  keyboard should only be dropped with the button... even if i do something outside of it"), and on
+  his phone WebKit cleared the page's selection 1 to 100 ms after the resign, so every long press on a
+  word selected nothing (Jimmy: "long tap is bugged... it should select a word... but it just...
+  doesn't work"; a debug build's log on the phone showed it on each press that found a word). A
+  separate flag, not a fifth mode, because the field's mode and native's mode would otherwise disagree
+  in a selection: an app cover and uncover then brought the field back in `webText`, and line edits
+  were dropped. Rejected: the web ignoring a selection-less change for a while after release (the
+  selection was gone, not just reported gone); keeping the resign for WebKit's handles (the
+  Simulator shows them without it; dragging a handle is still to check on the phone).
+- **The web sends `focus select` when the long press selects, not when the finger lifts.** This
+  supersedes "`focus select` goes to native when the finger lifts" (2026-10-24). That rule kept WebKit
+  from taking the held touch, which only resigning the native field allowed; `select` no longer does.
+  While the flag is on, the web view refuses every edit action and removes WebKit's AutoFill submenu
+  (which no refusal reaches). Told only on release, the flag sometimes came after WebKit built that
+  menu, and AutoFill showed over tether's Copy and Paste in the Simulator.
+- **The terminal's surface isolates its stacking.** The opaque selection snapshot (z 3) painted over
+  the dock (z 2) once the dock rode over the surface with the keyboard up.
+- **The snapshot is not a scroller while the finger that made the selection is down.** With
+  scrollback above the screen the snapshot scrolls (`overflow-y: auto`), and WebKit cleared the
+  selection when the press lifted over it: on a full terminal every long press selected nothing,
+  keyboard up or down (Jimmy: "i can't select text if the keyboard is up"; in the Simulator with the
+  snapshot unscrollable, the same presses kept their selection). It scrolls again once the finger is up.
+- **Writing Tools are off in the app** (`writingToolsBehavior = .none` on the web view and the native
+  field): Apple Intelligence's button sat over tether's Copy and Paste on a selection. tether's text is a
+  terminal and short fields, none of them prose.
+
+## The keyboard control stays in the tab row (2026-10-30)
+
+- **The phone's keyboard control is always the tab row's last control.** It reads Show keyboard with
+  the keyboard down and Hide keyboard with it up, in the same place; the key row no longer ends with
+  its own Hide keyboard. Jimmy: "when the keyboard is up, can we actually have the keyboard thing
+  remain on the tabs bar... so that its consistent and doesn't move". The key row gains that width for
+  keys. Rejected: Hide keyboard at the key row's end (Termius's place, taken earlier the same day),
+  which moved the control between rows as the keyboard rose.
+
+## Icons come from Lucide (2026-10-31)
+
+- **Every icon is a Lucide icon** (`lucide-preact`, ISC, imported one by one), behind tether's own names
+  in `web/ui/primitives/Icon.tsx`. The hand-drawn set it replaces drew Settings as a circle with rays,
+  which read as a sun (Jimmy: "the setings icon is hard to read - its not a freaking gear icon"; then
+  "yeah just Lucide"). Same 24-unit grid and 2 px stroke as before. Hide keyboard is Lucide's
+  keyboard-off: Lucide has no keyboard with a down arrow. Rejected: drawing more icons by hand.
+
+## Every text box has autocorrect off (2026-10-31)
+
+- **One record of keyboard settings applies to every text box** (`web/ui/primitives/fieldSettings.ts`):
+  autocapitalize off, autocorrect off, autocomplete off, spellcheck false, writingsuggestions false,
+  inputmode text. The terminal input, the line box, the Files path box, the code box (capitals on) and
+  the text and search fields all take it, so Device name, Session name and the session search lose
+  autocorrect too. They are set as attributes, never JSX props: Preact assigns a prop to the element's
+  property when one exists, and WebKit's `autocorrect` property is a boolean, so `"off"` became true.
+  Jimmy: autocorrect off on every one of them, Device name included. Rejected: autocorrect kept on
+  prose-like fields such as Device name (a second kind of field to decide for, for names that are
+  mostly identifiers and short); one helper that fixes only `autocorrect` (the class of bug is the
+  property-versus-attribute mismatch, not one name).
+
+## Home and a tab are the two levels; Back sits where the dock is (2026-10-31)
+
+- **A Home row opens the workspace's last tab, and Back from a tab is Home.** Jimmy: "going from home
+  completely skips the workspace selection, and going back u have to go to the workspace slection". Forward
+  skipped the tab overview and Back stopped on it. He chose two levels over three ("Home ↔ tab"). Rejected:
+  every level both ways (Home, then the overview, then the tab), an extra tap on every return to a
+  terminal, launch included, since a clean launch opens Home.
+- **The tab overview over a tab is the tab list, a router overlay** (`{ screen: "overview", name: "tabs" }`),
+  opened from the tab row's All tabs. The overlay already keeps a tab switched under it when it closes, so a
+  row tap is activate-then-close. The overview route stays only for a workspace with no tab, and a tab opened
+  from it replaces it in history. The tab row gains a control, so phone pills are about 44 px narrower.
+- **Where tabs have the dock, Back and a screen's controls are in a bottom bar the dock's height**, in
+  the place of the dock's ‹: Home (Settings), the tab overview, page dialogs. Jimmy: "the back button jumps
+  from top to bottom"; he chose bottom everywhere. Rejected: Back at the top in tabs, which costs a
+  terminal row and is a reach on a large phone.
+
+## Swipe back is WebKit's own gesture, off at the terminal (2026-10-31)
+
+- **The app turns on WebKit's back-forward swipe (`allowsBackForwardNavigationGestures`) everywhere but a
+  terminal tab with nothing over it.** Jimmy: "going back by swiping", and it "obviously shouldn't happen at
+  the terminal". Every Back is a history entry, so the swipe pops the router and no back logic is added. The
+  web sends `backSwipe { enabled }` from `syncScreen` when the value changes (bridge v8: the contract is
+  strict equality and native refuses a message it doesn't know, so an older native cannot take the new one).
+  Native holds one `backSwipe` state, starting off and reset for each new web view, so a cold launch cannot
+  swipe before the page has rendered a screen. Phone Safari: no-op.
+- **A crashed content process makes a new web view instead of reloading.** A reload via `loadUI` left the
+  dead document's entry in the back list (measured: `back=1` after the kill), and a swipe from the new
+  document's first entry would load it again. Clearing the list is not public API. Rejected: gesture off
+  while the list leaves the document (a KVO on the list and a floor to track), and refusing the navigation
+  in the policy (it can't tell back from forward, nor the target document).
+- **Rejected: a native edge-pan recognizer calling `history.back()`.** It needs no WebKit snapshot but has
+  no animation. Held as the fallback if WebKit's swipe snapshot shows a stale terminal frame.
+- **A forward swipe exists** (WebKit's, not tested on a device) while the gesture is on and the forward list is non-empty (Home after Back from a
+  tab, right-edge swipe returns to the tab). Left alone: it replays a router entry, as the browser's Forward.
+
+## The keyboard-up mark's menu is native's, over the page's mark (bridge v9) (2026-10-31)
+
+- **The page marks, native shows the menu.** With the keyboard up the mark is a CSS highlight, not a DOM
+  selection, so WebKit offers no menu. Bridge v9 adds `editMenu { rect | null }` (web to native) and `menuCopy`
+  and `menuPaste` (native to web). `TetherWebView` presents a `UIEditMenuInteraction` over the rect; a choice comes
+  back as a message and the page does the work: Copy through `copy` with the mark's joined text, Paste through
+  `pasteFromMenu`. v9 is a new version because the contract is strict equality.
+- **Native owns whether the menu is up.** iOS can dismiss it itself, and a page that tracked its visibility went
+  stale (the next tap on the mark did nothing). Native tracks `willPresent` and `willDismiss`; a rect from the
+  page shows the menu or, if up, hides it, so a tap on the mark needs no state of the page's. No close message.
+- **The Paste item on iOS's own menu (keyboard down) is there whenever no keyboard covers the view.** It was
+  gated on native's `activeTab`, which stays set on Home and the tab list, and which the native-input removal
+  deletes. The page already ignores a Paste with no terminal shown, so native keeps no terminal state for it.
+- **Rejected: the text sent with `editMenu`,** so native could copy itself. The page's join of soft-wrapped rows
+  is the one Copy path (`PageSelection.textOf`), and a copy in native would be a second.
+- **Rejected: a menu the web draws over the mark.** Step 0's Safari test failed it: a touch on a web-drawn menu
+  moves the selection or the keyboard, and it does not match the system's.
+- **Rejected: a `menuClosed` event** for the stale state; native owning the state needs no extra message.
+
+## The touch shell counts the fingers the platform lists, not the ends it was sent (2026-10-31)
+
+- **A touch whose end never arrives must not outlive the next touch.** On the iPhone (DOM renderer, rows replaced as
+  output arrives) a touch that began on a row xterm then replaced was dispatched to a detached node, so no end reached
+  `.host`; the leaked finger made every later swipe a two-finger one, which the recognizer ignores.
+  Chromium and the phone agree that a detached node's events never reach the surface or the document, only the node
+  itself. So at `touchstart` the shell listens, non-passive, on each new touch's own target for `touchmove`,
+  `touchend` and `touchcancel` (removed when that touch ends, unless another touch began on the same node), and a swipe
+  whose span is redrawn mid-gesture keeps scrolling. Only touches whose target is inside the surface are counted (a
+  finger held on a dock key is not a second finger on the terminal). Every touch event also checks `event.touches`, as
+  the safety net: a counted finger it no longer lists cancels the gesture it belonged to (never a tap), and the next
+  touch starts clean. A `touchcancel` with no touches left also ends a handed-over touch. Nothing non-passive is
+  attached to the document.
+- **The pointer path is left as it is.** It captures the pointer on the surface at `pointerdown`, so its events target the
+  surface, not a row, and `lostpointercapture` already ends a gesture whose pointer was taken.
+- **Rejected: a timeout on a counted finger.** A held finger is long and legitimate; the platform's list says exactly
+  which fingers are down.
 
 ## The name: muxen
 

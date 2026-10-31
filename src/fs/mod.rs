@@ -1,6 +1,5 @@
-//! The file API's core (fs.md): the favorites, `fs::open`, listings, raw reads, uploads
-//! and `config.toml` writes. Knows nothing of axum; `http/fs.rs` parses requests, takes
-//! slots and builds responses. Every path a client sends reaches the disk through
+//! The file API's core (fs.md): `fs::open`, listings, raw reads and uploads. Knows nothing of axum;
+//! `http/fs.rs` parses requests, takes slots and builds responses. Every path a client sends reaches the disk through
 //! `open`, which returns a descriptor and the canonical path it was opened at.
 
 use std::io;
@@ -9,10 +8,8 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use crate::blocking::Busy;
-use crate::config::{Config, ConfigError, ConfigFile};
-use crate::proto::fs as wire;
+use crate::config::ConfigError;
 
-pub mod config_write;
 pub mod list;
 pub mod mime;
 mod open;
@@ -20,7 +17,7 @@ pub mod raw;
 mod slots;
 pub mod upload;
 
-pub use open::{Opened, Want, check_dir, check_shape, open};
+pub use open::{Opened, Want, check_dir, check_shape, open, open_absolute};
 pub use slots::Slots;
 
 /// A path in a request: absolute, UTF-8, no NUL, at most this long.
@@ -40,8 +37,6 @@ pub enum FsError {
     NotAFile,
     #[error("can't upload to a memory-backed filesystem")]
     MemoryBacked,
-    #[error("config.toml can't be written: {0}")]
-    ConfigReadOnly(io::Error),
     #[error("too large")]
     TooLarge,
     /// The range starts at or past the end of a file this long.
@@ -78,75 +73,16 @@ impl From<Busy> for FsError {
     }
 }
 
-/// One `favorites` entry or `uploads_dir`, as stored and as resolved now.
-#[derive(Debug, Clone)]
-pub struct Place {
-    pub stored: String,
-    /// `None`: missing, not a directory, not absolute or `~/`, or not UTF-8.
-    pub canonical: Option<PathBuf>,
-}
-
-/// The favorites and the uploads folder, read from `config.toml` and canonicalized for
-/// one request.
-#[derive(Debug, Clone)]
-pub struct Favorites {
-    /// The canonical `$HOME`.
-    pub home: PathBuf,
-    pub favorites: Vec<Place>,
-    pub uploads: Place,
-}
-
-impl Favorites {
-    /// Reads `config.toml` now: a hand edit applies to the next request.
-    pub fn load(file: &ConfigFile, home: &Path) -> Result<Self, FsError> {
-        Self::resolve(&file.load()?, home)
-    }
-
-    pub fn resolve(config: &Config, home: &Path) -> Result<Self, FsError> {
-        let canonical_home = std::fs::canonicalize(home).map_err(FsError::Internal)?;
-        let place = |stored: &String| Place {
-            stored: stored.clone(),
-            canonical: expand(stored, home).and_then(|path| canonical_dir(&path)),
-        };
-        Ok(Self {
-            home: canonical_home,
-            favorites: config.favorites.iter().map(place).collect(),
-            uploads: place(&config.uploads_dir),
-        })
-    }
-
-    pub fn to_wire(&self) -> wire::Favorites {
-        let status = |place: &Place| wire::PlaceStatus {
-            path: place.stored.clone(),
-            canonical: place
-                .canonical
-                .as_deref()
-                .and_then(Path::to_str)
-                .map(str::to_owned),
-            ok: place.canonical.is_some(),
-        };
-        wire::Favorites {
-            home: self.home.to_string_lossy().into_owned(),
-            favorites: self.favorites.iter().map(status).collect(),
-            uploads_dir: status(&self.uploads),
-        }
-    }
-}
-
-/// An entry as written: absolute, or `~/` for `$HOME`; anything else is ignored.
+/// An entry as written: absolute, `~` or `~/…` for `$HOME`; anything else is ignored.
 pub fn expand(stored: &str, home: &Path) -> Option<PathBuf> {
+    if stored == "~" {
+        return Some(home.to_path_buf());
+    }
     match stored.strip_prefix("~/") {
         Some(rest) => Some(home.join(rest)),
         None if Path::new(stored).is_absolute() => Some(PathBuf::from(stored)),
         None => None,
     }
-}
-
-/// `path` canonicalized, if it is a directory with a UTF-8 canonical path.
-fn canonical_dir(path: &Path) -> Option<PathBuf> {
-    let canonical = std::fs::canonicalize(path).ok()?;
-    let is_dir = std::fs::metadata(&canonical).is_ok_and(|meta| meta.is_dir());
-    (is_dir && canonical.to_str().is_some()).then_some(canonical)
 }
 
 /// Temporary directory trees for the fs tests.

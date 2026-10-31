@@ -3,7 +3,7 @@ import { bellLook, type BellsState } from "../../sessions/bells";
 import { initialState } from "../../tabs/connection";
 import { describe, type Status, type Tone } from "../../tabs/status";
 import type { Pill, PillTone } from "../../ui/primitives/TabStrip";
-import { tabLabels } from "../../workspace/labels";
+import { labelOf } from "../../workspace/labels";
 import type { Tab, TerminalTab } from "../../workspace/state";
 import type { TabStatus } from "./terminals";
 
@@ -40,23 +40,24 @@ export function lookOf(tab: TerminalTab, status: TabStatus | undefined, host: st
   return { ...PILL[described.tone], status: described };
 }
 
-/** The open tabs as pills; `onScreen` is the terminal tab that is on screen, if any. A Files tab has no connection of its own: it reads as open. */
-export function tabPills(
-  tabs: readonly Tab[],
-  statuses: Readonly<Record<string, TabStatus>>,
-  hostName: (hostId: string) => string,
-  onScreen: string | null,
-  now: number,
-  bells: BellsState,
-): Pill[] {
-  // tabLabels keeps the order of `tabs`, so the two line up.
-  return tabLabels(tabs, hostName).flatMap((l, i): Pill[] => {
-    const tab = tabs[i];
-    if (!tab) return [];
-    if (tab.kind === "files") return [{ id: tab.id, host: tab.host, kind: tab.kind, session: l.session, window: "", full: l.full, tone: "idle" as const, state: "open", bell: false }];
-    const look = lookOf(tab, statuses[tab.id], hostName(tab.host), tab.id === onScreen, now);
-    return [{ id: tab.id, host: tab.host, kind: tab.kind, session: l.session, window: l.window, full: l.full, tone: look.tone, state: look.state, bell: bellLook(bells, tab.id).ring }];
-  });
+/** What a pill reads besides its tab: the workspace's home and the app's live state. */
+export interface PillEnv {
+  /** The workspace's server's home folder, if known. */
+  home: string | null;
+  statuses: Readonly<Record<string, TabStatus>>;
+  hostName: (hostId: string) => string;
+  /** The terminal tab that is on screen, if any. */
+  onScreen: string | null;
+  now: number;
+  bells: BellsState;
+}
+
+/** A tab as a pill. A Files tab has no connection of its own: it reads as open. */
+export function pillOf(tab: Tab, env: PillEnv): Pill {
+  const label = labelOf(tab, env.home);
+  if (tab.kind === "files") return { id: tab.id, host: tab.host, kind: tab.kind, session: label.session, window: "", full: label.full, tone: "idle", state: "open", bell: false };
+  const look = lookOf(tab, env.statuses[tab.id], env.hostName(tab.host), tab.id === env.onScreen, env.now);
+  return { id: tab.id, host: tab.host, kind: tab.kind, session: label.session, window: label.window, full: label.full, tone: look.tone, state: look.state, bell: bellLook(env.bells, tab.id).ring };
 }
 
 /** A pill's connection as a list row says it, when it isn't fine: "Checking…", "Reconnecting…", "Disconnected". */

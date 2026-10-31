@@ -36,22 +36,6 @@ impl Stamp {
         }
     }
 
-    /// `of`, from a `stat` that isn't a `Metadata`: the same fields, cast as std casts
-    /// them, so the two compare equal.
-    #[allow(
-        clippy::unnecessary_cast,
-        reason = "the field types differ by platform"
-    )]
-    fn from_stat(stat: &rustix::fs::Stat) -> Self {
-        Self {
-            dev: stat.st_dev as u64,
-            ino: stat.st_ino as u64,
-            size: stat.st_size as u64,
-            mtime_ns: i128::from(stat.st_mtime as i64) * 1_000_000_000
-                + i128::from(stat.st_mtime_nsec as i64),
-        }
-    }
-
     /// Strong: `"<ino>-<size>-<mtime_ns>"` in hex (fs.md "Raw reads"). It changes when
     /// the file does and stays put while it doesn't, which AVFoundation relies on across
     /// its range requests.
@@ -61,7 +45,7 @@ impl Stamp {
 }
 
 /// The state directory's `flock`, held until dropped: every tether writer holds it for
-/// its read-modify-write, of `auth.toml` and of `config.toml`, the CLI's included.
+/// its read-modify-write of `auth.toml`, the CLI's included.
 pub fn lock(state_dir: &Path) -> io::Result<File> {
     let file = OpenOptions::new()
         .create(true)
@@ -101,15 +85,6 @@ impl Dir {
         let flags = OFlags::RDONLY | OFlags::NONBLOCK | OFlags::CLOEXEC | OFlags::NOCTTY;
         match rustix::fs::openat(&*self.0, name, flags, Mode::empty()) {
             Ok(fd) => Ok(Some(File::from(fd))),
-            Err(Errno::NOENT) => Ok(None),
-            Err(errno) => Err(errno.into()),
-        }
-    }
-
-    /// The stamp of the entry `name` itself (a link isn't followed); `None` if missing.
-    fn stamp(&self, name: &OsStr) -> io::Result<Option<Stamp>> {
-        match rustix::fs::statat(&*self.0, name, AtFlags::SYMLINK_NOFOLLOW) {
-            Ok(stat) => Ok(Some(Stamp::from_stat(&stat))),
             Err(Errno::NOENT) => Ok(None),
             Err(errno) => Err(errno.into()),
         }
@@ -171,45 +146,16 @@ impl Temp {
     /// `text`, `fsync`, renamed over `target`, the directory `fsync`ed: a reader sees the
     /// old file or the new one, and a crash leaves one of them.
     pub fn replace(self, target: &OsStr, text: &[u8]) -> io::Result<()> {
-        self.commit(target, text, None).map(drop)
-    }
-
-    /// `replace`, only if `target` still has the stamp `expected` (`None`: still
-    /// missing). False, with the temporary file deleted, if it changed.
-    pub fn replace_if(
-        self,
-        target: &OsStr,
-        text: &[u8],
-        expected: Option<Stamp>,
-    ) -> io::Result<bool> {
-        self.commit(target, text, Some(expected))
-    }
-
-    fn commit(
-        self,
-        target: &OsStr,
-        text: &[u8],
-        expected: Option<Option<Stamp>>,
-    ) -> io::Result<bool> {
         let written = (&*self.file)
             .write_all(text)
             .and_then(|()| self.file.sync_all());
         if let Err(error) = written {
             return Err(self.failed(error));
         }
-        match expected.map(|expected| self.dir.stamp(target).map(|now| now == expected)) {
-            Some(Ok(false)) => {
-                self.discard();
-                return Ok(false);
-            }
-            Some(Err(error)) => return Err(self.failed(error)),
-            None | Some(Ok(true)) => {}
-        }
         if let Err(errno) = rustix::fs::renameat(&*self.dir.0, &*self.name, &*self.dir.0, target) {
             return Err(self.failed(errno.into()));
         }
-        self.dir.sync()?;
-        Ok(true)
+        self.dir.sync()
     }
 
     /// Renames to the first of `names` that doesn't exist yet, never replacing a file.

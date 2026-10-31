@@ -1,0 +1,13 @@
+{
+  "direction": "webToNative",
+  "message": {
+    "type": "editMenu",
+    "rect": {
+      "x": 40,
+      "y": 220.5,
+      "width": 96,
+      "height": 18
+    }
+  },
+  "reply": null
+}

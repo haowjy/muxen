@@ -13,15 +13,23 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
     private let uploader = Uploader()
     private let terminalInput = KeyboardInput(frame: .zero)
     private var focus: FocusController!
-    private var webView: WKWebView!
+    private var webView: TetherWebView!
     private var webViewConstraints: [NSLayoutConstraint] = []
-    private var bottomConstraint: NSLayoutConstraint!
+    /// How much of the web view's bottom a docked keyboard covers, and how long it takes to get there.
+    private var keyboardCover: (height: CGFloat, duration: Double) = (0, 0)
+    private var pendingKeyboardCover: DispatchWorkItem?
     private var pendingInput: [InputEvent] = []
     private var inputFlushQueued = false
     private var lineReceiverReady = false
     private var activeTab: TabKey?
+    /// WebKit's left-edge back swipe pops the page's history, which is every Back in the web app. The page turns it
+    /// off on a bare terminal tab. It starts off, and a new document starts off again, until the page has rendered a screen.
+    private var backSwipe = false { didSet { webView?.allowsBackForwardNavigationGestures = backSwipe } }
     private var lastViewport: Viewport?
     private var pendingPick: PendingPick?
+    /// Web keyboard switch only: keeps the page's scroll offset at zero, and answers WebKit's "may this focus raise the keyboard".
+    private var scrollGuard: NSKeyValueObservation?
+    private let inputPolicy = AllowFocusPolicy()
     private lazy var messageHandlerProxy = WeakScriptMessageHandler(target: self)
 
     init(model: TetherAppModel) {
@@ -46,8 +54,7 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         focus = FocusController(input: terminalInput)
 
         terminalInput.translatesAutoresizingMaskIntoConstraints = false
-        bottomConstraint = webView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
-        webViewConstraints = constraints(for: webView, bottom: bottomConstraint)
+        webViewConstraints = constraints(for: webView)
         NSLayoutConstraint.activate(webViewConstraints + [
             terminalInput.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             terminalInput.topAnchor.constraint(equalTo: view.topAnchor),
@@ -57,6 +64,7 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
 
         NotificationCenter.default.addObserver(self, selector: #selector(keyboardWillChange(_:)), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(keyboardWillHide(_:)), name: UIResponder.keyboardWillHideNotification, object: nil)
+        focus.setWebKeyboard(model.webKeyboard)
         focus.set(.hidden)
         model.attach(self)
         loadUI()
@@ -65,6 +73,19 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         publishViewportIfChanged()
+        lockZoom()
+    }
+
+    /// The page never zooms: WKWebView re-reads its scale limits from each page, so this is applied again
+    /// after every load and layout, and a zoom already taken is undone.
+    private func lockZoom() {
+        guard let scrollView = webView?.scrollView else { return }
+        scrollView.minimumZoomScale = 1
+        scrollView.maximumZoomScale = 1
+        scrollView.bouncesZoom = false
+        scrollView.pinchGestureRecognizer?.isEnabled = false
+        if scrollView.zoomScale != 1 { scrollView.setZoomScale(1, animated: false) }
+        if scrollView.contentOffset != .zero { scrollView.setContentOffset(.zero, animated: false) }
     }
 
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
@@ -73,6 +94,8 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        lockZoom()
+        if model.webKeyboard { WebKitAccessoryBar.hide(in: self.webView) }
         focus.restoreAfterInterruption()
     }
 
@@ -115,6 +138,14 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
     }
 
     func restoreFocus() { focus.restoreAfterInterruption() }
+
+    /// The web keyboard switch flipped: the field takes or gives up the keyboard, and a new web view reports the other input.
+    func webKeyboardChanged() {
+        guard isViewLoaded else { return }
+        focus.setWebKeyboard(model.webKeyboard)
+        lastViewport = nil
+        recreateWebView()
+    }
 
     func send(_ event: NativeEvent) {
         do {
@@ -175,6 +206,11 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         didReceive message: WKScriptMessage,
         replyHandler: @escaping (Any?, String?) -> Void
     ) {
+        // A message queued by a web view `recreateWebView` already replaced must not change the new one's state.
+        guard message.webView === webView else {
+            replyHandler(nil, "this web view was replaced")
+            return
+        }
         guard message.frameInfo.isMainFrame,
               message.frameInfo.securityOrigin.protocol == "tether-app",
               message.frameInfo.securityOrigin.host == "ui" else {
@@ -214,7 +250,9 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         return nil
     }
 
-    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { loadUI(fragment: webView.url?.fragment) }
+    /// A new web view, not a reload of this one: a reload leaves the dead document's entries in the back list,
+    /// and a back swipe from the new document's first entry would load that old document again.
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { recreateWebView() }
 
     private func loadUI(fragment: String? = nil) {
         lineReceiverReady = false
@@ -228,6 +266,8 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
     }
 
     private func recreateWebView() {
+        lineReceiverReady = false
+        backSwipe = false
         let previous = webView!
         let fragment = previous.url?.fragment
         NSLayoutConstraint.deactivate(webViewConstraints)
@@ -236,20 +276,31 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         previous.uiDelegate = nil
         previous.removeFromSuperview()
         webView = makeWebView()
-        bottomConstraint = webView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: bottomConstraint.constant)
-        webViewConstraints = constraints(for: webView, bottom: bottomConstraint)
+        webViewConstraints = constraints(for: webView)
         NSLayoutConstraint.activate(webViewConstraints)
         loadUI(fragment: fragment)
     }
 
-    private func makeWebView() -> WKWebView {
+    private func makeWebView() -> TetherWebView {
         let configuration = WKWebViewConfiguration()
         configuration.setURLSchemeHandler(schemeHandler, forURLScheme: "tether-app")
         configuration.allowsInlineMediaPlayback = true
+        // Apple Intelligence put its Writing Tools button over tether's Copy and Paste on a terminal selection.
+        // tether's text is a terminal and a few short fields, none of them prose.
+        if #available(iOS 18.0, *) { configuration.writingToolsBehavior = .none }
+        if model.webKeyboard { configuration.allowsInlinePredictions = false }
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         configuration.userContentController.addScriptMessageHandler(messageHandlerProxy, contentWorld: .page, name: "tether")
 
-        let result = WKWebView(frame: .zero, configuration: configuration)
+        let result = TetherWebView(frame: .zero, configuration: configuration)
+        result.suppressesEditMenu = { [weak self] in self?.focus.selecting == true }
+        // With the keyboard down iOS's own menu over a selection gets a Paste. Off a terminal the page ignores it (`pasteFromMenu`).
+        result.addsPaste = { [weak self] in self?.keyboardCover.height == 0 }
+        result.onMenuChoice = { [weak self] choice in self?.send(choice, fields: [:]) }
+        // iOS's selection handles, and the page's own (they read `--color-accent`): --blue-7 in light, --blue-9 in dark.
+        result.tintColor = UIColor { $0.userInterfaceStyle == .dark
+            ? UIColor(red: 113 / 255, green: 193 / 255, blue: 247 / 255, alpha: 1)
+            : UIColor(red: 0, green: 101 / 255, blue: 180 / 255, alpha: 1) }
         result.translatesAutoresizingMaskIntoConstraints = false
         result.navigationDelegate = self
         result.uiDelegate = self
@@ -257,20 +308,43 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         result.scrollView.bounces = false
         result.scrollView.keyboardDismissMode = .none
         result.scrollView.isScrollEnabled = false
-        result.allowsBackForwardNavigationGestures = false
+        result.scrollView.minimumZoomScale = 1
+        result.scrollView.maximumZoomScale = 1
+        result.scrollView.bouncesZoom = false
+        result.allowsBackForwardNavigationGestures = backSwipe
         #if DEBUG
         result.isInspectable = true
         #endif
         view.addSubview(result)
+        if model.webKeyboard { installWebKeyboard(on: result) }
         return result
     }
 
-    private func constraints(for webView: WKWebView, bottom: NSLayoutConstraint) -> [NSLayoutConstraint] {
+    /// The page's text boxes hold the keyboard (web keyboard switch). Page-side, nothing changes from phone Safari.
+    private func installWebKeyboard(on result: TetherWebView) {
+        // WebKit raises the keyboard for a script's `focus()` only inside a tap; this lets the page do it
+        // after unlock or a web view restart. Private API: if the property is gone, the keyboard stays down then.
+        if result.responds(to: NSSelectorFromString("_setInputDelegate:")) {
+            _ = result.perform(NSSelectorFromString("_setInputDelegate:"), with: inputPolicy)
+        } else {
+            print("tether: WebKit input delegate is unavailable")
+        }
+        // WebKit scrolls the page to reveal a focused box even with scrolling off; the page lays out from a fixed root.
+        scrollGuard = result.scrollView.observe(\.contentOffset) { scrollView, _ in
+            MainActor.assumeIsolated {
+                if scrollView.contentOffset != .zero { scrollView.setContentOffset(.zero, animated: false) }
+            }
+        }
+        if !WebKitAccessoryBar.hide(in: result) { print("tether: WebKit accessory-bar suppression failed") }
+    }
+
+    /// The web view always fills the screen; the keyboard covers its bottom (see `keyboardWillChange`).
+    private func constraints(for webView: WKWebView) -> [NSLayoutConstraint] {
         [
             webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             webView.topAnchor.constraint(equalTo: view.topAnchor),
-            bottom,
+            webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ]
     }
 
@@ -307,6 +381,17 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
                 let tab: JSONValue = try request.field("tab")
                 if case .null = tab { activeTab = nil }
                 else { activeTab = try tab.decode(TabKey.self) }
+                reply(NSNull(), nil)
+            case .backSwipe:
+                backSwipe = try request.field("enabled")
+                reply(NSNull(), nil)
+            case .editMenu:
+                let rect: JSONValue = try request.field("rect")
+                if case .null = rect { webView.hideMarkMenu() }
+                else {
+                    let r = try rect.decode(MenuRect.self)
+                    webView.toggleMarkMenu(over: CGRect(x: r.x, y: r.y, width: r.width, height: r.height))
+                }
                 reply(NSNull(), nil)
             case .manageHosts:
                 model.showingServers = true
@@ -388,7 +473,7 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
                 reply(NSNull(), nil)
             case .ack:
                 reply(NSNull(), nil)
-            case .input, .lineEdit, .lineReturn, .viewport, .lifecycle, .hosts, .upload:
+            case .input, .lineEdit, .lineReturn, .viewport, .lifecycle, .hosts, .upload, .menuCopy, .menuPaste:
                 throw BridgeError.malformed
             }
         } catch {
@@ -537,58 +622,82 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
     private func publishViewportIfChanged(force: Bool = false) {
         guard isViewLoaded else { return }
         let next = viewport()
-        guard force || next != lastViewport else { return }
-        lastViewport = next
+        // The duration belongs to one move: a later message that differs only by it says nothing new.
+        var settled = next
+        settled.keyboardDuration = nil
+        guard force || settled != lastViewport else { return }
+        lastViewport = settled
         send(.viewport(next))
     }
 
     private func viewport() -> Viewport {
         let stable = max(0, view.bounds.height)
-        let visible = max(0, webView?.bounds.height ?? stable)
-        // A docked keyboard moves the web view's bottom edge up, so the keyboard covers none of
-        // the page: the dock and sheets sit at the bottom of the resized view, and the web lifts
-        // nothing (ios-shell.md, "Keyboard geometry"). `covered` is the frame the keyboard took,
-        // which is what the keyboard-dependent chrome keys on.
-        let covered = max(0, stable - visible)
+        // The web view fills the screen and a docked keyboard covers its bottom, as in a browser: the
+        // dock and sheets rise by `keyboardInset` (ios-shell.md, "Keyboard geometry"). Resizing the web
+        // view instead made WebKit lay the page out at the final size at once, so the dock jumped ahead
+        // of the keyboard opening and dropped out while it closed.
+        let covered = min(stable, max(0, keyboardCover.height))
         let width = max(0, view.bounds.width)
         let safe = view.safeAreaInsets
         return Viewport(
             layout: min(width, stable) < 600 ? "phone" : "desktop",
             density: "touch",
+            directInput: model.webKeyboard ? "owned" : "native",
             scheme: traitCollection.userInterfaceStyle == .dark ? "dark" : "light",
             width: width,
             stableHeight: stable,
-            visibleHeight: visible,
-            keyboardInset: 0,
+            visibleHeight: stable - covered,
+            keyboardInset: covered,
             safeArea: SafeArea(top: safe.top, right: safe.right, bottom: safe.bottom, left: safe.left),
-            keyboard: covered >= 120
+            keyboard: covered >= 120,
+            keyboardDuration: keyboardCover.duration > 0 ? keyboardCover.duration : nil
         )
     }
 
+    /// The page hears where the keyboard is going as it starts, with its duration, so the dock moves with
+    /// it instead of after it.
     @objc private func keyboardWillChange(_ notification: Notification) {
         guard let info = notification.userInfo,
               let screenFrame = info[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
         let frame = view.convert(screenFrame, from: nil)
         let docked = frame.maxY >= view.bounds.maxY - 1 && frame.minY < view.bounds.maxY
-        bottomConstraint.constant = docked ? -(view.bounds.maxY - frame.minY) : 0
-        let duration = info[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0.25
-        let curve = info[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt ?? 7
-        let options = UIView.AnimationOptions(rawValue: curve << 16).union(.beginFromCurrentState)
-        UIView.animate(withDuration: duration, delay: 0, options: options) {
-            self.view.layoutIfNeeded()
-        } completion: { [weak self] _ in
-            self?.publishViewportIfChanged(force: true)
-        }
+        // `hidden` holds the field with an empty input view, so no keyboard covers anything.
+        let height = docked && focus.mode != .hidden ? view.bounds.maxY - frame.minY : 0
+        setKeyboardCover(height, duration: info[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0)
     }
 
     @objc private func keyboardWillHide(_ notification: Notification) {
         focus.systemKeyboardDidHide()
-        bottomConstraint.constant = 0
-        let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0.25
-        UIView.animate(withDuration: duration) {
-            self.view.layoutIfNeeded()
-        } completion: { [weak self] _ in self?.publishViewportIfChanged(force: true) }
+        setKeyboardCover(0, duration: notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0)
     }
+
+    /// The page hears where the keyboard is going and how long it has left to get there.
+    ///
+    /// Sent at once when the native field owns the keyboard (`terminal`, `line`) or the keyboard is going
+    /// down: anything later and the keyboard visibly leads the dock. A keyboard coming up for anyone else is
+    /// held for `keyboardSettle` first. Handing first responder from the native field to WebKit with no
+    /// keyboard wanted (a tab switch to Files) posts a full-height frame and a zero one 20 to 50 ms later,
+    /// and no keyboard shows; sending both lurched the page up and back. The zero one cancels the held one.
+    private func setKeyboardCover(_ height: CGFloat, duration: Double) {
+        pendingKeyboardCover?.cancel()
+        pendingKeyboardCover = nil
+        let posted = CACurrentMediaTime()
+        let apply = { [weak self] in
+            guard let self, height != self.keyboardCover.height else { return }
+            self.keyboardCover = (height, max(0, duration - (CACurrentMediaTime() - posted)))
+            self.publishViewportIfChanged()
+            self.keyboardCover.duration = 0
+        }
+        if height == 0 || focus.mode == .terminal || focus.mode == .line || focus.webKeyboard {
+            apply()
+            return
+        }
+        let held = DispatchWorkItem(block: apply)
+        pendingKeyboardCover = held
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.keyboardSettle, execute: held)
+    }
+
+    private static let keyboardSettle: TimeInterval = 0.06
 
     private func jsonObject<T: Encodable>(_ value: T) throws -> Any {
         let data = try JSONEncoder().encode(value)
@@ -662,4 +771,69 @@ private final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandlerWi
         }
         target.userContentController(userContentController, didReceive: message, replyHandler: replyHandler)
     }
+}
+
+
+/// Native's two edit menus over the terminal. The page's mark (keyboard up) is no selection, so WebKit offers
+/// nothing there and the page asks for `toggleMarkMenu`; native knows whether the menu is up, since iOS can dismiss it
+/// itself. With the keyboard down iOS's own selection menu gets a Paste, on a terminal or not: the page drops a Paste
+/// that has no terminal to go to.
+/// In native input mode the page draws its own menu over a snapshot selection and WebKit's is emptied
+/// (`suppressesEditMenu`); web text fields keep the system menu.
+final class TetherWebView: WKWebView, UIEditMenuInteractionDelegate {
+    var suppressesEditMenu: () -> Bool = { false }
+    var addsPaste: () -> Bool = { false }
+    var onMenuChoice: (BridgeMessageType) -> Void = { _ in }
+    private lazy var markMenu = UIEditMenuInteraction(delegate: self)
+    private var markRect = CGRect.zero
+    private var markMenuUp = false
+
+    /// Shows the menu over `rect`, or hides it if it is up.
+    func toggleMarkMenu(over rect: CGRect) {
+        if markMenuUp { hideMarkMenu(); return }
+        if markMenu.view == nil { addInteraction(markMenu) }
+        markRect = rect
+        markMenu.presentEditMenu(with: UIEditMenuConfiguration(identifier: nil, sourcePoint: CGPoint(x: rect.midX, y: rect.midY)))
+    }
+
+    func hideMarkMenu() { markMenu.dismissMenu() }
+
+    func editMenuInteraction(_ interaction: UIEditMenuInteraction, menuFor configuration: UIEditMenuConfiguration, suggestedActions: [UIMenuElement]) -> UIMenu? {
+        UIMenu(children: [
+            UIAction(title: "Copy") { [weak self] _ in self?.onMenuChoice(.menuCopy) },
+            UIAction(title: "Paste") { [weak self] _ in self?.onMenuChoice(.menuPaste) },
+        ])
+    }
+
+    func editMenuInteraction(_ interaction: UIEditMenuInteraction, willPresentMenuFor configuration: UIEditMenuConfiguration, animator: any UIEditMenuInteractionAnimating) { markMenuUp = true }
+
+    func editMenuInteraction(_ interaction: UIEditMenuInteraction, willDismissMenuFor configuration: UIEditMenuConfiguration, animator: any UIEditMenuInteractionAnimating) { markMenuUp = false }
+
+    func editMenuInteraction(_ interaction: UIEditMenuInteraction, targetRectFor configuration: UIEditMenuConfiguration) -> CGRect { markRect }
+
+    // WebKit's content view asks the web view whether each edit action may run; refusing them all leaves
+    // its menu empty, so it never shows. (Removing menus in `buildMenu` left it up.)
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        suppressesEditMenu() ? false : super.canPerformAction(action, withSender: sender)
+    }
+
+    // AutoFill is a submenu, not an action, so the refusal above leaves it: it showed alone once native's
+    // field stayed first responder through the selection.
+    override func buildMenu(with builder: any UIMenuBuilder) {
+        super.buildMenu(with: builder)
+        if suppressesEditMenu() { builder.remove(menu: .autoFill) }
+        else if addsPaste() {
+            builder.insertChild(
+                UIMenu(options: .displayInline, children: [UIAction(title: "Paste") { [weak self] _ in self?.onMenuChoice(.menuPaste) }]),
+                atEndOfMenu: .standardEdit)
+        }
+    }
+}
+
+/// WebKit's input delegate (private `_WKInputDelegate`), asked whether a focused page element may start an input
+/// session. Always yes, so a script's `focus()` raises the keyboard without a tap. WebKit holds the delegate weakly.
+final class AllowFocusPolicy: NSObject {
+    /// `_WKFocusStartsInputSessionPolicyAllow`
+    @objc(_webView:decidePolicyForFocusedElement:)
+    func webView(_ webView: WKWebView, decidePolicyFor info: AnyObject) -> Int { 1 }
 }

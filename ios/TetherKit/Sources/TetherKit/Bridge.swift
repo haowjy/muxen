@@ -9,19 +9,21 @@ public enum BridgeMessageType: String, CaseIterable, Codable, Sendable {
     case ready, socket, hostRejected, recreateWebView, saveWorkspace, focus, activeTab
     case lineSet, lineCaret, lineCaretStep, lineInsert, lineSubmit, lineSelectAll, modifiers, lineEdit, lineReturn
     case draftGet, draftPut, draftDelete, draftList, copy, readPasteboard, haptic
-    case pickMedia, playVideo, manageHosts, setPreference, openURL, ack
-    case input, viewport, lifecycle, hosts, upload
+    case pickMedia, playVideo, manageHosts, setPreference, openURL, backSwipe, editMenu, ack
+    case input, viewport, lifecycle, hosts, upload, menuCopy, menuPaste
 
     public var direction: BridgeDirection {
         switch self {
-        case .input, .lineEdit, .lineReturn, .viewport, .lifecycle, .hosts, .upload: .nativeToWeb
+        case .input, .lineEdit, .lineReturn, .viewport, .lifecycle, .hosts, .upload, .menuCopy, .menuPaste: .nativeToWeb
         default: .webToNative
         }
     }
 
     var requiredFields: Set<String> {
         switch self {
-        case .ready, .recreateWebView, .draftList, .manageHosts: []
+        case .ready, .recreateWebView, .draftList, .manageHosts, .menuCopy, .menuPaste: []
+        case .backSwipe: ["enabled"]
+        case .editMenu: ["rect"]
         case .pickMedia: ["id", "host"]
         case .socket: ["host"]
         case .hostRejected: ["host", "token"]

@@ -1,0 +1,15 @@
+/* The dock's row: its height, fill and top border, over the safe area. It rides on the keyboard as the dock does. */
+.bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  box-sizing: content-box;
+  height: var(--dock-height);
+  /* The safe area under it, less what a raised keyboard already covers (a page dialog shrinks above the keyboard). */
+  padding: 0 var(--space-2) max(0px, var(--safe-bottom) - var(--keyboard-inset));
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg-raised);
+}
+/* Controls after a spacer sit at the row's end, as + and the keyboard control do in the tab row. */
+.bar > [data-end] { margin-left: auto; }

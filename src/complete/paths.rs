@@ -60,7 +60,7 @@ impl Listing {
     /// `dir`'s names: `cached` while it is the same directory with the same mtime.
     /// Blocks.
     pub fn load(dir: &str, cached: Option<Arc<Self>>) -> Result<Arc<Self>, FsError> {
-        let opened = crate::fs::open(dir, Want::Dir)?;
+        let opened = crate::fs::open_absolute(dir, Want::Dir)?;
         let stamp = Stamp::of(&opened.meta);
         if let Some(cached) = cached.filter(|c| c.path == opened.path && c.stamp == stamp) {
             return Ok(cached);

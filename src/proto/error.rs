@@ -50,7 +50,6 @@ pub enum HttpError {
     NotAFile,
     /// Upload target is backed by tmpfs or ramfs.
     MemoryBacked,
-    ConfigReadOnly,
     TooLarge,
     BadRange,
     /// Retry after the `Retry-After` header's seconds.

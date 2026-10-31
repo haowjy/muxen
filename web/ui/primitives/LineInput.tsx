@@ -3,6 +3,7 @@ import type { Ref } from "preact";
 import { useCallback, useLayoutEffect, useRef } from "preact/hooks";
 import { cx } from "../cx";
 import { useFocusRef, type FocusTarget } from "../focus";
+import { applyFieldSettings } from "./fieldSettings";
 import styles from "./LineInput.module.css";
 
 interface LineInputProps {
@@ -42,6 +43,7 @@ export function LineInput({ label, value, onInput, focusTarget, inputRef, class:
   );
   const element = useCallback((el: HTMLTextAreaElement | null) => {
     field.current = el;
+    applyFieldSettings(el);
     attach(el);
     if (el) resize(el);
   }, [attach]);
@@ -64,14 +66,10 @@ export function LineInput({ label, value, onInput, focusTarget, inputRef, class:
   return (
     <textarea
       rows={1}
-      enterkeyhint="send"
-      autocapitalize="off"
-      autocomplete="off"
-      autocorrect="off"
-      spellcheck={false}
       {...rest}
       value={value}
-      onInput={(e) => { resize(e.currentTarget); onInput(e.currentTarget.value, e.currentTarget); }}
+      // Measure after the caller: a refused edit puts the old text back, and that is the text to fit.
+      onInput={(e) => { onInput(e.currentTarget.value, e.currentTarget); resize(e.currentTarget); }}
       aria-label={label}
       class={cx(styles.input, className)}
       ref={element}

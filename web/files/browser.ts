@@ -1,5 +1,5 @@
 import { HttpRefusal } from "../net/http";
-import type { Entry, Favorites, FsApi, Listing } from "./api";
+import type { Entry, FsApi, Listing } from "./api";
 import { samePlace, type FilesPlace } from "../platform/types";
 import { hostProblem, type HostProblem } from "../ui/hostProblem";
 import { Store } from "../ui/store";
@@ -20,7 +20,7 @@ export interface FileRef {
 /** Where the file manager is: the active Files tab's place, with the viewed file's details. */
 export type Place = { kind: "dir"; path: string } | { kind: "file"; file: FileRef };
 
-/** The folder a new Files tab opens: the host's home, which only the host can name. */
+/** The folder a new Files tab opens: the host's home, which only the host can name. Listing it names the canonical home too. */
 const HOME = "~";
 
 /** A directory's pages loaded so far. */
@@ -30,9 +30,8 @@ export interface Pages extends Listing {
 
 export interface FilesView {
   place: Place;
-  favorites: Favorites | null;
-  /** Why the last ask for the favorites failed; the picker offers to try again. */
-  favoritesError: HttpRefusal | null;
+  /** The canonical `$HOME`, once the host has said: `~` names it, and paths are shown relative to it. */
+  home: string | null;
   /** The directory under the place: the dir itself, or a viewed file's folder when it was opened from there. */
   pages: Pages | null;
   loading: boolean;
@@ -44,6 +43,8 @@ export interface FilesView {
 export interface BrowserOptions {
   api: FsApi;
   hidden: boolean;
+  /** The host's canonical `$HOME` if an earlier page life learned it. */
+  home?: string | null;
 }
 
 /** The place a listing entry opens, for the router to push; null for what cannot open. */
@@ -67,7 +68,7 @@ export function placeOf(place: Place): FilesPlace {
 }
 
 /**
- * The file manager's state, apart from the DOM: the favorites, the directory pages loaded for
+ * The file manager's state, apart from the DOM: the home folder, the directory pages loaded for
  * the place on screen, and that place. The active Files tab owns where the user is (its place,
  * written from browser history); `follow` brings this state to it. Nothing is fetched until a place
  * needs it, and only the page in view (plan.md "Bandwidth"); a folder whose first page the host's
@@ -82,35 +83,32 @@ export class FileBrowser extends Store<FilesView> {
   private seq = 0;
   /** Files opened by path (a link, a reload) and probed: returning to one costs no second probe. */
   private readonly probed = new Recent<FileRef>(KEPT);
-  private asked: Promise<Favorites> | null = null;
-  private favoritesSeq = 0;
+  private asked: Promise<string> | null = null;
 
   constructor(opts: BrowserOptions) {
-    super({ place: { kind: "dir", path: HOME }, favorites: null, favoritesError: null, pages: null, loading: true, error: null, hidden: opts.hidden });
+    super({ place: { kind: "dir", path: HOME }, home: opts.home ?? null, pages: null, loading: true, error: null, hidden: opts.hidden });
     this.api = opts.api;
     this.folders = new Folders(opts.api);
   }
 
-  /** The host's favorites, asked for once and kept; they name `$HOME`, which paths are shown relative to. */
-  favorites(): Promise<Favorites> {
-    if (this.asked) return this.asked;
-    const seq = ++this.favoritesSeq;
-    this.asked = this.api.favorites().then(
-      // Only the latest answer lands: a refresh that was overtaken by an add or remove must not bring the old list back.
-      (favorites) => { if (seq === this.favoritesSeq) this.update({ favorites, favoritesError: null }); return favorites; },
+  /** The host's home folder: known from a listing of `~`, else asked for once by listing it, which browsing shows again without a request. */
+  home(): Promise<string> {
+    const { home } = this.snapshot;
+    if (home !== null) return Promise.resolve(home);
+    this.asked ??= this.listing(HOME, false).then(
+      (listing) => {
+        this.folders.loaded(listing, false, HOME);
+        this.update({ home: listing.path });
+        return listing.path;
+      },
       (error: unknown) => { this.asked = null; throw error; },
     );
     return this.asked;
   }
 
-  /** Asks again, for the picker opening: another device may have changed them. A failure shows as `favoritesError`; what was known stays. */
-  async refreshFavorites(): Promise<void> {
-    this.asked = null;
-    try {
-      await this.favorites();
-    } catch (error) {
-      this.update({ favoritesError: error instanceof HttpRefusal ? error : new HttpRefusal(0, "internal") });
-    }
+  /** A folder's first page: the fetch the path field has under way, else a request. */
+  private async listing(path: string, hidden: boolean): Promise<Listing> {
+    return (await this.folders.settled(path, hidden)) ?? this.api.list(path, 0, hidden);
   }
 
   /**
@@ -131,7 +129,8 @@ export class FileBrowser extends Store<FilesView> {
 
   private show(want: FilesPlace): Promise<void> {
     const { place, pages, error } = this.snapshot;
-    void this.favorites().catch(() => undefined);
+    // Listing `~` names home itself; any other place needs it asked for, once.
+    if (want.kind === "file" || want.path !== HOME) void this.home().catch(() => undefined);
     if (want.kind === "dir") {
       if (pages?.path !== want.path || error) return this.load(want);
       if (place.kind !== "dir" || place.path !== want.path) this.go({ place: want, loading: false });
@@ -180,23 +179,6 @@ export class FileBrowser extends Store<FilesView> {
     if (place.kind === "dir") await this.load(place);
   }
 
-  /** Adds a favorite. A refusal throws for the caller to show. */
-  async addFavorite(path: string): Promise<void> {
-    await this.written(this.api.addFavorite(path));
-  }
-
-  /** Removes the favorite stored as `path`. */
-  async removeFavorite(path: string): Promise<void> {
-    await this.written(this.api.removeFavorite(path));
-  }
-
-  /** A write's answer is the newest word on the favorites: it outranks any ask still in flight. */
-  private async written(answer: Promise<Favorites>): Promise<void> {
-    const seq = ++this.favoritesSeq;
-    const favorites = await answer;
-    if (seq === this.favoritesSeq) this.update({ favorites, favoritesError: null });
-  }
-
   /** An upload landed at `path`: relist if it is in the folder on screen. */
   async uploaded(path: string): Promise<void> {
     this.folders.drop(parentOf(path));
@@ -234,21 +216,17 @@ export class FileBrowser extends Store<FilesView> {
     const { hidden } = this.snapshot;
     const cached = this.folders.peek(place.path, hidden);
     if (cached) {
-      this.go({ place: { ...place, path: cached.path }, pages: { ...cached, hidden }, loading: false, error: null });
+      this.go({ place: { ...place, path: cached.path }, pages: { ...cached, hidden }, loading: false, error: null, ...(place.path === HOME && { home: cached.path }) });
       return Promise.resolve();
     }
     // The same folder's pages stay up (greyed by `loading`) while it reloads; another folder's go.
     return this.run(
       { place, pages: this.snapshot.pages?.path === place.path ? this.snapshot.pages : null, loading: true, error: null },
-      async () => {
-        const path = place.path === HOME ? (await this.favorites()).home : place.path;
-        // A fetch the path field has under way serves this too.
-        return (await this.folders.settled(path, hidden)) ?? this.api.list(path, 0, hidden);
-      },
-      // The daemon answers with the canonical path; the place follows it.
+      () => this.listing(place.path, hidden),
+      // The daemon answers with the canonical path; the place follows it, and a listing of `~` is the host's home.
       (listing) => {
         this.folders.loaded(listing, hidden, place.path);
-        this.update({ place: { ...place, path: listing.path }, pages: { ...listing, hidden }, loading: false });
+        this.update({ place: { ...place, path: listing.path }, pages: { ...listing, hidden }, loading: false, ...(place.path === HOME && { home: listing.path }) });
       },
     );
   }
@@ -293,7 +271,6 @@ export function describeError(error: HttpRefusal, host: string): string {
     case "not_a_file": return "That isn't a regular file.";
     case "busy": return `${host} is busy. Try again in a moment.`;
     case "config_unavailable": return "tether can't read config.toml on the server. Fix it there.";
-    case "config_read_only": return "config.toml can't be written on the server.";
     case "incompatible": return problem("incompatible");
     case "auth_required": case "forbidden": case "http_401": return problem("unauthorized");
     case "bad_request": return "The server refused that path.";

@@ -2,6 +2,7 @@ import type { RefObject, TargetedKeyboardEvent } from "preact";
 import { useCallback, useId } from "preact/hooks";
 import { cx } from "../cx";
 import { useFocusRef, type FocusTarget } from "../focus";
+import { applyFieldSettings } from "./fieldSettings";
 import { Icon } from "./Icon";
 import styles from "./TextField.module.css";
 
@@ -12,31 +13,31 @@ interface FieldProps {
   onInput: (value: string) => void;
   placeholder?: string;
   name?: string;
-  inputMode?: "text" | "numeric" | "url";
-  /** Starts the shift key on for the whole field; off unless a field's values are uppercase. */
-  autocapitalize?: "off" | "characters";
   disabled?: boolean;
   hint?: string | undefined;
   /** Shown under the field and announced; also marks the field invalid. */
   error?: string | null | undefined;
   /** Registers the input with the focus controller under this name. */
   focusTarget?: FocusTarget;
+  /** Takes focus when its dialog opens, with a fine pointer (`Dialog`). */
+  "data-initial-focus"?: string;
   class?: string | undefined;
 }
 
 /** A labelled single-line field. With SearchField, the only place an `<input>` lives for screens (lint rule 1). */
-export function TextField({ label, value, onInput, hint, error, focusTarget, autocapitalize = "off", class: className, ...rest }: FieldProps) {
+export function TextField({ label, value, onInput, hint, error, focusTarget, class: className, ...rest }: FieldProps) {
   const id = useId();
   const focusRef = useFocusRef(focusTarget);
+  const attach = useCallback((el: HTMLInputElement | null) => {
+    applyFieldSettings(el);
+    focusRef(el);
+  }, [focusRef]);
   const note = error ?? hint;
   return (
     <div class={cx(styles.field, className)}>
       <label for={id} class={styles.label}>{label}</label>
       <input
         type="text"
-        autocapitalize={autocapitalize}
-        autocomplete="off"
-        spellcheck={false}
         {...rest}
         id={id}
         value={value}
@@ -44,7 +45,7 @@ export function TextField({ label, value, onInput, hint, error, focusTarget, aut
         class={styles.input}
         aria-invalid={error ? true : undefined}
         aria-describedby={note ? `${id}-note` : undefined}
-        ref={focusRef}
+        ref={attach}
       />
       {note && <p id={`${id}-note`} class={cx(styles.note, error && styles.error)} role={error ? "alert" : undefined}>{note}</p>}
     </div>
@@ -67,6 +68,7 @@ type SearchProps = Pick<FieldProps, "label" | "placeholder" | "focusTarget" | "c
 export function SearchField({ label, value, onInput, placeholder, focusTarget, onKeyDown, inputRef, listId, activeId, class: className, ...rest }: SearchProps) {
   const focusRef = useFocusRef(focusTarget);
   const attach = useCallback((el: HTMLInputElement | null) => {
+    applyFieldSettings(el);
     focusRef(el);
     if (inputRef) inputRef.current = el;
   }, [focusRef, inputRef]);
@@ -76,9 +78,6 @@ export function SearchField({ label, value, onInput, placeholder, focusTarget, o
       <input
         type="text"
         role="searchbox"
-        autocapitalize="off"
-        autocomplete="off"
-        spellcheck={false}
         {...rest}
         {...(placeholder !== undefined && { placeholder })}
         aria-controls={listId}

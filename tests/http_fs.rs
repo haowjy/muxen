@@ -35,10 +35,6 @@ async fn post(daemon: &Daemon, path: &str, body: &[u8], json: bool) -> Reply {
     send(daemon.port, "POST", path, &headers, body).await
 }
 
-fn path_body(path: &std::path::Path) -> Vec<u8> {
-    serde_json::json!({ "path": path }).to_string().into_bytes()
-}
-
 #[tokio::test]
 async fn a_video_streams_by_range_with_a_stable_etag() {
     let daemon = start("fs-raw").await;
@@ -170,155 +166,22 @@ async fn uploads_land_one_at_a_time_and_leave_no_part_file() {
 }
 
 #[tokio::test]
-async fn settings_writes_keep_a_hand_written_symlinked_config() {
-    let daemon = start("fs-favorites").await;
-    let dotfiles = daemon.dir.join("dotfiles");
-    std::fs::create_dir_all(&dotfiles).expect("a dir");
-    let real = dotfiles.join("config.toml");
-    let hand_written = "# mine\nfavorites = [\n  \"~/code\", # the code\n]\nfuture = 1\n\n[tmux]\nsocket_name = \"x\"\n";
-    std::fs::write(&real, hand_written).expect("written");
-    std::fs::remove_file(&daemon.config).expect("removed");
-    std::os::unix::fs::symlink(&real, &daemon.config).expect("a link");
-    std::fs::create_dir_all(daemon.home("code")).expect("a dir");
-    std::fs::create_dir_all(daemon.home("notes")).expect("a dir");
-
-    let added = post(
-        &daemon,
-        "/fs/favorites/add",
-        &path_body(&daemon.home("notes")),
-        true,
-    )
-    .await;
-    assert_eq!(added.status, 200, "{}", added.text());
-    let favorites = added.json();
-    assert_eq!(favorites["home"], daemon.home.to_str().expect("UTF-8"));
-    assert_eq!(favorites["favorites"][0]["path"], "~/code");
-    assert_eq!(favorites["favorites"][0]["ok"], true);
-    assert_eq!(
-        favorites["favorites"][1]["path"],
-        daemon.home("notes").to_str().expect("UTF-8")
-    );
-    assert_eq!(favorites["uploadsDir"]["path"], "~/tether-uploads");
-    let written = std::fs::read_to_string(&real).expect("the file");
-    let notes = daemon.home("notes");
-    let expected = hand_written.replace(
-        "# the code\n]",
-        &format!("# the code\n  \"{}\",\n]", notes.display()),
-    );
-    assert_eq!(written, expected);
-    assert!(
-        std::fs::symlink_metadata(&daemon.config)
-            .expect("the link")
-            .is_symlink()
-    );
-    // Adding the same directory by another path is a no-op.
-    let again = post(
-        &daemon,
-        "/fs/favorites/add",
-        &path_body(&daemon.home("code/../notes")),
-        true,
-    )
-    .await;
-    assert_eq!(again.status, 200);
-    assert_eq!(std::fs::read_to_string(&real).expect("the file"), expected);
-
-    // A directory outside `$HOME` is a favorite too; a file or a missing path isn't.
-    let tmp = std::fs::canonicalize("/tmp").expect("/tmp");
-    let reply = post(&daemon, "/fs/favorites/add", &path_body(&tmp), true).await;
-    assert_eq!(
-        reply.json()["favorites"][2]["canonical"],
-        tmp.to_str().expect("UTF-8")
-    );
-    let removed = post(&daemon, "/fs/favorites/remove", &path_body(&tmp), true).await;
-    assert_eq!(
-        removed.json()["favorites"].as_array().map(Vec::len),
-        Some(2)
-    );
-    std::fs::write(daemon.home("file"), b"x").expect("written");
-    for (refused, expected) in [
-        (daemon.home("file"), (409, r#"{"error":"not_a_directory"}"#)),
-        (daemon.home("missing"), (404, r#"{"error":"not_found"}"#)),
-    ] {
-        let reply = post(&daemon, "/fs/favorites/add", &path_body(&refused), true).await;
-        assert_eq!((reply.status, reply.text()), expected);
-    }
-
-    // Removing by the stored text, then by the canonical path.
-    let removed = post(
-        &daemon,
-        "/fs/favorites/remove",
-        br#"{"path":"~/code"}"#,
-        true,
-    )
-    .await;
-    assert_eq!(
-        removed.json()["favorites"].as_array().map(Vec::len),
-        Some(1)
-    );
-    let removed = post(&daemon, "/fs/favorites/remove", &path_body(&notes), true).await;
-    assert_eq!(
-        removed.json()["favorites"].as_array().map(Vec::len),
-        Some(0)
-    );
-    let written = std::fs::read_to_string(&real).expect("the file");
-    assert!(
-        written.starts_with("# mine\nfavorites = [\n") && written.contains("future = 1"),
-        "{written}"
-    );
-
-    let moved = post(&daemon, "/fs/uploads-dir", &path_body(&notes), true).await;
-    assert_eq!(
-        moved.json()["uploadsDir"]["canonical"],
-        notes.to_str().expect("UTF-8")
-    );
-    let large = format!(r#"{{"path":"{}"}}"#, "a".repeat(5000));
-    let reply = post(&daemon, "/fs/favorites/add", large.as_bytes(), true).await;
-    assert_eq!(
-        (reply.status, reply.text()),
-        (413, r#"{"error":"too_large"}"#)
-    );
-
-    // A link to nothing is refused, and neither the link nor its target changes.
-    std::fs::remove_file(&real).expect("removed");
-    let reply = post(&daemon, "/fs/favorites/add", &path_body(&notes), true).await;
-    assert_eq!(
-        (reply.status, reply.text()),
-        (409, r#"{"error":"config_read_only"}"#)
-    );
-    let link = std::fs::symlink_metadata(&daemon.config).expect("the link");
-    assert!(link.is_symlink() && !real.exists());
-}
-
-#[tokio::test]
-async fn a_broken_config_fails_the_config_routes_closed() {
+async fn a_broken_config_fails_uploads_closed() {
     let daemon = start("fs-broken").await;
     std::fs::create_dir_all(daemon.home("code")).expect("a dir");
-    let broken = "favorites = [\"~/code\"\n";
-    std::fs::write(&daemon.config, broken).expect("written");
+    std::fs::write(&daemon.config, "uploads_dir = \"~/up\n").expect("written");
     let code = url("/fs/list/", &daemon.home("code"));
-    let unavailable = r#"{"error":"config_unavailable"}"#;
-    let reply = get(&daemon, "/fs/favorites", &[]).await;
-    assert_eq!((reply.status, reply.text()), (503, unavailable));
     // Listing and reading don't consult the config.
     assert_eq!(get(&daemon, &code, &[]).await.status, 200);
-    let body = path_body(&daemon.home("code"));
-    for path in [
-        "/fs/favorites/add",
-        "/fs/favorites/remove",
-        "/fs/uploads-dir",
-    ] {
-        let reply = post(&daemon, path, &body, true).await;
-        assert_eq!((reply.status, reply.text()), (503, unavailable), "{path}");
-    }
     let upload = post(&daemon, "/fs/upload?name=a.png", b"x", false).await;
-    assert_eq!((upload.status, upload.text()), (503, unavailable));
-    // Nothing wrote the file, and a fixed file applies to the next request.
     assert_eq!(
-        std::fs::read_to_string(&daemon.config).expect("the file"),
-        broken
+        (upload.status, upload.text()),
+        (503, r#"{"error":"config_unavailable"}"#)
     );
-    std::fs::write(&daemon.config, "favorites = [\"~/code\"]\n").expect("fixed");
-    assert_eq!(get(&daemon, "/fs/favorites", &[]).await.status, 200);
+    // A fixed file applies to the next request.
+    std::fs::write(&daemon.config, "uploads_dir = \"~/up\"\n").expect("fixed");
+    let upload = post(&daemon, "/fs/upload?name=a.png", b"x", false).await;
+    assert_eq!(upload.status, 201, "{}", upload.text());
 }
 
 /// Writes `request` and reads until the server closes or a second passes.

@@ -40,17 +40,19 @@ describe("selectedText", () => {
 
 describe("budgetStart", () => {
   it("keeps everything under the budget", () => {
-    expect(budgetStart(Array.from({ length: 10 }, () => ({ rows: 1, bytes: 10 })), 24)).toBe(0);
+    expect(budgetStart(Array.from({ length: 10 }, () => 10), 8, 10)).toBe(0);
   });
-  it("drops the oldest lines past 2000 rows above the visible ones", () => {
-    const sizes = Array.from({ length: 3000 }, () => ({ rows: 1, bytes: 10 }));
-    expect(budgetStart(sizes, 24)).toBe(3000 - 2024);
+  it("keeps the rows in view and 2000 above them, wherever they are", () => {
+    const bytes = Array.from({ length: 10_000 }, () => 10);
+    expect(budgetStart(bytes, 5000, 5024)).toBe(3000);
+    expect(budgetStart(bytes, 500, 524)).toBe(0);
   });
-  it("drops by bytes too", () => {
-    const sizes = Array.from({ length: 100 }, () => ({ rows: 1, bytes: 10_000 }));
-    const start = budgetStart(sizes, 24);
+  it("drops by bytes, never the rows in view", () => {
+    const bytes = Array.from({ length: 100 }, () => 10_000);
+    const start = budgetStart(bytes, 90, 100);
     expect(100 - start).toBeLessThanOrEqual(52);
     expect(start).toBeGreaterThan(0);
+    expect(budgetStart(bytes.map(() => 100_000), 90, 100)).toBe(90);
   });
 });
 

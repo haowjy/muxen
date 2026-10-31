@@ -1,6 +1,6 @@
-// The terminal screen (client-architecture.md §6.1, §6.4, §7): the surface the renderer draws
+// The terminal screen (client-architecture.md §6.4, §7): the surface the renderer draws
 // into, with the status band over its top edge, and on touch the dock below it. Its tabs are
-// the shell's top row (desktop) or the dock's current-tab button (touch). The screen is
+// the tab row: the shell's top row (desktop) or the dock's bottom row (touch). The screen is
 // mounted once and hidden rather than unmounted (§6.5); the renderer, the drivers and tmux's
 // size belong to `terminals.ts`, so this file only places things and draws state.
 import { useEffect, useRef } from "preact/hooks";
@@ -9,7 +9,7 @@ import { EmptyState } from "../../ui/primitives/EmptyState";
 import { StatusBand } from "../../ui/primitives/StatusBand";
 import { useStore } from "../../ui/store";
 import { Button } from "../../ui/primitives/Button";
-import { terminalTabOf } from "../../workspace/state";
+import { activeTerminal } from "../../workspace/state";
 import { Dock } from "./dock/Dock";
 import { EditMenu } from "./selection/EditMenu";
 import { bandTone, lookOf } from "./tabView";
@@ -34,7 +34,7 @@ export function TerminalScreen({ active }: { active: boolean }) {
   }, [terminals]);
 
   const hostName = useHostName();
-  const current = terminalTabOf(workspace, workspace.active);
+  const current = activeTerminal(workspace);
   const running = active && current !== null && statuses[current.id]?.state.kind !== "live";
   const now = useNow(running);
   const look = current && lookOf(current, statuses[current.id], hostName(current.host), active, now);
@@ -46,7 +46,7 @@ export function TerminalScreen({ active }: { active: boolean }) {
       <div class={styles.surface} ref={slot}>
         {current === null && (
           <div class={styles.empty}>
-            <EmptyState icon="terminal" title={dock && phone ? "Tap Sessions below to open a session." : "Open a session with + or from Home."} />
+            <EmptyState icon="terminal" title="Open a session with +." />
           </div>
         )}
         {scrolled && (
