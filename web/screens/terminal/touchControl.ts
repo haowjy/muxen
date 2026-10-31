@@ -121,6 +121,7 @@ export class TouchControl {
   /** Ends any gesture in progress: a selection still being dragged goes with it. */
   cancel(): void {
     clearTimeout(this.timer);
+    this.handedOver = false;
     this.dismissing = false;
     this.fingers.clear();
     this.spent.clear();
@@ -161,8 +162,9 @@ export class TouchControl {
       if (this.fingers.has(touch.identifier)) this.run(this.recognizer.move(touch.identifier, touch.clientX, touch.clientY, performance.now()));
     }
     this.schedule();
-    // The first move past the slop starts a scroll, and WebKit's long press has given up by then.
-    if (this.recognizer.scrolling) event.preventDefault();
+    // The first move past the slop starts a scroll, and WebKit's long press has given up by then. A second finger
+    // would pinch the page, which the terminal never does.
+    if (this.recognizer.scrolling || event.touches.length > 1) event.preventDefault();
   };
 
   private readonly touchEnd = (event: TouchEvent): void => {
@@ -183,9 +185,7 @@ export class TouchControl {
   };
 
   private readonly touchCancelled = (): void => {
-    if (!this.owned) return;
-    this.handedOver = false;
-    this.cancel();
+    if (this.owned) this.cancel();
   };
 
   /** Mouse events imitating a touch (a mouse-move over a link underlines it, and redraws rows) go no further than the surface. */
