@@ -4,7 +4,9 @@
 // pane received with `tmux capture-pane` (client-architecture.md §7.6, §11, P3b). Chromium only:
 // WebKit has no touch injection beyond a tap. The device-only checks (haptic, momentum feel,
 // selection handles, the system back gesture) are in g3-iphone-checklist.md.
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, test, type CDPSession, type Page } from "@playwright/test";
 import { openSessionRow } from "../shared/home";
 import { startStack, type Stack, type TmuxVersion } from "../shared/stack";
@@ -244,6 +246,58 @@ for (const version of VERSIONS) {
       await jump.tap();
       await expect(jump).toHaveCount(0);
       expect(Math.abs((await scrollTop()) - latest)).toBeLessThan(2000);
+    });
+
+    test("a held finger at the top: the text under it does not move while tmux's history lands above", async ({ page }) => {
+      test.setTimeout(60_000);
+      const s = newSession();
+      stack.tmux("send-keys", "-t", s, "seq -f 'line %05g' 1 4000", "Enter");
+      await paneIncludes(s, "line 04000", 30_000);
+      const finger = await open(page, s);
+      const probe = { x: 200, y: 440 };
+      await page.evaluate(({ x, y }) => {
+        const log: [string | null, number | null, number][] = [];
+        (window as unknown as { log: typeof log }).log = log;
+        const tick = (): void => {
+          const row = document.elementFromPoint(x, y)?.closest("[data-seq]");
+          log.push([row?.textContent ?? null, row ? row.getBoundingClientRect().top : null, document.querySelectorAll("[data-rows] [data-seq]").length]);
+          requestAnimationFrame(tick);
+        };
+        tick();
+      }, probe);
+      await page.evaluate(() => { (window as unknown as { log: unknown[] }).log.length = 0; });
+      await finger.down(200, 400);
+      await finger.drag(200, 400, probe.x, probe.y, 4, 16);
+      await page.waitForTimeout(2500); // the prefetch fills in chunks under the still finger
+      const held = await page.evaluate(() => (window as unknown as { log: [string | null, number | null, number][] }).log);
+      await finger.up();
+      expect(new Set(held.map((e) => e[0])).size).toBe(1);
+      expect(new Set(held.map((e) => e[1])).size).toBe(1);
+      expect(new Set(held.map((e) => e[2])).size).toBeGreaterThan(1);
+    });
+
+    test("a touch on a row that output redraws still lets the view follow after the lift", async ({ page }) => {
+      const s = newSession();
+      const stop = join(tmpdir(), `muxen-gesture-stop-${s}-${version}`);
+      rmSync(stop, { force: true });
+      stack.tmux("send-keys", "-t", s, `while [ ! -e ${stop} ]; do printf '\\rtick %05d' $RANDOM; sleep 0.04; done`, "Enter");
+      await paneIncludes(s, /tick \d{5}/);
+      const finger = await open(page, s);
+      const row = stack.tmux("capture-pane", "-p", "-t", s).split("\n").findIndex((l) => l.startsWith("tick"));
+      const at = await cellCentre(page, s, 3, row);
+      await finger.down(at.x, at.y);
+      await page.waitForTimeout(250); // the row is redrawn under the finger, and the touch's node leaves the page
+      await finger.up();
+      writeFileSync(stop, ""); // the loop ends on its own, so the next command is the shell's
+      await paneIncludes(s, /tick \d{5}\$ /);
+      stack.tmux("send-keys", "-t", s, "seq 1 300", "Enter");
+      await paneIncludes(s, /^300$/m);
+      await expect.poll(() => page.evaluate(() => {
+        const list = document.querySelector<HTMLElement>("[data-rows]");
+        const last = [...document.querySelectorAll<HTMLElement>("[data-rows] [data-seq]")].find((r) => r.textContent.trim() === "300");
+        const box = last?.getBoundingClientRect();
+        return !!list && !!box && box.top >= list.getBoundingClientRect().top && box.bottom <= list.getBoundingClientRect().bottom + 1;
+      })).toBe(true);
     });
 
     test("a finger whose end never arrived is forgotten: the next swipe in a full-screen application still sends arrows", async ({ page }) => {
