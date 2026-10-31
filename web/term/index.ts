@@ -81,10 +81,10 @@ export interface TerminalRenderer {
   /** The element holding the screen's rows when they are page text (the DOM renderer, as on a phone), else null. */
   textRoot(): HTMLElement | null;
   /**
-   * The screen's rows as page text, top to bottom: each row's element, its buffer line, and whether it continues
+   * The screen's rows as page text, top to bottom: each row's element and whether it continues
    * the row above (a soft wrap). Empty while WebGL draws.
    */
-  textRows(): { element: HTMLElement; line: number; wrapped: boolean }[];
+  textRows(): { element: HTMLElement; wrapped: boolean }[];
   /** Whether the application asked for mouse reports. */
   mouseMode(): MouseMode;
   /** The report format the application selected (DECSET 1006 and 1005). */

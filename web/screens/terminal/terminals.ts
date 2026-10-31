@@ -108,6 +108,8 @@ export class Terminals extends Store<TerminalsView> {
   private paneLarge = false;
   /** The shell's command line under the cursor, for a tap on the prompt row. */
   private promptLine: PromptLine | null = null;
+  /** The colour scheme changed and the renderer has not taken the new theme yet. */
+  private themeStale = false;
   /** The touch side of looking at the shown tab: scroll, history, selection, gestures. */
   private readonly view: TerminalView;
   /** Paste, copy and inserted paths. */
@@ -162,6 +164,7 @@ export class Terminals extends Store<TerminalsView> {
     new ResizeObserver(() => { this.measure(); }).observe(this.element);
     app.subscribe(() => { this.sync(); });
     app.focus.subscribe(() => { this.drawCursor(); });
+    document.addEventListener("selectionchange", () => { this.applyTheme(); });
     app.platform.subscribe((event) => {
       // Native's responder: only the tab on screen still takes input.
       if (event.type !== "input") return;
@@ -294,7 +297,10 @@ export class Terminals extends Store<TerminalsView> {
       const before = this.viewport;
       this.viewport = viewport;
       this.sizer.setViewport(viewport);
-      if (viewport.scheme !== before.scheme) this.renderer?.setTheme(terminalTheme());
+      if (viewport.scheme !== before.scheme) {
+        this.themeStale = true;
+        this.applyTheme();
+      }
       if (viewport.density !== before.density) this.refont();
       if (viewport.directInput !== before.directInput) this.applyInput();
       if (chromeInputsChanged(before, viewport)) this.openChromeWindow();
@@ -477,6 +483,13 @@ export class Terminals extends Store<TerminalsView> {
     this.chromeWindow = "closed";
     this.update({ ready: true });
     this.sync();
+  }
+
+  /** A new theme redraws every row, and a redraw replaces the text a selection is on: it waits for the selection to close. */
+  private applyTheme(): void {
+    if (!this.themeStale || this.view.selected) return;
+    this.themeStale = false;
+    this.renderer?.setTheme(terminalTheme());
   }
 
   private async createRenderer(): Promise<void> {

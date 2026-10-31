@@ -30,7 +30,7 @@ class Finger {
   async drag(x0: number, y0: number, x1: number, y1: number, steps = 10, gap = 12): Promise<void> {
     for (let i = 1; i <= steps; i++) {
       await this.move(x0 + ((x1 - x0) * i) / steps, y0 + ((y1 - y0) * i) / steps);
-      await this.page.waitForTimeout(gap);
+      if (i < steps) await this.page.waitForTimeout(gap); // no wait after the last move: a fling needs the lift close behind it
     }
   }
 }
@@ -126,6 +126,21 @@ for (const version of VERSIONS) {
         return data.getData("text/plain");
       });
       expect(copied).toBe(`${words}\ntail`);
+      // A range dragged out of the terminal keeps what is inside it; one ending at the next row's start adds no blank line.
+      const copyAfter = (extend: string): Promise<string> => page.evaluate((how) => {
+        const selection = getSelection();
+        const rows = [...document.querySelectorAll(".xterm-rows > div")];
+        const tail = rows.find((r) => r.textContent.includes("tail-line"));
+        if (!selection || !tail?.nextElementSibling) throw new Error("no tail row");
+        if (how === "out") selection.extend(document.body, document.body.childNodes.length);
+        else selection.setBaseAndExtent(tail.firstChild ?? tail, 0, tail.nextElementSibling, 0);
+        const data = new DataTransfer();
+        tail.dispatchEvent(new ClipboardEvent("copy", { clipboardData: data, bubbles: true, cancelable: true }));
+        return data.getData("text/plain");
+      }, extend);
+      expect(await copyAfter("row-end")).toBe("tail-line");
+      await select(page, "word00", "tail-line", 4);
+      expect((await copyAfter("out")).startsWith(`${words}\ntail-line`)).toBe(true);
     });
 
     test("a tap elsewhere closes a selection of the rows and does nothing else", async ({ page }) => {
@@ -207,15 +222,32 @@ for (const version of VERSIONS) {
       await expect(page.getByRole("button", { name: "Jump to latest" })).toBeVisible();
       const history = await page.locator("[data-history]").innerText();
       expect(history).toMatch(/row 3\d\d/);
+      // Copy across the seam between the history view and xterm's first row takes the rows in order.
+      const seam = await page.evaluate(() => {
+        const last = document.querySelector("[data-history]")?.lastElementChild;
+        const first = document.querySelector(".xterm-rows")?.firstElementChild;
+        const from = last && document.createTreeWalker(last, NodeFilter.SHOW_TEXT).nextNode();
+        const to = first && document.createTreeWalker(first, NodeFilter.SHOW_TEXT).nextNode();
+        if (!from || !to) throw new Error("no rows at the seam");
+        getSelection()?.setBaseAndExtent(from, 0, to, to.textContent?.length ?? 0);
+        const data = new DataTransfer();
+        first.dispatchEvent(new ClipboardEvent("copy", { clipboardData: data, bubbles: true, cancelable: true }));
+        return data.getData("text/plain");
+      });
+      const [above, below] = seam.split("\n").map((line) => Number(/row (\d+)/.exec(line)?.[1]));
+      expect(seam.split("\n")).toHaveLength(2);
+      expect(below).toBe((above ?? 0) + 1);
       // Momentum: a flick keeps going after the finger lifts.
       const top = async (): Promise<number> => (await page.locator("[data-history]").boundingBox())?.y ?? 0;
       await finger.down(at.x, at.y + 200);
       await finger.drag(at.x, at.y + 200, at.x, at.y + 380, 6, 8);
       await finger.up();
+      // The fling counts only if the last move was within 80 ms of the lift, so lift at once, then poll: the coast
+      // moves the history again and again after the finger is gone.
       const lifted = await top();
-      await page.waitForTimeout(120);
-      const later = await top();
-      expect(later).toBeGreaterThan(lifted);
+      await expect.poll(top).toBeGreaterThan(lifted);
+      const coasting = await top();
+      await expect.poll(top).toBeGreaterThan(coasting);
       await page.getByRole("button", { name: "Jump to latest" }).tap();
       await expect(page.getByRole("button", { name: "Jump to latest" })).toHaveCount(0);
     });

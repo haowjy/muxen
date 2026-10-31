@@ -23,7 +23,7 @@ const REACH = 22;
 export class PageSelection {
   constructor(private readonly deps: PageSelectionDeps) {}
 
-  /** Whether a non-empty range lies inside the rows. The line box's caret and the terminal input's fire the same event and don't count. */
+  /** Whether a non-empty range reaches the rows. The line box's caret and the terminal input's fire the same event and don't count. */
   exists(): boolean {
     return this.range() !== null;
   }
@@ -40,7 +40,10 @@ export class PageSelection {
     if (!range) return "";
     const pieces = this.deps.rows()
       .filter(({ element }) => range.intersectsNode(element))
-      .map(({ element, wrapped }) => ({ text: clipped(range, element).replaceAll(" ", " "), wrapped }));
+      .map(({ element, wrapped }) => ({ text: clipped(range, element).replaceAll("\u00a0", " "), wrapped }));
+    // A range that ends at a row's start still touches that row, and one that starts at a row's end touches it: neither selects it.
+    while (pieces.at(-1)?.text === "") pieces.pop();
+    while (pieces[0]?.text === "") pieces.shift();
     return logicalLines(pieces).lines.map((line) => line.trimEnd()).join("\n");
   }
 
@@ -48,12 +51,20 @@ export class PageSelection {
     if (this.range()) getSelection()?.removeAllRanges();
   }
 
+  /** The selection cut to the rows: a range that runs on past them (a handle dragged out of the terminal) keeps what lies inside. */
   private range(): Range | null {
     const selection = getSelection();
     if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
     const range = selection.getRangeAt(0);
+    const touched = this.deps.rows().filter(({ element }) => range.intersectsNode(element));
+    const first = touched[0]?.element;
+    const last = touched.at(-1)?.element;
+    if (!first || !last) return null;
     const inside = (node: Node): boolean => this.deps.roots().some((root) => root?.contains(node));
-    return inside(range.startContainer) && inside(range.endContainer) ? range : null;
+    const cut = range.cloneRange();
+    if (!inside(range.startContainer)) cut.setStart(first, 0);
+    if (!inside(range.endContainer)) cut.setEnd(last, last.childNodes.length);
+    return cut;
   }
 }
 

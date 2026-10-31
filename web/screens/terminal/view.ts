@@ -76,11 +76,7 @@ export class TerminalView {
     });
     this.page = new PageSelection({
       roots: () => [deps.renderer()?.textRoot() ?? null, this.history.element],
-      rows: () => {
-        const live = deps.renderer()?.textRows() ?? [];
-        // A soft wrap across the seam between the history and xterm's first row.
-        return [...this.history.pageRows(), ...live.map(({ element, line, wrapped }) => ({ element, wrapped: wrapped || (line === 0 && this.history.continuesIntoBuffer) }))];
-      },
+      rows: () => this.history.pageRows(deps.renderer()?.textRows() ?? []),
     });
     // The recognizer owns every touch on the surface (§7.6): none moves focus, and what a touch means is decided when it resolves.
     this.touch = new TouchControl({ ...deps, scroll: this.scroll, selection: this.selection, page: this.page, send: (events) => { this.send(events); } });
@@ -100,6 +96,11 @@ export class TerminalView {
     this.touch.cancel();
     this.dismissSelection();
     this.scroll.reset();
+  }
+
+  /** Whether the page's selection is up on the rows. */
+  get selected(): boolean {
+    return this.page.exists();
   }
 
   /** The page selection's text, soft wraps joined; empty with none. */

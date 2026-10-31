@@ -44,7 +44,7 @@ interface TouchDeps {
 export type TapAction = "focus" | "focusAndClick" | "click" | "moveCursor" | "none";
 
 /**
- * A tap, resolved (terminal-interaction-design.md, "Terminal taps"). It is aimed at a cell (`cell`, false in
+ * A tap, resolved (terminal-interaction-design.md, "One gesture owner"). It is aimed at a cell (`cell`, false in
  * history), and never raises or lowers the keyboard: a click for an application that asked for the mouse
  * (`mouse`), else the tap moves the prompt cursor while the terminal's own input holds the keyboard.
  *
