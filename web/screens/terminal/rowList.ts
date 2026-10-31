@@ -90,8 +90,6 @@ export class RowList {
    * (after one nobody knows how far tmux's numbering is, and a gap row only leaves with a reset or the cap).
    */
   private historyDone = false;
-  /** A fetched chunk is queued behind a bounce and not yet landed: asking again would fetch the same rows. */
-  private landing = false;
   private lastFrame: Frame | null = null;
   private cell: CellSize | null = null;
   private font: { family: string; size: number } | null = null;
@@ -108,8 +106,11 @@ export class RowList {
   private written = Number.NaN;
   private readonly coast = new Coast(() => { this.rest(); });
   private pullFrame = 0;
-  /** Changes above the view that waited for a bounce to settle, in order. */
-  private deferred: (() => boolean)[] = [];
+  /**
+   * A fetched chunk waiting for a bounce to settle. Its presence is what stops `wantOlder` asking again (the same
+   * rows would come back). Only a chunk waits: a trim is recomputed every frame, so it never queues.
+   */
+  private pending: (() => boolean) | null = null;
 
   private readonly rewritten: ((seqs: number[]) => void)[] = [];
   private readonly dropped: ((first: number, last: number) => void)[] = [];
@@ -236,9 +237,8 @@ export class RowList {
   /** Leaves history for the newest line. */
   toLatest(): void {
     this.following = true;
-    this.deferred = [];
-    this.landing = false;
     this.follow(true);
+    this.flushPending(); // the bounce is over: land the chunk, so its rows (and `historyDone`) are not lost
     this.setScrolledUp(false);
   }
 
@@ -340,24 +340,30 @@ export class RowList {
 
   /** Removes every row after `row`. */
   private dropAfter(row: HTMLElement): void {
-    this.reportDropped(Number(row.dataset["seq"]) + 1, this.seq - 1);
-    for (let block = this.blocks.at(-1); block; block = this.blocks.at(-1)) {
-      while (block.rows.length > 0 && block.rows.at(-1) !== row) {
-        const gone = block.rows.pop();
-        gone?.remove();
-        this.count--;
-      }
-      this.grown.add(block);
-      if (block.rows.length > 0) break;
-      this.blocks.pop();
-      this.grown.delete(block);
-      block.element.remove();
-    }
+    this.remove(Number(row.dataset["seq"]) + 1, this.seq - 1);
   }
 
-  /** The one place rows are announced before they leave: a selection over them closes (J7). */
-  private reportDropped(first: number, last: number): void {
+  /**
+   * The one place rows leave the list: a selection over them closes (J7) before they go. Removes the rows whose
+   * `seq` lies in `first..last`; a block it empties goes with them.
+   */
+  private remove(first: number, last: number): void {
     for (const listener of this.dropped) listener(first, last);
+    const seq = (row: HTMLElement | undefined): number => Number(row?.dataset["seq"]);
+    this.blocks = this.blocks.filter((block) => {
+      if (seq(block.rows.at(-1)) < first || seq(block.rows[0]) > last) return true;
+      const kept = block.rows.filter((row) => seq(row) < first || seq(row) > last);
+      this.count -= block.rows.length - kept.length;
+      for (const row of block.rows) if (!kept.includes(row)) row.remove();
+      block.rows = kept;
+      if (kept.length === 0) {
+        block.element.remove();
+        this.grown.delete(block);
+        return false;
+      }
+      this.grown.add(block);
+      return true;
+    });
   }
 
   private draw(screen: ScreenRow, row: Row): void {
@@ -373,8 +379,7 @@ export class RowList {
   }
 
   private clear(): void {
-    const first = this.blocks[0]?.rows[0];
-    if (first) this.reportDropped(Number(first.dataset["seq"]), this.seq - 1);
+    if (this.count > 0) this.remove(0, this.seq - 1);
     this.run.replaceChildren();
     this.blocks = [];
     this.gapRow = null;
@@ -383,8 +388,7 @@ export class RowList {
     this.count = 0;
     this.historyDone = false;
     this.history.reset();
-    this.deferred = [];
-    this.landing = false;
+    this.pending = null;
     this.following = true;
   }
 
@@ -492,13 +496,13 @@ export class RowList {
     this.setScrolledUp(!this.following);
     this.coast.scrolled();
     for (const listener of this.userScrolls) listener();
-    if (scrollTop >= 0) this.flushDeferred();
+    if (scrollTop >= 0) this.flushPending();
     this.wantOlder();
   };
 
   /** No gesture and no fling: what waited for rest may go. */
   private rest(): void {
-    this.flushDeferred();
+    this.flushPending();
     this.trim();
     this.follow();
   }
@@ -514,17 +518,12 @@ export class RowList {
   /**
    * Every change above the view goes through here: Safari does no scroll anchoring of its own (and
    * `overflow-anchor: none` keeps Chromium's out), so the top visible row's offset is read before and
-   * restored after, following or not (a finger may hold the view at latest). While the view is overscrolled
-   * the change waits for the bounce to settle; waiting changes run in order. A change returns false when it
+   * restored after, following or not (a finger may hold the view at latest). A change returns false when it
    * moved nothing. If it removes the row the view was anchored to, the view goes to the oldest row, the
    * nearest to where it was.
    */
   private editAbove(change: () => boolean): void {
     const { element } = this;
-    if (element.scrollTop < 0) {
-      this.deferred.push(change);
-      return;
-    }
     const top = element.getBoundingClientRect().top;
     const anchor = this.topRow();
     const before = anchor ? anchor.getBoundingClientRect().top - top : 0;
@@ -535,10 +534,10 @@ export class RowList {
     for (const listener of this.shifted) listener();
   }
 
-  private flushDeferred(): void {
-    const changes = this.deferred;
-    this.deferred = [];
-    for (const change of changes) this.editAbove(change);
+  private flushPending(): void {
+    const change = this.pending;
+    this.pending = null;
+    if (change) this.editAbove(change);
   }
 
   /** The first of `items` whose bottom edge is below `edge`, as an index: a binary search, so it reads a few rects and no more. */
@@ -569,7 +568,8 @@ export class RowList {
   private trim(): void {
     if (this.count - (this.blocks[0]?.rows.length ?? 0) < CAP_ROWS) return;
     const urgent = this.count > CEILING_ROWS;
-    if (!urgent && (this.coast.moving || this.element.hidden)) return;
+    // Not mid-bounce unless the ceiling forces it: a flash beats rows without bound. Otherwise the next frame retries.
+    if (!urgent && (this.coast.moving || this.element.hidden || this.element.scrollTop < 0)) return;
     const held = this.options.held();
     this.editAbove(() => {
       const inView = urgent ? this.blocks.length : this.firstBelow(this.blocks, (b) => b.element, this.element.getBoundingClientRect().top);
@@ -584,9 +584,7 @@ export class RowList {
       const first = this.blocks[0]?.rows[0];
       const last = this.blocks[gone - 1]?.rows.at(-1);
       if (!first || !last) return false;
-      this.reportDropped(Number(first.dataset["seq"]), Number(last.dataset["seq"]));
-      for (const block of this.blocks.splice(0, gone)) block.element.remove();
-      this.count = rows;
+      this.remove(Number(first.dataset["seq"]), Number(last.dataset["seq"]));
       return true;
     });
   }
@@ -600,7 +598,7 @@ export class RowList {
    * knows how far the numbers are), no miss, and below the cap, which would trim the chunk the moment it landed.
    */
   wantOlder(): void {
-    if (this.historyDone || this.landing || this.pinned || this.element.hidden || this.count >= CAP_ROWS || !this.history.idle) return;
+    if (this.historyDone || this.pending || this.pinned || this.element.hidden || this.count >= CAP_ROWS || !this.history.idle) return;
     if (this.element.scrollTop >= PREFETCH_SCREENS * this.height) return;
     void this.fetchOlder();
   }
@@ -635,9 +633,7 @@ export class RowList {
     const seam = chunk.rows[found];
     if (chunk.fetched.length < CHUNK || rows.length === 0) this.historyDone = true;
     if (rows.length === 0) return;
-    this.landing = true;
-    this.editAbove(() => {
-      this.landing = false;
+    const land = (): boolean => {
       if (this.blocks[0]?.rows[0] !== oldest) return false;
       if (seam?.wrapped) { // a soft wrap across the seam; `draw` keeps it if a frame redraws this row
         oldest.dataset["seam"] = "";
@@ -653,7 +649,9 @@ export class RowList {
       this.count += rows.length;
       for (const block of blocks) this.sizeBlock(block);
       return true;
-    });
+    };
+    if (this.element.scrollTop < 0) this.pending = land; // lands when the bounce settles
+    else this.editAbove(land);
   }
 
   // ---- rows of a range
