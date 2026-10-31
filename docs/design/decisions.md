@@ -191,8 +191,8 @@ Decided by Jimmy, 2026-10-21 unless an entry gives another date.
 ### Keyboard: native Swift shell first
 
 - **What:** a native iOS app, a WKWebView hosting the web UI with a native first
-  responder owning the keyboard ([ios-shell.md](ios-shell.md)). Xcode installs until a
-  paid account brings TestFlight.
+  responder owning the keyboard ([ios-shell.md](ios-shell.md)). Xcode installs until
+  TestFlight is set up.
 - **Why:** iOS shows the keyboard only from a user gesture in a web page, and the
   system accessory's Done button closes it and can't be hidden
   ([ios-web.md §1](research/ios-web.md)).
