@@ -2,7 +2,7 @@
 // server's sessions that are not open in the workspace; typing filters them locally; a tap attaches; the last
 // row creates. The router overlay `{ screen: "sessions", name: "open", params: { workspace } }`, so Back, Escape
 // and the opener's focus return are the overlay machinery's.
-import { useState } from "preact/hooks";
+import { useRef, useState } from "preact/hooks";
 import { useApp, useAppView, useBells, useDocked, useOverlay } from "../../app/context";
 import type { HostClient } from "../../net/hosts";
 import { tabId } from "../../platform/tabKey";
@@ -49,6 +49,9 @@ function Body({ host, workspace }: { host: HostClient; workspace: Workspace }) {
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // New session with the field empty asks for a name there instead of creating one tmux names.
+  const [asked, setAsked] = useState(false);
+  const form = useRef<HTMLFormElement>(null);
   const name = host.name ?? "the server";
   const listing = sessions?.listing;
   const failure = sessions?.failure ?? null;
@@ -68,6 +71,11 @@ function Body({ host, workspace }: { host: HostClient; workspace: Workspace }) {
   };
   const commit = async (): Promise<void> => {
     if (busy || blocked !== undefined) return;
+    if (typed === "") {
+      setAsked(true);
+      form.current?.querySelector("input")?.focus();
+      return;
+    }
     setBusy(true);
     setError(null);
     const result = await openOrCreate(app, workspace, host, typed);
@@ -113,8 +121,8 @@ function Body({ host, workspace }: { host: HostClient; workspace: Workspace }) {
   }
 
   return (
-    <form class={styles.page} onSubmit={submit}>
-      <TextField label="Session name" value={query} onInput={(v) => { setQuery(v); setError(null); }} error={error} data-initial-focus="" />
+    <form ref={form} class={styles.page} onSubmit={submit}>
+      <TextField label="Session name" value={query} onInput={(v) => { setQuery(v); setError(null); setAsked(false); }} hint={asked ? "Type a name for the new session" : undefined} error={error} data-initial-focus="" />
       {list}
     </form>
   );

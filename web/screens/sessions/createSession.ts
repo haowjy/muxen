@@ -65,22 +65,22 @@ function listingWith(app: AppController, host: HostClient, find: (listing: TmuxL
   });
 }
 
-/** Attaches `name` if the listing has it, else creates it (`name` empty: tmux names it); the tab opens behind the closing Open session screen. */
+/** Attaches `name` if the listing has it, else creates it; the tab opens once Open session, and the tab list under it, close. */
 export async function openOrCreate(app: AppController, workspace: Workspace, host: HostClient, name: string): Promise<OpenResult> {
   const hostName = host.name ?? "the server";
   const typed = name.trim();
   const attach = ({ listing, session }: Found): OpenResult => {
-    app.router.closeOverlay(() => { openSession(app, workspace, host, listing, session); });
+    app.router.closeAllOverlays(() => { openSession(app, workspace, host, listing, session); });
     return { ok: true };
   };
   const listed = app.sessions.snapshot.hosts[host.entry.handle]?.listing;
-  const existing = typed === "" ? undefined : listed?.sessions.find((s) => s.name === typed);
+  const existing = listed?.sessions.find((s) => s.name === typed);
   if (listed && existing) return attach({ listing: listed, session: existing });
 
   let created;
   try {
     created = await host.socket.request(
-      (req) => ({ type: "newSession", data: { req, ...(typed !== "" && { name: typed }) } }),
+      (req) => ({ type: "newSession", data: { req, name: typed } }),
       (reply) => (reply.type === "created" ? reply.data : undefined),
     );
   } catch (error) {

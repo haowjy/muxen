@@ -215,8 +215,10 @@ A field heads it, “Session name”, over this server's sessions that are not o
 workspace, each with its window count and last activity, from a listing fetched when the screen
 opens and refreshed on `sessionsChanged`. Typing filters the list locally, with no request per
 keystroke. A tap on a session opens it as a tab and makes it active; it never creates a shell.
-The list's last row creates: with the field empty, **New session** (tmux names it); with text no
-session has, **Create “infra2”**. Return does what the first row does. Typing the name of a
+The list's last row creates: with text no session has, **Create “infra2”**. With the field empty it reads
+**New session** and asks for a name: it puts the caret in the field, which says "Type a name for the new
+session", and creates nothing (Jimmy, 2026-10-31: "if u click “new session” - it doesn't ask u for a
+name"). A session tmux would name is not offered. Return does what the first row does. Typing the name of a
 session already open here activates its tab. New-or-attach is the client's rule over the
 listing: a listed name attaches and an unlisted one sends `newSession`; a “duplicate session”
 refusal (another client created it first) re-lists and attaches. tmux's `new-session -A` is not
