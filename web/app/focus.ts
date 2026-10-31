@@ -26,11 +26,10 @@ interface FocusView {
 }
 
 /**
- * The mode native rests in for a screen: `webText` wherever a web field may take the keyboard;
- * on Terminal, `select` while the selection snapshot holds the touch, so native lets the web view's text selection work.
+ * The mode native rests in for a screen: `webText` wherever a web field may take the keyboard.
  */
-function restingMode(screen: Screen, overlay: boolean, keyboardWasUp: boolean, selecting = false): FocusMode {
-  if (screen === "terminal" && !overlay) return selecting ? "select" : keyboardWasUp ? "terminal" : "hidden";
+function restingMode(screen: Screen, overlay: boolean, keyboardWasUp: boolean): FocusMode {
+  if (screen === "terminal" && !overlay) return keyboardWasUp ? "terminal" : "hidden";
   return "webText";
 }
 
@@ -48,7 +47,6 @@ export class FocusController extends Store<FocusView> implements FocusPort {
   private standIn: HTMLElement | null = null;
   private mode: FocusMode | null = null;
   private screen: { screen: Screen; overlay: boolean } | null = null;
-  private isSelecting = false;
   /** The keyboard was up when the user switched tabs: the next screen's input of this kind takes it (`keepKeyboardOn`). */
   private keeping: FocusTarget | null = null;
 
@@ -262,12 +260,6 @@ export class FocusController extends Store<FocusView> implements FocusPort {
     if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
   }
 
-  /** The terminal's selection is up (§7.6) while `on`: native keeps the keyboard and empties its edit menus. */
-  selecting(on: boolean): void {
-    this.isSelecting = on;
-    this.rest();
-  }
-
   /** Whenever the screen or overlay changes: native learns the mode the screen needs. */
   screenChanged(screen: Screen, overlay: boolean): void {
     this.screen = { screen, overlay };
@@ -287,9 +279,8 @@ export class FocusController extends Store<FocusView> implements FocusPort {
 
   private restingNow(): FocusMode | null {
     if (!this.screen) return null;
-    if (this.isSelecting) return restingMode(this.screen.screen, this.screen.overlay, this.snapshot.owner !== "none", true);
     if (this.isNative && this.screen.screen === "terminal" && !this.screen.overlay && this.snapshot.owner === "line") return "line";
-    return restingMode(this.screen.screen, this.screen.overlay, this.snapshot.owner !== "none", this.isSelecting);
+    return restingMode(this.screen.screen, this.screen.overlay, this.snapshot.owner !== "none");
   }
 
   private get isNative(): boolean { return this.viewport().directInput === "native"; }

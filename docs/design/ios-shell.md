@@ -348,7 +348,7 @@ responder. Terminal's native responder stays the same object while its target ch
 | `terminal` | `KeyboardInput` | up | `focus terminal`: toggle from `hidden`; a tap on the cursor row or the row above/below while down; a terminal tap or esc from `line` while up; restore after interruption |
 | `line` | `KeyboardInput` | up, Return labelled Send | `focus line`: tap the dock box; restore after interruption |
 | `webText` | WebKit content view | WebKit's | a sheet or Files screen needs its own field; overlay / destination opens |
-| `select` | unchanged | unchanged | `focus select`: not a target but a flag over the current one (`selecting`); any other mode clears it |
+| `select` | unchanged | unchanged | `focus select`: not a target but a flag over the current one (`selecting`); any other mode clears it. The web no longer sends it (2026-10-31): no snapshot holds the touch |
 
 - **One responder, two targets.** Switching `terminal` ↔ `line` changes the mode and
   Return label, then calls `reloadInputViews()` on the same field. Tapping the dock box
@@ -365,6 +365,7 @@ responder. Terminal's native responder stays the same object while its target ch
   sheet field and its ordinary keyboard chrome. On close the held Terminal target is
   restored synchronously; the app does not require a new tap to raise the keyboard.
 - **Selection** ([plan.md](plan.md#select-copy-and-paste)) uses the web selection layer.
+  (Since 2026-10-31 the web never sends `focus select`; the paragraph below describes what native still accepts.)
   `focus select` sets `FocusController.selecting` and leaves the target alone: the keyboard
   stays as it was, typing goes where it went, and only the hide button lowers it. Resigning
   the field there dropped the keyboard, and on the phone WebKit cleared the page's

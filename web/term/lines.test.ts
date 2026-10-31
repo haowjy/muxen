@@ -1,6 +1,6 @@
 import { Terminal } from "@xterm/headless";
 import { describe, expect, it } from "vitest";
-import { logicalLines, selectedText } from "../touch/selection";
+import { logicalLines } from "../touch/selection";
 import { bufferRows } from "./lines";
 import { rowText } from "./rows";
 
@@ -9,9 +9,7 @@ async function copied(cols: number, data: string, rows = 10): Promise<string> {
   const term = new Terminal({ cols, rows, allowProposedApi: true });
   await new Promise<void>((resolve) => { term.write(data, resolve); });
   const { rows: all } = bufferRows(term.buffer.active, 0);
-  const logical = logicalLines(all.map((row) => ({ text: rowText(row), wrapped: row.wrapped })));
-  const last = logical.lines.length - 1;
-  return selectedText(logical.lines, { line: 0, offset: 0 }, { line: last, offset: logical.lines[last]?.length ?? 0 });
+  return logicalLines(all.map((row) => ({ text: rowText(row), wrapped: row.wrapped }))).map((line) => line.trimEnd()).join("\n");
 }
 
 describe("copying a real buffer", () => {
@@ -23,14 +21,5 @@ describe("copying a real buffer", () => {
     ["keeps the space a wrap splits at", 5, "ab cd ef", 2, "ab cd ef"],
   ])("%s", async (_name, cols, data, rows, expected) => {
     expect((await copied(cols, data, rows)).trimEnd()).toBe(expected);
-  });
-});
-
-describe("a buffer row's cells", () => {
-  it("come from the terminal's own widths: a wide character is followed by an empty cell, © takes one", async () => {
-    const term = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
-    await new Promise<void>((resolve) => { term.write("© 日本x", resolve); });
-    const [row] = bufferRows(term.buffer.active, 0).rows;
-    expect(row?.cells.slice(0, 8)).toEqual(["©", " ", "日", "", "本", "", "x", " "]);
   });
 });

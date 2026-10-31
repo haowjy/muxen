@@ -78,7 +78,7 @@ export function Dock({ active }: { active: boolean }) {
     const box = slot.current;
     const lifted = lift.current;
     if (!active || !strip || !bar || !hung || !box || !lifted) {
-      terminals.setPanArea(null);
+      terminals.setVisible(null);
       return;
     }
     const root = document.documentElement;
@@ -86,7 +86,7 @@ export function Dock({ active }: { active: boolean }) {
       const covered = strip.offsetHeight;
       root.style.setProperty("--dock-above-height", `${String(covered + hung.offsetHeight)}px`);
       if (!typing && viewport.keyboardInset === 0) {
-        terminals.setPanArea(null);
+        terminals.setVisible(null);
         return;
       }
       // Where the row is going, not where it is: the lift may be part way through its slide with the
@@ -94,7 +94,7 @@ export function Dock({ active }: { active: boolean }) {
       // place in the slot less the lift's end value is its top once the keyboard is there.
       const rest = box.getBoundingClientRect().top + lifted.offsetTop + bar.offsetTop;
       const raised = Math.max(0, viewport.keyboardInset - parseFloat(getComputedStyle(lifted).bottom));
-      terminals.setPanArea(Math.max(0, rest - raised - covered - terminals.element.getBoundingClientRect().top));
+      terminals.setVisible(Math.max(0, rest - raised - covered - terminals.element.getBoundingClientRect().top));
     };
     update();
     // Defer layout writes until after ResizeObserver delivery. Growing the line changes this
@@ -113,7 +113,7 @@ export function Dock({ active }: { active: boolean }) {
       watch.disconnect();
       cancelAnimationFrame(frame);
       root.style.removeProperty("--dock-above-height");
-      terminals.setPanArea(null);
+      terminals.setVisible(null);
     };
   }, [active, typing, viewport.keyboardInset, viewport.visibleHeight, terminals]);
 

@@ -11,7 +11,6 @@ import { useStore } from "../../ui/store";
 import { Button } from "../../ui/primitives/Button";
 import { activeTerminal } from "../../workspace/state";
 import { Dock } from "./dock/Dock";
-import { EditMenu } from "./selection/EditMenu";
 import { bandTone, lookOf } from "./tabView";
 import { terminalsOf } from "./terminals";
 import { useNow } from "./useNow";
@@ -23,7 +22,6 @@ export function TerminalScreen({ active }: { active: boolean }) {
   const slot = useRef<HTMLDivElement>(null);
   const statuses = useStore(terminals, (s) => s.tabs);
   const scrolled = useStore(terminals, (s) => s.scrolled);
-  const menu = useStore(terminals, (s) => s.menu);
   const workspace = useAppView((v) => v.workspace);
   const phone = useAppView((v) => v.viewport.layout === "phone");
   // Touch input (a phone, or an iPad without a trackpad) ends in the dock.
@@ -54,7 +52,6 @@ export function TerminalScreen({ active }: { active: boolean }) {
             Jump to latest
           </Button>
         )}
-        {menu && <EditMenu menu={menu} onCopy={() => { terminals.pastes.copySelection(); }} onPaste={() => { terminals.pastes.pasteFromMenu(); }} />}
         {current && !status?.detail && statuses[current.id]?.state.kind === "live" && statuses[current.id]?.sizedForOther && (
           <StatusBand tone="notice" text="Sized for another terminal" action={{ label: "Fit", onAction: () => { terminals.fit(current.id); } }} />
         )}

@@ -1,4 +1,4 @@
-// Styled terminal text outside xterm: the rows the selection snapshot and the history view
+// Styled terminal text outside xterm: the rows the row list and the history view
 // draw as DOM. A row is a list of runs; a run is text in one style. Pure: the DOM that draws
 // them lives in the screens.
 import type { TerminalTheme } from ".";
@@ -30,8 +30,6 @@ export interface Row {
   runs: Run[];
   /** This row continues the one above it: a soft wrap, not a line break. */
   wrapped: boolean;
-  /** The row cell by cell, as the terminal laid it out: a wide character is followed by an empty cell. */
-  cells: string[];
 }
 
 export function rowText(row: Row): string {

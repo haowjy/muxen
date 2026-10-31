@@ -43,13 +43,11 @@ export interface ViewOptions {
   fontFamily: string;
   fontSize: number;
   theme: TerminalTheme;
-  /** WebGL when the context can be had, else the DOM renderer. A phone wants the DOM renderer: its rows are page text. */
-  webgl: boolean;
   /** A URL in the output was tapped. */
   openLink(url: string): void;
 }
 
-/** The interim xterm view over a {@link TerminalModel}: what xterm draws, scrolls and selects (desktop, and the app's native input). */
+/** The interim xterm view over a {@link TerminalModel}: what xterm draws, scrolls and selects (desktop). */
 export interface XtermView {
   /** One cell's size in CSS pixels, null until the first paint; changes with font size. */
   cellSize(): CellSize | null;
@@ -77,8 +75,6 @@ export interface XtermView {
   inputElement(): HTMLElement | null;
   /** The selection's logical text: soft wraps joined, as xterm marks them. Empty with no selection. */
   selectionText(): string;
-  /** Where the cursor is on the visible screen (interim: callers read the frame's cursor once the view takes frames). */
-  cursor(): CellPosition;
   /** Scrollback rows above the visible screen, and how many of them the view is scrolled up by. */
   scrollback(): { rows: number; up: number };
   /** Scrolls the buffer by whole rows, negative toward older ones, and returns the rows it moved: fewer than asked at either end. */
@@ -91,15 +87,9 @@ export interface XtermView {
   /**
    * The buffer's rows from the row `from` (moved up to its line's start, and returned as
    * `from`) up to the row `to` exclusive (default: the end; run on to finish a wrapped line),
-   * styled: the selection snapshot's text and the history seam's anchor.
+   * styled: the history seam's anchor.
    */
   rows(from: number, to?: number): { rows: Row[]; from: number };
   /** The buffer row at the top of the visible screen. */
   viewportTop(): number;
-  /** The cell under a client point, from measured cell metrics and the screen's position, pan included; null outside the screen. */
-  cellAt(x: number, y: number): CellPosition | null;
-  /** The screen's top-left corner in client px, the pan and the history slide included; null before the first paint. */
-  screenOrigin(): { left: number; top: number } | null;
-  /** What remains visible of the terminal, in CSS pixels, for the cursor pan; null follows the container (the default). */
-  setPanArea(px: number | null): void;
 }

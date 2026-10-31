@@ -38,23 +38,17 @@ export function readRows(buffer: IBuffer, from: number, to: number, wrapped: (y:
     const line = buffer.getLine(y);
     if (!line) break;
     const runs: Run[] = [];
-    const cells: string[] = [];
     for (let x = 0; x < line.length; x++) {
       cell = line.getCell(x, cell);
       if (!cell) continue;
       const width = cell.getWidth();
-      // The second cell of a wide character is empty in the cells and absent from the text.
-      if (width === 0) {
-        cells.push("");
-        continue;
-      }
+      if (width === 0) continue; // the second cell of a wide character is absent from the text
       const chars = cell.getChars() || " ";
-      cells.push(chars);
       if (width === 2) runs.push({ text: chars, style: styleOf(cell), wide: true }); // a run of its own, so the view can give it two cells
       else pushRun(runs, chars, styleOf(cell));
     }
     if (!wrapped(y + 1)) trimRow(runs);
-    rows.push({ runs, wrapped: wrapped(y), cells });
+    rows.push({ runs, wrapped: wrapped(y) });
   }
   return rows;
 }

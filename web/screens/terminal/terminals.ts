@@ -24,7 +24,6 @@ import { failureText } from "../sessions/createSession";
 import type { LineEditor } from "./dock/lineEditor";
 import { nativeLineEditor } from "./dock/lineEditor";
 import { interceptClipboard, Pastes } from "./paste";
-import type { MenuState } from "./selection/control";
 import styles from "./Terminal.module.css";
 import { RowList } from "./rowList";
 import { TerminalView } from "./view";
@@ -48,8 +47,6 @@ interface TerminalsView {
   ready: boolean;
   /** The view is above the newest line (in the buffer or the history): the jump-to-latest control shows. */
   scrolled: boolean;
-  /** The edit menu, while a long-press selection or a press on a blank cell has one open. */
-  menu: MenuState | null;
 }
 
 /** A few frames for xterm to paint and the cell to become measurable. */
@@ -85,8 +82,8 @@ export class Terminals extends Store<TerminalsView> {
   /** The element the renderer draws into; the screen places it and never creates it. */
   readonly element: HTMLDivElement = document.createElement("div");
   /**
-   * The model, once the element has a size, and the views of it. The row list draws it while the input is the
-   * phone's own (`"owned"`), xterm's view otherwise; each is created the first time it is needed, and the other
+   * The model, once the element has a size, and the views of it. The row list draws it on every input but
+   * desktop's (`"xterm"`), where xterm's view does; each is created the first time it is needed, and the other
    * stays hidden and keeps parsing (an iPad that gains or loses a trackpad switches without a fetch).
    */
   private surface: { model: TerminalModel; xterm: XtermView | null; list: RowList | null } | null = null;
@@ -109,7 +106,8 @@ export class Terminals extends Store<TerminalsView> {
   private batchTimer: ReturnType<typeof setTimeout> | undefined;
   /** muxen's own input on a phone browser; created the first time it is needed. */
   private owned: HTMLTextAreaElement | null = null;
-  private panArea: number | null = null;
+  /** What remains visible above the keyboard, for the row list; null is all of it. */
+  private visible: number | null = null;
   /** The shown pane is larger than the box: the renderer stays DOM. */
   private paneLarge = false;
   /** The shell's command line under the cursor, for a tap on the prompt row. */
@@ -126,7 +124,7 @@ export class Terminals extends Store<TerminalsView> {
   browserLine: LineEditor | null = null;
 
   constructor(private readonly app: AppController) {
-    super({ tabs: {}, ready: false, scrolled: false, menu: null });
+    super({ tabs: {}, ready: false, scrolled: false });
     this.viewport = app.snapshot.viewport;
     this.textSize = app.snapshot.preferences.textSize;
     this.element.className = styles.host ?? "";
@@ -166,16 +164,14 @@ export class Terminals extends Store<TerminalsView> {
       focusTerminal: () => { this.app.focus.focusTarget("terminal", true); },
       prompt: () => this.promptLine,
       owner: () => this.app.focus.snapshot.owner,
-      selecting: (on) => { this.app.focus.selecting(on); },
       onScrolled: (scrolled) => { this.update({ scrolled }); },
-      onMenu: (menu) => { this.update({ menu }); },
     });
     new ResizeObserver(() => { this.measure(); }).observe(this.element);
     app.subscribe(() => { this.sync(); });
     app.focus.subscribe(() => { this.drawCursor(); });
     document.addEventListener("selectionchange", () => { this.applyTheme(); });
     app.platform.subscribe((event) => {
-      // The app's edit menu over the mark, or over iOS's own selection: its choices are the same as muxen's own menu had.
+      // The app's edit menu over the mark, or over iOS's own selection.
       if (event.type === "menuCopy") this.pastes.copySelection();
       if (event.type === "menuPaste") this.pastes.pasteFromMenu();
       // Native's responder: only the tab on screen still takes input.
@@ -293,9 +289,8 @@ export class Terminals extends Store<TerminalsView> {
   }
 
   /** What remains visible of the terminal above the dock, for the keyboard; null follows the surface. */
-  setPanArea(px: number | null): void {
-    this.panArea = px;
-    this.surface?.xterm?.setPanArea(px);
+  setVisible(px: number | null): void {
+    this.visible = px;
     this.surface?.list?.setVisible(px);
   }
 
@@ -508,7 +503,7 @@ export class Terminals extends Store<TerminalsView> {
 
   /** One cell's size from the font alone, for the view that draws now. */
   private activeCell(): CellSize | null {
-    return (this.viewport.directInput === "owned" ? this.surface?.list?.cellSize() : this.surface?.xterm?.fontCell()) ?? null;
+    return (this.viewport.directInput === "xterm" ? this.surface?.xterm?.fontCell() : this.surface?.list?.cellSize()) ?? null;
   }
 
   private async createSurface(): Promise<void> {
@@ -532,7 +527,7 @@ export class Terminals extends Store<TerminalsView> {
     const { surface } = this;
     if (!surface) return;
     const font = getComputedStyle(this.element);
-    if (this.viewport.directInput === "owned") {
+    if (this.viewport.directInput !== "xterm") {
       if (!surface.list) {
         const list = new RowList(surface.model, { fetch: (start, end) => this.shownDriver()?.history(start, end) ?? null, held: () => this.view.heldRanges() });
         surface.list = list;
@@ -540,7 +535,7 @@ export class Terminals extends Store<TerminalsView> {
         this.view.attach(list);
         list.onScrolledUp((scrolled) => { this.view.reportScrolled(scrolled); });
         list.setFont(font.fontFamily, parseFloat(font.fontSize));
-        list.setVisible(this.panArea);
+        list.setVisible(this.visible);
       }
       surface.xterm?.setHidden(true);
       surface.list.setHidden(false);
@@ -552,12 +547,9 @@ export class Terminals extends Store<TerminalsView> {
         fontFamily: font.fontFamily,
         fontSize: parseFloat(font.fontSize),
         theme: terminalTheme(),
-        // Desktop draws the screen as a picture; the app's native input draws page text for its selection snapshot.
-        webgl: this.viewport.directInput === "xterm",
         openLink: (url) => { this.app.platform.openURL(url); },
       });
       surface.xterm = xterm;
-      xterm.setPanArea(this.panArea);
       xterm.onScrolledUp(() => { this.view.scroll.scrolledChanged(); });
     }
     surface.xterm.setHidden(false);
@@ -616,13 +608,12 @@ export class Terminals extends Store<TerminalsView> {
    * The hardware keys that do not type text go to tmux (`routeHardwareKey`). The listener is on the
    * document's bubble phase and stands down for a key already claimed (`defaultPrevented`, or a
    * stopPropagation), so the line box's Enter and a menu's Escape keep theirs. Another focused
-   * element, an open dialog and an IME composing keep their keys; with no box focused, so does the
-   * terminal's edit menu. A tab menu is not modal: its other keys go to the terminal.
+   * element, an open dialog and an IME composing keep their keys. A tab menu is not modal: its other keys go to the terminal.
    */
   private readonly hardwareKey = (event: KeyboardEvent): void => {
     if (event.defaultPrevented) return;
     const held = document.activeElement;
-    const free = this.shownTerminalTab() !== null && this.app.snapshot.entry.overlay === null && this.snapshot.menu === null && (!held || held === document.body);
+    const free = this.shownTerminalTab() !== null && this.app.snapshot.entry.overlay === null && (!held || held === document.body);
     const route = routeHardwareKey(decideKey(event, "owned"), event, this.app.focus.snapshot.owner, free);
     if (route.to === "ignore") return;
     event.preventDefault();

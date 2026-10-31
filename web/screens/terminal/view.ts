@@ -1,10 +1,8 @@
-// How the shown tab is looked at by touch (client-architecture.md §7.6): the recognizer, the
-// scroll with its momentum (xterm's view: the row list scrolls natively), the history rows above the buffer
-// and the selection snapshot (xterm's view too), and the selection and mark on the row list. All
-// of it is state of one tab on a surface every tab shares, so it lives in one object that is
-// told which tab is shown and drops everything when that changes or a snapshot repaints the
-// pane. Nothing here outlives the view it began on: a coast, a held drag or a
-// selection never reaches another tab's pane.
+// How the shown tab is looked at by touch (client-architecture.md §7.6): the recognizer, the selection and
+// mark on the row list (which scrolls natively), and, for desktop's xterm view, the wheel past the buffer's top
+// onto the history rows. All of it is state of one tab on a surface every tab shares, so it lives in one object
+// that is told which tab is shown and drops everything when that changes or a snapshot repaints the
+// pane. Nothing here outlives the view it began on: a held drag or a selection never reaches another tab's pane.
 import type { Owner } from "../../app/focus";
 import type { HapticKind, InputEvent, MenuRect } from "../../platform/types";
 import type { HistoryRow } from "../../tabs/driver";
@@ -14,16 +12,15 @@ import { HistoryView } from "./history";
 import { PinnedWheel } from "./pinnedWheel";
 import type { RowList } from "./rowList";
 import { ScrollControl } from "./scroll";
-import { SelectionControl, type MenuState } from "./selection/control";
 import { Mark } from "./selection/mark";
 import { PageSelection } from "./selection/pageSelection";
 import { TouchControl } from "./touchControl";
 
 interface ViewDeps {
-  /** The surface: the host of the renderer, the history rows and the snapshot. */
+  /** The surface: the host of the views and the history rows. */
   element: HTMLElement;
   renderer(): XtermView | null;
-  /** The row list, once it exists; it is the view while `directInput` is `"owned"`. */
+  /** The row list, once it exists; it is the view on every input but desktop's xterm. */
   list(): RowList | null;
   model(): TerminalModel | null;
   theme(): TerminalTheme;
@@ -39,21 +36,16 @@ interface ViewDeps {
   prompt(): PromptLine | null;
   /** Who holds the keyboard. */
   owner(): Owner;
-  /** Native keeps the web view's selection while a snapshot is up (`setFocus("select")`). */
-  selecting(on: boolean): void;
   /** The platform's edit menu, where it has one (the app). */
   editMenu(): ((rect: MenuRect | null) => void) | undefined;
   /** The view is above the newest line. */
   onScrolled(scrolled: boolean): void;
-  /** The edit menu opened, moved or closed. */
-  onMenu(menu: MenuState | null): void;
 }
 
 export class TerminalView {
   private tab: string | null = null;
   private readonly history: HistoryView;
   readonly scroll: ScrollControl;
-  private readonly selection: SelectionControl;
   /** The phone's own selection of the rows' text (owned input). */
   private readonly page: PageSelection;
   /** The app's keyboard-up mark over the same rows. */
@@ -76,18 +68,8 @@ export class TerminalView {
       renderer: () => deps.renderer(),
       model: () => deps.model(),
       history: this.history,
-      send: (events) => { this.send(events); },
       onScrolled: (scrolled) => { deps.onScrolled(scrolled); },
       surfaceHeight: () => element.clientHeight,
-    });
-    this.selection = new SelectionControl({
-      host: element,
-      renderer: () => deps.renderer(),
-      model: () => deps.model(),
-      joinHistory: (buffer) => this.history.join(buffer),
-      theme: () => deps.theme(),
-      menu: (menu) => { deps.onMenu(menu); },
-      selecting: (on) => { deps.selecting(on); },
     });
     this.page = new PageSelection({ list: () => deps.list() });
     this.mark = new Mark({ layer: () => deps.list()?.element ?? null, page: this.page, editMenu: () => deps.editMenu(), tick: () => { deps.haptic("key"); } });
@@ -95,13 +77,8 @@ export class TerminalView {
     // The recognizer owns every touch on the surface (§7.6): none moves focus, and what a touch means is decided when it resolves.
     this.touch = new TouchControl({
       ...deps,
-      surface: () => (deps.directInput() === "owned" ? deps.list() : deps.renderer()),
-      scroll: this.scroll,
+      list: () => deps.list(),
       wheel: this.wheel,
-      listCoasting: () => deps.list()?.coasting ?? false,
-      holdList: (held) => { deps.list()?.hold(held); },
-      reachOlder: () => { deps.list()?.wantOlder(); },
-      selection: this.selection,
       page: this.page,
       mark: this.mark,
       send: (events) => { this.send(events); },
@@ -137,13 +114,13 @@ export class TerminalView {
 
   /** Whether the view is on the newest line. */
   get atLatest(): boolean {
-    return this.deps.directInput() === "owned" ? (this.deps.list()?.atLatest ?? true) : this.scroll.atLatest;
+    return this.deps.directInput() === "xterm" ? this.scroll.atLatest : (this.deps.list()?.atLatest ?? true);
   }
 
   /** Leaves history for the newest line. */
   toLatest(): void {
-    if (this.deps.directInput() === "owned") this.deps.list()?.toLatest();
-    else this.scroll.toLatest();
+    if (this.deps.directInput() === "xterm") this.scroll.toLatest();
+    else this.deps.list()?.toLatest();
   }
 
   /** The tab on screen changed: everything the last one had going stops. */
@@ -153,7 +130,7 @@ export class TerminalView {
     this.reset();
   }
 
-  /** A snapshot repainted the pane, or the tab changed: stop the coast and any gesture, and drop the selection and the fetched history. */
+  /** A snapshot repainted the pane, or the tab changed: stop any gesture, and drop the selection and the fetched history. */
   reset(): void {
     this.touch.cancel();
     this.dismissSelection();
@@ -171,17 +148,15 @@ export class TerminalView {
     return this.page.text();
   }
 
-  /** Closes the mark or the snapshot's selection and returns its logical text: the edit menu's Copy. */
+  /** Closes the mark and returns its logical text: the edit menu's Copy. */
   takeSelection(): string {
-    const text = this.mark.text() || this.selection.text();
+    const text = this.mark.text();
     this.mark.clear();
-    this.selection.dismiss();
     return text;
   }
 
-  /** Closes whichever selection is up: the snapshot's (native input), the page's, or the mark. */
+  /** Closes whichever selection is up: the page's, or the mark. */
   dismissSelection(): void {
-    this.selection.dismiss();
     this.page.clear();
     this.mark.clear();
   }
@@ -192,7 +167,7 @@ export class TerminalView {
 
   private readonly wheelPastTop = (event: WheelEvent): void => {
     const cell = this.deps.renderer()?.cellSize();
-    if (!cell || event.deltaY === 0 || this.selection.active) return;
+    if (!cell || event.deltaY === 0) return;
     // A wheel up (negative) shows older content; some wheels report lines, not pixels.
     const dy = -event.deltaY * (event.deltaMode === WheelEvent.DOM_DELTA_LINE ? cell.height : 1);
     if (this.scroll.wheelPastTop(dy)) {

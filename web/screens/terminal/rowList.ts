@@ -331,7 +331,7 @@ export class RowList {
   }
 
   private appendGap(): void {
-    const { element } = this.append({ runs: [{ text: GAP_TEXT, style: {} }], wrapped: false, cells: [] });
+    const { element } = this.append({ runs: [{ text: GAP_TEXT, style: {} }], wrapped: false });
     element.dataset["gap"] = "";
     element.classList.add(styles.gap ?? "");
     this.gapRow = element;

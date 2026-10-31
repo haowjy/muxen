@@ -27,8 +27,6 @@ export interface HistoryDeps extends FetcherDeps {
 export class HistoryView {
   readonly element: HTMLDivElement = document.createElement("div");
   private rows: Row[] = [];
-  /** The newest row continues into the buffer's first row: a soft wrap across the seam. */
-  private joinsBuffer = false;
   private readonly fetcher: HistoryFetcher;
   /** Reached tmux's oldest row, or the cap. */
   private exhausted = false;
@@ -53,21 +51,10 @@ export class HistoryView {
     return this.height;
   }
 
-  /**
-   * The fetched rows above `buffer`'s rows, joined to them: the selection snapshot's text.
-   * `buffer` must start at the top of xterm's buffer, which the newest history row sits above;
-   * a soft wrap across that seam is kept.
-   */
-  join(buffer: readonly Row[]): Row[] {
-    const [first, ...rest] = buffer;
-    return first && this.joinsBuffer ? [...this.rows, { ...first, wrapped: true }, ...rest] : [...this.rows, ...buffer];
-  }
-
   /** The pane was repainted from a snapshot, or the tab changed: what was fetched no longer sits above this buffer. */
   reset(): void {
     this.fetcher.reset();
     this.rows = [];
-    this.joinsBuffer = false;
     this.exhausted = false;
     this.height = 0;
     this.cell = null;
@@ -89,7 +76,7 @@ export class HistoryView {
   }
 
   /**
-   * Sizes the rows to `cell`, fits their text to its width as the selection snapshot's is, and
+   * Sizes the rows to `cell`, fits their text to its width, and
    * measures them. Both need layout, so a hidden view is shown for the measure.
    */
   private layout(cell: CellSize): void {
@@ -124,10 +111,6 @@ export class HistoryView {
     const split = found ?? fetched.length - anchor.length;
     const added = all.slice(0, split);
     if (fetched.length < CHUNK || this.rows.length + added.length >= MAX_ROWS) this.exhausted = true;
-    if (first) this.joinsBuffer = fetched[split - 1]?.continues ?? false;
-    const oldest = this.rows[0];
-    const copy = all[split];
-    if (oldest && copy) oldest.wrapped = copy.wrapped; // a soft wrap across the seam between chunks
     if (added.length > 0) {
       const theme = this.deps.theme();
       this.element.prepend(...added.map((row) => rowElement(row, theme)));

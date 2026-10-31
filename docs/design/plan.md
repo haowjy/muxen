@@ -518,14 +518,17 @@ Core MVP. Spikes 5–8 prototype these before feature work.
 
 ### Scroll
 
-- **Normal screen:** native-feeling momentum scroll.
-  - xterm.js holds the lines that scrolled off since the tab's last snapshot. Above
-    them, older lines come from tmux on demand through `history`, about 200 lines a
-    request, cached on the phone per tab with a cap, and offset by the lines xterm.js
-    already holds. Nothing is fetched unless Jimmy scrolls.
-  - xterm.js can't prepend lines, so fetched history renders in a DOM view above the
-    live terminal, sharing the selection overlay's row renderer. Spike 6 settles this.
-  - New output while scrolled up doesn't yank to the bottom; ⤓ appears instead.
+- **Normal screen:** the browser's own scroll and momentum.
+  - On touch the terminal is one native scroller of rows: tmux's history above, the lines
+    that scrolled off the screen, and the live screen as the newest rows. The browser scrolls
+    and coasts it, so a fling is one continuous scroll with one scroll indicator.
+  - Older lines come from tmux on demand through `history`, about 200 lines a request,
+    once the view is within a few screens of the oldest row. Each chunk is anchored against
+    the list's oldest rows, so a chunk that no longer lines up is dropped. The list keeps
+    at most 10,000 rows. Nothing is fetched unless Jimmy scrolls.
+  - New output while scrolled up doesn't move the view; ⤓ appears instead. After output
+    muxen skipped (a gap), the list shows one "output skipped" row and stops fetching until
+    the next snapshot.
   - *Fallback:* drive tmux copy-mode; simpler, less native.
 - **Alternate screen or mouse mode** (Claude Code, vim, less, htop), detected from
   xterm.js's state (seeded by the snapshot's modes): vertical swipes become mouse-wheel
@@ -546,17 +549,16 @@ Core MVP. Spikes 5–8 prototype these before feature work.
 ### Select, copy and paste
 
 The [researched interaction design](client/terminal-interaction-design.md) is the
-current direction. A long-press fires with a haptic and highlights the word under the
-finger at once. Dragging while still held moves the selection's far end to the cell under
-the finger, across rows, within the snapshot (the rows in view and those kept above them;
-no autoscroll at the edges). Releasing shows the handles to adjust it and muxen's edit
-menu: Copy, and Paste, which sends the clipboard to the terminal as one paste without
-Enter. A long-press over a blank cell opens the menu with Paste alone on release. It must not trigger a remote click. Prototype
-native selection handles with a bounded, immutable logical-text snapshot; rendering
-one DOM node per physical terminal row is not enough to preserve copied newlines.
-Current snapshot restoration loses wrap metadata, so capture/restore must be resolved
-before correct copy after reconnect/history can be promised. Unicode cell mapping,
-streaming output, native menus, and gesture arbitration require device verification.
+current direction. The rows are the page's text, so selection is iOS's own: with the
+keyboard down and in phone Safari a long-press selects the word under the finger with
+iOS's handles and menu, and dragging a handle to a screen edge autoscrolls the list. With
+the keyboard up in the app, a hold marks the word under the finger with muxen's highlight,
+the finger and two handles extend it, and native's edit menu shows Copy and Paste; the
+mark autoscrolls near the list's top and bottom edges. A selection survives scrolling and
+output below it; it closes only when output rewrites or the cap drops one of its rows. Copy
+joins soft-wrapped rows into logical lines. Paste sends the clipboard to the terminal as one
+paste without Enter, and a long-press over a blank cell must not trigger a remote click.
+Device verification is required for the gesture arbitration.
 
 Paste goes through tmux `load-buffer` and `paste-buffer -p -d`; tmux adds bracketed
 markers only when the receiving application requests them. The line field's Return
@@ -888,7 +890,7 @@ The spikes come first. The native app's keyboard checks are in
   field (Return sends the line and Enter), the key row with one-shot ctrl and alt;
   native focus ownership. Modifier locking is deferred. Verify dictation/IME and
   hardware keyboards.
-- **Touch:** momentum scroll with lazy history, wheel translation, jump-to-bottom,
+- **Touch:** native scroll over a row list with lazy history, wheel translation, jump-to-bottom,
   trackpad and tap-to-position, DOM selection with copy, paste through tmux.
 - **Display:** xterm.js 6 WebGL, Nerd Font, `unicode11`, tappable URLs.
 - **Suggestion strip (deferred client UI):** backend completion capabilities do not

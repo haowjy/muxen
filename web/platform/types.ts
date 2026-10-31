@@ -83,7 +83,7 @@ export interface MenuRect {
   height: number;
 }
 export type HapticKind = "selection" | "rigid" | "key" | "modifier";
-export type FocusMode = "terminal" | "line" | "hidden" | "webText" | "select";
+export type FocusMode = "terminal" | "line" | "hidden" | "webText";
 
 /** UTF-16 offsets into a line, matching the native text field's NSRange. */
 export interface TextRange { start: number; end: number }

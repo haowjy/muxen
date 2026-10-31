@@ -16,6 +16,33 @@ naming the old option under Rejected; git history keeps the removed text.
 
 Decided by Jimmy, 2026-10-21 unless an entry gives another date.
 
+### Touch scrolls and selects on one native list of rows; desktop follows (2026-10-31)
+
+- **What:** on touch the terminal is one native scroller of rows: tmux's history, the lines that left the
+  screen and the live screen as the newest rows, drawn by muxen from the model's frames. The browser scrolls
+  and coasts it. A selection survives scrolling and autoscrolls at the list's edges (iOS's own with the
+  keyboard down, muxen's with the mark). A row is redrawn only when its text changes, so output that rewrites
+  a selected row closes the selection and nothing else does. Desktop moves to the same list after the phone:
+  one implementation everywhere, with WebGL, the history slide, the trackpad switch and `@xterm/xterm` going
+  in phase 6 and desktop typing on muxen's own input (phases 5–6). Until then desktop is drawn by xterm as
+  before.
+- **Decided:** Jimmy, 2026-10-31. Selection while scrolling and autoscroll reverse the J8 rule ("a selection
+  covers what's on screen plus the history already shown; scrolling closes it") and plan.md's "no autoscroll
+  at the edges". "yes, 1 implementation everywhere" for the single list.
+- **Why:** the selection needed rows that stay put under scrolling, and autoscroll needs a scroller the
+  selection lives in. A JS-driven scroll over xterm's redrawn rows could give neither, and each patch to it
+  (seam rules, snapshot, momentum) brought the next. One native scroller deletes the scroll code, the
+  snapshot and the slide.
+- **Rejected:** a runtime switch between the two paths (a `main` build is the comparison); keeping the
+  snapshot for the app's native input (a second selection model for the app's default input); JS momentum over
+  a native scroller (a second scroll position).
+- **Open questions answered (2026-10-31):** after output overflows (a gap) the list keeps the rows above it
+  under an "output skipped" row and fetches nothing more until the next snapshot ("probably keep them... try
+  to not add random patches"); a tap on a URL on touch does nothing, and copy and paste are the way
+  ([issue 4](https://github.com/haowjy/muxen/issues/4) holds opening links as an experiment); Alt+drag column
+  selection on desktop goes with xterm's selection; a desktop selection in a redrawing app closes at the next
+  redraw, the phone's rule.
+
 ### Workspaces: Home, the tab overview, a tab with its tab row (2026-10-30)
 
 - **What:** a workspace is one server's open tabs, in the user's order, and the tab it last showed;
@@ -325,6 +352,23 @@ Decided by Jimmy, 2026-10-21 unless an entry gives another date.
 - **Rejected:** raunch, pinned to `=1.0.1` (the above).
 
 ## Product and architecture
+
+### The terminal's rows are muxen's, not xterm's (2026-10-31)
+
+- **Decided:** 2026-10-31, tech lead ("whatever is a better experience").
+- **What:** `TerminalModel` (`term/`) parses a pane's output into frames and owns no DOM; the row list draws
+  them with muxen's own run-based rows (`rowList.ts`). tmux's older rows are fetched in chunks, decoded with a
+  short-lived xterm instance, and anchored against the list's oldest rows so a chunk that no longer lines up
+  is dropped. A gap stops fetching until the next snapshot. The merge was gated on screenshots of vim splits,
+  htop, tmux borders, Claude Code and CJK text against a `main` build.
+- **Why:** the list must own its rows to keep them in place. The earlier choice, "Touch scroll is JS momentum
+  over xterm and a DOM history view" (2026-10-24, no decider named), was an implementation choice made to let
+  one recognizer tell a tap, a scroll and a hold apart. It is superseded: the browser's scroll leaves the
+  recognizer only taps, holds and mark drags.
+- **Rejected:** that implementation (JS momentum over xterm's buffer, a slide onto a DOM history view, an
+  immutable DOM snapshot for the long press with the system's handles); a native scroller over xterm's DOM
+  renderer (its rows are redrawn in place, which ends any selection); tmux copy-mode (every scroll would
+  change the pane's state, and tmux's own state is what muxen must not disturb).
 
 ### Rust for the daemon
 
@@ -2444,27 +2488,6 @@ and 3.7b ([probe-latest-activity.md](research/probe-latest-activity.md)).
   ([browser-behaviors.md](client/browser-behaviors.md#phone-dock)); no layout keeps it
   up over Files.
 
-### Touch scroll is JS momentum over xterm and a DOM history view
-
-- **Decided:** 2026-10-24.
-- **What:** one recognizer owns every touch on the terminal and a release coasts with an
-  exponential decay (time constant 500 ms). The normal screen scrolls xterm's buffer by rows,
-  then slides the terminal down onto a DOM view of tmux's older rows fetched on demand;
-  full-screen and mouse-mode applications get wheel events or ↑/↓. A long-press hold with a
-  drag extends the word selection in an immutable snapshot of one DOM row per grid row;
-  release shows the system handles and edit menu.
-- **Why:** the recognizer must tell a tap, a scroll and a hold apart before anything reaches
-  tmux, which a native scroller cannot do; rows of fixed height keep the snapshot, the history
-  and the canvas on one grid however the text wraps, and joining them at the wrap flags the daemon
-  sends keeps copy logical.
-- **Rejected:** a native `overflow: auto` scroller (it owns the touch, so long-press and
-  taps cannot be arbitrated, and it cannot reach rows xterm does not hold); tmux copy-mode
-  (the plan's fallback: every scroll would change the pane's state, and tmux's own state is
-  what muxen must not disturb); CSS-wrapped logical lines in the snapshot (wide characters
-  and fractional cell widths misalign it); custom selection handles (the spec chose the system's;
-  the device check decides whether they appear on a programmatic selection).
-
-
 ### iOS Link resolves the socket without exposing host routing in page state
 
 - **Decided:** 2026-10-24, tech lead.
@@ -4230,6 +4253,10 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   is the ux-lead's to change.
 
 ## The terminal's selection keeps the keyboard; `select` is a flag (2026-10-30)
+
+- **Superseded in part (2026-10-31):** the web no longer sends `focus select`. The selection snapshot it
+  served is gone: the rows are page text on every touch path, so WebKit's selection works with no flag.
+  Native still accepts the mode (bridge v9 is unchanged); nothing sends it.
 
 - **`focus select` no longer changes first responder or the keyboard.** Native's `FocusController`
   keeps the keyboard's target (`hidden`, `terminal`, `line`, `webText`) and a separate `selecting`

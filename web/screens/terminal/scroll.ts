@@ -1,22 +1,14 @@
-// Touch scrolling (client-architecture.md §7.6). The finger drives it and a release carries on
-// with momentum; a mouse wheel past the buffer's top joins it. On the normal screen the buffer
-// scrolls, and past its top the terminal slides down onto the history view; in a full-screen
-// or mouse-aware application the same motion becomes wheel events (`PinnedWheel`). Swiping down shows older
-// content in both. This is the xterm view's scroll (desktop, and the app's native input until step 4); the
-// row list scrolls natively.
-import type { InputEvent } from "../../platform/types";
-import type { CellPosition, TerminalModel, XtermView } from "../../term";
+// Desktop's wheel past the xterm buffer's top (client-architecture.md §7.6): the buffer scrolls itself, and past
+// its top the terminal slides down onto the history view. This is the xterm view's scroll, which phase 6 deletes
+// with the view; on touch the row list scrolls natively.
+import type { TerminalModel, XtermView } from "../../term";
 import type { CellSize } from "../../term/size";
-import { Momentum } from "../../touch/momentum";
 import type { HistoryView } from "./history";
-import { PinnedWheel } from "./pinnedWheel";
 
 interface ScrollDeps {
   renderer(): XtermView | null;
   model(): TerminalModel | null;
   history: HistoryView;
-  /** Typed input for the tab this view is showing. */
-  send(events: InputEvent[]): void;
   /** The view moved onto or off the newest line. */
   onScrolled(scrolled: boolean): void;
   /** The height of the surface the terminal and the history share, in px. */
@@ -28,40 +20,13 @@ export class ScrollControl {
   private shift = 0;
   /** The part of a row not yet scrolled, in px; the buffer moves whole rows. */
   private remainder = 0;
-  private momentum: Momentum | null = null;
-  private frame = 0;
-  private last = 0;
-  private app = false;
-  private readonly wheelOfApp: PinnedWheel;
-  /** The cell and the screen's row count, measured when a gesture begins: a frame of momentum measures nothing. */
+  /** The cell and the screen's row count, measured at each wheel turn. */
   private cell: CellSize | null = null;
   private screenRows = 0;
   /** Whether the view was above the newest line when last reported. */
   private scrolled = false;
 
-  constructor(private readonly deps: ScrollDeps) {
-    this.wheelOfApp = new PinnedWheel({ model: () => deps.model(), cell: () => deps.renderer()?.cellSize() ?? null, send: (events) => { deps.send(events); } });
-  }
-
-  /** Whether a fling is still coasting: a touch then stops it, and is not a tap. */
-  get coasting(): boolean {
-    return this.momentum !== null || this.wheelOfApp.coasting;
-  }
-
-  /** A finger went down on the scrolling surface. */
-  begin(anchor: CellPosition | null): void {
-    this.stop();
-    this.remainder = 0;
-    this.measure();
-    this.app = this.wheelOfApp.active;
-    if (this.app) this.wheelOfApp.begin(anchor);
-  }
-
-  /** The finger moved `dy` px downward. */
-  by(dy: number): void {
-    if (this.app) this.wheelOfApp.by(dy);
-    else if (this.cell) this.buffer(dy, this.cell);
-  }
+  constructor(private readonly deps: ScrollDeps) {}
 
   /**
    * A mouse wheel turned `dy` px toward older content. The buffer scrolls itself; this takes
@@ -73,29 +38,13 @@ export class ScrollControl {
     if (!renderer || !model || model.altScreen() || model.mouseMode() !== "none") return false;
     const { rows, up } = renderer.scrollback();
     if (this.shift === 0 && !(dy > 0 && up === rows)) return false;
-    this.stop();
     this.measure();
-    this.app = false;
-    this.by(dy);
+    if (this.cell) this.buffer(dy, this.cell);
     return true;
-  }
-
-  /** The finger lifted at `velocity` px/s downward: coast. */
-  release(velocity: number): void {
-    if (this.app) {
-      this.wheelOfApp.release(velocity);
-      return;
-    }
-    const momentum = new Momentum(velocity);
-    if (momentum.done) return;
-    this.momentum = momentum;
-    this.last = performance.now();
-    this.frame = requestAnimationFrame(this.tick);
   }
 
   /** Leaves history for the newest line. */
   toLatest(): void {
-    this.stop();
     this.measure();
     this.shift = 0;
     this.remainder = 0;
@@ -105,7 +54,6 @@ export class ScrollControl {
 
   /** A snapshot repainted the pane, or another tab came to the surface: nothing slid or fetched belongs to it. */
   reset(): void {
-    this.stop();
     this.shift = 0;
     this.remainder = 0;
     this.cell = null;
@@ -113,12 +61,6 @@ export class ScrollControl {
     this.scrolled = false;
     this.deps.renderer()?.shift(0);
     this.scrolledChanged();
-  }
-
-  stop(): void {
-    cancelAnimationFrame(this.frame);
-    this.momentum = null;
-    this.wheelOfApp.stop();
   }
 
   /** The view is on the newest line. */
@@ -142,16 +84,6 @@ export class ScrollControl {
     this.cell = this.deps.renderer()?.cellSize() ?? null;
     this.screenRows = this.cell ? Math.ceil(this.deps.surfaceHeight() / this.cell.height) : 0;
   }
-
-  private readonly tick = (now: number): void => {
-    const momentum = this.momentum;
-    const cell = this.cell;
-    if (!momentum || !cell) return;
-    const moved = this.buffer(momentum.step(now - this.last), cell);
-    this.last = now;
-    if (momentum.done || !moved) this.momentum = null;
-    else this.frame = requestAnimationFrame(this.tick);
-  };
 
   /** The distance from the newest line, in px: the buffer's rows, the part row, and the slide onto the history. */
   private position(renderer: XtermView, cell: CellSize): number {

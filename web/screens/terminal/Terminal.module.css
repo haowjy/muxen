@@ -1,7 +1,7 @@
 .terminal { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .terminal[hidden] { display: none; }
-/* Its layers (the selection snapshot, the band, the edit menu) stack inside it: with the keyboard up the
-   dock rides over the surface's bottom, and the opaque snapshot must not paint over it. */
+/* Its layers (the band, the jump control) stack inside it: with the keyboard up the dock rides over the
+   surface's bottom. */
 .surface {
   position: relative;
   isolation: isolate;
@@ -25,27 +25,20 @@
   -webkit-user-select: none;
   user-select: none;
 }
-/* The phone's own input: the rows are the row list's page text and the long press is WebKit's, so iOS selects them
+/* Every input but desktop's xterm: the rows are the row list's page text and the long press is WebKit's, so iOS selects them
    with its own handles and menu. Nothing on or above the host may cancel `touchstart` or set `user-select: none`,
    `-webkit-touch-callout: none` or `touch-action: none` (a pinned list's swipes are muxen's, below). The list scrolls
    natively: vertical pans are the browser's. */
-.host[data-direct-input="owned"] {
+.host:not([data-direct-input="xterm"]) {
   touch-action: auto;
   -webkit-touch-callout: default;
   -webkit-user-select: text;
   user-select: text;
 }
-.host[data-direct-input="owned"] [data-rows] { touch-action: pan-y; }
-.host[data-direct-input="owned"] [data-rows][data-pinned] { touch-action: none; }
-.host[data-direct-input="owned"] ::selection { background-color: var(--term-selection); }
+.host:not([data-direct-input="xterm"]) [data-rows] { touch-action: pan-y; }
+.host:not([data-direct-input="xterm"]) [data-rows][data-pinned] { touch-action: none; }
+.host:not([data-direct-input="xterm"]) ::selection { background-color: var(--term-selection); }
 
-/* xterm draws the cursor hollow while its own textarea is unfocused (always, with the app's native input). Holding the keyboard
-   fills it. CSS and not an xterm option: an option change redraws every row, and a selection on them with it. */
-.host[data-cursor="solid"] :global(.xterm-cursor-outline) {
-  background-color: var(--term-cursor) !important;
-  color: var(--term-bg) !important;
-  outline: none !important;
-}
 /* Nothing of another tab, and no cursor on an empty screen, until this tab's snapshot lands. */
 .host[data-blank] { opacity: 0; } /* not visibility: its input must stay focusable */
 .empty { position: absolute; z-index: var(--z-band); inset: 0; display: grid; place-items: center; pointer-events: none; }

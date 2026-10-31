@@ -24,17 +24,14 @@ export function createXtermView(model: TerminalModel, container: HTMLElement, op
   // A tapped URL leaves the app through native, never `window.open` (ios-shell.md "Web content security").
   term.loadAddon(new WebLinksAddon((_event, url) => { options.openLink(url); }));
   term.open(container);
-  // The DOM rows draw no cursor until the terminal first takes focus or switches buffers, and the app's native input never
-  // focuses xterm. Selecting the normal buffer, which is already showing, marks the cursor drawable.
-  if (!options.webgl) term.write("\x1b[?47l");
-  // Stdin is off until a source is chosen: with native or muxen's owned input, xterm's helper
-  // textarea must never take focus (ios-shell.md "Keyboard"). `setInput` turns it on for desktop.
+  // Stdin is off until the input is chosen: when muxen's owned input or native's takes over (an iPad that loses its
+  // trackpad), xterm's helper textarea must never take focus (ios-shell.md "Keyboard"). `setInput` turns it on for desktop.
   const setDesktopInput = createDesktopInput(term);
   setDesktopInput(null);
 
   let recreations = 0;
   let webgl: WebglAddon | undefined;
-  let webglWanted = options.webgl;
+  let webglWanted = true;
   const attachWebgl = (): void => {
     try {
       const addon = new WebglAddon();
@@ -50,7 +47,7 @@ export function createXtermView(model: TerminalModel, container: HTMLElement, op
       webgl = undefined; // no WebGL here: stay on the DOM renderer
     }
   };
-  if (webglWanted) attachWebgl();
+  attachWebgl();
 
   const cellSize = (): CellSize | null => {
     // The screen element is exactly cols × rows cells, so this needs no private API.
@@ -60,19 +57,17 @@ export function createXtermView(model: TerminalModel, container: HTMLElement, op
     return width > 0 && height > 0 ? { width: width / term.cols, height: height / term.rows } : null;
   };
 
-  // The keyboard shortens what is visible but never tmux: the terminal keeps its rows and
-  // slides to put the last row at the pan area's bottom. If that would hide the cursor above
-  // the area, the cursor row meets the bottom instead. The browser's container never shrinks.
+  // A pane larger than the container keeps its rows and slides to put the last row at the container's bottom.
+  // If that would hide the cursor above it, the cursor row meets the bottom instead.
   // In history the pan anchors to the top, so no row is skipped; the cursor lives at the bottom.
   // The slide follows a resize with the keyboard's motion; a cursor move jumps, as text does.
   let panned = 0;
   let scrolledUp = false;
-  let panArea: number | null = null;
   const pan = (animate: boolean): void => {
     const element = term.element;
     const cell = cellSize();
     if (!element || !cell) return;
-    const next = scrolledUp ? 0 : terminalBottomPan(term.buffer.active.cursorY, term.rows, cell.height, panArea ?? container.clientHeight);
+    const next = scrolledUp ? 0 : terminalBottomPan(term.buffer.active.cursorY, term.rows, cell.height, container.clientHeight);
     if (next === panned) return;
     panned = next;
     // The pan's slide follows the keyboard's (ui/theme.ts writes its duration beside the inset).
@@ -125,7 +120,6 @@ export function createXtermView(model: TerminalModel, container: HTMLElement, op
     setHidden: (hidden) => {
       if (term.element) term.element.hidden = hidden;
     },
-    cursor: () => ({ col: term.buffer.active.cursorX, row: term.buffer.active.cursorY }),
     scrollback: () => {
       const buffer = term.buffer.active;
       return { rows: buffer.baseY, up: buffer.baseY - buffer.viewportY };
@@ -140,24 +134,6 @@ export function createXtermView(model: TerminalModel, container: HTMLElement, op
     },
     rows: (from, to) => bufferRows(term.buffer.active, from, to),
     viewportTop: () => term.buffer.active.viewportY,
-    cellAt: (x, y) => {
-      const screen = term.element?.querySelector(".xterm-screen");
-      const cell = cellSize();
-      if (!screen || !cell) return null;
-      // The rectangle includes the pan's translation, so a panned terminal still maps right.
-      const rect = screen.getBoundingClientRect();
-      const col = Math.floor((x - rect.left) / cell.width);
-      const row = Math.floor((y - rect.top) / cell.height);
-      return col < 0 || row < 0 || col >= term.cols || row >= term.rows ? null : { col, row };
-    },
-    screenOrigin: () => {
-      const rect = term.element?.querySelector(".xterm-screen")?.getBoundingClientRect();
-      return rect ? { left: rect.left, top: rect.top } : null;
-    },
-    setPanArea: (px) => {
-      panArea = px;
-      pan(true);
-    },
   };
 }
 

@@ -5,7 +5,7 @@ import { rowText } from "./rows";
 const bytes = (s: string): Uint8Array => new TextEncoder().encode(s);
 
 describe("decodeChunk", () => {
-  it("starts every row in the default style, reads 256-colour, 24-bit and bright colours, and keeps xterm's cells", async () => {
+  it("starts every row in the default style, reads 256-colour, 24-bit and bright colours", async () => {
     const [first, second] = await decodeChunk(
       [{ bytes: bytes("\x1b[1;31mred bold\x1b[38;5;202mo\x1b[48;2;1;2;3mb\x1b[93mc"), continues: false }, { bytes: bytes("日本x"), continues: false }],
       12,
@@ -13,7 +13,6 @@ describe("decodeChunk", () => {
     expect(first?.runs.map((run) => run.style)).toEqual([{ bold: true, fg: 1 }, { bold: true, fg: 202 }, { bold: true, fg: 202, bg: "#010203" }, { bold: true, fg: 11, bg: "#010203" }]);
     // A wide character is a run of its own, so the view can give it two cells.
     expect(second?.runs).toEqual([{ text: "日", style: {}, wide: true }, { text: "本", style: {}, wide: true }, { text: "x", style: {} }]);
-    expect(second?.cells).toEqual(["日", "", "本", "", "x", " ", " ", " ", " ", " ", " ", " "]);
   });
 
   it("marks the row after a continuing one as wrapped, and keeps the blanks only where the line goes on", async () => {

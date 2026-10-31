@@ -75,7 +75,7 @@ export class PageSelection {
     // A range that ends at a row's start still touches that row, and one that starts at a row's end touches it: neither selects it.
     while (pieces.at(-1)?.text === "") pieces.pop();
     while (pieces[0]?.text === "") pieces.shift();
-    return logicalLines(pieces).lines.map((line) => line.trimEnd()).join("\n");
+    return logicalLines(pieces).map((line) => line.trimEnd()).join("\n");
   }
 
   /**
