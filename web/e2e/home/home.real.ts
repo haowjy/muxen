@@ -34,15 +34,13 @@ for (const version of VERSIONS) {
       await expect(page).toHaveURL(/#\/tab$/);
       // The tab's pill carries the session's current window, the one tmux made current with new-window.
       await expect(page.locator("[aria-current='true']").first()).toHaveAttribute("aria-label", /^alpha shell/);
-      // Back goes to the overview, then Home.
-      await page.goBack();
-      await expect(page).toHaveURL(/#\/overview$/);
+      // Back from the tab is Home: the overview it was opened from is not a stop.
       await page.goBack();
       await expect(page).toHaveURL(/#\/$/);
       // The row opens the tab it last showed: no duplicate, and Open session no longer offers alpha.
       await page.getByRole("button", { name: /^pop-os/ }).first().click();
       await expect(page).toHaveURL(/#\/tab$/);
-      await page.getByRole("button", { name: "Back to the tab overview" }).click();
+      await page.getByRole("button", { name: "All tabs" }).click();
       await page.getByRole("button", { name: "Open session" }).click();
       await expect(sessionRow(page, "alpha")).toHaveCount(0);
     });
@@ -65,7 +63,7 @@ for (const version of VERSIONS) {
       await page.getByRole("button", { name: "Open session" }).click();
       await sessionRow(page, "doomed").click();
       await expect(page).toHaveURL(/#\/tab$/);
-      await page.getByRole("button", { name: "Back to the tab overview" }).click();
+      await page.getByRole("button", { name: "All tabs" }).click();
       await expect(page.getByRole("button", { name: /^doomed/ })).toBeVisible();
       stack.tmux("kill-session", "-t", "doomed");
       await expect(page.getByRole("button", { name: /^doomed/ })).toHaveCount(0);

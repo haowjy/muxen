@@ -107,7 +107,7 @@ function WorkspacePage({ workspace, over }: { workspace: Workspace; over: boolea
     <div class={styles.page}>
       <header class={styles.header}>
         <div class={styles.bar} data-docked={docked ? "" : undefined}>
-          {!docked && <Button variant="quiet" icon="back" onClick={goBack}>{back}</Button>}
+          {!docked && <Button variant="quiet" icon="back" aria-label={`Back to ${back}`} onClick={goBack}>{back}</Button>}
           <h1 class={styles.title}>{name}</h1>
         </div>
       </header>
@@ -169,7 +169,7 @@ function WorkspacePage({ workspace, over }: { workspace: Workspace; over: boolea
       </div>
       {docked && (
         <BottomBar label="Tab list">
-          <DockButton kind="control" aria-label={back} onClick={goBack}><Icon name="back" size={20} /></DockButton>
+          <DockButton kind="control" aria-label={`Back to ${back}`} onClick={goBack}><Icon name="back" size={20} /></DockButton>
         </BottomBar>
       )}
     </div>

@@ -61,6 +61,8 @@ export class Router {
   private at = 0;
   private readonly listeners = new Set<(entry: Entry) => void>();
   private nextId = Date.now();
+  /** The entry a tab switch settles on once its `go` back over the earlier tab's entries pops. */
+  private settling: (Next & { route: "tab" }) | null = null;
 
   /**
    * A clean launch opens Home, even with saved tabs: the first entry is replaced with Home's.
@@ -155,10 +157,33 @@ export class Router {
     else this.replace({ ...entry, overlay: null });
   }
 
-  /** The workspace's last tab changed while a tab is on screen: the current entry names `tab` now. A replace, so switching tabs pushes nothing. */
+  /**
+   * The workspace's last tab changed while a tab is on screen: the entry names `tab` now, and pushes nothing. With no
+   * overlay open, the earlier tab's entries (its folders) go too, so Back from any tab is one step to Home, never a
+   * stop on a tab no longer shown. Under an overlay, closing it settles the same way.
+   */
   switchTab(tab: string, place: FilesPlace | null): void {
     const { entry } = this;
-    if (entry.route === "tab") this.replace({ route: "tab", workspace: entry.workspace, tab, place, overlay: entry.overlay });
+    if (entry.route !== "tab") return;
+    const next = { route: "tab" as const, workspace: entry.workspace, tab, place, overlay: entry.overlay };
+    if (entry.overlay === null) this.settle(next);
+    else this.replace(next);
+  }
+
+  /** Shows `next`, a tab entry with no overlay, on the first of the run of this workspace's tab entries it ends: one history step back, then a replace. */
+  private settle(next: Next & { route: "tab" }): void {
+    if (this.settling) {
+      this.settling = next;
+      return;
+    }
+    const below = this.stack.slice(0, this.at);
+    const first = below.findLastIndex((e) => e.route !== "tab" || e.workspace !== next.workspace) + 1;
+    if (first >= this.at) {
+      this.replace(next);
+      return;
+    }
+    this.settling = next;
+    this.port.go(first - this.at);
   }
 
   /** Drilling into a folder or preview of Files tab `tab`: a new entry. */
@@ -222,13 +247,19 @@ export class Router {
     } else {
       this.stand({ id: this.nextId++, ...HOME });
     }
+    const { settling } = this;
+    if (settling) {
+      this.settling = null;
+      this.replace(settling);
+      return;
+    }
     const { entry } = this;
     // Back out of overlays lands on the entry below them. The overlay's entry names the current tab and place (tabs switch under an open overlay), the one below may not: it takes them, so closing leaves the tab as it is.
     const closed = this.stack.slice(this.at + 1, left + 1);
     if (closed.length > 0 && closed.every((e) => e.overlay !== null) && entry.overlay === null && entry.route === "tab") {
       const top = closed[closed.length - 1] as Entry;
       if (top.route === "tab") {
-        this.replace({ route: "tab", workspace: top.workspace, tab: top.tab, place: top.place, overlay: null });
+        this.settle({ route: "tab", workspace: top.workspace, tab: top.tab, place: top.place, overlay: null });
         return;
       }
     }

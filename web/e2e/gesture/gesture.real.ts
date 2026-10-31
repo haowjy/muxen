@@ -264,7 +264,7 @@ for (const version of VERSIONS) {
       await finger.drag(at.x, at.y, at.x, at.y + 200, 5, 6);
       await finger.up();
       await paneIncludes(s, "^[[A");
-      await page.getByRole("button", { name: "Back to the tab overview" }).tap();
+      await page.getByRole("button", { name: "All tabs" }).tap();
       await page.getByRole("button", { name: "Open session" }).tap();
       await page.getByRole("dialog", { name: "Open session" }).getByRole("button", { name: new RegExp(`^${next} \\d+ window`) }).tap();
       await expect(page.getByRole("dialog")).toHaveCount(0);
