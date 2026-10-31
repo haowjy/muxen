@@ -9,6 +9,14 @@
   font-variant-ligatures: none;
 }
 
+/* A wide character fills two cells whatever advance its fallback font gives it. */
+.wide {
+  display: inline-block;
+  width: calc(var(--cell-width, 1ch) * 2);
+  overflow: hidden;
+  letter-spacing: 0;
+}
+
 /* The history view: placed above the terminal by `translate`, shown only while the terminal is slid down onto it. */
 .history {
   position: absolute;

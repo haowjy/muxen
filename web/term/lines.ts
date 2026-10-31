@@ -22,6 +22,8 @@ function styleOf(cell: IBufferCell): Style {
   if (cell.isItalic()) style.italic = true;
   if (cell.isUnderline()) style.underline = true;
   if (cell.isInverse()) style.inverse = true;
+  if (cell.isStrikethrough()) style.strike = true;
+  if (cell.isInvisible()) style.invisible = true;
   return style;
 }
 
@@ -48,7 +50,8 @@ export function readRows(buffer: IBuffer, from: number, to: number, wrapped: (y:
       }
       const chars = cell.getChars() || " ";
       cells.push(chars);
-      pushRun(runs, chars, styleOf(cell));
+      if (width === 2) runs.push({ text: chars, style: styleOf(cell), wide: true }); // a run of its own, so the view can give it two cells
+      else pushRun(runs, chars, styleOf(cell));
     }
     if (!wrapped(y + 1)) trimRow(runs);
     rows.push({ runs, wrapped: wrapped(y), cells });

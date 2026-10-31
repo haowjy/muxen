@@ -19,22 +19,31 @@ export function fitText(container: HTMLElement, cellWidth: number): void {
   const advance = probe.getBoundingClientRect().width / PROBE_CHARS;
   probe.remove();
   if (advance > 0) container.style.letterSpacing = `${String(cellWidth - advance)}px`;
+  container.style.setProperty("--cell-width", `${String(cellWidth)}px`);
+}
+
+/** Draws `row` into `element`: its runs as spans, a wide character in a box of two cells. */
+export function drawRow(element: HTMLElement, row: Row, theme: TerminalTheme): void {
+  if (row.runs.every((run) => !run.wide && Object.keys(run.style).length === 0)) {
+    element.textContent = rowText(row);
+    return;
+  }
+  element.replaceChildren(
+    ...row.runs.map((run) => {
+      const span = document.createElement("span");
+      span.textContent = run.text;
+      if (run.wide) span.className = styles.wide ?? "";
+      const css = styleCss(run.style, theme);
+      if (css) span.style.cssText = css;
+      return span;
+    }),
+  );
 }
 
 /** A row as DOM text. The container sets `--cell-height`. */
 export function rowElement(row: Row, theme: TerminalTheme): HTMLDivElement {
   const element = document.createElement("div");
   element.className = styles.row ?? "";
-  if (row.runs.every((run) => Object.keys(run.style).length === 0)) {
-    element.textContent = rowText(row);
-    return element;
-  }
-  for (const run of row.runs) {
-    const span = document.createElement("span");
-    span.textContent = run.text;
-    const css = styleCss(run.style, theme);
-    if (css) span.style.cssText = css;
-    element.append(span);
-  }
+  drawRow(element, row, theme);
   return element;
 }

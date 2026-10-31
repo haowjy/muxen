@@ -11,7 +11,8 @@ describe("decodeChunk", () => {
       12,
     );
     expect(first?.runs.map((run) => run.style)).toEqual([{ bold: true, fg: 1 }, { bold: true, fg: 202 }, { bold: true, fg: 202, bg: "#010203" }, { bold: true, fg: 11, bg: "#010203" }]);
-    expect(second?.runs).toEqual([{ text: "日本x", style: {} }]);
+    // A wide character is a run of its own, so the view can give it two cells.
+    expect(second?.runs).toEqual([{ text: "日", style: {}, wide: true }, { text: "本", style: {}, wide: true }, { text: "x", style: {} }]);
     expect(second?.cells).toEqual(["日", "", "本", "", "x", " ", " ", " ", " ", " ", " ", " "]);
   });
 

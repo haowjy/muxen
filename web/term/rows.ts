@@ -14,11 +14,15 @@ export interface Style {
   italic?: boolean;
   underline?: boolean;
   inverse?: boolean;
+  strike?: boolean;
+  invisible?: boolean;
 }
 
 export interface Run {
   text: string;
   style: Style;
+  /** A wide character, which takes two cells: the view gives it both. */
+  wide?: boolean;
 }
 
 /** One physical row of the grid, as the terminal drew it. */
@@ -65,14 +69,14 @@ export function trimRow(runs: Run[]): void {
 }
 
 export function sameStyle(a: Style, b: Style): boolean {
-  return a.fg === b.fg && a.bg === b.bg && !a.bold === !b.bold && !a.dim === !b.dim && !a.italic === !b.italic && !a.underline === !b.underline && !a.inverse === !b.inverse;
+  return a.fg === b.fg && a.bg === b.bg && !a.bold === !b.bold && !a.dim === !b.dim && !a.italic === !b.italic && !a.underline === !b.underline && !a.inverse === !b.inverse && !a.strike === !b.strike && !a.invisible === !b.invisible;
 }
 
 /** Appends text in a style, merging with the last run when the style is the same. */
 export function pushRun(runs: Run[], text: string, style: Style): void {
   if (!text) return;
   const last = runs[runs.length - 1];
-  if (last && sameStyle(last.style, style)) last.text += text;
+  if (last && !last.wide && sameStyle(last.style, style)) last.text += text;
   else runs.push({ text, style });
 }
 
@@ -110,6 +114,7 @@ export function styleCss(style: Style, theme: TerminalTheme): string {
   if (style.bold) out.push("font-weight:bold");
   if (style.dim) out.push("opacity:.6");
   if (style.italic) out.push("font-style:italic");
-  if (style.underline) out.push("text-decoration:underline");
+  if (style.underline || style.strike) out.push(`text-decoration:${[style.underline && "underline", style.strike && "line-through"].filter(Boolean).join(" ")}`);
+  if (style.invisible) out.push("color:transparent");
   return out.join(";");
 }
