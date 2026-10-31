@@ -541,7 +541,8 @@ export class Terminals extends Store<TerminalsView> {
    * The hardware keys that do not type text go to tmux (`routeHardwareKey`). The listener is on the
    * document's bubble phase and stands down for a key already claimed (`defaultPrevented`, or a
    * stopPropagation), so the line box's Enter and a menu's Escape keep theirs. Another focused
-   * element, an open dialog or edit menu, and an IME composing keep their keys.
+   * element, an open dialog and an IME composing keep their keys; with no box focused, so does the
+   * terminal's edit menu. A tab menu is not modal: its other keys go to the terminal.
    */
   private readonly hardwareKey = (event: KeyboardEvent): void => {
     if (event.defaultPrevented) return;
