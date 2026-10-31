@@ -26,6 +26,11 @@ struct ServerListSheet: View {
                     }
                 }
                 if let error = model.errorMessage { Text(error).foregroundStyle(.red) }
+                Section {
+                    Toggle("Web keyboard (test)", isOn: $model.webKeyboard)
+                } footer: {
+                    Text("Typing goes to the page's own text boxes, as in Safari. Reloads the page.")
+                }
             }
             .navigationTitle("Servers")
             .toolbar {

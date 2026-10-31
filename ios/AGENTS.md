@@ -10,6 +10,11 @@ phone dock is web. Spec: [ios-shell.md](../docs/design/ios-shell.md).
   bridge) ask it for a mode. Its modes and transitions are in ios-shell.md, "Focus: one
   controller, native"; a second caller puts the keyboard in a state none of them
   describes. One native text field owns both the terminal and line targets.
+- **Web keyboard switch (step 1 of the ios-simplify plan, temporary).** The server list's "Web keyboard (test)"
+  toggle (`TetherAppModel.webKeyboard`, UserDefaults `tether.webKeyboard`) rebuilds the web view with
+  `directInput: "owned"`: page text boxes hold the keyboard, `FocusController` pins `webText` and ignores `focus`
+  requests, and `installWebKeyboard` adds the private form-bar and input-delegate hooks. Off is the old path,
+  untouched. Step 4 deletes the native field and makes this the only path.
 - **Add server is native.** Manual enrolment and the browser's `tether://add` handoff
   use the same two-step host/code then device-name form; a link prefills its host and
   optional code but never enrols until Next and Add are tapped. With a code, Add first

@@ -15,6 +15,9 @@ final class FocusController {
     private var isCovered = false
     private var stateBeforeCover: Mode?
     private let input: KeyboardInput
+    /// The web keyboard switch: a page text box holds the keyboard, so the field rests in `webText` whatever
+    /// is asked, and the web's `focus` requests change nothing.
+    private(set) var webKeyboard = false
 
     var canResignInput: Bool { mode == .webText }
     var covered: Bool { isCovered }
@@ -28,6 +31,7 @@ final class FocusController {
 
     /// The web's request: `select` turns the selection on; any target turns it off and takes the keyboard.
     func set(_ next: Mode) {
+        guard !webKeyboard else { return }
         selecting = next == .select
         guard next != .select else { return }
         target(next)
@@ -41,7 +45,15 @@ final class FocusController {
         apply(next)
     }
 
-    private func apply(_ next: Mode) {
+    func setWebKeyboard(_ on: Bool) {
+        guard on != webKeyboard else { return }
+        webKeyboard = on
+        selecting = false
+        target(on ? .webText : .hidden)
+    }
+
+    private func apply(_ requested: Mode) {
+        let next = webKeyboard ? Mode.webText : requested
         mode = next
         input.setMode(next)
         if next == .webText {

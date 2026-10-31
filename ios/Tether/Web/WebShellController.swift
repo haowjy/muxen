@@ -24,6 +24,9 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
     private var activeTab: TabKey?
     private var lastViewport: Viewport?
     private var pendingPick: PendingPick?
+    /// Web keyboard switch only: keeps the page's scroll offset at zero, and answers WebKit's "may this focus raise the keyboard".
+    private var scrollGuard: NSKeyValueObservation?
+    private let inputPolicy = AllowFocusPolicy()
     private lazy var messageHandlerProxy = WeakScriptMessageHandler(target: self)
 
     init(model: TetherAppModel) {
@@ -58,6 +61,7 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
 
         NotificationCenter.default.addObserver(self, selector: #selector(keyboardWillChange(_:)), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(keyboardWillHide(_:)), name: UIResponder.keyboardWillHideNotification, object: nil)
+        focus.setWebKeyboard(model.webKeyboard)
         focus.set(.hidden)
         model.attach(self)
         loadUI()
@@ -88,6 +92,7 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         lockZoom()
+        if model.webKeyboard { WebKitAccessoryBar.hide(in: self.webView) }
         focus.restoreAfterInterruption()
     }
 
@@ -130,6 +135,14 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
     }
 
     func restoreFocus() { focus.restoreAfterInterruption() }
+
+    /// The web keyboard switch flipped: the field takes or gives up the keyboard, and a new web view reports the other input.
+    func webKeyboardChanged() {
+        guard isViewLoaded else { return }
+        focus.setWebKeyboard(model.webKeyboard)
+        lastViewport = nil
+        recreateWebView()
+    }
 
     func send(_ event: NativeEvent) {
         do {
@@ -243,6 +256,7 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
     }
 
     private func recreateWebView() {
+        lineReceiverReady = false
         let previous = webView!
         let fragment = previous.url?.fragment
         NSLayoutConstraint.deactivate(webViewConstraints)
@@ -263,6 +277,7 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         // Apple Intelligence put its Writing Tools button over tether's Copy and Paste on a terminal selection.
         // tether's text is a terminal and a few short fields, none of them prose.
         if #available(iOS 18.0, *) { configuration.writingToolsBehavior = .none }
+        if model.webKeyboard { configuration.allowsInlinePredictions = false }
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         configuration.userContentController.addScriptMessageHandler(messageHandlerProxy, contentWorld: .page, name: "tether")
 
@@ -283,7 +298,26 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         result.isInspectable = true
         #endif
         view.addSubview(result)
+        if model.webKeyboard { installWebKeyboard(on: result) }
         return result
+    }
+
+    /// The page's text boxes hold the keyboard (web keyboard switch). Page-side, nothing changes from phone Safari.
+    private func installWebKeyboard(on result: TetherWebView) {
+        // WebKit raises the keyboard for a script's `focus()` only inside a tap; this lets the page do it
+        // after unlock or a web view restart. Private API: if the property is gone, the keyboard stays down then.
+        if result.responds(to: NSSelectorFromString("_setInputDelegate:")) {
+            _ = result.perform(NSSelectorFromString("_setInputDelegate:"), with: inputPolicy)
+        } else {
+            print("tether: WebKit input delegate is unavailable")
+        }
+        // WebKit scrolls the page to reveal a focused box even with scrolling off; the page lays out from a fixed root.
+        scrollGuard = result.scrollView.observe(\.contentOffset) { scrollView, _ in
+            MainActor.assumeIsolated {
+                if scrollView.contentOffset != .zero { scrollView.setContentOffset(.zero, animated: false) }
+            }
+        }
+        if !WebKitAccessoryBar.hide(in: result) { print("tether: WebKit accessory-bar suppression failed") }
     }
 
     /// The web view always fills the screen; the keyboard covers its bottom (see `keyboardWillChange`).
@@ -579,6 +613,7 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         return Viewport(
             layout: min(width, stable) < 600 ? "phone" : "desktop",
             density: "touch",
+            directInput: model.webKeyboard ? "owned" : "native",
             scheme: traitCollection.userInterfaceStyle == .dark ? "dark" : "light",
             width: width,
             stableHeight: stable,
@@ -624,7 +659,7 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
             self.publishViewportIfChanged()
             self.keyboardCover.duration = 0
         }
-        if height == 0 || focus.mode == .terminal || focus.mode == .line {
+        if height == 0 || focus.mode == .terminal || focus.mode == .line || focus.webKeyboard {
             apply()
             return
         }
@@ -728,4 +763,12 @@ final class TetherWebView: WKWebView {
         super.buildMenu(with: builder)
         if suppressesEditMenu() { builder.remove(menu: .autoFill) }
     }
+}
+
+/// WebKit's input delegate (private `_WKInputDelegate`), asked whether a focused page element may start an input
+/// session. Always yes, so a script's `focus()` raises the keyboard without a tap. WebKit holds the delegate weakly.
+final class AllowFocusPolicy: NSObject {
+    /// `_WKFocusStartsInputSessionPolicyAllow`
+    @objc(_webView:decidePolicyForFocusedElement:)
+    func webView(_ webView: WKWebView, decidePolicyFor info: AnyObject) -> Int { 1 }
 }
