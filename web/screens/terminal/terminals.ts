@@ -534,7 +534,7 @@ export class Terminals extends Store<TerminalsView> {
     const font = getComputedStyle(this.element);
     if (this.viewport.directInput === "owned") {
       if (!surface.list) {
-        const list = new RowList(surface.model, { held: () => this.view.heldRanges() });
+        const list = new RowList(surface.model, { fetch: (start, end) => this.shownDriver()?.history(start, end) ?? null, held: () => this.view.heldRanges() });
         surface.list = list;
         this.element.append(list.element);
         this.view.attach(list);

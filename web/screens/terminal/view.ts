@@ -100,6 +100,7 @@ export class TerminalView {
       wheel: this.wheel,
       listCoasting: () => deps.list()?.coasting ?? false,
       holdList: (held) => { deps.list()?.hold(held); },
+      reachOlder: () => { deps.list()?.wantOlder(); },
       selection: this.selection,
       page: this.page,
       mark: this.mark,

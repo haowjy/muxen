@@ -7,6 +7,9 @@
 import type { CellPosition, CellSize, Frame, Row, TerminalModel, TerminalTheme } from "../../term";
 import { sameStyle } from "../../term/rows";
 import { fontCell, terminalBottomPan } from "../../term/size";
+import { ANCHOR_ROWS } from "./anchor";
+import { Coast } from "./coast";
+import { CHUNK, HistoryFetcher, type Chunk, type FetcherDeps } from "./historyFetcher";
 import { drawRow, fitText } from "./rows/rowsDom";
 import rowStyles from "./rows/Rows.module.css";
 import styles from "./RowList.module.css";
@@ -17,8 +20,8 @@ const BLOCK_ROWS = 64;
 const CAP_ROWS = 10_000;
 /** Past this the oldest blocks go even mid-gesture. */
 const CEILING_ROWS = 20_000;
-/** A scroll event this long after the last one with no finger down is no longer a coast. */
-const COAST_QUIET_MS = 100;
+/** Fetch older rows from tmux once the view is within this many screens of the oldest row: a fling reaches them before the top. */
+const PREFETCH_SCREENS = 4;
 const GAP_TEXT = "output skipped";
 
 /** The theme as CSS variables: the global tokens follow the colour scheme, so a theme change writes nothing here. */
@@ -47,6 +50,8 @@ interface ScreenRow {
 }
 
 export interface RowListOptions {
+  /** Rows `start..=end` of the tab on screen (tmux line numbers), or null with no live tab. */
+  fetch: FetcherDeps["fetch"];
   /** Ranges the list must not drop rows under (the selection, the mark). */
   held(): Range[];
 }
@@ -71,6 +76,11 @@ export class RowList {
   private seq = 0;
   /** The gap row, while the last frame was a gap frame: the next gap frame reuses it. */
   private gapRow: HTMLElement | null = null;
+  /** Every gap row the list may still hold: tmux's numbering is unknown past one, so nothing is fetched while one is here. */
+  private gaps: HTMLElement[] = [];
+  private readonly history: HistoryFetcher;
+  /** tmux has no older rows, or a fetch missed twice: nothing more is fetched until a reset. */
+  private historyDone = false;
   private lastFrame: Frame | null = null;
   private cell: CellSize | null = null;
   private font: { family: string; size: number } | null = null;
@@ -85,10 +95,7 @@ export class RowList {
   private following = true;
   /** The `scrollTop` muxen last wrote: the scroll event that lands on it is its own. */
   private written = Number.NaN;
-  /** The touch layer's word that a gesture holds the view. */
-  private held = false;
-  private flinging = false;
-  private coastTimer: ReturnType<typeof setTimeout> | undefined;
+  private readonly coast = new Coast(() => { this.rest(); });
   private pullFrame = 0;
   /** Changes above the view that waited for a bounce to settle, in order. */
   private deferred: (() => boolean)[] = [];
@@ -109,6 +116,7 @@ export class RowList {
     cursorBox.className = styles.cursor ?? "";
     cursorBox.hidden = true;
     element.append(run, spacer, cursorBox);
+    this.history = new HistoryFetcher({ fetch: options.fetch, cols: () => model.cols() });
     // The list starts from the model's screen: whatever froze before it existed is not its to show.
     model.onChange(() => { this.schedule(); });
     element.addEventListener("scroll", this.scrolled, { passive: true });
@@ -146,7 +154,7 @@ export class RowList {
 
   /** A fling is still moving the view with no finger down: a touch then stops it, and is not a tap. */
   get coasting(): boolean {
-    return this.flinging;
+    return this.coast.coasting;
   }
 
   // ---- what the callers tell it
@@ -181,9 +189,7 @@ export class RowList {
    * says so, since it alone knows its fingers. When the hold ends the view is at rest after a quiet moment.
    */
   hold(held: boolean): void {
-    if (held === this.held) return;
-    this.held = held;
-    if (!held) this.settle();
+    this.coast.hold(held);
   }
 
   /** A density change or a new font: the cell, and so every row's height, follows. */
@@ -297,16 +303,21 @@ export class RowList {
       block = { element, rows: [] };
       this.blocks.push(block);
     }
-    const element = document.createElement("div");
-    element.className = rowStyles.row ?? "";
-    element.dataset["seq"] = String(this.seq++);
-    block.rows.push(element);
-    block.element.append(element);
+    const created = this.makeRow(row, this.seq++);
+    block.rows.push(created.element);
+    block.element.append(created.element);
     this.grown.add(block);
     this.count++;
-    const created = { element, drawn: row };
-    this.draw(created, row);
     return created;
+  }
+
+  private makeRow(row: Row, seq: number): ScreenRow {
+    const element = document.createElement("div");
+    element.className = rowStyles.row ?? "";
+    element.dataset["seq"] = String(seq);
+    const made = { element, drawn: row };
+    this.draw(made, row);
+    return made;
   }
 
   private appendGap(): void {
@@ -314,6 +325,7 @@ export class RowList {
     element.dataset["gap"] = "";
     element.classList.add(styles.gap ?? "");
     this.gapRow = element;
+    this.gaps = [...this.gaps.filter((gap) => gap.isConnected), element];
   }
 
   /** Removes every row after `row`. */
@@ -359,6 +371,9 @@ export class RowList {
     this.grown.clear();
     this.screen = [];
     this.count = 0;
+    this.gaps = [];
+    this.historyDone = false;
+    this.history.reset();
     this.deferred = [];
     this.following = true;
   }
@@ -449,7 +464,7 @@ export class RowList {
     const { top, spacer } = this.latestPosition();
     this.spacer.style.height = `${String(spacer)}px`;
     if (!(force || this.following)) return;
-    if (!this.pinned && !force && (this.held || this.flinging)) return;
+    if (!this.pinned && !force && this.coast.moving) return;
     if (Math.abs(this.element.scrollTop - top) < 0.5) return;
     this.element.scrollTop = top;
     this.written = this.element.scrollTop;
@@ -465,23 +480,14 @@ export class RowList {
     }
     this.following = this.atLatest;
     this.setScrolledUp(!this.following);
-    if (!this.held) {
-      this.flinging = true;
-      this.settle();
-    }
+    this.coast.scrolled();
     for (const listener of this.userScrolls) listener();
     if (scrollTop >= 0) this.flushDeferred();
+    this.wantOlder();
   };
-
-  /** The view is at rest once it has been quiet this long with nothing holding it. */
-  private settle(): void {
-    clearTimeout(this.coastTimer);
-    this.coastTimer = setTimeout(() => { this.flinging = false; this.rest(); }, COAST_QUIET_MS);
-  }
 
   /** No gesture and no fling: what waited for rest may go. */
   private rest(): void {
-    if (this.flinging || this.held) return;
     this.flushDeferred();
     this.trim();
     this.follow();
@@ -553,7 +559,7 @@ export class RowList {
   private trim(): void {
     if (this.count - (this.blocks[0]?.rows.length ?? 0) < CAP_ROWS) return;
     const urgent = this.count > CEILING_ROWS;
-    if (!urgent && (this.held || this.flinging || this.element.hidden)) return;
+    if (!urgent && (this.coast.moving || this.element.hidden)) return;
     const held = this.options.held();
     this.editAbove(() => {
       const inView = urgent ? this.blocks.length : this.firstBelow(this.blocks, (b) => b.element, this.element.getBoundingClientRect().top);
@@ -571,6 +577,76 @@ export class RowList {
       this.reportDropped(Number(first.dataset["seq"]), Number(last.dataset["seq"]));
       for (const block of this.blocks.splice(0, gone)) block.element.remove();
       this.count = rows;
+      return true;
+    });
+  }
+
+  // ---- older rows from tmux
+
+  /**
+   * Fetches the next chunk of tmux's history once the view is near the oldest row. The list asks on its own
+   * scroll events; the touch layer asks when a swipe begins, since a list shorter than its box never scrolls.
+   * Only while the list is contiguous with tmux's numbering: no gap row anywhere in it (after a gap nobody
+   * knows how far the numbers are), no miss, and below the cap, which would trim the chunk the moment it landed.
+   */
+  wantOlder(): void {
+    if (this.historyDone || this.element.hidden || this.count >= CAP_ROWS || !this.history.idle) return;
+    if (this.element.scrollTop >= PREFETCH_SCREENS * this.height || this.hasGap()) return;
+    void this.fetchOlder();
+  }
+
+  private hasGap(): boolean {
+    return this.gaps.some((gap) => gap.isConnected);
+  }
+
+  private async fetchOlder(): Promise<void> {
+    // A miss retries once with a fresh count; a second one stops fetching. Rows are never dropped for a miss.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const oldest = this.blocks[0]?.rows[0];
+      if (!oldest || this.hasGap()) return; // a gap may have come while the first request was out: the count is no longer tmux's
+      const anchor: string[] = [];
+      for (const block of this.blocks) {
+        for (const row of block.rows) if (anchor.length < ANCHOR_ROWS) anchor.push(row.textContent.trimEnd());
+        if (anchor.length >= ANCHOR_ROWS) break;
+      }
+      // The screen is tmux's lines 0 and up, so the oldest row sits as many lines above 0 as there are rows before the screen.
+      const chunk = await this.history.load(anchor, this.screen.length - this.count);
+      if (!chunk) return;
+      // Anything that changed the top of the list while the request was out (cap, ceiling, reset) makes the chunk stale.
+      if (this.blocks[0]?.rows[0] !== oldest) break;
+      if (chunk.found !== null) {
+        this.prepend(oldest, chunk, chunk.found);
+        break;
+      }
+      if (attempt === 1) this.historyDone = true;
+    }
+    this.wantOlder();
+  }
+
+  /** The chunk's rows above its copy of the anchor go above `oldest`. */
+  private prepend(oldest: HTMLElement, chunk: Chunk, found: number): void {
+    const rows = chunk.rows.slice(0, found);
+    const seam = chunk.rows[found];
+    if (chunk.fetched.length < CHUNK || rows.length === 0) this.historyDone = true;
+    if (rows.length === 0) return;
+    this.editAbove(() => {
+      if (this.blocks[0]?.rows[0] !== oldest) return false;
+      if (seam) oldest.toggleAttribute("data-wrap", seam.wrapped); // a soft wrap across the seam
+      const first = Number(oldest.dataset["seq"]) - rows.length;
+      const made = rows.map((row, i) => this.makeRow(row, first + i).element);
+      const blocks: Block[] = [];
+      // Whole blocks from the newest end, so only the oldest is short.
+      for (let end = made.length; end > 0; end -= BLOCK_ROWS) {
+        const element = document.createElement("div");
+        element.className = styles.block ?? "";
+        const inBlock = made.slice(Math.max(0, end - BLOCK_ROWS), end);
+        element.append(...inBlock);
+        blocks.unshift({ element, rows: inBlock });
+      }
+      this.run.prepend(...blocks.map((block) => block.element));
+      this.blocks.unshift(...blocks);
+      this.count += rows.length;
+      for (const block of blocks) this.sizeBlock(block);
       return true;
     });
   }

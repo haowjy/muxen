@@ -45,6 +45,8 @@ interface TouchDeps {
   listCoasting(): boolean;
   /** Whether a finger holds the row list: it is left alone, and at rest a moment after the last lifts. */
   holdList(held: boolean): void;
+  /** A swipe has begun on the list: it may be reaching for rows tmux has and the list does not. */
+  reachOlder(): void;
   selection: SelectionControl;
   page: PageSelection;
   /** The app's keyboard-up mark. */
@@ -410,6 +412,7 @@ export class TouchControl {
           if (this.owned) {
             // The list scrolls natively and a selection survives it; the mark's menu hides until a tap inside it.
             this.deps.mark.hideMenu();
+            this.deps.reachOlder(); // a list too short to scroll sends no scroll event
             this.pinned = this.deps.wheel.active;
             if (this.pinned) this.deps.wheel.begin(anchor);
           } else scroll.begin(anchor);

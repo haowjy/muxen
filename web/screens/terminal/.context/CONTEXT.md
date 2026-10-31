@@ -70,13 +70,17 @@ The Terminal destination. The design is client-architecture.md §5.4, §5.5, §5
   follow the scheme. The host is selectable (`Terminal.module.css`, keyed on `data-direct-input`), the long
   press is WebKit's and the selection is the page's (`selection/pageSelection.ts` reads, joins and clears
   it). `touchControl.ts` listens to touch events: `touchstart` is never cancelled, `touchmove` only for the
-  mark, a second finger and a pinned terminal's swipe (`pinnedWheel.ts`: wheel events or arrows), `touchend`
+  mark and a pinned terminal's swipe (`pinnedWheel.ts`: wheel events or arrows), `touchend`
   is for a tap, a touch on a live selection or on the mark's handles is not the recognizer's, a tap
   elsewhere only clears it, and mouse events stop at the host for 800 ms after a touch. Nothing on or above
   the host may set `user-select: none`, `touch-action: none` (the pinned list excepted) or
   `-webkit-touch-callout: none`, or cancel `touchstart`: the long press would never begin. A tap never
-  moves focus. The list keeps no tmux history yet (phase 3 of `redesign-touch`): it holds what the model
-  saw. `"native"` (the app) and `"xterm"` still draw with xterm's view; for native, `pointerdown` is
+  moves focus. The list fetches tmux's older rows through `historyFetcher.ts`, the procedure
+  `history.ts` also runs: when the view is within four screens of its oldest row (its scroll events, or a swipe
+  beginning, since a list shorter than its box never scrolls), and only while the list holds no gap row
+  and is below the 10,000-row cap, because after a gap nobody knows how far tmux's numbering is. A chunk
+  lands only if the oldest row is still the one it was anchored to; two misses in a row stop fetching until the
+  next reset. Prepends go through `editAbove`. `"native"` (the app) and `"xterm"` still draw with xterm's view; for native, `pointerdown` is
   cancelled and a long press builds the immutable snapshot (`selection/`, EditMenu), and scrolling is
   `scroll.ts` with `history.ts`. The list is created the first time the input is `"owned"` and hidden while
   another view shows (an iPad's trackpad); it keeps pulling frames while hidden.
