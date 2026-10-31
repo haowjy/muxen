@@ -75,14 +75,6 @@ export class HistoryView {
     return first && this.joinsBuffer ? [...this.rows, { ...first, wrapped: true }, ...rest] : [...this.rows, ...buffer];
   }
 
-  /** The fetched rows as page text, oldest first, with `live` (xterm's rows, top first) below them; a soft wrap across the seam is kept.
-   * The history view shows only while xterm's view is at its buffer's top, so `live` starts where the seam is. */
-  pageRows(live: readonly { element: HTMLElement; wrapped: boolean }[]): { element: HTMLElement; wrapped: boolean }[] {
-    const own = this.rows.map((row, i) => ({ element: this.element.children[i] as HTMLElement, wrapped: row.wrapped }));
-    const [first, ...rest] = live;
-    return first && this.joinsBuffer ? [...own, { ...first, wrapped: true }, ...rest] : [...own, ...live];
-  }
-
   /** The pane was repainted from a snapshot, or the tab changed: what was fetched no longer sits above this buffer. */
   reset(): void {
     this.generation++;

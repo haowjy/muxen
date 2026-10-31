@@ -1,18 +1,15 @@
 // Touch scrolling (client-architecture.md §7.6). The finger drives it and a release carries on
 // with momentum; a mouse wheel past the buffer's top joins it. On the normal screen the buffer
 // scrolls, and past its top the terminal slides down onto the history view; in a full-screen
-// or mouse-aware application the same motion becomes wheel events, or ↑/↓ when the application
-// has no mouse mode, since that application owns its own scrolling. Swiping down shows older
-// content in both.
+// or mouse-aware application the same motion becomes wheel events (`PinnedWheel`). Swiping down shows older
+// content in both. This is the xterm view's scroll (desktop, and the app's native input until step 4); the
+// row list scrolls natively.
 import type { InputEvent } from "../../platform/types";
 import type { CellPosition, TerminalModel, XtermView } from "../../term";
-import { mouseInput } from "../../term/mouse";
 import type { CellSize } from "../../term/size";
 import { Momentum } from "../../touch/momentum";
 import type { HistoryView } from "./history";
-
-/** Wheel events or arrows sent in one frame at most, so a hard flick never floods the pane. */
-const MAX_EVENTS_PER_FRAME = 4;
+import { PinnedWheel } from "./pinnedWheel";
 
 interface ScrollDeps {
   renderer(): XtermView | null;
@@ -34,20 +31,21 @@ export class ScrollControl {
   private momentum: Momentum | null = null;
   private frame = 0;
   private last = 0;
-  /** Where the gesture began, for a wheel event's cell. */
-  private anchor: CellPosition = { col: 0, row: 0 };
   private app = false;
+  private readonly wheelOfApp: PinnedWheel;
   /** The cell and the screen's row count, measured when a gesture begins: a frame of momentum measures nothing. */
   private cell: CellSize | null = null;
   private screenRows = 0;
   /** Whether the view was above the newest line when last reported. */
   private scrolled = false;
 
-  constructor(private readonly deps: ScrollDeps) {}
+  constructor(private readonly deps: ScrollDeps) {
+    this.wheelOfApp = new PinnedWheel({ model: () => deps.model(), cell: () => deps.renderer()?.cellSize() ?? null, send: (events) => { deps.send(events); } });
+  }
 
   /** Whether a fling is still coasting: a touch then stops it, and is not a tap. */
   get coasting(): boolean {
-    return this.momentum !== null;
+    return this.momentum !== null || this.wheelOfApp.coasting;
   }
 
   /** A finger went down on the scrolling surface. */
@@ -55,16 +53,14 @@ export class ScrollControl {
     this.stop();
     this.remainder = 0;
     this.measure();
-    if (anchor) this.anchor = anchor;
-    const model = this.deps.model();
-    this.app = model !== null && (model.altScreen() || model.mouseMode() !== "none");
+    this.app = this.wheelOfApp.active;
+    if (this.app) this.wheelOfApp.begin(anchor);
   }
 
   /** The finger moved `dy` px downward. */
   by(dy: number): void {
-    if (!this.cell) return;
-    if (this.app) this.wheel(dy, this.cell, Infinity);
-    else this.buffer(dy, this.cell);
+    if (this.app) this.wheelOfApp.by(dy);
+    else if (this.cell) this.buffer(dy, this.cell);
   }
 
   /**
@@ -86,6 +82,10 @@ export class ScrollControl {
 
   /** The finger lifted at `velocity` px/s downward: coast. */
   release(velocity: number): void {
+    if (this.app) {
+      this.wheelOfApp.release(velocity);
+      return;
+    }
     const momentum = new Momentum(velocity);
     if (momentum.done) return;
     this.momentum = momentum;
@@ -118,6 +118,7 @@ export class ScrollControl {
   stop(): void {
     cancelAnimationFrame(this.frame);
     this.momentum = null;
+    this.wheelOfApp.stop();
   }
 
   /** The view is on the newest line. */
@@ -146,7 +147,7 @@ export class ScrollControl {
     const momentum = this.momentum;
     const cell = this.cell;
     if (!momentum || !cell) return;
-    const moved = this.app ? this.wheel(momentum.step(now - this.last), cell, MAX_EVENTS_PER_FRAME) : this.buffer(momentum.step(now - this.last), cell);
+    const moved = this.buffer(momentum.step(now - this.last), cell);
     this.last = now;
     if (momentum.done || !moved) this.momentum = null;
     else this.frame = requestAnimationFrame(this.tick);
@@ -203,20 +204,5 @@ export class ScrollControl {
     const returned = this.scrolled && this.atLatest;
     this.scrolledChanged();
     if (!returned) this.deps.history.want(this.shift, renderer.viewportTop() * cell.height, cell, this.screenRows);
-  }
-
-  /** Wheel events (or arrows) for `dy` px; returns whether any row's worth was due. */
-  private wheel(dy: number, cell: CellSize, cap: number): boolean {
-    const model = this.deps.model();
-    if (!model) return false;
-    this.remainder += dy;
-    let rows = Math.trunc(this.remainder / cell.height);
-    this.remainder -= rows * cell.height;
-    if (rows === 0) return true;
-    const up = rows > 0; // the finger moved down: older content, the wheel turns up
-    rows = Math.min(Math.abs(rows), cap);
-    const events = mouseInput(up ? "wheelUp" : "wheelDown", this.anchor.col, this.anchor.row, model.mouseMode(), model.mouseEncoding()) ?? [{ key: up ? "Up" : "Down" }];
-    this.deps.send(Array.from({ length: rows }, () => events).flat());
-    return true;
   }
 }

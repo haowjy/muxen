@@ -24,7 +24,7 @@ export function createXtermView(model: TerminalModel, container: HTMLElement, op
   // A tapped URL leaves the app through native, never `window.open` (ios-shell.md "Web content security").
   term.loadAddon(new WebLinksAddon((_event, url) => { options.openLink(url); }));
   term.open(container);
-  // The DOM rows draw no cursor until the terminal first takes focus or switches buffers, and a phone's input never
+  // The DOM rows draw no cursor until the terminal first takes focus or switches buffers, and the app's native input never
   // focuses xterm. Selecting the normal buffer, which is already showing, marks the cursor drawable.
   if (!options.webgl) term.write("\x1b[?47l");
   // Stdin is off until a source is chosen: with native or muxen's owned input, xterm's helper
@@ -59,8 +59,6 @@ export function createXtermView(model: TerminalModel, container: HTMLElement, op
     const { width, height } = screen.getBoundingClientRect();
     return width > 0 && height > 0 ? { width: width / term.cols, height: height / term.rows } : null;
   };
-
-  const textRoot = (): HTMLElement | null => term.element?.querySelector<HTMLElement>(".xterm-rows") ?? null;
 
   // The keyboard shortens what is visible but never tmux: the terminal keeps its rows and
   // slides to put the last row at the pan area's bottom. If that would hide the cursor above
@@ -124,10 +122,8 @@ export function createXtermView(model: TerminalModel, container: HTMLElement, op
     setInput: setDesktopInput,
     inputElement: () => term.textarea ?? null,
     selectionText: () => term.getSelection(),
-    textRoot,
-    textRows: () => {
-      const buffer = term.buffer.active;
-      return [...(textRoot()?.children ?? [])].map((element, i) => ({ element: element as HTMLElement, wrapped: buffer.getLine(buffer.viewportY + i)?.isWrapped ?? false }));
+    setHidden: (hidden) => {
+      if (term.element) term.element.hidden = hidden;
     },
     cursor: () => ({ col: term.buffer.active.cursorX, row: term.buffer.active.cursorY }),
     scrollback: () => {

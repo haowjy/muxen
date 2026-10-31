@@ -60,26 +60,37 @@ The Terminal destination. The design is client-architecture.md §5.4, §5.5, §5
   comes from `term/mouse.ts` (`mouseInput` holds the per-mode policy) with the encoding
   `term/xterm.ts` saw in DECSET.
 - **Two touch paths, keyed on `directInput`, until ios-simplify step 4 deletes the second.**
-  `"owned"` (phone Safari, the PWA, the app's web keyboard test): xterm's DOM renderer draws page
-  text and the host is selectable (`Terminal.module.css`, keyed on `data-direct-input`), so the long
-  press is WebKit's and the selection is the page's (`selection/pageSelection.ts` only reads, joins
-  and clears it). `touchControl.ts` listens to touch events: `touchstart` is never cancelled,
-  `touchmove` is once the recognizer is scrolling, `touchend` is for a tap, a touch on a live
-  selection is not the recognizer's, a tap elsewhere only clears it, and mouse events stop at the
-  host for 800 ms after a touch. Nothing on or above the host may set `user-select: none`,
-  `touch-action: none` or `-webkit-touch-callout: none`, or cancel `touchstart`: the long press would
-  never begin. A tap never moves focus. `"native"` (the app): `pointerdown` is cancelled and a long
-  press builds the immutable snapshot (`selection/`, EditMenu). `"xterm"`: a mouse is xterm's.
-- **Nothing redraws a still screen on touch.** A redraw replaces a row's text and a selection on it.
-  The cursor's solid/hollow look is CSS on `data-cursor`, never an xterm option; a theme waits for the
-  selection to close (`term/xterm.ts`); a resize, font change, snapshot or input switch closes it first.
-- **Rows carry cells.** `term/rows.ts` `Row`: xterm rows get exact cells from `getWidth()`
-  (`term/lines.ts`); history rows work them out from the text. Words and the prompt-row tap use
-  cells, never `String.length`.
+  `"owned"` (phone Safari, the PWA, the app's web keyboard test) draws with the row list
+  (`rowList.ts`): one native scroller of rows muxen draws from the model's frames (`term/model.ts`),
+  the lines that left the screen plus the screen as the newest rows. The browser scrolls it, coasts it and
+  autoscrolls a selection; muxen writes `scrollTop` only to follow output at latest (`follow`), from
+  `editAbove` and from the mark's edge autoscroll. A row is created once and redrawn only when its text
+  changes, so a selection sits on rows that stay put; the rows it rewrites are reported (`onRewritten`) and
+  the view closes a selection or mark between them (J7). Colours are the global `--term-*` variables, which
+  follow the scheme. The host is selectable (`Terminal.module.css`, keyed on `data-direct-input`), the long
+  press is WebKit's and the selection is the page's (`selection/pageSelection.ts` reads, joins and clears
+  it). `touchControl.ts` listens to touch events: `touchstart` is never cancelled, `touchmove` only for the
+  mark, a second finger and a pinned terminal's swipe (`pinnedWheel.ts`: wheel events or arrows), `touchend`
+  is for a tap, a touch on a live selection or on the mark's handles is not the recognizer's, a tap
+  elsewhere only clears it, and mouse events stop at the host for 800 ms after a touch. Nothing on or above
+  the host may set `user-select: none`, `touch-action: none` (the pinned list excepted) or
+  `-webkit-touch-callout: none`, or cancel `touchstart`: the long press would never begin. A tap never
+  moves focus. The list keeps no tmux history yet (phase 3 of `redesign-touch`): it holds what the model
+  saw. `"native"` (the app) and `"xterm"` still draw with xterm's view; for native, `pointerdown` is
+  cancelled and a long press builds the immutable snapshot (`selection/`, EditMenu), and scrolling is
+  `scroll.ts` with `history.ts`. The list is created the first time the input is `"owned"` and hidden while
+  another view shows (an iPad's trackpad); it keeps pulling frames while hidden.
+- **Nothing redraws a still screen on touch.** A redraw replaces a row's text and a selection on it. The list
+  rewrites only the rows whose text differs, and the cursor is an overlay whose look is CSS on
+  `data-cursor`; xterm's view (native, desktop) still never takes a theme while a selection is up
+  (`term/xterm.ts`). A resize, font change, snapshot or input switch closes a selection first.
+- **Rows carry cells.** `term/rows.ts` `Row`: every row comes from xterm (`term/lines.ts`; history is
+  decoded by `term/decode.ts`), with exact cells from `getWidth()`; a wide character is a run of its own
+  (`wide`), which the view draws two cells wide. Words and the prompt-row tap use cells, never `String.length`.
 - **The grid is the contract.** History rows, the selection snapshot and the canvas are each
   one cell tall per row; copy joins rows at wrap flags, never by length. Change the font or cell
   size and all three follow `renderer.cellSize()`.
-- **The terminal may be slid and panned.** `renderer.shift` (history slide, `translate`) and the
+- **xterm's terminal may be slid and panned (native, desktop).** `renderer.shift` (history slide, `translate`) and the
   cursor pan (`transform`) both move the screen; coordinates come from `renderer.cellAt` and
   `screenOrigin`, which read the screen's rectangle, so neither is ever added by hand.
 

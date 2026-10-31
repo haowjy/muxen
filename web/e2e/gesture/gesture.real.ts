@@ -61,17 +61,22 @@ for (const version of VERSIONS) {
     async function open(page: Page, session: string): Promise<Finger> {
       await page.goto(`${stack.url}/#/`);
       await openSessionRow(page, session);
-      await page.waitForFunction(() => { const host = document.querySelector(".xterm")?.parentElement; return host !== null && host !== undefined && !host.hasAttribute("data-blank"); });
+      await page.waitForFunction(() => { const host = document.querySelector("[data-rows], .xterm")?.parentElement; return host !== null && host !== undefined && !host.hasAttribute("data-blank"); });
       await page.waitForTimeout(400); // the snapshot's size settles
       return new Finger(await page.context().newCDPSession(page), page);
     }
 
-    /** Where cell (col, row) is in client pixels, from the screen's box and the pane's size. */
+    /** Where cell (col, row) is in client pixels: the screen is the list's newest rows, the cell as wide as the list's `--cell-width`. */
     async function cellCentre(page: Page, session: string, col: number, row: number): Promise<{ x: number; y: number }> {
-      const [cols, rows] = stack.tmux("display-message", "-p", "-t", session, "#{pane_width} #{pane_height}").trim().split(" ").map(Number);
-      const box = await page.locator(".xterm-screen").boundingBox();
-      if (!box || !cols || !rows) throw new Error("no screen");
-      return { x: box.x + ((col + 0.5) * box.width) / cols, y: box.y + ((row + 0.5) * box.height) / rows };
+      const [, rows] = stack.tmux("display-message", "-p", "-t", session, "#{pane_width} #{pane_height}").trim().split(" ").map(Number);
+      const at = await page.evaluate(([index, count]) => {
+        const list = document.querySelector<HTMLElement>("[data-rows]");
+        const screen = [...document.querySelectorAll<HTMLElement>("[data-rows] [data-seq]")].slice(-(count ?? 0));
+        const box = screen[index ?? 0]?.getBoundingClientRect();
+        if (!list || !box) throw new Error("no screen");
+        return { left: list.getBoundingClientRect().left, cell: parseFloat(list.style.getPropertyValue("--cell-width")), top: box.top, height: box.height };
+      }, [row, rows ?? 0]);
+      return { x: at.left + (col + 0.5) * at.cell, y: at.top + at.height / 2 };
     }
 
     /** The screen's centre column, `row` rows down. */
@@ -83,7 +88,7 @@ for (const version of VERSIONS) {
     /** The page's selection from the start of the row holding `from` to `offset` characters into the row holding `to`. */
     async function select(page: Page, from: string, to: string, offset: number): Promise<void> {
       await page.evaluate(([fromRow, toRow, end]) => {
-        const rows = [...document.querySelectorAll<HTMLElement>(".xterm-rows > div")];
+        const rows = [...document.querySelectorAll<HTMLElement>("[data-rows] [data-seq]")];
         const text = (needle: string | undefined): Node => {
           const row = rows.find((r) => r.textContent.includes(needle ?? ""));
           const node = row && document.createTreeWalker(row, NodeFilter.SHOW_TEXT).nextNode();
@@ -117,11 +122,11 @@ for (const version of VERSIONS) {
       // The command line holds neither the words nor the tail as typed, so the output's rows are the only matches.
       stack.tmux("send-keys", "-t", s, "echo $(seq -f 'word%02g' 0 23); printf 'ta%s\\n' il-line", "Enter");
       await paneIncludes(s, /^tail-line$/m);
-      await expect(page.locator(".xterm-rows")).toContainText("tail-line");
+      await expect(page.locator("[data-rows]")).toContainText("tail-line");
       await select(page, "word00", "tail-line", 4);
       const copied = await page.evaluate(() => {
         const data = new DataTransfer();
-        const rows = document.querySelectorAll(".xterm-rows > div");
+        const rows = document.querySelectorAll("[data-rows] [data-seq]");
         rows[rows.length - 1]?.dispatchEvent(new ClipboardEvent("copy", { clipboardData: data, bubbles: true, cancelable: true }));
         return data.getData("text/plain");
       });
@@ -129,7 +134,7 @@ for (const version of VERSIONS) {
       // A range dragged out of the terminal keeps what is inside it; one ending at the next row's start adds no blank line.
       const copyAfter = (extend: string): Promise<string> => page.evaluate((how) => {
         const selection = getSelection();
-        const rows = [...document.querySelectorAll(".xterm-rows > div")];
+        const rows = [...document.querySelectorAll("[data-rows] [data-seq]")];
         const tail = rows.find((r) => r.textContent.includes("tail-line"));
         if (!selection || !tail?.nextElementSibling) throw new Error("no tail row");
         if (how === "out") selection.extend(document.body, document.body.childNodes.length);
@@ -148,7 +153,7 @@ for (const version of VERSIONS) {
       const finger = await open(page, s);
       stack.tmux("send-keys", "-t", s, "printf 'alp%s\\n' ha-beta", "Enter");
       await paneIncludes(s, /^alpha-beta$/m);
-      await expect(page.locator(".xterm-rows")).toContainText("alpha-beta");
+      await expect(page.locator("[data-rows]")).toContainText("alpha-beta");
       const row = stack.tmux("capture-pane", "-p", "-t", s).split("\n").findIndex((l) => l === "alpha-beta");
       const before = pane(s);
       await select(page, "alpha-beta", "alpha-beta", 5);
@@ -206,97 +211,78 @@ for (const version of VERSIONS) {
       await expect.poll(() => (existsSync(out) ? readFileSync(out, "utf8").trim() : ""), { timeout: 10_000 }).toBe("3:7");
     });
 
-    test("a vertical swipe scrolls the buffer and tmux's history with momentum, and Jump to latest returns", async ({ page }) => {
+    test("a vertical swipe scrolls the list natively, a selection survives it and output below it, and Jump to latest returns", async ({ page }) => {
       const s = newSession();
+      const finger = await open(page, s);
       stack.tmux("send-keys", "-t", s, "seq 1 400 | sed 's/^/row /'", "Enter");
       await paneIncludes(s, /row 400/);
-      const finger = await open(page, s); // opened after: all of it is tmux's history, none of xterm's
+      await expect(page.locator("[data-rows]")).toContainText("row 400");
       const at = await mid(page, s, 4);
-      await expect(page.getByRole("button", { name: "Jump to latest" })).toHaveCount(0);
-      for (let i = 0; i < 6; i++) {
+      const jump = page.getByRole("button", { name: "Jump to latest" });
+      const scrollTop = (): Promise<number> => page.locator("[data-rows]").evaluate((list) => list.scrollTop);
+      await expect(jump).toHaveCount(0);
+      const latest = await scrollTop();
+      // A selection on rows high in the list stays put through the scroll (design.md J7: scrolling redraws nothing).
+      await select(page, "row 300", "row 301", 3);
+      const selected = await page.evaluate(() => getSelection()?.toString());
+      for (let i = 0; i < 3; i++) {
         await finger.down(at.x, at.y);
         await finger.drag(at.x, at.y, at.x, at.y + 300, 8, 6);
         await finger.up();
         await page.waitForTimeout(700);
       }
-      await expect(page.getByRole("button", { name: "Jump to latest" })).toBeVisible();
-      const history = await page.locator("[data-history]").innerText();
-      expect(history).toMatch(/row 3\d\d/);
-      // Copy across the seam between the history view and xterm's first row takes the rows in order.
-      const seam = await page.evaluate(() => {
-        const last = document.querySelector("[data-history]")?.lastElementChild;
-        const first = document.querySelector(".xterm-rows")?.firstElementChild;
-        const from = last && document.createTreeWalker(last, NodeFilter.SHOW_TEXT).nextNode();
-        const to = first && document.createTreeWalker(first, NodeFilter.SHOW_TEXT).nextNode();
-        if (!from || !to) throw new Error("no rows at the seam");
-        getSelection()?.setBaseAndExtent(from, 0, to, to.textContent?.length ?? 0);
-        const data = new DataTransfer();
-        first.dispatchEvent(new ClipboardEvent("copy", { clipboardData: data, bubbles: true, cancelable: true }));
-        return data.getData("text/plain");
-      });
-      const [above, below] = seam.split("\n").map((line) => Number(/row (\d+)/.exec(line)?.[1]));
-      expect(seam.split("\n")).toHaveLength(2);
-      expect(below).toBe((above ?? 0) + 1);
-      // Momentum: a flick keeps going after the finger lifts.
-      const top = async (): Promise<number> => (await page.locator("[data-history]").boundingBox())?.y ?? 0;
-      await finger.down(at.x, at.y + 200);
-      await finger.drag(at.x, at.y + 200, at.x, at.y + 380, 6, 8);
-      await finger.up();
-      // The fling counts only if the last move was within 80 ms of the lift, so lift at once, then poll: the coast
-      // moves the history again and again after the finger is gone.
-      const lifted = await top();
-      await expect.poll(top).toBeGreaterThan(lifted);
-      const coasting = await top();
-      await expect.poll(top).toBeGreaterThan(coasting);
-      await page.getByRole("button", { name: "Jump to latest" }).tap();
-      await expect(page.getByRole("button", { name: "Jump to latest" })).toHaveCount(0);
+      await expect(jump).toBeVisible();
+      expect(await scrollTop()).toBeLessThan(latest - 300);
+      expect(await page.evaluate(() => getSelection()?.toString())).toBe(selected);
+      // Output while scrolled up appends below and moves nothing.
+      const held = await scrollTop();
+      stack.tmux("send-keys", "-t", s, "seq 1 50", "Enter");
+      await paneIncludes(s, /^50$/m);
+      await page.waitForTimeout(500);
+      expect(await scrollTop()).toBe(held);
+      expect(await page.evaluate(() => getSelection()?.toString())).toBe(selected);
+      await jump.tap();
+      await expect(jump).toHaveCount(0);
+      expect(Math.abs((await scrollTop()) - latest)).toBeLessThan(2000);
     });
 
-    test("a finger whose end never arrived is forgotten: the next one-finger swipe still scrolls", async ({ page }) => {
-      const s = newSession();
-      stack.tmux("send-keys", "-t", s, "seq 1 400 | sed 's/^/row /'", "Enter");
-      await paneIncludes(s, /row 400/);
-      const finger = await open(page, s);
-      const at = await mid(page, s, 4);
-      // A touch that began on a row xterm then replaced: its end went to a detached node, so none reached the surface.
+    test("a finger whose end never arrived is forgotten: the next swipe in a full-screen application still sends arrows", async ({ page }) => {
+      const alt = newSession("sh -c \"printf '\\033[?1049h'; exec cat -vt\"");
+      const finger = await open(page, alt);
+      const at = await mid(page, alt);
+      // A touch that began on a row the list then replaced: its end went to a detached node, so none reached the surface.
       await page.evaluate(({ x, y }) => {
         const touch = new Touch({ identifier: 777, target: document.body, clientX: x, clientY: y });
         const host = document.elementFromPoint(x, y) ?? document.body;
         host.dispatchEvent(new TouchEvent("touchstart", { bubbles: true, touches: [touch], targetTouches: [touch], changedTouches: [touch] }));
       }, at);
-      for (let i = 0; i < 2; i++) {
+      for (let i = 1; i <= 2; i++) {
         await finger.down(at.x, at.y);
-        await finger.drag(at.x, at.y, at.x, at.y + 300, 8, 6);
+        await finger.drag(at.x, at.y, at.x, at.y + 160, 8, 10);
         await finger.up();
+        await expect.poll(() => count(alt, "^[[A")).toBeGreaterThanOrEqual(i);
         await page.waitForTimeout(700);
-        await expect(page.getByRole("button", { name: "Jump to latest" })).toBeVisible();
-        await page.getByRole("button", { name: "Jump to latest" }).tap();
-        await expect(page.getByRole("button", { name: "Jump to latest" })).toHaveCount(0);
       }
     });
 
-    test("a swipe keeps scrolling when the touched span is removed mid-swipe, and the next swipe is not ignored", async ({ page }) => {
-      const s = newSession();
-      stack.tmux("send-keys", "-t", s, "seq 1 400 | sed 's/^/row /'", "Enter");
-      await paneIncludes(s, /row 400/);
-      const finger = await open(page, s);
-      const at = await mid(page, s, 4);
-      for (let i = 0; i < 2; i++) {
+    test("a swipe keeps sending arrows when the touched row is removed mid-swipe, and the next swipe is not ignored", async ({ page }) => {
+      const alt = newSession("sh -c \"printf '\\033[?1049h'; exec cat -vt\"");
+      const finger = await open(page, alt);
+      const at = await mid(page, alt, 4);
+      for (let i = 1; i <= 2; i++) {
         await finger.down(at.x, at.y);
-        // What xterm's row redraw does: the node the touch began on leaves the document, and its events go on to that node.
+        // What a redraw does to a styled row: the node the touch began on leaves the document, and its events go on to that node.
         const detached = await page.evaluate(({ x, y }) => {
           const node = document.elementFromPoint(x, y);
-          if (!node || node.closest(".xterm-rows") === null || node.classList.contains("xterm-rows")) return false;
+          if (!node || node.closest("[data-seq]") === null || node.hasAttribute("data-rows")) return false;
           node.remove();
           return !node.isConnected;
         }, at);
         expect(detached).toBe(true);
-        await finger.drag(at.x, at.y, at.x, at.y + 300, 8, 6);
+        await finger.drag(at.x, at.y, at.x, at.y + 160, 8, 10);
         await finger.up();
+        await expect.poll(() => count(alt, "^[[A")).toBeGreaterThanOrEqual(i);
         await page.waitForTimeout(700);
-        await expect(page.getByRole("button", { name: "Jump to latest" })).toBeVisible();
-        await page.getByRole("button", { name: "Jump to latest" }).tap();
-        await expect(page.getByRole("button", { name: "Jump to latest" })).toHaveCount(0);
       }
     });
 

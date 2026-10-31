@@ -1,5 +1,6 @@
 // How the shown tab is looked at by touch (client-architecture.md §7.6): the recognizer, the
-// scroll with its momentum, the history rows above the buffer and the selection snapshot. All
+// scroll with its momentum (xterm's view: the row list scrolls natively), the history rows above the buffer
+// and the selection snapshot (xterm's view too), and the selection and mark on the row list. All
 // of it is state of one tab on a surface every tab shares, so it lives in one object that is
 // told which tab is shown and drops everything when that changes or a snapshot repaints the
 // pane. Nothing here outlives the view it began on: a coast, a held drag or a
@@ -10,6 +11,8 @@ import type { HistoryRow } from "../../tabs/driver";
 import type { PromptLine, TerminalModel, TerminalTheme, XtermView } from "../../term";
 import { rowText } from "../../term/rows";
 import { HistoryView } from "./history";
+import { PinnedWheel } from "./pinnedWheel";
+import type { RowList } from "./rowList";
 import { ScrollControl } from "./scroll";
 import { SelectionControl, type MenuState } from "./selection/control";
 import { Mark } from "./selection/mark";
@@ -20,6 +23,8 @@ interface ViewDeps {
   /** The surface: the host of the renderer, the history rows and the snapshot. */
   element: HTMLElement;
   renderer(): XtermView | null;
+  /** The row list, once it exists; it is the view while `directInput` is `"owned"`. */
+  list(): RowList | null;
   model(): TerminalModel | null;
   theme(): TerminalTheme;
   /** Scrollback rows `start..=end` of the tab shown, or null when none is live. */
@@ -54,6 +59,7 @@ export class TerminalView {
   /** The app's keyboard-up mark over the same rows. */
   private readonly mark: Mark;
   private readonly touch: TouchControl;
+  private readonly wheel: PinnedWheel;
 
   constructor(private readonly deps: ViewDeps) {
     const { element } = deps;
@@ -83,15 +89,52 @@ export class TerminalView {
       menu: (menu) => { deps.onMenu(menu); },
       selecting: (on) => { deps.selecting(on); },
     });
-    this.page = new PageSelection({
-      roots: () => [deps.renderer()?.textRoot() ?? null, this.history.element],
-      rows: () => this.history.pageRows(deps.renderer()?.textRows() ?? []),
-    });
-    this.mark = new Mark({ layer: () => element.parentElement ?? element, page: this.page, editMenu: () => deps.editMenu(), tick: () => { deps.haptic("key"); } });
+    this.page = new PageSelection({ list: () => deps.list() });
+    this.mark = new Mark({ layer: () => deps.list()?.element ?? null, page: this.page, editMenu: () => deps.editMenu(), tick: () => { deps.haptic("key"); } });
+    this.wheel = new PinnedWheel({ model: () => deps.model(), cell: () => deps.list()?.cellSize() ?? null, send: (events) => { this.send(events); } });
     // The recognizer owns every touch on the surface (§7.6): none moves focus, and what a touch means is decided when it resolves.
-    this.touch = new TouchControl({ ...deps, scroll: this.scroll, selection: this.selection, page: this.page, mark: this.mark, send: (events) => { this.send(events); } });
+    this.touch = new TouchControl({
+      ...deps,
+      surface: () => (deps.directInput() === "owned" ? deps.list() : deps.renderer()),
+      scroll: this.scroll,
+      wheel: this.wheel,
+      listCoasting: () => deps.list()?.coasting ?? false,
+      selection: this.selection,
+      page: this.page,
+      mark: this.mark,
+      send: (events) => { this.send(events); },
+    });
     // A mouse wheel past the buffer's top goes on into the history, as a swipe does.
-    element.addEventListener("wheel", this.wheel, { capture: true, passive: false });
+    element.addEventListener("wheel", this.wheelPastTop, { capture: true, passive: false });
+  }
+
+  /** Wires a new row list: the output that rewrites a selected row closes the selection (J7), and a scroll hides the mark's menu. */
+  attach(list: RowList): void {
+    list.onRewritten((seqs) => {
+      if (this.page.rewrites(this.page.current(), seqs) || this.page.rewrites(this.mark.range(), seqs)) this.dismissSelection();
+    });
+    list.onUserScroll(() => { this.mark.hideMenu(); });
+  }
+
+  /** The ranges the row list must not drop rows under. */
+  heldRanges(): Range[] {
+    return [this.page.current(), this.mark.range()].filter((range) => range !== null);
+  }
+
+  /** The row list moved onto or off the newest line: the jump-to-latest control follows. */
+  reportScrolled(scrolled: boolean): void {
+    this.deps.onScrolled(scrolled);
+  }
+
+  /** Whether the view is on the newest line. */
+  get atLatest(): boolean {
+    return this.deps.directInput() === "owned" ? (this.deps.list()?.atLatest ?? true) : this.scroll.atLatest;
+  }
+
+  /** Leaves history for the newest line. */
+  toLatest(): void {
+    if (this.deps.directInput() === "owned") this.deps.list()?.toLatest();
+    else this.scroll.toLatest();
   }
 
   /** The tab on screen changed: everything the last one had going stops. */
@@ -106,6 +149,7 @@ export class TerminalView {
     this.touch.cancel();
     this.dismissSelection();
     this.scroll.reset();
+    this.wheel.stop();
   }
 
   /** Whether the page's selection is up on the rows. */
@@ -137,7 +181,7 @@ export class TerminalView {
     if (this.tab !== null) this.deps.send(this.tab, events);
   }
 
-  private readonly wheel = (event: WheelEvent): void => {
+  private readonly wheelPastTop = (event: WheelEvent): void => {
     const cell = this.deps.renderer()?.cellSize();
     if (!cell || event.deltaY === 0 || this.selection.active) return;
     // A wheel up (negative) shows older content; some wheels report lines, not pixels.

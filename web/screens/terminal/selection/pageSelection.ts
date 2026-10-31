@@ -1,20 +1,19 @@
-// The page's text of the terminal (phone, `directInput: "owned"`). On touch xterm's rows and the history
-// view are page text: iOS's long press selects them with its own handles and menu (this reads that
-// selection and closes it), and the keyboard-up mark (`mark.ts`) is a range over the same rows. One rule
-// says what "selected" is, and one join turns a range into Copy's text across soft wraps.
+// The page's text of the terminal (phone, `directInput: "owned"`). On touch the row list's rows are page text:
+// iOS's long press selects them with its own handles and menu (this reads that selection and closes it), and
+// the keyboard-up mark (`mark.ts`) is a range over the same rows. One rule says what "selected" is, and one
+// join turns a range into Copy's text across soft wraps.
 import { logicalLines } from "../../../touch/selection";
+import type { TextRow } from "../rowList";
 
-/** A row of the selectable text: its element, and whether it continues the row above (a soft wrap). */
-export interface TextRow {
-  element: HTMLElement;
-  wrapped: boolean;
-}
+export type { TextRow };
 
+/** The row list the text is on; null while another view draws the terminal. */
 interface PageSelectionDeps {
-  /** The containers of the selectable rows: xterm's, and the history view's. */
-  roots(): readonly (HTMLElement | null)[];
-  /** Every selectable row, oldest first. */
-  rows(): TextRow[];
+  list(): {
+    contains(node: Node): boolean;
+    rowsIn(range: Range): TextRow[];
+    span(range: Range): { first: HTMLElement; last: HTMLElement } | null;
+  } | null;
 }
 
 /**
@@ -40,7 +39,20 @@ export class PageSelection {
 
   /** Whether `node` is inside the rows' text. */
   holds(node: Node): boolean {
-    return this.deps.roots().some((root) => root?.contains(node));
+    return this.deps.list()?.contains(node) ?? false;
+  }
+
+  /** The selection's range cut to the rows, or null with none. */
+  current(): Range | null {
+    return this.range();
+  }
+
+  /** Whether any row in `seqs` lies between a range's first and last row: the text it marked was rewritten (J7). */
+  rewrites(range: Range | null, seqs: readonly number[]): boolean {
+    const span = range && this.deps.list()?.span(range);
+    if (!span) return false;
+    const [first, last] = [Number(span.first.dataset["seq"]), Number(span.last.dataset["seq"])];
+    return seqs.some((seq) => seq >= first && seq <= last);
   }
 
   /** The selected text with soft wraps joined, one line per logical line; empty with no selection. */
@@ -51,8 +63,7 @@ export class PageSelection {
 
   /** `range`'s text with soft wraps joined, one line per logical line: Copy's text for the selection and the mark alike. */
   textOf(range: Range): string {
-    const pieces = this.deps.rows()
-      .filter(({ element }) => range.intersectsNode(element))
+    const pieces = this.rowsOf(range)
       .map(({ element, wrapped }) => ({ text: clipped(range, element).toString().replaceAll("\u00a0", " "), wrapped }));
     // A range that ends at a row's start still touches that row, and one that starts at a row's end touches it: neither selects it.
     while (pieces.at(-1)?.text === "") pieces.pop();
@@ -62,39 +73,18 @@ export class PageSelection {
 
   /**
    * The client rects of `range`'s text, row by row. `range.getClientRects()` itself would add the box of every
-   * element the range fully contains, and across the history/live seam those include xterm's viewport and its
-   * off-screen measure span: a rect over the whole terminal. Each row's rects come from its clipped part.
+   * element the range fully contains: a rect over a whole block. Each row's rects come from its clipped part.
    */
   rectsOf(range: Range): DOMRect[] {
-    return this.deps.rows()
-      .filter(({ element }) => range.intersectsNode(element))
+    return this.rowsOf(range)
       .flatMap(({ element }) => {
         const part = clipped(range, element);
         return part.collapsed ? [] : [...part.getClientRects()];
       });
   }
 
-  /**
-   * Calls `onRedraw` once, when output redraws a row the range touches: the text the range marked is
-   * gone. Rows it doesn't touch may redraw, and rows may be added. `range()` is read when output arrives, so a
-   * drag that moves the range's ends costs nothing here; the rows it touches are found once per range.
-   * Returns the cancel.
-   */
-  watch(range: () => Range, onRedraw: () => void): () => void {
-    let seen: { range: Range; rows: HTMLElement[] } | null = null;
-    const touched = (): HTMLElement[] => {
-      const current = range();
-      if (seen?.range !== current) seen = { range: current, rows: this.deps.rows().filter(({ element }) => current.intersectsNode(element)).map(({ element }) => element) };
-      return seen.rows;
-    };
-    const observer = new MutationObserver((records) => {
-      const rows = touched();
-      if (!records.some((record) => rows.some((row) => row.contains(record.target)))) return;
-      observer.disconnect();
-      onRedraw();
-    });
-    for (const root of this.deps.roots()) if (root) observer.observe(root, { childList: true, characterData: true, subtree: true });
-    return () => { observer.disconnect(); };
+  private rowsOf(range: Range): TextRow[] {
+    return this.deps.list()?.rowsIn(range) ?? [];
   }
 
   clear(): void {
@@ -106,10 +96,9 @@ export class PageSelection {
     const selection = getSelection();
     if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
     const range = selection.getRangeAt(0);
-    const touched = this.deps.rows().filter(({ element }) => range.intersectsNode(element));
-    const first = touched[0]?.element;
-    const last = touched.at(-1)?.element;
-    if (!first || !last) return null;
+    const span = this.deps.list()?.span(range);
+    if (!span) return null;
+    const { first, last } = span;
     const cut = range.cloneRange();
     if (!this.holds(range.startContainer)) cut.setStart(first, 0);
     if (!this.holds(range.endContainer)) cut.setEnd(last, last.childNodes.length);

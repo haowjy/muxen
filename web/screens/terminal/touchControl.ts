@@ -1,10 +1,12 @@
 // The touch shell (client-architecture.md §7.6): touches in, the sans-IO recognizer in the middle,
 // the terminal's side effects out. What it means is decided when a touch resolves.
 //
-// With the phone's own input (`directInput: "owned"`) the rows are page text and the long press is
-// WebKit's. Touch events are shared with it: `touchstart` is left alone so the long press can begin,
-// `touchmove` is cancelled once the finger is scrolling, `touchend` is cancelled for a tap (so a tap is
-// never a click or a blur), and `touchcancel` is what a long press that WebKit took over looks like.
+// With the phone's own input (`directInput: "owned"`) the rows are the row list's page text, and its scroll and
+// the long press are WebKit's. Touch events are shared with it: every listener but the handles' is passive
+// where it can be, `touchmove` is cancelled only for the mark, a second finger and a pinned terminal's swipe
+// (which becomes wheel events), `touchend` is cancelled for a tap (so a tap is never a click or a blur), and
+// `touchcancel` is what a long press that WebKit took over looks like. A swipe past the slop is the browser's
+// scroll: the recognizer only hides the mark's menu for it.
 // A touch on a live selection is WebKit's and never reaches the recognizer. After a touch, mouse events
 // on the surface stop for a while: iOS's imitation mouse-move over a link would redraw rows and end a selection.
 // With the keyboard up in the app the hold is muxen's instead (`Mark`): WebKit's selection would take the
@@ -16,20 +18,31 @@
 // press builds the selection snapshot.
 import type { Owner } from "../../app/focus";
 import type { HapticKind, InputEvent } from "../../platform/types";
-import type { PromptLine, TerminalModel, XtermView } from "../../term";
+import type { CellPosition, PromptLine, TerminalModel } from "../../term";
 import { mouseInput } from "../../term/mouse";
 import { DEFAULT_GESTURE, GestureRecognizer, type GestureAction } from "../../touch/gesture";
 import { charsAcross } from "../../touch/selection";
 import type { ScrollControl } from "./scroll";
 import type { SelectionControl } from "./selection/control";
+import type { PinnedWheel } from "./pinnedWheel";
 import type { Mark } from "./selection/mark";
 import type { PageSelection } from "./selection/pageSelection";
 
+/** What a tap and a swipe need of the view that draws the terminal: the row list's, or xterm's. */
+export interface TouchSurface {
+  cellAt(x: number, y: number): CellPosition | null;
+  cursor(): CellPosition;
+}
+
 interface TouchDeps {
   element: HTMLElement;
-  renderer(): XtermView | null;
+  surface(): TouchSurface | null;
   model(): TerminalModel | null;
+  /** The xterm view's scroll (the native input path). */
   scroll: ScrollControl;
+  /** A pinned terminal's swipe as wheel events, and whether the row list is coasting (the owned path). */
+  wheel: PinnedWheel;
+  listCoasting(): boolean;
   selection: SelectionControl;
   page: PageSelection;
   /** The app's keyboard-up mark. */
@@ -90,6 +103,8 @@ export class TouchControl {
   /** Where the first finger went down: a wheel event's cell. */
   private origin = { x: 0, y: 0 };
   private scrolling = false;
+  /** The scroll in progress is a pinned terminal's: its swipes are wheel events. */
+  private pinned = false;
   /** A long-press began a selection and the finger has not lifted. */
   private selecting = false;
   /** The touch that stopped a coasting scroll is that, and not a tap. */
@@ -184,7 +199,8 @@ export class TouchControl {
     if (!this.owned) return;
     this.lastTouchAt = performance.now();
     this.reap(event);
-    const inside = (touch: Touch): boolean => touch.target instanceof Node && this.deps.element.contains(touch.target);
+    // Not the mark's handles, which are inside the list but have touches of their own.
+    const inside = (touch: Touch): boolean => touch.target instanceof Node && this.deps.element.contains(touch.target) && !this.deps.mark.owns(touch.target);
     for (const touch of event.changedTouches) if (inside(touch)) this.follow(touch);
     if (this.handedOver) return;
     const first = event.changedTouches[0];
@@ -203,8 +219,8 @@ export class TouchControl {
     for (const touch of event.touches) {
       if (this.fingers.has(touch.identifier) || !inside(touch)) continue;
       if (this.fingers.size === 0) {
-        this.stoppedCoast = this.deps.scroll.coasting;
-        this.deps.scroll.stop();
+        this.stoppedCoast = this.deps.listCoasting() || this.deps.wheel.coasting;
+        this.deps.wheel.stop();
         this.origin = { x: touch.clientX, y: touch.clientY };
       }
       this.fingers.add(touch.identifier);
@@ -222,9 +238,9 @@ export class TouchControl {
       if (this.fingers.has(touch.identifier)) this.run(this.recognizer.move(touch.identifier, touch.clientX, touch.clientY, performance.now()));
     }
     this.schedule();
-    // The first move past the slop starts a scroll, and WebKit's long press has given up by then. A second finger
-    // would pinch the page, which the terminal never does.
-    if (this.recognizer.scrolling || this.marking || event.touches.length > 1) event.preventDefault();
+    // Only a pinned terminal's swipe, the mark and a second finger (which would pinch the page) are muxen's: any
+    // other move is WebKit's, and the list scrolls natively.
+    if ((this.pinned && this.recognizer.scrolling) || this.marking || event.touches.length > 1) event.preventDefault();
   };
 
   private readonly touchEnd = (event: TouchEvent): void => {
@@ -370,15 +386,22 @@ export class TouchControl {
       case "scroll":
         if (!this.scrolling) {
           this.scrolling = true;
-          this.deps.page.clear(); // scrolling redraws the rows
-          this.deps.mark.clear();
-          scroll.begin(this.deps.renderer()?.cellAt(this.origin.x, this.origin.y) ?? null);
+          const anchor = this.deps.surface()?.cellAt(this.origin.x, this.origin.y) ?? null;
+          if (this.owned) {
+            // The list scrolls natively and a selection survives it; the mark's menu hides until a tap inside it.
+            this.deps.mark.hideMenu();
+            this.pinned = this.deps.wheel.active;
+            if (this.pinned) this.deps.wheel.begin(anchor);
+          } else scroll.begin(anchor);
         }
-        scroll.by(action.dy);
+        if (!this.owned) scroll.by(action.dy);
+        else if (this.pinned) this.deps.wheel.by(action.dy);
         break;
       case "scrollEnd":
         this.scrolling = false;
-        scroll.release(action.velocity);
+        if (!this.owned) scroll.release(action.velocity);
+        else if (this.pinned) this.deps.wheel.release(action.velocity);
+        this.pinned = false;
         break;
       case "longPress":
         if (this.owned) {
@@ -415,17 +438,18 @@ export class TouchControl {
 
   /** A short press, resolved to the one thing it does (`tapAction`). */
   private tap(x: number, y: number): void {
-    const renderer = this.deps.renderer();
+    const surface = this.deps.surface();
     const model = this.deps.model();
     if (this.deps.directInput() === "xterm") {
       this.deps.focusTerminal();
       return;
     }
-    const cell = this.deps.scroll.atLatest ? renderer?.cellAt(x, y) ?? null : null;
+    // On the list a cell is a screen row under the finger, wherever the view is; xterm's slide hides the screen above the history.
+    const cell = this.owned || this.deps.scroll.atLatest ? surface?.cellAt(x, y) ?? null : null;
     const action = tapAction({
       owner: this.deps.owner(),
       cell: cell !== null,
-      nearCursor: cell !== null && renderer !== null && Math.abs(cell.row - renderer.cursor().row) <= 1,
+      nearCursor: cell !== null && surface !== null && Math.abs(cell.row - surface.cursor().row) <= 1,
       mouse: model !== null && model.mouseMode() !== "none",
       raises: this.deps.directInput() === "native",
     });
@@ -440,10 +464,10 @@ export class TouchControl {
 
   /** On the prompt's input row, a tap moves the cursor there; the caller has checked that the terminal's own input held the keyboard. */
   private moveCursorTo(col: number, row: number): void {
-    const renderer = this.deps.renderer();
+    const surface = this.deps.surface();
     const line = this.deps.prompt();
-    if (!renderer || !line) return;
-    const cursor = renderer.cursor();
+    if (!surface || !line) return;
+    const cursor = surface.cursor();
     if (row !== cursor.row || col === cursor.col) return;
     // The cursor moves a character a key, and a cell is not a character: wide text takes two cells, a combining mark none.
     const left = col < cursor.col;

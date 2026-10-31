@@ -3,14 +3,16 @@
 // focus and the keyboard stay. The finger, still down, extends it; two drawn handles adjust it; native's edit
 // menu (`Platform.editMenu`) sits over it. The mark is a range over the same rows `PageSelection` reads, and its
 // text is `PageSelection.textOf`: one join for Copy. Output never pauses: when rows under the mark redraw, the
-// mark goes with its handles (`PageSelection.watch`).
+// view closes it with its handles (`PageSelection.rewrites`). The handles sit in the row list's scroller, so they
+// ride its native scroll; a finger or handle near the scroller's top or bottom edge scrolls it (the mark's own
+// autoscroll, which iOS gives its own selection but not a CSS highlight).
 import type { MenuRect } from "../../../platform/types";
 import { boxOf, near, type PageSelection } from "./pageSelection";
 import styles from "./Mark.module.css";
 
 interface MarkDeps {
-  /** The surface the terminal is in: the handles are its children, placed in its coordinates. The host clips, and a first row's start knob lies above it. */
-  layer(): HTMLElement;
+  /** The row list's scroller: the handles are its children, placed in its content's coordinates. It clips, and a first row's start knob lies above it. */
+  layer(): HTMLElement | null;
   page: PageSelection;
   /** The platform's edit menu, or undefined where there is none (a browser): the mark is the app's. */
   editMenu(): ((rect: MenuRect | null) => void) | undefined;
@@ -22,6 +24,9 @@ interface MarkDeps {
 const TAP_REACH = 8;
 /** Half a handle's hit area: a touch this near a knob's centre is that handle's. */
 const HIT = 22;
+/** A finger this near the scroller's top or bottom edge scrolls it, this many px a frame. */
+const EDGE = 40;
+const EDGE_STEP = 8;
 /** From a handle's line to its knob's centre: 2 px of air and the 10 px knob's radius. */
 const KNOB_OFFSET = 7;
 
@@ -48,7 +53,10 @@ export class Mark {
   private places: Record<End, Place> | null = null;
   /** A handle being dragged, and the vector from the finger to its text point at the grab. */
   private grabbed: { end: End; touch: number; dx: number; dy: number } | null = null;
-  private unwatch: (() => void) | null = null;
+  /** The menu may be up: native owns whether it is, so only a shown one is hidden. */
+  private menuShown = false;
+  /** The edge autoscroll: the direction, the finger it follows, and what moves the mark's end to it. */
+  private edge: { dir: -1 | 1; x: number; y: number; apply: (x: number, y: number) => void; frame: number } | null = null;
 
   constructor(private readonly deps: MarkDeps) {}
 
@@ -66,6 +74,16 @@ export class Mark {
     return this.state !== null && near(this.deps.page.rectsOf(this.state.range), x, y, TAP_REACH);
   }
 
+  /** The marked range, or null. */
+  range(): Range | null {
+    return this.state?.range ?? null;
+  }
+
+  /** Whether `target` is one of the handles: their touches are the mark's own, never the terminal's. */
+  owns(target: EventTarget | null): boolean {
+    return target instanceof Node && this.handles !== null && ENDS.some((end) => this.handles?.[end].contains(target));
+  }
+
   /** Copy's text: the mark's range through the page selection's join. Empty with no mark. */
   text(): string {
     return this.state ? this.deps.page.textOf(this.state.range) : "";
@@ -78,7 +96,6 @@ export class Mark {
     if (!word) return false;
     this.deps.tick();
     this.state = { range: word.cloneRange(), word };
-    this.unwatch = this.deps.page.watch(() => this.state?.range ?? word, () => { this.clear(); });
     this.paint();
     this.setInert(true); // until the finger lifts, a handle's hit area must not be what hit-testing finds under it
     return true;
@@ -86,6 +103,11 @@ export class Mark {
 
   /** The finger, still down after the hold, drags the mark's far end: it grows from the word the hold began on, either way. */
   extend(x: number, y: number): void {
+    this.follow(x, y, (px, py) => { this.extendTo(px, py); });
+    this.extendTo(x, y);
+  }
+
+  private extendTo(x: number, y: number): void {
     if (!this.state) return;
     const at = this.caretAt(x, y);
     if (!at) return;
@@ -99,6 +121,7 @@ export class Mark {
 
   /** The finger that held and dragged lifted: the mark is final and the menu comes up. */
   lift(): void {
+    this.stopEdge();
     this.setInert(false);
     this.toggleMenu();
   }
@@ -106,7 +129,16 @@ export class Mark {
   /** A tap inside the mark. Native owns whether the menu is up (iOS can dismiss it itself): it shows over the mark or, if showing, hides. */
   toggleMenu(): void {
     const box = this.state && boxOf(this.deps.page.rectsOf(this.state.range));
-    if (box) this.deps.editMenu()?.({ x: box.x, y: box.y, width: box.width, height: box.height });
+    if (!box) return;
+    this.menuShown = true;
+    this.deps.editMenu()?.({ x: box.x, y: box.y, width: box.width, height: box.height });
+  }
+
+  /** The menu hides when a scroll starts and stays hidden: a tap inside the mark brings it back. */
+  hideMenu(): void {
+    if (!this.menuShown) return;
+    this.menuShown = false;
+    this.deps.editMenu()?.(null);
   }
 
   clear(): void {
@@ -114,8 +146,7 @@ export class Mark {
     this.state = null;
     this.places = null;
     this.grabbed = null;
-    this.unwatch?.();
-    this.unwatch = null;
+    this.stopEdge();
     CSS.highlights.delete("tsel");
     this.hideMenu();
     this.setInert(false);
@@ -127,10 +158,6 @@ export class Mark {
     if (!state) return;
     CSS.highlights.set("tsel", new Highlight(state.range));
     this.placeHandles(state.range);
-  }
-
-  private hideMenu(): void {
-    this.deps.editMenu()?.(null);
   }
 
   /** The word under a client point, or null off the rows' text or on a blank. */
@@ -166,15 +193,15 @@ export class Mark {
     const first = rects[0];
     const last = rects.at(-1);
     if (!first || !last) return;
-    const handles = this.ensureHandles();
     const layer = this.deps.layer();
+    if (!layer) return;
+    const handles = this.ensureHandles();
     const host = layer.getBoundingClientRect();
     const place = (end: End, x: number, rect: DOMRect): Place => {
       const element = handles[end];
       if (element.parentElement !== layer) layer.append(element);
-      element.hidden = rect.bottom < host.top || rect.top > host.bottom; // a row scrolled out of the surface
-      element.style.left = `${String(x - host.left)}px`;
-      element.style.top = `${String(rect.top - host.top)}px`;
+      element.style.left = `${String(x - host.left + layer.scrollLeft)}px`;
+      element.style.top = `${String(rect.top - host.top + layer.scrollTop)}px`;
       element.style.height = `${String(rect.height)}px`;
       return { knob: { x, y: end === "start" ? rect.top - KNOB_OFFSET : rect.bottom + KNOB_OFFSET }, text: { x, y: rect.top + rect.height / 2 } };
     };
@@ -205,6 +232,7 @@ export class Mark {
   private grab(end: End, event: TouchEvent): void {
     event.preventDefault();
     const finger = event.changedTouches[0];
+    if (this.state) this.placeHandles(this.state.range); // the list may have scrolled since the last paint
     const { places } = this;
     if (!finger || !places || this.grabbed) return;
     // Two short marks' hit areas overlap: of the handles whose area holds the touch, the nearer knob takes it.
@@ -223,7 +251,15 @@ export class Mark {
     if (!grabbed || !state) return;
     const finger = [...event.changedTouches].find((t) => t.identifier === grabbed.touch);
     if (!finger) return;
-    const at = this.caretAt(finger.clientX + grabbed.dx, finger.clientY + grabbed.dy);
+    this.follow(finger.clientX + grabbed.dx, finger.clientY + grabbed.dy, (x, y) => { this.dragTo(x, y); });
+    this.dragTo(finger.clientX + grabbed.dx, finger.clientY + grabbed.dy);
+  }
+
+  /** The grabbed handle's text point moves to (`x`, `y`). */
+  private dragTo(x: number, y: number): void {
+    const { grabbed, state } = this;
+    if (!grabbed || !state) return;
+    const at = this.caretAt(x, y);
     if (!at) return;
     const range = state.range.cloneRange();
     if (grabbed.end === "start") range.setStart(at.startContainer, at.startOffset);
@@ -250,6 +286,34 @@ export class Mark {
     if (!this.grabbed || ![...event.changedTouches].some((t) => t.identifier === this.grabbed?.touch)) return;
     this.grabbed = null;
     this.lift();
+  }
+
+  /** Starts, keeps or stops the edge autoscroll for a finger at (`x`, `y`) in the scroller's coordinates. */
+  private follow(x: number, y: number, apply: (x: number, y: number) => void): void {
+    const box = this.deps.layer()?.getBoundingClientRect();
+    if (!box) return;
+    const dir = y < box.top + EDGE ? -1 : y > box.bottom - EDGE ? 1 : 0;
+    if (dir === 0) {
+      this.stopEdge();
+      return;
+    }
+    this.edge = { dir, x, y, apply, frame: this.edge?.frame ?? 0 };
+    if (!this.edge.frame) this.edge.frame = requestAnimationFrame(this.tick);
+  }
+
+  private readonly tick = (): void => {
+    const { edge } = this;
+    const layer = this.deps.layer();
+    if (!edge || !layer) return;
+    layer.scrollTop += edge.dir * EDGE_STEP;
+    const box = layer.getBoundingClientRect();
+    edge.apply(edge.x, Math.max(box.top + 3, Math.min(box.bottom - 3, edge.y)));
+    edge.frame = requestAnimationFrame(this.tick);
+  };
+
+  private stopEdge(): void {
+    if (this.edge) cancelAnimationFrame(this.edge.frame);
+    this.edge = null;
   }
 
   private setInert(on: boolean): void {

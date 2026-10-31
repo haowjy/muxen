@@ -12,7 +12,7 @@ import { acceptsInsert, type ConnectionState } from "../../tabs/connection";
 import { TabDriver } from "../../tabs/driver";
 import { decideKey } from "../../tabs/keymap";
 import type { SessionRef, ShownWindow } from "../../proto/generated/messages";
-import { createXtermView, TerminalModel, type PromptLine, type XtermView } from "../../term";
+import { createXtermView, TerminalModel, type CellSize, type PromptLine, type XtermView } from "../../term";
 import { TerminalSizer } from "../../term/size";
 import { ArmedModifiers } from "../../touch/armed";
 import { routeHardwareKey, type RowKey } from "../../touch/keyRoute";
@@ -26,6 +26,7 @@ import { nativeLineEditor } from "./dock/lineEditor";
 import { interceptClipboard, Pastes } from "./paste";
 import type { MenuState } from "./selection/control";
 import styles from "./Terminal.module.css";
+import { RowList } from "./rowList";
 import { TerminalView } from "./view";
 
 /** What the pill and the status band read for a tab. */
@@ -83,8 +84,12 @@ export function terminalsOf(app: AppController): Terminals {
 export class Terminals extends Store<TerminalsView> {
   /** The element the renderer draws into; the screen places it and never creates it. */
   readonly element: HTMLDivElement = document.createElement("div");
-  /** The model and the view that draws it, created together once the element has a size. */
-  private surface: { model: TerminalModel; view: XtermView } | null = null;
+  /**
+   * The model, once the element has a size, and the views of it. The row list draws it while the input is the
+   * phone's own (`"owned"`), xterm's view otherwise; each is created the first time it is needed, and the other
+   * stays hidden and keeps parsing (an iPad that gains or loses a trackpad switches without a fetch).
+   */
+  private surface: { model: TerminalModel; xterm: XtermView | null; list: RowList | null } | null = null;
   private creating = false;
   private readonly drivers = new Map<string, TabDriver>();
   private readonly sizer: TerminalSizer;
@@ -127,7 +132,7 @@ export class Terminals extends Store<TerminalsView> {
     this.element.className = styles.host ?? "";
     this.element.dataset["blank"] = "true"; // until the first snapshot: no pretend-live empty terminal
     this.sizer = new TerminalSizer({
-      cell: () => this.surface?.view.fontCell() ?? null,
+      cell: () => this.activeCell(),
       // A new size redraws the rows, and a selection on them goes first.
       onChange: (size) => {
         this.view.dismissSelection();
@@ -145,11 +150,12 @@ export class Terminals extends Store<TerminalsView> {
     interceptClipboard(this.element, {
       onPaste: (pasted) => { this.pastes.paste(pasted); },
       // The phone's selection is page text; desktop's is xterm's own.
-      selectionText: () => this.view.pageText() || (this.surface?.view.selectionText() ?? ""),
+      selectionText: () => this.view.pageText() || (this.surface?.xterm?.selectionText() ?? ""),
     });
     this.view = new TerminalView({
       element: this.element,
-      renderer: () => this.surface?.view ?? null,
+      renderer: () => this.surface?.xterm ?? null,
+      list: () => this.surface?.list ?? null,
       model: () => this.surface?.model ?? null,
       theme: terminalTheme,
       fetchHistory: (start, end) => this.shownDriver()?.history(start, end) ?? null,
@@ -283,13 +289,14 @@ export class Terminals extends Store<TerminalsView> {
 
   /** The jump-to-latest control. */
   toLatest(): void {
-    this.view.scroll.toLatest();
+    this.view.toLatest();
   }
 
-  /** What remains visible of the terminal above the dock, for the cursor pan; null follows the surface. */
+  /** What remains visible of the terminal above the dock, for the keyboard; null follows the surface. */
   setPanArea(px: number | null): void {
     this.panArea = px;
-    this.surface?.view.setPanArea(px);
+    this.surface?.xterm?.setPanArea(px);
+    this.surface?.list?.setVisible(px);
   }
 
   private sync(): void {
@@ -362,11 +369,12 @@ export class Terminals extends Store<TerminalsView> {
           const box = this.sizer.sizeForWatch();
           this.view.dismissSelection();
           this.paneLarge = snapshot.cols > box.cols || snapshot.rows > box.rows;
-          if (this.paneLarge) this.surface?.view.setWebgl(false);
+          if (this.paneLarge) this.surface?.xterm?.setWebgl(false);
           await this.surface?.model.snapshot(snapshot);
-          if (!this.paneLarge && this.viewport.directInput === "xterm") this.surface?.view.setWebgl(true);
-          // What was fetched or selected sat above the buffer this snapshot replaced.
+          if (!this.paneLarge && this.viewport.directInput === "xterm") this.surface?.xterm?.setWebgl(true);
+          // What was fetched or selected sat above the buffer this snapshot replaced; the list takes the reset frame now, before the surface shows.
           this.view.reset();
+          this.surface?.list?.update();
           // The surface now holds this tab's content, whichever tab is on screen by the time xterm finished parsing.
           this.painted = id;
           this.showPainted();
@@ -416,7 +424,7 @@ export class Terminals extends Store<TerminalsView> {
   private typeTo(id: string, events: InputEvent[]): void {
     if (id !== this.shownTerminalTab()) return;
     // Typing returns to the newest line.
-    if (!this.view.scroll.atLatest) this.view.scroll.toLatest();
+    if (!this.view.atLatest) this.view.toLatest();
     // Keys go to the window the tab showed when they were typed, even if it follows its session to another within the batch.
     const window = this.drivers.get(id)?.windowId ?? null;
     if (this.batch && (this.batch.id !== id || this.batch.window !== window)) this.flushInput();
@@ -466,7 +474,7 @@ export class Terminals extends Store<TerminalsView> {
     const { clientWidth: width, clientHeight: height } = this.element;
     const laidOut = width > 0 && height > 0;
     if (!this.surface) {
-      if (laidOut) void this.createRenderer();
+      if (laidOut) void this.createSurface();
       return;
     }
     // Hidden, only the box is unknown: the cell comes from the font, so the sizer stays current for the return.
@@ -491,60 +499,92 @@ export class Terminals extends Store<TerminalsView> {
     this.sync();
   }
 
-  /** A new theme redraws every row, and a redraw replaces the text a selection is on: it waits for the selection to close. */
+  /** A new theme redraws every row of xterm's view, and a redraw replaces the text a selection is on: it waits for the selection to close. The list's colours are CSS variables, which follow the scheme by themselves. */
   private applyTheme(): void {
     if (!this.themeStale || this.view.selected) return;
     this.themeStale = false;
-    this.surface?.view.setTheme(terminalTheme());
+    this.surface?.xterm?.setTheme(terminalTheme());
   }
 
-  private async createRenderer(): Promise<void> {
+  /** One cell's size from the font alone, for the view that draws now. */
+  private activeCell(): CellSize | null {
+    return (this.viewport.directInput === "owned" ? this.surface?.list?.cellSize() : this.surface?.xterm?.fontCell()) ?? null;
+  }
+
+  private async createSurface(): Promise<void> {
     if (this.creating) return;
     this.creating = true;
-    // xterm measures its cell once, at open: the faces must be in.
+    // The cell is measured from the font: the faces must be in.
     const style = getComputedStyle(this.element);
     const size = style.fontSize;
     await Promise.all([document.fonts.load(`${size} muxen-mono`), document.fonts.load(`bold ${size} muxen-mono`)]).catch(() => undefined);
-    const font = getComputedStyle(this.element);
     const model = new TerminalModel();
-    const renderer = createXtermView(model, this.element, {
-      fontFamily: font.fontFamily,
-      fontSize: parseFloat(font.fontSize),
-      theme: terminalTheme(),
-      // Desktop draws the screen as a picture. A phone draws it as page text, which iOS can select.
-      webgl: this.viewport.directInput === "xterm",
-      openLink: (url) => { this.app.platform.openURL(url); },
-    });
-    this.surface = { model, view: renderer };
-    renderer.setPanArea(this.panArea);
+    this.surface = { model, xterm: null, list: null };
     model.onPromptLine((line) => { this.promptLine = line; });
-    renderer.onScrolledUp(() => { this.view.scroll.scrolledChanged(); });
-    // The symbols fallback arrives after first paint: its glyphs draw once the atlas is cleared.
-    document.fonts.addEventListener("loadingdone", () => { renderer.refreshGlyphs(); });
+    // The symbols fallback arrives after first paint: xterm's glyphs draw once its atlas is cleared.
+    document.fonts.addEventListener("loadingdone", () => { this.surface?.xterm?.refreshGlyphs(); });
     this.applyInput();
     this.measure();
   }
 
+  /** Makes the view the input calls for exist and show, and hides the other. */
+  private showView(): void {
+    const { surface } = this;
+    if (!surface) return;
+    const font = getComputedStyle(this.element);
+    if (this.viewport.directInput === "owned") {
+      if (!surface.list) {
+        const list = new RowList(surface.model, { held: () => this.view.heldRanges() });
+        surface.list = list;
+        this.element.append(list.element);
+        this.view.attach(list);
+        list.onScrolledUp((scrolled) => { this.view.reportScrolled(scrolled); });
+        list.setFont(font.fontFamily, parseFloat(font.fontSize));
+        list.setVisible(this.panArea);
+      }
+      surface.xterm?.setHidden(true);
+      surface.list.setHidden(false);
+      return;
+    }
+    surface.list?.setHidden(true);
+    if (!surface.xterm) {
+      const xterm = createXtermView(surface.model, this.element, {
+        fontFamily: font.fontFamily,
+        fontSize: parseFloat(font.fontSize),
+        theme: terminalTheme(),
+        // Desktop draws the screen as a picture; the app's native input draws page text for its selection snapshot.
+        webgl: this.viewport.directInput === "xterm",
+        openLink: (url) => { this.app.platform.openURL(url); },
+      });
+      surface.xterm = xterm;
+      xterm.setPanArea(this.panArea);
+      xterm.onScrolledUp(() => { this.view.scroll.scrolledChanged(); });
+    }
+    surface.xterm.setHidden(false);
+  }
+
   private refont(): void {
-    const renderer = this.surface?.view;
-    if (!renderer) return;
+    const { surface } = this;
+    if (!surface) return;
     this.view.dismissSelection(); // a new font redraws every row
     const style = getComputedStyle(this.element);
-    renderer.setFont(style.fontFamily, parseFloat(style.fontSize));
+    surface.xterm?.setFont(style.fontFamily, parseFloat(style.fontSize));
+    surface.list?.setFont(style.fontFamily, parseFloat(style.fontSize));
     requestAnimationFrame(() => { this.measure(); });
   }
 
   /** Desktop direct input is xterm's own textarea, held by the focus controller; a phone browser's is muxen's owned input; native brings its own. */
   private applyInput(): void {
-    const renderer = this.surface?.view;
-    if (!renderer) return;
+    if (!this.surface) return;
+    this.showView();
+    const renderer = this.surface.xterm;
     const { directInput } = this.viewport;
     const xterm = directInput === "xterm";
     // The surface's own look follows the input (Terminal.module.css); a trackpad appearing on an iPad closes a phone's selection.
     this.element.dataset["directInput"] = directInput;
     this.view.dismissSelection();
-    renderer.setWebgl(xterm && !this.paneLarge);
-    renderer.setInput(
+    renderer?.setWebgl(xterm && !this.paneLarge);
+    renderer?.setInput(
       xterm
         ? {
             input: (events: InputEvent[]) => { this.type(events); },
@@ -559,13 +599,13 @@ export class Terminals extends Store<TerminalsView> {
     );
     if (this.registered) this.app.focus.withdraw("terminal", this.registered);
     // Where muxen's own input (or native's) takes the keyboard, xterm's helper textarea is inert: out of the accessibility tree, so VoiceOver cannot land on it.
-    const helper = renderer.inputElement();
+    const helper = renderer?.inputElement();
     if (xterm) helper?.removeAttribute("aria-hidden");
     else helper?.setAttribute("aria-hidden", "true");
     // On a phone browser the keys beside the text (below) go to tmux from here.
     if (directInput === "owned") document.addEventListener("keydown", this.hardwareKey);
     else document.removeEventListener("keydown", this.hardwareKey);
-    this.registered = xterm ? renderer.inputElement() : directInput === "owned" ? this.ownedInput() : this.app.focus.nativeTerminal();
+    this.registered = xterm ? renderer?.inputElement() ?? null : directInput === "owned" ? this.ownedInput() : this.app.focus.nativeTerminal();
     this.drawCursor();
     if (!this.registered) return;
     this.app.focus.register("terminal", this.registered);

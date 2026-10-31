@@ -49,7 +49,7 @@ export interface ViewOptions {
   openLink(url: string): void;
 }
 
-/** The interim xterm view over a {@link TerminalModel}: what xterm draws, scrolls and selects. */
+/** The interim xterm view over a {@link TerminalModel}: what xterm draws, scrolls and selects (desktop, and the app's native input). */
 export interface XtermView {
   /** One cell's size in CSS pixels, null until the first paint; changes with font size. */
   cellSize(): CellSize | null;
@@ -57,6 +57,8 @@ export interface XtermView {
   fontCell(): CellSize | null;
   /** Applies a theme; while a selection is on the rows it waits, since redrawing them would end the selection. */
   setTheme(theme: TerminalTheme): void;
+  /** Hides or shows the xterm element: while the row list is the view of the model, this one is hidden and stops rendering. */
+  setHidden(hidden: boolean): void;
   /** Calls `listener` whenever the view moves onto or off the newest line. */
   onScrolledUp(listener: (scrolledUp: boolean) => void): void;
   scrollToBottom(): void;
@@ -75,13 +77,6 @@ export interface XtermView {
   inputElement(): HTMLElement | null;
   /** The selection's logical text: soft wraps joined, as xterm marks them. Empty with no selection. */
   selectionText(): string;
-  /** The element holding the screen's rows when they are page text (the DOM renderer, as on a phone), else null. */
-  textRoot(): HTMLElement | null;
-  /**
-   * The screen's rows as page text, top to bottom: each row's element and whether it continues
-   * the row above (a soft wrap). Empty while WebGL draws.
-   */
-  textRows(): { element: HTMLElement; wrapped: boolean }[];
   /** Where the cursor is on the visible screen (interim: callers read the frame's cursor once the view takes frames). */
   cursor(): CellPosition;
   /** Scrollback rows above the visible screen, and how many of them the view is scrolled up by. */

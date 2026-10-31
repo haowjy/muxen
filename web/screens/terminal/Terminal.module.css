@@ -25,27 +25,21 @@
   -webkit-user-select: none;
   user-select: none;
 }
-/* The phone's own input: the rows are page text and the long press is WebKit's, so iOS selects them with its own
-   handles and menu. Nothing on or above the host may cancel `touchstart` or set `user-select: none`,
-   `-webkit-touch-callout: none` or `touch-action: none`; xterm's rows are `pointer-events: none` by default, which
-   would hide them from the long press. The history view's rows are page text too. */
+/* The phone's own input: the rows are the row list's page text and the long press is WebKit's, so iOS selects them
+   with its own handles and menu. Nothing on or above the host may cancel `touchstart` or set `user-select: none`,
+   `-webkit-touch-callout: none` or `touch-action: none` (a pinned list's swipes are muxen's, below). The list scrolls
+   natively: vertical pans are the browser's. */
 .host[data-direct-input="owned"] {
   touch-action: auto;
   -webkit-touch-callout: default;
   -webkit-user-select: text;
   user-select: text;
 }
-.host[data-direct-input="owned"] :global(.xterm),
-.host[data-direct-input="owned"] :global(.xterm-rows),
-.host[data-direct-input="owned"] > [data-history] {
-  -webkit-user-select: text;
-  user-select: text;
-}
-.host[data-direct-input="owned"] :global(.xterm-rows),
-.host[data-direct-input="owned"] > [data-history] { pointer-events: auto; }
+.host[data-direct-input="owned"] [data-rows] { touch-action: pan-y; }
+.host[data-direct-input="owned"] [data-rows][data-pinned] { touch-action: none; }
 .host[data-direct-input="owned"] ::selection { background-color: var(--term-selection); }
 
-/* xterm draws the cursor hollow while its own textarea is unfocused (always, on a phone). Holding the keyboard
+/* xterm draws the cursor hollow while its own textarea is unfocused (always, with the app's native input). Holding the keyboard
    fills it. CSS and not an xterm option: an option change redraws every row, and a selection on them with it. */
 .host[data-cursor="solid"] :global(.xterm-cursor-outline) {
   background-color: var(--term-cursor) !important;

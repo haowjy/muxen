@@ -1,0 +1,45 @@
+/* The row list: one native scroller. `overflow-anchor: none` because Chromium and Firefox anchor by themselves and
+   WebKit doesn't: the list restores the view itself (`editAbove`), and a browser doing it too would apply it twice. */
+.scroller {
+  position: absolute;
+  inset: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  overflow-anchor: none;
+  white-space: pre;
+}
+.scroller[hidden] { display: none; }
+/* A pinned list (a full-screen or mouse-aware application) holds still at latest; the application scrolls itself. */
+.scroller[data-pinned] { overflow-y: hidden; }
+.run { position: relative; }
+/* Only the blocks near the view are laid out; the others keep the height their rows will have. */
+.block { content-visibility: auto; }
+.spacer { height: 0; }
+.gap {
+  height: var(--cell-height);
+  color: var(--text-muted, inherit);
+  -webkit-user-select: none;
+  user-select: none;
+}
+/* The cursor overlays the content: a solid box that inverts what is under it while the terminal holds the keyboard,
+   an outline otherwise (`data-cursor` on the host). It never redraws a glyph, so a move or a blink touches no row. */
+.cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+  box-sizing: border-box;
+  outline: 1px solid var(--term-cursor);
+  outline-offset: -1px;
+}
+.cursor[hidden] { display: none; }
+.cursor[data-shape="bar"] { width: 2px !important; }
+.cursor[data-shape="underline"] { height: 2px !important; margin-top: calc(var(--cell-height) - 2px); }
+:global([data-cursor="solid"]) .cursor {
+  outline: none;
+  background: white; /* difference against white inverts what is under it */
+  mix-blend-mode: difference;
+}

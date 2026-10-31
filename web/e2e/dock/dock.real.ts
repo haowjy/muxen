@@ -53,7 +53,7 @@ for (const version of VERSIONS) {
       await painted(page);
     }
     async function painted(page: Page): Promise<void> {
-      await page.waitForFunction(() => { const host = document.querySelector(".xterm")?.parentElement; return host !== null && host !== undefined && !host.hasAttribute("data-blank"); });
+      await page.waitForFunction(() => { const host = document.querySelector("[data-rows], .xterm")?.parentElement; return host !== null && host !== undefined && !host.hasAttribute("data-blank"); });
     }
 
     /** The line field is hidden at rest: the toggle raises the keyboard for the terminal, and a tap on the box takes typing. */
@@ -170,10 +170,10 @@ for (const version of VERSIONS) {
       expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
       await expect(page.getByRole("group", { name: "Terminal keys" })).toHaveCount(0);
       // A tap on the terminal changes nothing.
-      await page.locator(".xterm-screen").click();
+      await page.locator("[data-rows]").click({ position: { x: 20, y: 20 } });
       expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
       await toggle(page).click();
-      await page.locator(".xterm-screen").click();
+      await page.locator("[data-rows]").click({ position: { x: 20, y: 20 } });
       await expect(owned(page)).toBeFocused();
     });
 

@@ -1,0 +1,538 @@
+// The terminal's view of rows (touch-rows design.md, "The view: rowList"): one native scroller holding the lines
+// that left the screen and the live screen as its newest rows. xterm owns the screen, this owns every line that
+// has left it; the model's frames are pulled on animation frames. A row is created once for its line and
+// redrawn only when that line's text changes, so a selection on rows that stay put survives scrolling and output.
+// It assumes nothing about touch: no touch-action, no recognizer (the touch layer, `touchControl.ts`, adds those).
+import type { CellPosition, CellSize, Frame, Row, TerminalModel, TerminalTheme } from "../../term";
+import { sameStyle } from "../../term/rows";
+import { fontCell, terminalBottomPan } from "../../term/size";
+import { drawRow, fitText } from "./rows/rowsDom";
+import rowStyles from "./rows/Rows.module.css";
+import styles from "./RowList.module.css";
+
+/** Rows per block: each block has `content-visibility: auto` and an intrinsic height, so only what is near the view is laid out. */
+const BLOCK_ROWS = 64;
+/** The list keeps this many rows, trimming whole blocks from the top once the view is at rest. */
+const CAP_ROWS = 10_000;
+/** Past this the oldest blocks go even mid-gesture. */
+const CEILING_ROWS = 20_000;
+/** A scroll event this long after the last one with no finger down is no longer a coast. */
+const COAST_QUIET_MS = 100;
+const GAP_TEXT = "output skipped";
+
+/** The theme as CSS variables: the global tokens follow the colour scheme, so a theme change writes nothing here. */
+const ANSI = ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"] as const;
+const VARIABLE_THEME: TerminalTheme = { foreground: "var(--term-fg)", background: "var(--term-bg)" };
+for (const name of ANSI) {
+  VARIABLE_THEME[name] = `var(--term-${name})`;
+  VARIABLE_THEME[`bright${name[0]?.toUpperCase() ?? ""}${name.slice(1)}` as keyof TerminalTheme] = `var(--term-bright-${name})`;
+}
+
+/** A row of selectable text: its element, its place in the list's order, and whether it continues the row above. */
+export interface TextRow {
+  element: HTMLElement;
+  seq: number;
+  wrapped: boolean;
+}
+
+interface Block {
+  element: HTMLElement;
+  rows: HTMLElement[];
+}
+
+interface ScreenRow {
+  element: HTMLElement;
+  drawn: Row;
+}
+
+export interface RowListOptions {
+  /** Ranges the list must not drop rows under (the selection, the mark). */
+  held(): Range[];
+}
+
+const sameRow = (a: Row, b: Row): boolean =>
+  a.wrapped === b.wrapped && a.runs.length === b.runs.length && a.runs.every((run, i) => {
+    const other = b.runs[i];
+    return other !== undefined && run.text === other.text && !run.wide === !other.wide && sameStyle(run.style, other.style);
+  });
+
+export class RowList {
+  /** The scroller. */
+  readonly element: HTMLDivElement = document.createElement("div");
+  private readonly run: HTMLDivElement = document.createElement("div");
+  private readonly spacer: HTMLDivElement = document.createElement("div");
+  private readonly cursorBox: HTMLDivElement = document.createElement("div");
+  private blocks: Block[] = [];
+  /** Blocks that gained rows this frame: their intrinsic height follows at its end. */
+  private grown = new Set<Block>();
+  private count = 0;
+  private screen: ScreenRow[] = [];
+  private seq = 0;
+  /** The newest gap row, and how many rows came after it. */
+  private lastGap: { element: HTMLElement; since: number } | null = null;
+  private lastFrame: Frame | null = null;
+  private cell: CellSize | null = null;
+  private font: { family: string; size: number } | null = null;
+  private fitted = false;
+  private covered = 0;
+  private pinned = false;
+
+  /** Following: muxen writes `scrollTop` to keep the view at latest while it is there. */
+  private following = true;
+  /** The `scrollTop` muxen last wrote: the scroll event that lands on it is its own. */
+  private written = Number.NaN;
+  private fingers = 0;
+  private flinging = false;
+  private coastTimer: ReturnType<typeof setTimeout> | undefined;
+  private pullFrame = 0;
+  private deferred: (() => void) | null = null;
+
+  private readonly rewritten: ((seqs: number[]) => void)[] = [];
+  private readonly scrolledListeners: ((scrolledUp: boolean) => void)[] = [];
+  private readonly userScrolls: (() => void)[] = [];
+  private scrolledUp = false;
+
+  constructor(private readonly model: TerminalModel, private readonly options: RowListOptions) {
+    const { element, run, spacer, cursorBox } = this;
+    element.className = styles.scroller ?? "";
+    element.dataset["rows"] = "";
+    run.className = styles.run ?? "";
+    spacer.className = styles.spacer ?? "";
+    cursorBox.className = styles.cursor ?? "";
+    cursorBox.hidden = true;
+    element.append(run, spacer, cursorBox);
+    // The list starts from the model's screen: whatever froze before it existed is not its to show.
+    model.onChange(() => { this.schedule(); });
+    element.addEventListener("scroll", this.scrolled, { passive: true });
+    // Touch events, not pointer events: the browser cancels a pointer when it starts a native pan.
+    const touched = (event: TouchEvent): void => { this.fingers = event.touches.length; if (this.fingers === 0) this.rest(); };
+    for (const type of ["touchstart", "touchend", "touchcancel"] as const) element.addEventListener(type, touched, { passive: true });
+    new ResizeObserver(() => { this.layout(); }).observe(element);
+    this.apply(model.frame());
+  }
+
+  // ---- what the callers read
+
+  /** One cell's size in CSS pixels, from the font alone: current at once and while hidden. Null before the font is set. */
+  cellSize(): CellSize | null {
+    return this.cell;
+  }
+
+  /** The cursor on the screen, from the last frame. */
+  cursor(): CellPosition {
+    const cursor = this.lastFrame?.cursor;
+    return { col: cursor?.col ?? 0, row: cursor?.row ?? 0 };
+  }
+
+  /** The screen cell under a client point; null above the screen (older rows) and outside the list. */
+  cellAt(x: number, y: number): CellPosition | null {
+    const cell = this.cell;
+    const row = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-seq]");
+    const cols = this.model.cols();
+    const index = row ? this.screen.findIndex((s) => s.element === row) : -1;
+    if (!cell || index < 0 || cols === 0) return null;
+    const left = this.element.getBoundingClientRect().left;
+    return { col: Math.max(0, Math.min(cols - 1, Math.floor((x - left) / cell.width))), row: index };
+  }
+
+  get atLatest(): boolean {
+    return Math.abs(this.element.scrollTop - this.latestPosition().top) < 2;
+  }
+
+  /** A fling is still moving the view with no finger down: a touch then stops it, and is not a tap. */
+  get coasting(): boolean {
+    return this.flinging;
+  }
+
+  // ---- what the callers tell it
+
+  /** Calls `listener` when the view moves onto or off the newest line. */
+  onScrolledUp(listener: (scrolledUp: boolean) => void): void {
+    this.scrolledListeners.push(listener);
+  }
+
+  /** The user's scroll, not muxen's own writes. */
+  onUserScroll(listener: () => void): void {
+    this.userScrolls.push(listener);
+  }
+
+  /** Rows that were rewritten in a frame (J7), by their `seq`. */
+  onRewritten(listener: (seqs: number[]) => void): void {
+    this.rewritten.push(listener);
+  }
+
+  /** A density change or a new font: the cell, and so every row's height, follows. */
+  setFont(family: string, size: number): void {
+    this.font = { family, size };
+    this.cell = fontCell(family, size, false);
+    this.fitted = false;
+    const height = this.cell?.height ?? 0;
+    this.element.style.setProperty("--cell-height", `${String(height)}px`);
+    for (const block of this.blocks) this.sizeBlock(block);
+    this.layout();
+  }
+
+  /** What remains visible of the terminal, in CSS pixels, for the keyboard; null is all of it. The covered part scrolls into view instead. */
+  setVisible(px: number | null): void {
+    this.covered = px === null ? 0 : Math.max(0, this.element.clientHeight - px);
+    this.layout();
+  }
+
+  /** Hidden while another view of the model is shown: it keeps pulling frames, but writes nothing that needs layout. */
+  setHidden(hidden: boolean): void {
+    this.element.hidden = hidden;
+    if (!hidden) this.layout();
+  }
+
+  /** Takes a frame now: a snapshot has landed and the surface is about to show. */
+  update(): void {
+    cancelAnimationFrame(this.pullFrame);
+    this.pullFrame = 0;
+    this.apply(this.model.frame());
+  }
+
+  /** Leaves history for the newest line. */
+  toLatest(): void {
+    this.following = true;
+    this.deferred = null;
+    this.follow(true);
+    this.setScrolledUp(false);
+  }
+
+  /** The rows a range touches, oldest first; the gap row is no text. Empty when it touches none. */
+  rowsIn(range: Range): TextRow[] {
+    const span = this.span(range);
+    const rows: TextRow[] = [];
+    for (let row: HTMLElement | null = span?.first ?? null; row; row = row === span?.last ? null : this.next(row)) {
+      if (!row.hasAttribute("data-gap")) rows.push({ element: row, seq: Number(row.dataset["seq"]), wrapped: row.hasAttribute("data-wrap") });
+    }
+    return rows;
+  }
+
+  /** The first and last row a range touches, from its two ends only. */
+  span(range: Range): { first: HTMLElement; last: HTMLElement } | null {
+    const first = this.rowAt(range.startContainer, range.startOffset, "start");
+    const last = this.rowAt(range.endContainer, range.endOffset, "end");
+    return first && last ? { first, last } : null;
+  }
+
+  contains(node: Node): boolean {
+    return this.run.contains(node);
+  }
+
+  // ---- frames
+
+  private schedule(): void {
+    if (this.pullFrame) return;
+    this.pullFrame = requestAnimationFrame(() => {
+      this.pullFrame = 0;
+      this.apply(this.model.frame());
+    });
+  }
+
+  private apply(frame: Frame): void {
+    this.lastFrame = frame;
+    const changed = new Set<number>();
+    const screenRows = frame.screen.length;
+    if (frame.reset || this.screen.length !== screenRows) this.clear();
+    if (this.screen.length === 0) {
+      this.screen = frame.screen.map((row) => this.append(row));
+    } else {
+      const old = this.screen;
+      if (frame.gap) {
+        // The old screen's final text was lost in the overflow: its rows freeze as last drawn. Heavy output
+        // overflows frame after frame: what the last gap left behind (a few screens, shown for a frame) goes,
+        // so the whole run is one "output skipped" row.
+        const last = this.lastGap;
+        if (last?.element.isConnected && last.since <= 3 * screenRows) this.dropAfter(last.element, changed);
+        else this.appendGap();
+        for (const row of frame.frozen) this.append(row);
+        this.screen = frame.screen.map((row) => this.append(row));
+      } else {
+        // The old screen's top rows are the lines that left: they take their final text, once drawn they never change.
+        const left = Math.min(frame.frozen.length, old.length);
+        for (let i = 0; i < left; i++) this.redraw(old[i], frame.frozen[i], changed);
+        for (const row of frame.frozen.slice(left)) this.append(row);
+        this.screen = [...old.slice(left), ...frame.screen.slice(screenRows - left).map((row) => this.append(row))];
+      }
+    }
+    // What remains of the screen takes the frame's text where it differs.
+    for (let i = 0; i < screenRows; i++) this.redraw(this.screen[i], frame.screen[i], changed);
+    this.trim();
+    this.finish(frame, changed);
+  }
+
+  /** A new row at the end of the run. */
+  private append(row: Row): ScreenRow {
+    let block = this.blocks.at(-1);
+    if (!block || block.rows.length >= BLOCK_ROWS) {
+      const element = document.createElement("div");
+      element.className = styles.block ?? "";
+      this.run.append(element);
+      block = { element, rows: [] };
+      this.blocks.push(block);
+    }
+    const element = document.createElement("div");
+    element.className = rowStyles.row ?? "";
+    element.dataset["seq"] = String(this.seq++);
+    block.rows.push(element);
+    block.element.append(element);
+    this.grown.add(block);
+    this.count++;
+    if (this.lastGap) this.lastGap.since++;
+    const created = { element, drawn: row };
+    this.draw(created, row);
+    return created;
+  }
+
+  private appendGap(): void {
+    const { element } = this.append({ runs: [{ text: GAP_TEXT, style: {} }], wrapped: false, cells: [] });
+    element.dataset["gap"] = "";
+    element.classList.add(styles.gap ?? "");
+    this.lastGap = { element, since: 0 };
+  }
+
+  /** Removes every row after `row`. */
+  private dropAfter(row: HTMLElement, changed: Set<number>): void {
+    for (let block = this.blocks.at(-1); block; block = this.blocks.at(-1)) {
+      while (block.rows.length > 0 && block.rows.at(-1) !== row) {
+        const gone = block.rows.pop();
+        gone?.remove();
+        this.count--;
+        changed.add(Number(gone?.dataset["seq"]));
+      }
+      this.grown.add(block);
+      if (block.rows.length > 0) break;
+      this.blocks.pop();
+      this.grown.delete(block);
+      block.element.remove();
+    }
+    if (this.lastGap) this.lastGap.since = 0;
+  }
+
+  private draw(screen: ScreenRow, row: Row): void {
+    drawRow(screen.element, row, VARIABLE_THEME);
+    screen.element.toggleAttribute("data-wrap", row.wrapped);
+    screen.drawn = row;
+  }
+
+  private redraw(screen: ScreenRow | undefined, row: Row | undefined, changed: Set<number>): void {
+    if (!screen || !row || sameRow(screen.drawn, row)) return;
+    this.draw(screen, row);
+    changed.add(Number(screen.element.dataset["seq"]));
+  }
+
+  private clear(): void {
+    this.run.replaceChildren();
+    this.blocks = [];
+    this.lastGap = null;
+    this.grown.clear();
+    this.screen = [];
+    this.count = 0;
+    this.deferred = null;
+    this.following = true;
+  }
+
+  /** The end of a frame: the pinned state, the cursor, following, and what was rewritten. */
+  private finish(frame: Frame, changed: Set<number>): void {
+    for (const block of this.grown) this.sizeBlock(block);
+    this.grown.clear();
+    const pinned = this.model.altScreen() || this.model.mouseMode() !== "none";
+    if (pinned !== this.pinned) {
+      this.pinned = pinned;
+      this.element.toggleAttribute("data-pinned", pinned);
+      if (pinned) this.following = true;
+    }
+    if (!this.element.hidden) {
+      this.follow();
+      this.placeCursor(frame);
+    }
+    this.setScrolledUp(!this.following);
+    if (changed.size > 0) for (const listener of this.rewritten) listener([...changed]);
+  }
+
+  private sizeBlock(block: Block): void {
+    block.element.style.containIntrinsicSize = `auto ${String(block.rows.length * (this.cell?.height ?? 0))}px`;
+  }
+
+  /** The cursor is an overlay in the scroller's content: moving or blinking it never touches a row. */
+  private placeCursor(frame: Frame): void {
+    const { cursor } = frame;
+    const box = this.cursorBox;
+    const row = this.screen[cursor.row]?.element;
+    const cell = this.cell;
+    box.hidden = !cursor.visible || !row || !cell;
+    if (box.hidden || !row || !cell) return;
+    const top = (this.count - this.screen.length + cursor.row) * cell.height;
+    box.dataset["shape"] = cursor.shape;
+    box.style.width = `${String(cell.width * cursor.width)}px`;
+    box.style.height = `${String(cell.height)}px`;
+    box.style.transform = `translate(${String(cursor.col * cell.width)}px, ${String(top)}px)`;
+  }
+
+  /** What a new size, font, keyboard or showing changes: the advance, the view's place and the cursor's. */
+  private layout(): void {
+    this.fit();
+    this.follow();
+    if (this.lastFrame && !this.element.hidden) this.placeCursor(this.lastFrame);
+  }
+
+  /** Sets the font's advance to the cell's, once the list is laid out. */
+  private fit(): void {
+    if (this.fitted || this.element.hidden || !this.cell || this.element.clientWidth === 0) return;
+    fitText(this.element, this.cell.width);
+    this.fitted = true;
+  }
+
+  // ---- scrolling
+
+  /**
+   * Where "at latest" is: the screen's top, moved by `terminalBottomPan` (the last row just above the keyboard, or
+   * the cursor row if that would hide the cursor), as xterm's view slid its terminal. `spacer` is the room the
+   * bottom needs for that `scrollTop` to be reachable: the keyboard's, or the slack under a screen shorter than the box.
+   */
+  private latestPosition(): { top: number; spacer: number } {
+    const { element, cell } = this;
+    if (!cell || this.screen.length === 0) return { top: 0, spacer: 0 };
+    const rows = this.screen.length;
+    const pan = terminalBottomPan(this.lastFrame?.cursor.row ?? 0, rows, cell.height, element.clientHeight - this.covered);
+    const screenTop = (this.count - rows) * cell.height; // every row is one cell tall, so no layout is read
+    return { top: screenTop + pan, spacer: Math.max(0, element.clientHeight - rows * cell.height + pan) };
+  }
+
+  /** Writes `scrollTop` to keep the view at latest, only while it is there and no finger or fling is moving it. */
+  private follow(force = false): void {
+    if (this.element.hidden) return;
+    // The room for "at latest" is kept whether or not the view is there.
+    const { top, spacer } = this.latestPosition();
+    this.spacer.style.height = `${String(spacer)}px`;
+    if (!(force || this.following)) return;
+    if (!this.pinned && !force && (this.fingers > 0 || this.flinging)) return;
+    if (Math.abs(this.element.scrollTop - top) < 0.5) return;
+    this.element.scrollTop = top;
+    this.written = this.element.scrollTop;
+  }
+
+  private readonly scrolled = (): void => {
+    const { scrollTop } = this.element;
+    if (Math.abs(scrollTop - this.written) < 0.5) return;
+    if (this.pinned) {
+      // Something scrolled a pinned list (a selection's autoscroll): back to latest.
+      this.follow(true);
+      return;
+    }
+    this.following = this.atLatest;
+    this.setScrolledUp(!this.following);
+    if (this.fingers === 0) {
+      this.flinging = true;
+      clearTimeout(this.coastTimer);
+      this.coastTimer = setTimeout(() => { this.flinging = false; this.rest(); }, COAST_QUIET_MS);
+    }
+    for (const listener of this.userScrolls) listener();
+    if (scrollTop >= 0) this.flushDeferred();
+  };
+
+  /** No finger and no fling: what waited for rest may go. */
+  private rest(): void {
+    if (this.flinging || this.fingers > 0) return;
+    this.flushDeferred();
+    this.trim();
+    this.follow();
+  }
+
+  private setScrolledUp(scrolledUp: boolean): void {
+    if (scrolledUp === this.scrolledUp) return;
+    this.scrolledUp = scrolledUp;
+    for (const listener of this.scrolledListeners) listener(scrolledUp);
+  }
+
+  // ---- changes above the view
+
+  /**
+   * Every change above the view goes through here: Safari does no scroll anchoring of its own (and
+   * `overflow-anchor: none` keeps Chromium's out), so the top visible row's offset is read before and
+   * restored after. While the view is overscrolled the change waits for the bounce to settle.
+   */
+  private editAbove(change: () => void): void {
+    const { element } = this;
+    if (element.scrollTop < 0) {
+      this.deferred = change;
+      return;
+    }
+    const top = element.getBoundingClientRect().top;
+    const anchor = this.screen.length > 0 && this.following ? null : this.topRow();
+    const before = anchor ? anchor.getBoundingClientRect().top - top : 0;
+    change();
+    if (anchor?.isConnected) {
+      element.scrollTop += anchor.getBoundingClientRect().top - top - before;
+      this.written = element.scrollTop;
+    }
+  }
+
+  private flushDeferred(): void {
+    const change = this.deferred;
+    this.deferred = null;
+    if (change) this.editAbove(change);
+  }
+
+  /** The first row at or below the scroller's top edge. */
+  private topRow(): HTMLElement | null {
+    const rect = this.element.getBoundingClientRect();
+    for (const block of this.blocks) {
+      if (block.element.getBoundingClientRect().bottom <= rect.top) continue;
+      return block.rows.find((row) => row.getBoundingClientRect().bottom > rect.top) ?? null;
+    }
+    return null;
+  }
+
+  /**
+   * Past the cap, whole blocks go from the top: at rest, never the block in view or one a selection
+   * starts in. Past the ceiling they go mid-gesture too.
+   */
+  private trim(): void {
+    if (this.count - (this.blocks[0]?.rows.length ?? 0) < CAP_ROWS) return;
+    const urgent = this.count > CEILING_ROWS;
+    if (!urgent && (this.fingers > 0 || this.flinging || this.element.hidden)) return;
+    const held = this.options.held();
+    const view = this.element.getBoundingClientRect().top;
+    this.editAbove(() => {
+      for (let block = this.blocks[0]; block && this.count - block.rows.length >= CAP_ROWS; block = this.blocks[0]) {
+        const second = this.blocks[1];
+        const inView = second !== undefined && second.element.getBoundingClientRect().top > view;
+        if (!urgent && (inView || held.some((range) => block.element.contains(range.startContainer)))) break;
+        this.blocks.shift();
+        block.element.remove();
+        this.count -= block.rows.length;
+      }
+    });
+  }
+
+  // ---- rows of a range
+
+  /** The row holding a range's end; an end outside the list is the list's first or last row, or none when the range lies beyond. */
+  private rowAt(node: Node, offset: number, end: "start" | "end"): HTMLElement | null {
+    if (!this.run.contains(node)) {
+      const rows = document.createRange();
+      rows.selectNodeContents(this.run);
+      const side = rows.comparePoint(node, offset);
+      // A start before the list begins at its first row; an end past it ends at its last. Otherwise the range misses the list.
+      if (end === "start" && side < 0) return this.blocks[0]?.rows[0] ?? null;
+      if (end === "end" && side > 0) return this.blocks.at(-1)?.rows.at(-1) ?? null;
+      return null;
+    }
+    const element = node instanceof Element ? node : node.parentElement;
+    const row = element?.closest<HTMLElement>("[data-seq]");
+    if (row) return row;
+    // The end is a block or the run itself: the child it points at.
+    const children = element?.children;
+    const child = children?.[Math.max(0, Math.min(children.length - 1, end === "end" && offset > 0 ? offset - 1 : offset))];
+    if (!child) return null;
+    const asRow = child.matches("[data-seq]") ? child : end === "end" ? child.lastElementChild : child.firstElementChild;
+    return asRow instanceof HTMLElement ? asRow : null;
+  }
+
+  private next(row: HTMLElement): HTMLElement | null {
+    const sibling = row.nextElementSibling ?? row.parentElement?.nextElementSibling?.firstElementChild;
+    return sibling instanceof HTMLElement && sibling.hasAttribute("data-seq") ? sibling : null;
+  }
+}
