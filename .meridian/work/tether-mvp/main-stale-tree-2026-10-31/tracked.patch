@@ -1,0 +1,524 @@
+diff --git a/.meridian/kb/client-design-handoff.md b/.meridian/kb/client-design-handoff.md
+index c4d5846..4b84525 100644
+--- a/.meridian/kb/client-design-handoff.md
++++ b/.meridian/kb/client-design-handoff.md
+@@ -31,8 +31,9 @@ These are the ones older documents contradict:
+   rest (tab chip, one-line field, the one keyboard toggle) and the fixed key row above
+   it while the keyboard is up. Navigation stays at the bottom; tabs on top were
+   rejected as "hard to reach". Native draws nothing above the keyboard; it owns the
+-  terminal input's first responder, lends the line field to WebKit by touch location,
+-  and sizes the web view so the dock rides the keyboard.
++  terminal input's first responder and all line editing (one keyboard, decided
++  2026-10-26: the web line field mirrors native's line; `LineFieldLender` is gone, bridge
++  contract v7), and sizes the web view so the dock rides the keyboard.
+ - A tap on the terminal never opens or closes the keyboard; the toggle does, and
+   tapping the line field opens line typing.
+ - The line field holds one line; Return sends it to the tab it was written for, then
+@@ -46,11 +47,12 @@ These are the ones older documents contradict:
+   and inserted paths go to the window the tab was showing when they started, never the
+   one current when they arrive. `client-architecture.md` predates this and is corrected
+   only where its banner says.
+-- The dock's tab chip opens the session switcher (open tabs, every session, search,
+-  New session, and the active session's windows). The desktop terminal's `+` opens
+-  existing sessions only; the active tab's pill holds the windows menu, the desktop's
+-  only way to create a window. New session is on Home and in the phone's switcher.
+-  Closing a tether tab only detaches it.
++- The phone's sheet lists only the open tabs, then "Add new tab", which asks "Add session" or
++  "Add file"; each opens its search and list (every tmux session, or folders) with Back to the
++  choice (2026-10-29, uncommitted at the time of writing). There is no Sessions | Files switch.
++  The desktop `+` opens on the same choice.
++  The phone's bar has a Home button. Files opens any readable path by Jimmy's decision; there
++  are no roots, only favorites (a90e1c7, `docs/design/fs.md`). Closing a tab only detaches it: × or a swipe left ("Close") drops the tab and sends `unwatch`; nothing in the client or daemon kills a tmux session (rule, `docs/design/decisions.md` 2026-10-29).
+ - A window takes the size of the client that acted on it last: "whoever has the last
+   focus gets the focus and the size of the screen" (Jimmy). A watching phone no longer
+   caps the window while the laptop is in use (`docs/design/daemon-core.md` §3.6).
+@@ -70,7 +72,7 @@ native shell and its bridge are built and tested in browsers, against real tmux
+ 
+ | Gate | What must hold |
+ | --- | --- |
+-| Real device | The device checklist in `docs/design/ios-shell.md`, run by Jimmy on his iPhone: keyboard toggle, focus restoration, line-field lending, geometry and rotation, selection, hardware keys, latency, paste, Face ID. |
++| Real device | Also the path-field caret, several servers at once, and reload mid New-session form. The device checklist in `docs/design/ios-shell.md`, run by Jimmy on his iPhone: keyboard toggle, focus restoration, line-field lending, geometry and rotation, selection, hardware keys, latency, paste, Face ID. |
+ | Touch on device | Tap, scroll and long-press resolve before anything is sent, and selection and copy behave in iPhone Safari and WKWebView, not only in emulated touch. |
+ | Deployment | The auth probe gates G1–G12 in `docs/design/auth.md`, on the Linux dev box behind real Tailscale Serve; a Mac host has its own gates, M0–M8, which don't stand in for G1–G12. |
+ | tmux versions | The real-tmux Rust suite (`tests/tmux_real.rs`) and the real-daemon web suites (`pnpm --dir web run e2e:real`, with `TETHER_E2E_TMUX=3.4` or `3.7b`) pass on both versions. |
+diff --git a/.meridian/kb/index.md b/.meridian/kb/index.md
+index e73fe96..c5ed8aa 100644
+--- a/.meridian/kb/index.md
++++ b/.meridian/kb/index.md
+@@ -1,11 +1,12 @@
+ # KB Index
+ 
+ - [client-design-handoff.md](client-design-handoff.md): where the client design lives,
+-  the quality bar, the cross-client rules older documents contradict, and what is built
+-  but unverified on a device, the tailnet, or both tmux versions.
++  the quality bar, the cross-client rules older documents contradict, and the one-keyboard and
++  one-picker rules, and what is built but unverified on a device, the tailnet, or tmux.
+ - [probe-environments.md](probe-environments.md): which machine answers which question
+   (Mac, Docker, the dev box, the iPhone), tmux crash hazards, probing on Jimmy's real
+-  tailnet, the Simulator's limits, and preflighting every commit after a rewrite.
++  tailnet, the Simulator's limits, preflighting every commit after a rewrite, driving the
++  web app on a private stack, and why preflight fails on macOS.
+ - [tailscale-and-launchd-shapes.md](tailscale-and-launchd-shapes.md): where tailscaled's
+   and `launchctl`'s real stored and printed shapes differ from what a client assumes,
+   and why fixtures must be captured from the real program.
+diff --git a/.meridian/kb/probe-environments.md b/.meridian/kb/probe-environments.md
+index a9bb667..4d45621 100644
+--- a/.meridian/kb/probe-environments.md
++++ b/.meridian/kb/probe-environments.md
+@@ -82,6 +82,17 @@ Prefer native runs; use Docker only for Linux-only questions, and then:
+ On the Mac itself, run test suites one after another and Playwright with
+ `--workers=2`.
+ 
++## Rust build output fills the Mac's disk
++
++Cargo never trims `target/`. Each set of build settings gets its own copy beside the
++old ones: test or not, Mac or Linux, preflight's own folder (`target/preflight`), and
++each environment a probe sets. Incremental caches come on top of that. On 2026-10-30
++the main checkout's `target/` reached 93 GB and the disk hit zero free, which broke
++running spawns. Jimmy keeps the caching ("saving time is fine... we just have to clean
++up after"). So the session that runs Rust builds runs `cargo clean` in each checkout it
++built in when its work ends, after checking that no `cargo` or `rustc` process is
++running. Check `du -sh target` when a session starts.
++
+ ## The iOS Simulator can't test input
+ 
+ From an agent shell the Simulator shows no software keyboard, `simctl` can't tap or
+@@ -115,3 +126,19 @@ clear 3.7b of the distinct select-and-destroy crash above. Issue #2 tracks the c
+ baseline/backport decision; no installed binary changes or daily-use sign-off without
+ Jimmy. See `docs/design/daemon-core.md` §9 and work evidence
+ `session-follow-tmux-attach-crash.md`.
++
++## Driving the web app on the Mac without touching Jimmy's tmux
++
++`TETHER_E2E_TMUX=3.7b pnpm --dir web run e2e:stack` starts a real debug daemon on a private
++tmux and prints a URL already admitted with a native token. Its tmux is
++`TMUX_TMPDIR=<stack>/run tmux -L by-hand`; it starts with no server, so make a session there
++first or the picker says "No tmux server is running". The Home card says "pop-os" whatever
++the host. The Sessions | Files switch is `role=tab`; the key row is the group "Terminal keys".
++Ctrl-C on the stack kills its tmux too.
++
++## `scripts/preflight.sh full` fails on macOS
++
++Four `complete::` tests are Linux-only by construction: the runner tests read `/proc/<pid>/stat`
++and one expects `carapace` on PATH. They stopped preflight at `cargo test` on the Mac
++(2026-10-29, 437adc1) and are now `#[cfg(target_os = "linux")]`, so a Mac run skips them; only a
++Linux run covers them.
+diff --git a/.meridian/work/tether-mvp/checkpoint.md b/.meridian/work/tether-mvp/checkpoint.md
+index a233d45..e8d52ed 100644
+--- a/.meridian/work/tether-mvp/checkpoint.md
++++ b/.meridian/work/tether-mvp/checkpoint.md
+@@ -1,6 +1,31 @@
+ # Client implementation checkpoint
+ 
+-## Client redesign build (c312, 2026-10-27) — current
++## Status at HEAD 437adc1 (verified 2026-10-29) — read this first
++
++Checked against the code, `gh` and a local build; supersedes every status line below.
++
++- **tmux crash risk (issue #2): still OPEN** (`gh issue view 2`, last updated 2026-10-25).
++  Daily-use sign-off is still Jimmy's decision. The 2026-10-26 pop-os segfault was tmux's own
++  `clients_calculate_size`, not tether (handoff-tech-lead.md, tmux-3.4-crash.md). The
++  `destroy-unattached` handling is specified in docs/design/daemon-core.md:2344; p282/p287
++  evidence files are still uncommitted.
++- **One keyboard: DECIDED and built.** one-keyboard.md is "decided 2026-10-26"
++  (f4b4b6d); `LineFieldLender` is gone from web/ and ios/; bridge contract is version 7
++  (ios/TetherKit/.../BridgeTypes.swift:4). The "put the four decisions to Jimmy" step in
++  handoff-tech-lead.md is done.
++- **Startup JS: no longer capped.** web/scripts/checks.mjs:15,146 records it only; measured
++  202.3 KB gzipped at 437adc1 (the old 192/202 KB caps are history). Screen splitting
++  is still the way to cut it.
++- **Rust tests on macOS:** 4 `complete::` tests fail on the Mac (runner tests read `/proc`;
++  one expects `carapace`, not installed). Linux-only by construction, so preflight on the Mac
++  fails at `cargo test`; run it on pop-os or gate those tests.
++- **Still unverified on a real iPhone:** path-field caret, several servers, reload mid
++  New-session form, and most of ios-shell.md's device checklist.
++- **Uncommitted work notes:** files-unscoped/, picker/, p287-tmux-crash/, p282 probes,
++  ~30 prompts/ (see `git status`). main == origin/main; nothing unpushed.
++
++
++## Client redesign build (c312, 2026-10-27) — superseded by the status above
+ 
+ Plan, slice order and structural decisions: [redesign/plan.md](redesign/plan.md)
+ (reviewed p320). Before-state screenshots: redesign/before/. Slice 1 (Files tabs, one
+@@ -28,7 +53,7 @@ crash on 3.4 is confirmed by p259 and fixed upstream in 3.7; that does not fix t
+ distinct 3.7b crash. Both are tracked in issue #2; daily-use sign-off is blocked. Notification channels are disabled;
+ the lead flagged this in chat.
+ 
+-## First real use on pop-os (2026-10-25) — read this first
++## First real use on pop-os (2026-10-25)
+ 
+ Setup and teardown shipped to main at 64b78c3 (earlier session c106). Jimmy then ran
+ `tether setup` (terminal mode) on pop-os (ssh/mosh `homebox`), with tether running in his
+diff --git a/docs/design/client/browser-behaviors.md b/docs/design/client/browser-behaviors.md
+index 61f1467..ae8c312 100644
+--- a/docs/design/client/browser-behaviors.md
++++ b/docs/design/client/browser-behaviors.md
+@@ -21,7 +21,7 @@ Interactive mockup: [mockups/index.html](mockups/index.html). It predates this r
+ | Primary navigation | One top row: Home, terminal and Files tabs, +, and server context. No rail. | Home is server-first. Terminal, Files and previews have a resting bar with Home and the current-tab button, which opens the picker; Home has no tab strip. |
+ | Tabs | Top row, with × on the active tab only. + opens the picker. | With the keyboard down, the bar has Home, the current-tab button and keyboard control. The open tabs are at the bottom of the picker sheet, not on the terminal. |
+ | Terminal | All available space below the top row. Direct physical-keyboard input; no dock. | Full-bleed above the dock. With the keyboard up, the compose box and key row replace the resting bar. |
+-| Picker | + opens a popover: a Sessions / Files switch, search, and that side's list, which ends with creation (New session; on Files, Open a folder…). | The same picker as a half-height sheet over the current tab; the search, the switch and the open tabs sit at the bottom, in thumb reach. |
++| Picker | + opens a popover on a choice, Add session or Add file; each shows its search and list, which ends with creation (New session; on Files, Open a folder…), and Back returns to the choice. | A half-height sheet over the current tab that lists the open tabs and one row, Add new tab, which opens the same choice and lists as the popover. |
+ 
+ Safe areas and browser chrome are real platform constraints. Use the measured visible
+ viewport and keep controls unobscured. Mobile controls target at least 44 px of touch
+@@ -116,14 +116,16 @@ Returning from the background keeps the screen the user left.
+ 
+ ## Picker (desktop) and picker sheet (phone)
+ 
+-One picker opens a session or a Files tab, on every surface. Its controls are one block: a
+-full-width search field that filters whichever side is showing (“Find a session” / “Find a
+-folder or type a path”) and a **Sessions / Files** switch (a tablist: a segmented control 32 px
+-tall on touch, each tab with a 44 px hit area), about 8 px apart. There is no +: creating is the
+-last row of each list. On the desktop the block leads the popover, switch first and then search,
+-with the list below it. On the phone the block sits at the bottom, in thumb reach like the dock,
+-search first and the switch under it, then the open tabs as the last row, and the list above it is
+-the only thing that scrolls; the list still starts at its top. With several servers, the lists are
++One picker opens a session or a Files tab, on every surface. Adding starts with a choice of two
++rows, **Add session** and **Add file**; each is a router entry of its own, so Back steps to the
++choice. Add session shows a full-width “Find a session” field above every tmux session; Add file
++shows “Find a folder or type a path” above the folders. There is no Sessions / Files switch and
++no +: creating is the last row of each list. On the phone the sheet opens on the open tabs (both
++kinds, in order; a tap switches and closes the sheet, a swipe left reveals Close, a full swipe closes, and × does it on a pointer that hovers; closing only detaches and never touches tmux)
++and one last row, **Add new tab**, which opens the choice; Back there returns to the tabs
++(Jimmy, 2026-10-29: the sheet's first job is switching between open tabs, and adding reads as
++“add new tab”, then session or file). The desktop's + opens on the choice, since its tabs are on
++the top row. With several servers, the lists are
+ grouped by server, each under an “On pop-os” heading; with one server shown (one listable) there is
+ no heading, since nothing needs telling apart (its transient
+ “Updating” note goes with it, so no row shifts). The phone sheet and the desktop popover differ only
+@@ -342,7 +344,7 @@ keyboard down                              keyboard up
+ terminal, full-bleed       $ █             terminal, panned       $ █
+ ───────────────────────────────            ───────────────────────────────────
+ [⌂] [a1 python   4 tabs  ⌃] [⌨]            [ Type or dictate a line          ]
+-bottom safe area                           esc tab ⇧tab ctrl alt ← ↑ ↓ → | ~ / - ^C ^R ^S ^Q ^Z ⏎ … [⌨↓]
++bottom safe area                           esc tab ← ↑ ↓ → ctrl alt | ~ / - ⇧tab ⏎ ^R ^Z ^C … [⌨↓]
+                                            iOS keyboard
+                                            (Safari's ⌃ ⌄ Done bar sits above it)
+ ```
+@@ -374,8 +376,8 @@ bottom safe area                           esc tab ⇧tab ctrl alt ← ↑ ↓ 
+   route. Clipboard reads capture the tab and window before a system prompt; if the
+   target changes, paste falls back to that captured terminal target instead of editing
+   the new line. An IME candidate Return remains with the editor.
+-- **Key row.** A fixed, horizontally scrolling text-only row: esc, ←, ↑, ↓, →, ⇧tab,
+-  tab, ^C, ^R, ctrl, alt, ⏎, then `|`, `~`, `/`, `-`, with Hide keyboard fixed at its end. While the box owns focus, unmodified ← and →
++- **Key row.** A fixed, horizontally scrolling text-only row: esc, tab, ←, ↑, ↓, →,
++  ctrl, alt, `|`, `~`, `/`, `-`, ⇧tab, ⏎, then the chords ^R, ^Z, ^C, with Hide keyboard fixed at its end. The order serves agent CLIs first (esc interrupts, arrows walk menus); no chord sits in the first slots, ^Z is never beside ⏎, and ^C is last (Jimmy, 2026-10-29). ^S and ^Q are not offered: ^S freezes a terminal with flow control on. While the box owns focus, unmodified ← and →
+   move its caret and unmodified esc returns focus to the terminal; ↑, ↓, ^R, ^C, tab and other
+   terminal controls go to tmux. Distinguish the two destinations visually. In terminal
+   mode the controls go to tmux. Arrows repeat while held; ↑, ↓ and ^R use the shell's
+diff --git a/docs/design/decisions.md b/docs/design/decisions.md
+index e613ee5..4601dc0 100644
+--- a/docs/design/decisions.md
++++ b/docs/design/decisions.md
+@@ -16,6 +16,36 @@ naming the old option under Rejected; git history keeps the removed text.
+ 
+ Decided by Jimmy, 2026-10-21 unless an entry gives another date.
+ 
++### Files reads any path the user can (2026-10-29)
++
++- **What:** Files has no roots or scope; any readable path opens, and favorites replace roots
++  ([fs.md](fs.md)). Uploads still never replace a file and downloads are served sandboxed.
++- **Why:** a device that can use tether already has the user's terminal, which reads the same
++  files; a scope would add rules without removing any reach.
++- **Rejected:** keeping roots below `$HOME`.
++
++### Closing a tab never kills tmux (2026-10-29)
++
++- **What:** every way to close a tab (× on the desktop, swipe left on a sheet row on touch, the
++  top row's ×, Home's close) only detaches: the client drops the tab and sends `unwatch`, and the
++  daemon stops its watch (`refresh-client -B`). No path from the tab list runs `kill-session` or
++  `kill-server`; the daemon has no such command. The swipe action reads "Close", never "Kill" or
++  "Delete".
++- **Why:** Jimmy: closing must "NEVER kill tmux", only stop tracking; the session is his and
++  lives on for every other client.
++- **Rejected:** a kill action on the swipe; a confirm-to-kill variant.
++
++### The phone picker lists open tabs; adding is one row (2026-10-29)
++
++- **What:** the sheet opens on the open tabs and an "Add new tab" row, which offers "Add
++  session" or "Add file", each with its own search and list; the Sessions / Files switch is gone
++  (the desktop + opens on the same choice). The key row always opens esc, tab ("the first row should guarantee esc | tab"), then the arrows; it keeps chords out of
++  its first slots and ^Z away from ⏎; ^C is last; ^S and ^Q are dropped
++  ([client/browser-behaviors.md](client/browser-behaviors.md)).
++- **Why:** "^C ... is kinda dangerous to be put in the initial keyboard setup"; ⇧tab is rarely
++  used now; "it should be 'add new tab' and then show 'add session' or 'add file'".
++- **Rejected:** every tmux session in the first view; a Sessions / Files switch, top or bottom.
++
+ ### Device: iPhone 17 Pro only
+ 
+ - **What:** one target device, iOS 26. The layout stays responsive for rotation and a
+diff --git a/src/complete/mod.rs b/src/complete/mod.rs
+index 3208bdf..520a59b 100644
+--- a/src/complete/mod.rs
++++ b/src/complete/mod.rs
+@@ -532,6 +532,8 @@ esac
+         chips.iter().map(|c| (c.source, c.insert.clone())).collect()
+     }
+ 
++    // The fake carapace is a Linux shell script setup; macOS fails it (see .meridian/kb/probe-environments.md).
++    #[cfg(target_os = "linux")]
+     #[tokio::test]
+     async fn every_chip_only_extends_what_is_typed() {
+         use ChipSource::*;
+diff --git a/src/complete/runner.rs b/src/complete/runner.rs
+index 4655e25..63a9337 100644
+--- a/src/complete/runner.rs
++++ b/src/complete/runner.rs
+@@ -252,7 +252,8 @@ async fn read_tail(pipe: Option<impl AsyncRead + Unpin>) -> Result<Vec<u8>, Fail
+     }
+ }
+ 
+-#[cfg(test)]
++// Every test reads `/proc` to see the group die: Linux only.
++#[cfg(all(test, target_os = "linux"))]
+ mod tests {
+     use std::os::unix::fs::PermissionsExt as _;
+ 
+diff --git a/web/screens/files/completion.ts b/web/screens/files/completion.ts
+index e5eaa64..0bb87a5 100644
+--- a/web/screens/files/completion.ts
++++ b/web/screens/files/completion.ts
+@@ -58,7 +58,10 @@ export function useCompletion({ session, text, setText, onOpen, enterOpens }: Op
+     if ("wait" in result && c.ask) {
+       await browser.folders.load(c.ask.path, c.ask.hidden);
+       if (latest.current !== text) return;
+-      result = go(text, target, { ...ctx, folder: (key) => browser.folders.snapshot.held.get(key)?.names ?? undefined });
++      const arrived: CompleteContext = { ...ctx, folder: (key) => browser.folders.snapshot.held.get(key)?.names ?? undefined };
++      // The highlight is read again: before the listing arrived there was no prediction to Go to.
++      const now = complete(text, arrived);
++      result = go(text, row ?? now.rows.find((r) => r.name === chosen) ?? now.predicted, arrived);
+     }
+     if ("open" in result) await onOpen(result.open);
+     else if ("say" in result) setSaid(result.say);
+diff --git a/web/screens/sessions/NewSessionPage.tsx b/web/screens/sessions/NewSessionPage.tsx
+index f65e62d..c295c68 100644
+--- a/web/screens/sessions/NewSessionPage.tsx
++++ b/web/screens/sessions/NewSessionPage.tsx
+@@ -50,7 +50,7 @@ export function NewSessionPage({ host, initialName }: { host: HostClient; initia
+ 
+   return (
+     <form class={styles.page} onSubmit={(e) => { void submit(e); }}>
+-      <TextField label="Name" data-initial-focus="" value={name} onInput={setName} placeholder="Let tmux choose" hint="Optional." />
++      <TextField label="Name" value={name} onInput={setName} placeholder="Let tmux choose" hint="Optional." />
+       <FolderField session={session} field={field} label="Start directory" value={dir} placeholder="tmux's default" hint="Optional. Starts with ~ or /." error={dirError} />
+       {error && <p class={styles.error} role="alert">{error}</p>}
+       <div class={styles.actions}>
+diff --git a/web/screens/sessions/Picker.tsx b/web/screens/sessions/Picker.tsx
+index f9ecb04..ee526f1 100644
+--- a/web/screens/sessions/Picker.tsx
++++ b/web/screens/sessions/Picker.tsx
+@@ -1,21 +1,20 @@
+ // The picker (browser-behaviors.md "Picker (desktop) and picker sheet (phone)"): one component for the
+ // desktop popover and the phone's half-height sheet. The router overlay open says which: `picker` is the
+ // popover under the top row's +, `sheet` the half sheet over the current tab (Home's card row lands on a
+-// tab, then opens the sheet over it). Everything else is shared: a search that filters the side showing
+-// (on Files, a path too), a Sessions / Files switch, and that side's list, ending with creation. The
+-// control block is below the list on the phone (search, switch, then the open tabs) and above it in the
+-// popover (switch, search). Every pick leaves it open, the tab it puts on screen behind it; "New session"
++// tab, then opens the sheet over it). The sheet opens on the open tabs and one "Add new tab" row; that
++// opens a choice, Add session or Add file (the popover opens on it), and either one is a search above
++// that side's list, ending with creation. Every pick leaves it open, the tab it puts on screen behind it; "New session"
+ // replaces the list with a form page, a router entry of its own, so Back and Escape return to the list
+ // before they close the picker (a reload drops overlays, so a page never outlives its list).
+-import { useEffect, useId, useRef, useState } from "preact/hooks";
++import { useEffect, useRef, useState } from "preact/hooks";
+ import { useApp, useAppView } from "../../app/context";
+ import { describeError } from "../../files/browser";
+ import { isPath } from "../../files/pathfield";
+ import type { HostClient } from "../../net/hosts";
+ import { HttpRefusal } from "../../net/http";
+-import { Choice } from "../../ui/primitives/Choice";
+ import { Dialog } from "../../ui/primitives/Dialog";
+ import { PageBar, ToolBar } from "../../ui/primitives/DialogBars";
++import { Row } from "../../ui/primitives/Row";
+ import { SearchField } from "../../ui/primitives/TextField";
+ import { useStore } from "../../ui/store";
+ import { screenOf } from "../../workspace/state";
+@@ -27,11 +26,12 @@ import { HostSection } from "./HostSection";
+ import { NewSessionPage } from "./NewSessionPage";
+ import { useActiveHost, useQuery } from "./pick";
+ import { pickerMemoryOf, type Side } from "./pickerMemory";
++import { listClass } from "./PickRows";
+ import { SessionPicks } from "./SessionPicks";
+-import { SheetTabs } from "./SheetTabs";
++import { OpenTabs } from "./OpenTabs";
+ import styles from "./Picker.module.css";
+ 
+-const SIDES = [{ value: "sessions", label: "Sessions" }, { value: "files", label: "Files" }] as const;
++const SIDES = [{ value: "sessions" }, { value: "files" }] as const;
+ const FIND: Record<Side, string> = { sessions: "Find a session", files: "Find a folder or type a path" };
+ 
+ type Kind = "popover" | "half";
+@@ -66,8 +66,11 @@ interface DialogProps {
+ function PickerDialog({ open, name, kind, params, host }: DialogProps) {
+   const app = useApp();
+   const memory = pickerMemoryOf(app);
+-  const side = useStore(memory, (s) => s.side);
+-  const panel = useId();
++  const remembered = useStore(memory, (s) => s.side);
++  // `add` is the step: "choose" (Add session / Add file) or the side chosen, each a router entry so Back steps back.
++  const step = params?.["add"];
++  const chosen: Side | null = step === "sessions" || step === "files" ? step : null;
++  const side: Side = chosen ?? remembered;
+   // The Files side asks for folders when first shown, then stays mounted (hidden) until the picker closes.
+   const [filesShown, setFilesShown] = useState(false);
+   useEffect(() => { setFilesShown(open && (filesShown || side === "files")); }, [open, side]);
+@@ -84,6 +87,15 @@ function PickerDialog({ open, name, kind, params, host }: DialogProps) {
+   // A form page is the same overlay with `newSession` (the server's handle) and `name`.
+   const target = typeof params?.["newSession"] === "string" ? hosts.find((h) => h.entry.handle === params["newSession"]) : undefined;
+   const page = params?.["newSession"] !== undefined;
++  // The phone's sheet opens on the open tabs, whose last row, "Add new tab", opens the choice; the
++  // desktop's + opens on the choice, since its tabs are on the top row.
++  const choosing = !page && chosen === null && (step === "choose" || kind === "popover");
++  const listing = !page && chosen !== null;
++  const showTabs = !page && !choosing && !listing;
++  const add = (to: "choose" | Side): void => {
++    if (to !== "choose") memory.setSide(to);
++    app.openOverlay({ screen: "sessions", name, params: { ...params, add: to } });
++  };
+   const newSession = (on: HostClient, initial: string): void => {
+     app.openOverlay({ screen: "sessions", name, params: { ...params, newSession: on.entry.handle, name: initial } });
+   };
+@@ -123,8 +135,6 @@ function PickerDialog({ open, name, kind, params, host }: DialogProps) {
+     if (search.current) app.focus.focusElement(search.current);
+   };
+ 
+-  const phone = kind !== "popover";
+-  const switcher = <Choice as="tabs" label="Open from" options={SIDES} value={side} onChange={(s) => { memory.setSide(s); }} panel={panel} />;
+   const searchField = (
+     <SearchField
+       label={FIND[side]}
+@@ -136,11 +146,7 @@ function PickerDialog({ open, name, kind, params, host }: DialogProps) {
+       {...(kind === "popover" && { "data-initial-focus": "" })}
+     />
+   );
+-  // On the phone the block sits at the bottom, in thumb reach and above the keyboard: the search, then the switch,
+-  // nearest the thumb last. The popover hangs from the top row, so the block leads it, switch first.
+-  const block = phone
+-    ? <><ToolBar>{searchField}</ToolBar><ToolBar>{switcher}</ToolBar></>
+-    : <><ToolBar>{switcher}</ToolBar><ToolBar>{searchField}</ToolBar></>;
++  const TITLE: Record<Side, string> = { sessions: "Add session", files: "Add file" };
+   const problem = pathError ?? field.said;
+   return (
+     <Dialog
+@@ -150,14 +156,24 @@ function PickerDialog({ open, name, kind, params, host }: DialogProps) {
+       {...(returnFocusTo && { returnFocusTo })}
+       onClose={close}
+       header={page
+-        ? <PageBar back="Back to sessions" onBack={close} title={`New session on ${target?.name ?? "the server"}`} />
+-        : kind === "half" ? false : block}
+-      {...(phone && { footer: <>{!page && block}{open && <SheetTabs />}</> })}
++        ? <PageBar back="Back" onBack={close} title={`New session on ${target?.name ?? "the server"}`} />
++        : listing
++          ? <><PageBar back="Back" onBack={close} title={TITLE[side]} /><ToolBar>{searchField}</ToolBar></>
++          : choosing && kind !== "popover"
++            ? <PageBar back="Back to open tabs" onBack={close} title="Add new tab" />
++            : false}
+     >
++      {open && showTabs && <OpenTabs onAdd={() => { add("choose"); }} onPick={close} />}
++      {open && choosing && (
++        <div class={listClass}>
++          <Row icon="terminal" label="Add session" trailing="chevron" onClick={() => { add("sessions"); }} />
++          <Row icon="folder" label="Add file" trailing="chevron" onClick={() => { add("files"); }} />
++        </div>
++      )}
+       {/* The list stays mounted under a page, so Back finds it as it was. */}
+-      <div hidden={page}>
++      <div hidden={!listing}>
+         {open && SIDES.map(({ value }) => (
+-          <div key={value} role="tabpanel" id={`${panel}-panel-${value}`} aria-labelledby={`${panel}-tab-${value}`} hidden={side !== value}>
++          <div key={value} hidden={side !== value}>
+             {value === "sessions" ? (
+               <SessionPicks query={query} onNew={newSession} />
+             ) : filesShown && (pathMode ? (
+diff --git a/web/screens/sessions/SheetTabs.module.css b/web/screens/sessions/SheetTabs.module.css
+deleted file mode 100644
+index 74047d1..0000000
+--- a/web/screens/sessions/SheetTabs.module.css
++++ /dev/null
+@@ -1,2 +0,0 @@
+-/* Under the picker's controls, which carry the gutter and the gap above. */
+-.tabs { padding: var(--space-1) var(--space-3) 0; }
+diff --git a/web/screens/sessions/SheetTabs.tsx b/web/screens/sessions/SheetTabs.tsx
+deleted file mode 100644
+index bdd76d2..0000000
+--- a/web/screens/sessions/SheetTabs.tsx
++++ /dev/null
+@@ -1,31 +0,0 @@
+-// The sheet's bottom row, in thumb reach: the open tabs of both kinds in order (a tap switches the
+-// tab behind the sheet, × closes the active one and never touches tmux).
+-import { useApp, useAppView, useBells, useHostName } from "../../app/context";
+-import { TabStrip } from "../../ui/primitives/TabStrip";
+-import { useStore } from "../../ui/store";
+-import styles from "./SheetTabs.module.css";
+-import { tabPills } from "../terminal/tabView";
+-import { terminalsOf } from "../terminal/terminals";
+-
+-export function SheetTabs() {
+-  const app = useApp();
+-  const terminals = terminalsOf(app);
+-  const workspace = useAppView((v) => v.workspace);
+-  const statuses = useStore(terminals, (s) => s.tabs);
+-  const hostName = useHostName();
+-  const bells = useBells();
+-  // The strip is no use with the keyboard up: it gives its row to the list, and the controls sit on the keyboard.
+-  const keyboardUp = useAppView((v) => v.viewport.keyboardInset > 0);
+-  if (keyboardUp) return null;
+-  const pills = tabPills(workspace.tabs, statuses, hostName, null, Date.now(), bells);
+-  return (
+-    <div class={styles.tabs}>
+-      <TabStrip
+-        pills={pills}
+-        active={workspace.active}
+-        onSelect={(id) => { terminals.activate(id); }}
+-        onClose={(id) => { app.dispatch({ type: "closed", id }); }}
+-      />
+-    </div>
+-  );
+-}
+diff --git a/web/screens/terminal/dock/KeyRow.tsx b/web/screens/terminal/dock/KeyRow.tsx
+index f02f8a2..af79b80 100644
+--- a/web/screens/terminal/dock/KeyRow.tsx
++++ b/web/screens/terminal/dock/KeyRow.tsx
+@@ -15,29 +15,30 @@ type Spec =
+   | { label: string; aria?: string; key: RowKey; repeat?: boolean }
+   | { label: string; modifier: "ctrl" | "alt" };
+ 
+-// Order: a keyboard's left edge top to bottom (esc, tab, ctrl, alt), then the keys used while
+-// typing a command (arrows for recall and the caret, then the shell's punctuation), then the
+-// control chords, last because a tap on one is rare and not always reversible (^Z suspends).
++// Order, for agent CLIs (Claude Code, Codex, opencode) first, and the row always opens esc, tab
++// (Jimmy, 2026-10-29): esc (interrupt a turn, close a menu), tab (completion), the arrows (menus
++// and history), then the modifiers and the shell's punctuation, then ⏎.
++// The chords come last, past ⏎, so none sits in the first, easy-tap slots and ^Z (suspend) is
++// never beside Return; ^C, the most destructive, is the very last. ⇧tab (mode cycling) is rare
++// now and sits after the punctuation. ^S and ^Q are gone: ^S freezes a terminal with flow control on.
+ const KEYS: Spec[] = [
+   { label: "esc", key: { name: "Escape" } },
+   { label: "tab", key: { name: "Tab" } },
+-  { label: "⇧tab", aria: "Shift tab", key: { name: "BTab" } },
+-  { label: "ctrl", modifier: "ctrl" },
+-  { label: "alt", modifier: "alt" },
+   { label: "←", aria: "Left arrow", key: { name: "Left" }, repeat: true },
+   { label: "↑", aria: "Up arrow", key: { name: "Up" }, repeat: true },
+   { label: "↓", aria: "Down arrow", key: { name: "Down" }, repeat: true },
+   { label: "→", aria: "Right arrow", key: { name: "Right" }, repeat: true },
++  { label: "ctrl", modifier: "ctrl" },
++  { label: "alt", modifier: "alt" },
+   { label: "|", key: { text: "|" } },
+   { label: "~", key: { text: "~" } },
+   { label: "/", key: { text: "/" } },
+   { label: "-", key: { text: "-" } },
+-  { label: "^C", aria: "Control C", key: { name: "C-c" } },
++  { label: "⇧tab", aria: "Shift tab", key: { name: "BTab" } },
++  { label: "⏎", aria: "Return", key: { name: "Enter" } },
+   { label: "^R", aria: "Control R", key: { name: "C-r" } },
+-  { label: "^S", aria: "Control S", key: { name: "C-s" } },
+-  { label: "^Q", aria: "Control Q", key: { name: "C-q" } },
+   { label: "^Z", aria: "Control Z", key: { name: "C-z" } },
+-  { label: "⏎", aria: "Return", key: { name: "Enter" } },
++  { label: "^C", aria: "Control C", key: { name: "C-c" } },
+ ];
+ 
+ /** A held arrow repeats after this, then at this rate. */

@@ -82,6 +82,17 @@ Prefer native runs; use Docker only for Linux-only questions, and then:
 On the Mac itself, run test suites one after another and Playwright with
 `--workers=2`.
 
+## Rust build output fills the Mac's disk
+
+Cargo never trims `target/`. Each set of build settings gets its own copy beside the
+old ones: test or not, Mac or Linux, preflight's own folder (`target/preflight`), and
+each environment a probe sets. Incremental caches come on top of that. On 2026-10-30
+the main checkout's `target/` reached 93 GB and the disk hit zero free, which broke
+running spawns. Jimmy keeps the caching ("saving time is fine... we just have to clean
+up after"). So the session that runs Rust builds runs `cargo clean` in each checkout it
+built in when its work ends, after checking that no `cargo` or `rustc` process is
+running. Check `du -sh target` when a session starts.
+
 ## The iOS Simulator can't test input
 
 From an agent shell the Simulator shows no software keyboard, `simctl` can't tap or
@@ -115,3 +126,19 @@ clear 3.7b of the distinct select-and-destroy crash above. Issue #2 tracks the c
 baseline/backport decision; no installed binary changes or daily-use sign-off without
 Jimmy. See `docs/design/daemon-core.md` §9 and work evidence
 `session-follow-tmux-attach-crash.md`.
+
+## Driving the web app on the Mac without touching Jimmy's tmux
+
+`TETHER_E2E_TMUX=3.7b pnpm --dir web run e2e:stack` starts a real debug daemon on a private
+tmux and prints a URL already admitted with a native token. Its tmux is
+`TMUX_TMPDIR=<stack>/run tmux -L by-hand`; it starts with no server, so make a session there
+first or the picker says "No tmux server is running". The Home card says "pop-os" whatever
+the host. The Sessions | Files switch is `role=tab`; the key row is the group "Terminal keys".
+Ctrl-C on the stack kills its tmux too.
+
+## `scripts/preflight.sh full` fails on macOS
+
+Four `complete::` tests are Linux-only by construction: the runner tests read `/proc/<pid>/stat`
+and one expects `carapace` on PATH. They stopped preflight at `cargo test` on the Mac
+(2026-10-29, 437adc1) and are now `#[cfg(target_os = "linux")]`, so a Mac run skips them; only a
+Linux run covers them.
