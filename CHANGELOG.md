@@ -6,6 +6,7 @@ version section on release.
 ## [Unreleased]
 
 - In the iPhone app, a long press on a word in the terminal selects it and shows tether's Copy and Paste again, anywhere on a full screen; it used to select nothing. A long press no longer lowers the keyboard: it stays as it was, and with it up the dock stays drawn above it. Apple Intelligence's Writing Tools button no longer appears over the selection.
+- In the iPhone app, a long press on terminal text selects the word under your finger when the press fires, with fewer cases of Paste alone: deep scrollback and long wrapped lines no longer push the pressed row out of the selection, and the text no longer shifts by a row's fraction when selection starts on a long terminal.
 - In the iPhone app, the dock slides up and down with the keyboard instead of jumping to its keyboard-up place before the keyboard moves and dropping out as it closes, and switching to a Files tab no longer makes the page jump as if a keyboard were coming. With Reduce Motion on, the dock moves at once.
 - In the iPhone app, selecting terminal text shows only tether's Copy and Paste; iOS's own Copy, Look Up and Translate bar no longer appears behind it.
 - In the iPhone app, holding delete while typing into the terminal keeps deleting until you let go; it used to delete one character. After about two seconds it slows to iOS's word steps, about six characters a second.
