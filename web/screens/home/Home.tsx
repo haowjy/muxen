@@ -1,11 +1,15 @@
 // Home (browser-behaviors.md "Home"): one row per workspace, which today is
 // one per server: its name, status and tab count. A row opens the workspace on the tab it last showed, or on
-// its overview when it has none. Server-first: one server is not opened for you. The gear opens Settings.
+// its overview when it has none. Server-first: one server is not opened for you. The gear opens Settings: in
+// the header, or docked (touch) in the bottom bar where a tab has its dock.
 // Add server exists only where the platform manages servers (the app); the browser has its one page origin.
-import { useApp, useAppView, useBells } from "../../app/context";
+import { useApp, useAppView, useBells, useDocked } from "../../app/context";
 import type { HostClient } from "../../net/hosts";
 import { bellLook, bellsUnavailable } from "../../sessions/bells";
+import { BottomBar } from "../../ui/primitives/BottomBar";
 import { Button } from "../../ui/primitives/Button";
+import { DockButton } from "../../ui/primitives/DockButton";
+import { Icon } from "../../ui/primitives/Icon";
 import { IconButton } from "../../ui/primitives/IconButton";
 import { useStore } from "../../ui/store";
 import { workspaceOfHost, type Workspace, type WorkspaceState } from "../../workspace/state";
@@ -48,13 +52,15 @@ export function Home() {
   const app = useApp();
   const hosts = useAppView((v) => v.hosts);
   const manageHosts = app.platform.manageHosts;
+  const docked = useDocked();
+  const openSettings = (opener: Element): void => { app.openOverlay({ screen: "settings", name: "settings" }, opener); };
 
   return (
     <div class={styles.home}>
       <header class={styles.header}>
         <div class={styles.bar}>
           <h1 class={styles.title}>tether</h1>
-          <IconButton icon="settings" label="Settings" onClick={(e) => { app.openOverlay({ screen: "settings", name: "settings" }, e.currentTarget); }} />
+          {!docked && <IconButton icon="settings" label="Settings" onClick={(e) => { openSettings(e.currentTarget); }} />}
         </div>
       </header>
       <div class={styles.body}>
@@ -64,6 +70,11 @@ export function Home() {
           <Install />
         </div>
       </div>
+      {docked && (
+        <BottomBar label="Home">
+          <DockButton kind="control" data-end="" aria-label="Settings" onClick={(e) => { openSettings(e.currentTarget); }}><Icon name="settings" size={20} /></DockButton>
+        </BottomBar>
+      )}
     </div>
   );
 }

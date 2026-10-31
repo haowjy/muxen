@@ -1,13 +1,18 @@
-// The tab overview (browser-behaviors.md "Tab overview"): one workspace's page, reached by the tab row's ‹
-// or from Home. One row per tab in workspace order, which is the tab row's order; Open session and Open
-// files under them. Rows, never previews: a preview would stream every tab's screen.
+// The tab overview (browser-behaviors.md "Tab overview"): one workspace's tabs. Over a tab it is the tab list,
+// the overlay `{ screen: "overview", name: "tabs" }` the tab row's All tabs opens, and its back returns to the tab;
+// for a workspace with no tab it is the overview route, whose back is Home. One row per tab in workspace order,
+// which is the tab row's order; Open session and Open files under them. Rows, never previews: a preview would
+// stream every tab's screen.
 import type { TargetedPointerEvent } from "preact";
 import { useRef, useState } from "preact/hooks";
-import { useApp, useAppView, useBells, useHostName } from "../../app/context";
+import { useApp, useAppView, useBells, useDocked, useHostName } from "../../app/context";
 import { shorten } from "../../files/format";
 import { bellsUnavailable } from "../../sessions/bells";
 import { ago, findSession } from "../../sessions/groups";
+import { BottomBar } from "../../ui/primitives/BottomBar";
 import { Button } from "../../ui/primitives/Button";
+import { DockButton } from "../../ui/primitives/DockButton";
+import { Icon } from "../../ui/primitives/Icon";
 import { DragHandle } from "../../ui/primitives/DragHandle";
 import { SwipeToClose } from "../../ui/primitives/SwipeToClose";
 import { Row } from "../../ui/primitives/Row";
@@ -21,12 +26,15 @@ import styles from "./Overview.module.css";
 
 export function Overview() {
   const workspace = useAppView((v) => routeWorkspace(v.workspace));
+  const over = useAppView((v) => v.entry.overlay?.screen === "overview");
   if (!workspace) return null;
-  return <WorkspacePage workspace={workspace} />;
+  return <WorkspacePage workspace={workspace} over={over} />;
 }
 
-function WorkspacePage({ workspace }: { workspace: Workspace }) {
+/** `over`: the tab list over the workspace's tab, else the overview route of a workspace with no tab. */
+function WorkspacePage({ workspace, over }: { workspace: Workspace; over: boolean }) {
   const app = useApp();
+  const docked = useDocked();
   const terminals = terminalsOf(app);
   const host = useAppView((v) => v.hosts.find((h) => h.hostId === workspace.host));
   const sessions = useStore(app.sessions, (s) => (host ? s.hosts[host.entry.handle] : undefined));
@@ -84,11 +92,22 @@ function WorkspacePage({ workspace }: { workspace: Workspace }) {
     handle.addEventListener("pointercancel", end);
   };
 
+  // Back names where it goes: the tab under the list, or Home.
+  const under = over ? workspace.tabs.find((t) => t.id === workspace.last) : undefined;
+  const back = under ? pillOf(under, env).session : "Home";
+  const goBack = (): void => { if (over) app.router.closeOverlay(); else app.router.toHome(); };
+  // A tab picked or added from the list over a tab is on screen once the list closes.
+  const open = (id: string): void => {
+    terminals.activate(id);
+    if (over) app.router.closeOverlay();
+  };
+  const openFiles = (): void => { if (over) app.router.closeOverlay(add.openFiles); else add.openFiles(); };
+
   return (
     <div class={styles.page}>
       <header class={styles.header}>
-        <div class={styles.bar}>
-          <Button variant="quiet" icon="back" onClick={() => { app.router.toHome(); }}>Home</Button>
+        <div class={styles.bar} data-docked={docked ? "" : undefined}>
+          {!docked && <Button variant="quiet" icon="back" onClick={goBack}>{back}</Button>}
           <h1 class={styles.title}>{name}</h1>
         </div>
       </header>
@@ -133,7 +152,7 @@ function WorkspacePage({ workspace }: { workspace: Workspace }) {
                             {terminal?.hidden && <span class={styles.detail}>tmux settings hide bells in this session</span>}
                           </span>
                         }
-                        onClick={() => { terminals.activate(pill.id); }}
+                        onClick={() => { open(pill.id); }}
                       />
                       <DragHandle label={`Reorder ${pill.full}`} onDragStart={(e) => { startDrag(pill.id, e); }} onNudge={(step) => { app.dispatch({ type: "moved", id: pill.id, to: i + step }); }} />
                     </SwipeToClose>
@@ -144,10 +163,15 @@ function WorkspacePage({ workspace }: { workspace: Workspace }) {
           )}
           <div class={styles.add}>
             <Button icon="terminal" onClick={(e) => { add.openSession(e.currentTarget); }}>Open session</Button>
-            <Button icon="folder" onClick={add.openFiles}>Open files</Button>
+            <Button icon="folder" onClick={openFiles}>Open files</Button>
           </div>
         </div>
       </div>
+      {docked && (
+        <BottomBar label="Tab list">
+          <DockButton kind="control" aria-label={back} onClick={goBack}><Icon name="back" size={20} /></DockButton>
+        </BottomBar>
+      )}
     </div>
   );
 }

@@ -14,7 +14,7 @@ export interface Fixture {
   daemon?: (daemon: TestPlatform["daemon"]) => void;
   /** Open the saved workspace's active tab at launch, as a tap on its Home row would: a clean launch otherwise opens Home. */
   openActive?: true;
-  /** Open the first workspace's tab overview at launch, as a tap on Home's row (or the tab row's ‹) would. */
+  /** Open the first workspace's tab overview route at launch, as a tap on Home's row of a workspace with no tab would. */
   overview?: true;
   /** An overlay to open once the app is up, as a tap on its opener would. */
   overlay?: Overlay;

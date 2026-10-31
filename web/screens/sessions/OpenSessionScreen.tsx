@@ -3,7 +3,7 @@
 // row creates. The router overlay `{ screen: "sessions", name: "open", params: { workspace } }`, so Back, Escape
 // and the opener's focus return are the overlay machinery's.
 import { useState } from "preact/hooks";
-import { useApp, useAppView, useBells, useOverlay } from "../../app/context";
+import { useApp, useAppView, useBells, useDocked, useOverlay } from "../../app/context";
 import type { HostClient } from "../../net/hosts";
 import { tabId } from "../../platform/tabKey";
 import { bellLook } from "../../sessions/bells";
@@ -12,7 +12,7 @@ import type { SessionListing, TmuxListing } from "../../proto/generated/messages
 import { BellDot } from "../../ui/primitives/BellDot";
 import { Button } from "../../ui/primitives/Button";
 import { Dialog } from "../../ui/primitives/Dialog";
-import { PageBar } from "../../ui/primitives/DialogBars";
+import { PageBack, PageBar } from "../../ui/primitives/DialogBars";
 import { EmptyState } from "../../ui/primitives/EmptyState";
 import { Row } from "../../ui/primitives/Row";
 import { Spinner } from "../../ui/primitives/Spinner";
@@ -26,8 +26,9 @@ export function OpenSessionScreen() {
   const { open, params, close } = useOverlay("sessions", "open");
   const workspace = useAppView((v) => v.workspace.workspaces.find((w) => w.id === params?.["workspace"]) ?? null);
   const host = useAppView((v) => v.hosts.find((h) => h.hostId === workspace?.host));
+  const docked = useDocked();
   return (
-    <Dialog open={open} title="Open session" variant="page" onClose={close} header={<PageBar back="Back" onBack={close} title="Open session" />}>
+    <Dialog open={open} title="Open session" variant="page" onClose={close} header={<PageBar back="Back" onBack={close} title="Open session" docked={docked} />} footer={docked && <PageBack back="Back" onBack={close} />}>
       {open && workspace && host && <Body host={host} workspace={workspace} />}
     </Dialog>
   );
@@ -62,7 +63,8 @@ function Body({ host, workspace }: { host: HostClient; workspace: Workspace }) {
   const blocked = blockedBy(host);
 
   const attach = (l: TmuxListing, s: SessionListing): void => {
-    app.router.closeOverlay(() => { openSession(app, workspace, host, l, s); });
+    // Every overlay: Open session may sit on the tab list, which the new tab replaces on screen.
+    app.router.closeAllOverlays(() => { openSession(app, workspace, host, l, s); });
   };
   const commit = async (): Promise<void> => {
     if (busy || blocked !== undefined) return;

@@ -19,14 +19,25 @@ Interactive mockup: [mockups/index.html](mockups/index.html). It predates this r
 A **workspace** is a server's open tabs, in the order the user gave them, and the tab it last
 showed. Each server has one workspace for now; the model keeps a workspace its own record, owned
 by a server, so a second one on the same server later is another record, not a remodel (Jimmy,
-2026-10-30: "maybe in the future we can have multiple workspaces"). Every surface has three levels:
+2026-10-30: "maybe in the future we can have multiple workspaces"). Every surface has two levels,
+and the same screens going forward and back (Jimmy, 2026-10-31: "going from home completely skips the
+workspace selection, and going back u have to go to the workspace slection"):
 
-1. **Home** lists the workspaces.
-2. **The tab overview** lists one workspace's tabs, and adds, reorders and closes them.
-3. **A tab** (terminal or Files) fills the screen, with the workspace's **tab row**.
+1. **Home** lists the workspaces. A row opens the workspace's last tab.
+2. **A tab** (terminal or Files) fills the screen, with the workspace's **tab row**.
 
-Back steps up one level: from a tab to its overview, from the overview to Home. It lands on the
-nearest earlier entry of that level, so folders drilled into on the way never add a stop.
+**The tab overview** lists one workspace's tabs, and adds, reorders and closes them. It is not a level:
+over a tab it is the tab list, opened from the tab row's All tabs, and Back closes it onto the tab it
+was opened over, or onto the tab picked in it. A workspace with no tab shows it in the tab's place,
+reached from Home; a tab opened from there takes its place, so it is never a stop on the way back.
+
+Back from a tab is Home. It lands on the nearest earlier Home entry, so folders drilled into on the
+way never add a stop.
+
+**Back's place.** Where a tab has the dock (touch), every screen puts Back and its controls in a bottom
+bar the dock's height, where the dock's tab row has its ‹: Home (Settings, at the row's end), the tab
+overview and page dialogs (Settings, Open session); their titles stay at the top. With a mouse, Back is
+in each screen's header (Jimmy, 2026-10-31: "the back button jumps from top to bottom").
 
 **Workspace state.** A workspace record has its own id, its server's host id, its tabs in order and
 its last-shown tab; today each host has exactly one, made when the server is first known. The route is Home,
@@ -99,7 +110,7 @@ Home Screen instructions.
 
 No servers shows enrolment instructions and Add server. If a server's tmux is not running,
 its row says so; tether never starts Jimmy's tmux server. Server management includes adding,
-removing and re-enrolling a server. Settings is a separate screen reached from the Home gear, with
+removing and re-enrolling a server. Settings is a separate screen reached from Home's gear (its header, or docked its bottom bar), with
 appearance, terminal text size, this device/browser and local-data controls. The app also
 offers the Face ID relock setting ([auth.md](../auth.md#swift-side-keychain-item-and-app-lock));
 the phone browser has no Face ID setting. Clear local data deletes
@@ -115,7 +126,7 @@ stopped daemon is explained. Returning from the background keeps the screen the 
 - Selecting a tab activates it; other tabs remain open. Opening a session already represented by a tab activates that tab. Implementation identity must use server/session IDs, not mutable display names.
 - **The tab follows its session.** When the session's current window changes (prefix-n on the laptop, the window switcher below, a window exiting, a script), the tab shows the new window: its snapshot replaces the old one in place and the label changes. The tab, its draft and its place in the tab order stay. Typing, the line field, paste and an inserted path go to the window the tab is showing on this screen, so keys sent just before a change made elsewhere still reach the window the user was looking at. Opening or activating a tab enters Terminal through the router; desktop focus lands on the terminal after that screen is rendered.
 - Closing the active tab activates its right-hand neighbour, or the left-hand neighbour if it was last. Only the active tab shows ×, in the tab row on every surface; every tab keeps the space for one, so changing tabs never moves the others. It closes that tether tab, never its tmux session or process. Scroll the active tab into view. Closing the last tab shows the tab overview. Creation-dialog cancellation/Escape restores focus to its opener.
-- The tab row's ‹ and the system back gesture go to the workspace's tab overview, preserving open tabs and the active tab. + opens Open session and Open files.
+- The tab row's ‹ and the system back gesture go to Home, preserving open tabs and the active tab. + opens Open session and Open files.
 - Switching tabs preserves the terminal and running process.
 - Terminal output is not editable mock text masquerading as live input. The prototype says it is sample content and sends no input.
 - On the terminal, show connection status only when not live. Reconnecting/error is visible in text, with Retry, and is distinct from active-tab selection and the bell dot. Home's workspace rows still show live or offline status.
@@ -131,14 +142,15 @@ stopped daemon is explained. Returning from the background keeps the screen the 
 
 ## Tab row
 
-The tab row holds ‹, the workspace's tabs as pills in workspace order, and +; on the phone,
+The tab row holds ‹ (Home), the workspace's tabs as pills in workspace order, All tabs (the tab list),
+and +; on the phone,
 Show keyboard ends it while the keyboard is down. Every pill is filled; the active one is tinted with its
 status colour, its label and its circled × in that colour; other pills have a muted label and the
 attention dot when they have one (Jimmy, 2026-10-30, after Termius's tabs).
 Every pill is the same width, whatever its label, and keeps space for ×, so changing tabs never moves the others (Jimmy, 2026-10-30: “the tabs change size... they should be consistent... look at termius's”): the pills share the strip between a minimum and a maximum width, past the minimum the row scrolls, and on the phone they fill the row between ‹ and +. A phone pill shows the session or folder name only; the window is in the tab overview and the pill's menu. The row scrolls
 horizontally, the active pill is scrolled into view, and the next pill peeks when more remain.
 A tap switches tabs and leaves the keyboard up or down as it was; with it up, it goes to the
-new tab's input (Phone dock). ‹ goes to the tab overview.
+new tab's input (Phone dock). ‹ goes to Home; All tabs opens the tab list over the tab.
 The tab row's controls (‹, pills, +, the keyboard control) are filled, one height and one corner
 radius; the key row's keys are plain text, so the two never read alike (Jimmy, 2026-10-30).
 
@@ -170,8 +182,10 @@ tmux prefix keys sent by tether reach the pane, not tmux's key tables.
 
 ## Tab overview
 
-The tab overview is one workspace's page, reached by the tab row's ‹ or from Home. Its header
-has ‹ Home and the workspace's name (the server's name for now). Below it, one row per tab in
+The tab overview is one workspace's page: the tab list over a tab, opened from the tab row's All tabs, or
+the page of a workspace with no tab, reached from Home. Its header has the workspace's name (the server's
+name for now) and Back, named for where it goes (the tab under the list, or Home); docked, Back is in
+the bottom bar. A tap on a row, Open session and Open files close the list onto that tab. Below it, one row per tab in
 workspace order: an icon for the kind, the label, and a line of detail (a terminal's window and
 how long since its last activity or bell, from the latest listing, with no request of its own; a
 Files tab's path, shortened under home, when that says more than the label); the workspace's last-shown tab's row is filled.

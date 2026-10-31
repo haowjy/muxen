@@ -13,8 +13,8 @@ import { TabMenus, type MenuTarget } from "./tabMenus";
 import styles from "./TabRow.module.css";
 
 /**
- * The tab row (browser-behaviors.md "Tab row"), on every surface: ‹ to the workspace's tab overview, the
- * workspace's tabs as pills (the strip is the desktop's and the phone's alike), + for Open session and Open
+ * The tab row (browser-behaviors.md "Tab row"), on every surface: ‹ to Home, the workspace's tabs as pills
+ * (the strip is the desktop's and the phone's alike), All tabs (the tab list over the tab), + for Open session and Open
  * files, and on touch the keyboard control, which stays at the row's end with the keyboard up or down. On the
  * desktop it is the top row; on the phone it is the dock's bottom row, which the dock keeps in place with the keyboard up.
  */
@@ -45,7 +45,7 @@ export function TabRow({ place }: { place: "top" | "dock" }) {
 
   return (
     <nav class={styles.row} data-place={place} aria-label="Tabs" onPointerDown={(e) => { if (touchInput) e.preventDefault(); }}>
-      <DockButton kind="control" class={styles.control} aria-label="Back to the tab overview" onClick={() => { app.router.toOverview(space.id); }}>
+      <DockButton kind="control" class={styles.control} aria-label="Home" onClick={() => { app.router.toHome(); }}>
         <Icon name="back" size={20} />
       </DockButton>
       <div class={styles.strip}>
@@ -57,6 +57,9 @@ export function TabRow({ place }: { place: "top" | "dock" }) {
           onMenu={(id, anchor) => { setMenu({ kind: "tab", id, anchor }); }}
         />
       </div>
+      <DockButton kind="control" class={styles.control} aria-label="All tabs" onClick={(e) => { app.openOverlay({ screen: "overview", name: "tabs" }, e.currentTarget); }}>
+        <Icon name="tabs" size={20} />
+      </DockButton>
       <DockButton
         kind="control"
         class={styles.control}

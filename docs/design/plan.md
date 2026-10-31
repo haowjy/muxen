@@ -368,10 +368,10 @@ kernel kills tether before tmux or the agents), and
 ## Layout
 
 The [client interaction contract](client/browser-behaviors.md) defines the layout for the
-iPhone app, phone browser/PWA and desktop. Every surface has three levels: Home lists the
-workspaces (a server's open tabs; one per server for now), the tab overview lists one
-workspace's tabs, and a tab fills the screen with the workspace's tab row: ‹ (back to the
-overview), the tabs as pills, and +, which opens Open session and Open files. Desktop has the
+iPhone app, phone browser/PWA and desktop. Every surface has two levels: Home lists the
+workspaces (a server's open tabs; one per server for now) and a row opens its last tab, and a tab
+fills the screen with the workspace's tab row: ‹ (back to Home), the tabs as pills, All tabs (the tab
+overview, which lists the workspace's tabs, over the tab), and +, which opens Open session and Open files. Desktop has the
 tab row at the top; there is no rail. On the phone it is the dock's bottom row, ending with the
 keyboard control (Show keyboard, Hide keyboard); with the keyboard up it stays put, control and all,
 and the one-line compose box and the text-only key row sit under it. The phone browser, PWA and native app share the web dock

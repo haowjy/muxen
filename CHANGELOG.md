@@ -5,6 +5,7 @@ version section on release.
 
 ## [Unreleased]
 
+- Navigation has two levels. A server on Home opens the tab you last had there, and ‹ in a tab goes back to Home, no longer through the tab overview. The tab overview opens over the tab from the tab row's new All tabs button, and picking a tab, Open session or Open files there closes it onto that tab. On the phone and iPad, Back is always at the bottom left, where the tab row's ‹ is: Home, the tab overview, Settings and Open session have a bottom bar, and Home's Settings gear moved into it.
 - In phone Safari and the app's web keyboard test, hardware Ctrl chords, Tab and the up and down arrows typed in the line box go to the terminal, as in the app; with no box focused, a hardware keyboard's chords, Escape, Tab and arrows go to the terminal too.
 - In phone Safari and the app's web keyboard test, a hardware Ctrl+[, Ctrl+/ and Option+punctuation (Option+. in bash) now reach tmux as they do in the app, and the key row's armed ctrl and alt do the same for the next punctuation key. Ctrl+Shift+letter is named with the capital (`C-A`), as in the app.
 - Icons are now Lucide's: Settings is a gear (it was a sun-like circle with rays), and Hide keyboard is a keyboard with a slash through it.

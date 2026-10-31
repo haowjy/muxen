@@ -17,3 +17,5 @@
   margin: 0 auto;
   padding: var(--safe-top) var(--space-2) 0;
 }
+/* Docked, Back is at the bottom: the title starts the row at the page's gutter. */
+.page[data-docked] { padding-left: var(--space-gutter); }

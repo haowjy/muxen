@@ -14,11 +14,13 @@ interface DialogProps {
   variant?: "dialog" | "page";
   /** The top row: a `TitleBar` or `PageBar`, or null for none. `title` is the dialog's accessible name. */
   header: ComponentChildren;
+  /** Under the body: a docked page's `PageBack`. */
+  footer?: ComponentChildren;
   children: ComponentChildren;
 }
 
 /** `<dialog>.showModal()`: top layer, modal focus containment, Escape. Safari lacks `closedby`, so Escape and the backdrop are handled here. */
-export function Dialog({ open, onClose, title, variant = "dialog", header, children }: DialogProps) {
+export function Dialog({ open, onClose, title, variant = "dialog", header, footer, children }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const focus = useFocus();
   const closeByTap = useCloseByTap(onClose);
@@ -50,6 +52,7 @@ export function Dialog({ open, onClose, title, variant = "dialog", header, child
       <div class={styles.panel}>
         {header}
         <div class={styles.body}>{children}</div>
+        {footer}
       </div>
     </dialog>
   );

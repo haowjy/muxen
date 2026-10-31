@@ -19,7 +19,10 @@ import styles from "./Shell.module.css";
 export function Shell() {
   const app = useApp();
   const layout = useAppView((v) => v.viewport.layout);
+  // The tab list over a tab takes the tab's place; the tab stays mounted under it.
+  const listed = useAppView((v) => v.entry.overlay?.screen === "overview");
   const screen = useAppView((v) => screenOf(v.workspace));
+  const tabShown = !listed && (screen === "terminal" || screen === "files");
   // Touch input ends in the dock (phone and iPad); a mouse keeps the tab row on top, even in a narrow window. Home and the overview have none.
   const topRow = useAppView((v) => v.viewport.layout === "desktop" || v.viewport.directInput === "xterm");
   const hosts = useAppView((v) => v.hosts);
@@ -32,7 +35,7 @@ export function Shell() {
   return (
     <div class={styles.shell} data-layout={layout}>
       <div class={styles.column}>
-        {!blocking && topRow && (screen === "terminal" || screen === "files") && <TabRow place="top" />}
+        {!blocking && topRow && tabShown && <TabRow place="top" />}
         <div class={styles.banners}>
           <AppBanners />
           {/* Home's cards carry their own host's notice. */}
@@ -46,11 +49,11 @@ export function Shell() {
               {hosts.length === 0 && !noServers && <div class={styles.waiting}><Spinner label="Checking access" /></div>}
               {noServers && <NoServers />}
               {!noServers && screen === "home" && <Home />}
-              {!noServers && screen === "overview" && <Overview />}
-              {!noServers && screen === "files" && <FilesScreen />}
+              {!noServers && (screen === "overview" || listed) && <Overview />}
+              {!noServers && tabShown && screen === "files" && <FilesScreen />}
             </>
           )}
-          <TerminalScreen active={!blocking && screen === "terminal"} />
+          <TerminalScreen active={!blocking && tabShown && screen === "terminal"} />
         </main>
       </div>
       {!blocking && (

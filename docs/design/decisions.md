@@ -4270,3 +4270,19 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   prose-like fields such as Device name (a second kind of field to decide for, for names that are
   mostly identifiers and short); one helper that fixes only `autocorrect` (the class of bug is the
   property-versus-attribute mismatch, not one name).
+
+## Home and a tab are the two levels; Back sits where the dock is (2026-10-31)
+
+- **A Home row opens the workspace's last tab, and Back from a tab is Home.** Jimmy: "going from home
+  completely skips the workspace selection, and going back u have to go to the workspace slection". Forward
+  skipped the tab overview and Back stopped on it. He chose two levels over three ("Home ↔ tab"). Rejected:
+  every level both ways (Home, then the overview, then the tab), an extra tap on every return to a
+  terminal, launch included, since a clean launch opens Home.
+- **The tab overview over a tab is the tab list, a router overlay** (`{ screen: "overview", name: "tabs" }`),
+  opened from the tab row's All tabs. The overlay already keeps a tab switched under it when it closes, so a
+  row tap is activate-then-close. The overview route stays only for a workspace with no tab, and a tab opened
+  from it replaces it in history. The tab row gains a control, so phone pills are about 44 px narrower.
+- **Where tabs have the dock, Back and a screen's controls are in a bottom bar the dock's height**, in
+  the place of the dock's ‹: Home (Settings), the tab overview, page dialogs. Jimmy: "the back button jumps
+  from top to bottom"; he chose bottom everywhere. Rejected: Back at the top in tabs, which costs a
+  terminal row and is a reach on a large phone.

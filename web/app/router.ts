@@ -1,6 +1,6 @@
 // Browser history is the navigation stack, and this is its only writer (browser-behaviors.md
 // "Keyboard ownership and navigation history"). Each entry's state holds the route (Home, a
-// workspace's overview, or one of its tabs), the overlay open on it, and a record of the tab's Files place. The URL carries the route only, so file paths never enter
+// workspace's overview, or one of its tabs), the overlay open on it (the tab list over a tab is one), and a record of the tab's Files place. The URL carries the route only, so file paths never enter
 // it. Everyone else learns of navigation one way: `navigated`, after every push, replace and pop.
 import { samePlace, type FilesPlace } from "../platform/types";
 import { isPlace } from "../workspace/saved";
@@ -90,16 +90,16 @@ export class Router {
   }
 
   /**
-   * Shows the active tab. From Home the overview is pushed first, so Back from the tab lands on its
-   * workspace's overview and Back from there on Home (Home, overview, tab are three levels).
-   * Switching tabs on a tab route adds no entry.
+   * Shows the active tab, a level above Home: Back from it is Home. The overview route (a workspace with no
+   * tab) is replaced, so it is never a stop on the way back. Switching tabs on a tab route adds no entry.
    */
   openTab(workspace: string, tab: string, place: FilesPlace | null): void {
-    if (this.entry.route === "home") this.push({ route: "overview", workspace, overlay: null }, false);
-    this.push({ route: "tab", workspace, tab, place, overlay: null });
+    const next: Next = { route: "tab", workspace, tab, place, overlay: null };
+    if (this.entry.route === "overview") this.replace(next);
+    else this.push(next);
   }
 
-  /** Shows `workspace`'s overview: pushed from Home, else the nearest overview of it below (Back from there is the level above it). */
+  /** Shows `workspace`'s overview, the page of a workspace with no tab: pushed from Home, else the nearest overview of it below. */
   toOverview(workspace: string): void {
     const { entry } = this;
     if (entry.route === "overview" && entry.workspace === workspace) return;
@@ -173,7 +173,7 @@ export class Router {
     if (entry.route === "tab") this.replace({ route: "tab", workspace: entry.workspace, tab, place, overlay: entry.overlay });
   }
 
-  /** The overview's back button to Home: the nearest Home entry below, else the entry is replaced with it. */
+  /** Back to Home, from a tab or the overview: the nearest Home entry below, else the entry is replaced with it. */
   toHome(): void {
     if (this.entry.route !== "home") this.goUp(HOME, (e) => e.route === "home");
   }
@@ -196,12 +196,12 @@ export class Router {
     else this.replace(fallback);
   }
 
-  private push(next: Next, emit = true): void {
+  private push(next: Next): void {
     const entry = { ...next, id: this.nextId++ };
     this.stack.splice(this.at + 1, Infinity, entry);
     this.at++;
     this.port.push(entry, HASHES[entry.route]);
-    if (emit) this.emit();
+    this.emit();
   }
 
   private replace(next: Next): void {

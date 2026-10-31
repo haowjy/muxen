@@ -52,3 +52,8 @@ export function useHostName(): (hostId: string) => string {
   const hosts = useAppView((v) => v.hosts);
   return (hostId) => hosts.find((h) => h.hostId === hostId)?.name ?? hostId;
 }
+
+/** Touch input ends in the dock (phone and iPad), so its screens put back and their controls in a bottom bar, where the dock's tab row is. */
+export function useDocked(): boolean {
+  return useAppView((v) => v.viewport.directInput !== "xterm");
+}

@@ -1,6 +1,6 @@
 import {
   Check, ChevronDown, ChevronLeft, ChevronRight, CircleX, Equal, ExternalLink, File, Film, Folder, House, Image, Keyboard,
-  KeyboardOff, Plus, RotateCw, Search, Server, Settings, Terminal, TriangleAlert, Upload, X, type LucideIcon,
+  KeyboardOff, List, Plus, RotateCw, Search, Server, Settings, Terminal, TriangleAlert, Upload, X, type LucideIcon,
 } from "lucide-preact";
 
 /** tether's icon names, each a Lucide icon. */
@@ -30,6 +30,8 @@ const ICONS = {
   image: Image,
   film: Film,
   external: ExternalLink,
+  /** All tabs: the tab list. */
+  tabs: List,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;
