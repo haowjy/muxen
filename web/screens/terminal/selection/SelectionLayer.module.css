@@ -18,4 +18,6 @@
 }
 .layer::-webkit-scrollbar { display: none; }
 .layer ::selection { background: var(--term-selection); color: inherit; }
-.layer[data-held] { pointer-events: none; -webkit-touch-callout: none; }
+/* Not a scroller while the finger is down: WebKit cleared the selection when the press that made it lifted over
+   one. It scrolls once the finger is up; scrollTop set meanwhile carries over. */
+.layer[data-held] { overflow-y: hidden; pointer-events: none; -webkit-touch-callout: none; }

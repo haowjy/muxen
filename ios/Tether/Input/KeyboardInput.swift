@@ -59,6 +59,7 @@ final class KeyboardInput: UITextField, UITextFieldDelegate {
         autocapitalizationType = .none
         spellCheckingType = .no
         smartQuotesType = .no
+        if #available(iOS 18.0, *) { writingToolsBehavior = .none }
         smartDashesType = .no
         smartInsertDeleteType = .no
         inlinePredictionType = .no

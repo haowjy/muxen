@@ -260,6 +260,9 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         let configuration = WKWebViewConfiguration()
         configuration.setURLSchemeHandler(schemeHandler, forURLScheme: "tether-app")
         configuration.allowsInlineMediaPlayback = true
+        // Apple Intelligence put its Writing Tools button over tether's Copy and Paste on a terminal selection.
+        // tether's text is a terminal and a few short fields, none of them prose.
+        if #available(iOS 18.0, *) { configuration.writingToolsBehavior = .none }
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         configuration.userContentController.addScriptMessageHandler(messageHandlerProxy, contentWorld: .page, name: "tether")
 

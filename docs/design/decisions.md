@@ -4232,6 +4232,14 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   menu, and AutoFill showed over tether's Copy and Paste in the Simulator.
 - **The terminal's surface isolates its stacking.** The opaque selection snapshot (z 3) painted over
   the dock (z 2) once the dock rode over the surface with the keyboard up.
+- **The snapshot is not a scroller while the finger that made the selection is down.** With
+  scrollback above the screen the snapshot scrolls (`overflow-y: auto`), and WebKit cleared the
+  selection when the press lifted over it: on a full terminal every long press selected nothing,
+  keyboard up or down (Jimmy: "i can't select text if the keyboard is up"; in the Simulator with the
+  snapshot unscrollable, the same presses kept their selection). It scrolls again once the finger is up.
+- **Writing Tools are off in the app** (`writingToolsBehavior = .none` on the web view and the native
+  field): Apple Intelligence's button sat over tether's Copy and Paste on a selection. tether's text is a
+  terminal and short fields, none of them prose.
 
 ## The keyboard control stays in the tab row (2026-10-30)
 
