@@ -3,10 +3,10 @@
 // drawn as DOM rows directly above the terminal. Scrolling past the buffer's top slides the
 // terminal down and these rows in; nothing is fetched until someone scrolls there.
 import type { HistoryRow } from "../../tabs/driver";
-import type { TerminalTheme } from "../../term";
+import type { CellSize, TerminalTheme } from "../../term";
 import { historyRows, rowText, type Row } from "../../term/rows";
 import { ANCHOR_ROWS, locateRun } from "./anchor";
-import { rowElement } from "./rows/rowsDom";
+import { fitText, rowElement } from "./rows/rowsDom";
 import styles from "./rows/Rows.module.css";
 
 /** Rows per request ("about 200 lines a request"). */
@@ -45,7 +45,10 @@ export class HistoryView {
   private top = 0;
   private baseThen = 0;
   private generation = 0;
+  /** The rows' laid-out height: the browser rounds each row's, so it is not rows times the cell height. */
   private height = 0;
+  /** The cell the rows were last fitted to and measured at. */
+  private cell: CellSize | null = null;
 
   constructor(private readonly deps: HistoryDeps) {
     this.element.className = styles.history ?? "";
@@ -78,24 +81,40 @@ export class HistoryView {
     this.retryAt = 0;
     this.exhausted = false;
     this.height = 0;
+    this.cell = null;
     this.element.replaceChildren();
     this.element.style.display = "none";
   }
 
   /** Where the view sits: its bottom edge on the terminal's top edge, which `shift` px below the host's. */
-  place(shift: number, cellHeight: number): void {
-    this.element.style.setProperty("--cell-height", `${String(cellHeight)}px`);
+  place(shift: number, cell: CellSize): void {
+    if (this.rows.length > 0 && (cell.width !== this.cell?.width || cell.height !== this.cell.height)) this.layout(cell);
     this.element.style.display = shift > 0 ? "" : "none";
     this.element.style.translate = `0 ${String(shift - this.height)}px`;
   }
 
   /** The view is `shift` px into the history, with `buffer` px of xterm's scrollback above it: fetch before it runs out. */
-  want(shift: number, buffer: number, cellHeight: number, screenRows: number): void {
+  want(shift: number, buffer: number, cell: CellSize, screenRows: number): void {
     if (this.loading || this.exhausted || performance.now() < this.retryAt) return;
-    if (buffer + this.height - shift < PREFETCH_SCREENS * screenRows * cellHeight) void this.load(cellHeight);
+    if (buffer + this.height - shift < PREFETCH_SCREENS * screenRows * cell.height) void this.load(cell);
   }
 
-  private async load(cellHeight: number): Promise<void> {
+  /**
+   * Sizes the rows to `cell`, fits their text to its width as the selection snapshot's is, and
+   * measures them. Both need layout, so a hidden view is shown for the measure.
+   */
+  private layout(cell: CellSize): void {
+    const { style } = this.element;
+    const hidden = style.display === "none";
+    style.display = "";
+    style.setProperty("--cell-height", `${String(cell.height)}px`);
+    fitText(this.element, cell.width);
+    this.height = this.element.getBoundingClientRect().height;
+    if (hidden) style.display = "none";
+    this.cell = cell;
+  }
+
+  private async load(cell: CellSize): Promise<void> {
     const generation = this.generation;
     const base = this.deps.scrollbackRows();
     const first = this.rows.length === 0;
@@ -141,10 +160,9 @@ export class HistoryView {
     if (oldest && copy) oldest.wrapped = copy.wrapped; // a soft wrap across the seam between chunks
     if (added.length > 0) {
       const theme = this.deps.theme();
-      this.element.style.setProperty("--cell-height", `${String(cellHeight)}px`);
       this.element.prepend(...added.map((row) => rowElement(row, theme)));
       this.rows = [...added, ...this.rows];
-      this.height = this.rows.length * cellHeight;
+      this.layout(cell);
     }
     this.top = end - fetched.length + 1;
     this.baseThen = base;

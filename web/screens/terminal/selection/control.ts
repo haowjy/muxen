@@ -6,6 +6,7 @@
 import type { TerminalRenderer, TerminalTheme } from "../../../term";
 import { rowCells, rowText, type Row } from "../../../term/rows";
 import { budgetStart, cellSpan, MAX_SNAPSHOT_HISTORY_ROWS, wordAt } from "../../../touch/selection";
+import { fitText } from "../rows/rowsDom";
 import { SelectionLayer } from "./SelectionLayer";
 
 /** The edit menu: where it points, in the surface's coordinates, and whether there is a selection to copy. */
@@ -107,7 +108,7 @@ export class SelectionControl {
     this.layer = layer;
     this.drag = { rows, topRow, hostTop: hostRect.top, left: origin.left, cell, anchor: { row: index, from: word.from, to: word.to } };
     host.append(layer.element);
-    layer.fit(cell.width);
+    fitText(layer.element, cell.width);
     layer.align(topRow);
     layer.select({ row: index, offset: word.from }, { row: index, offset: word.to });
     this.unsubscribe = layer.onChange(() => { this.changed(); });
