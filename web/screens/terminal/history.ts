@@ -72,6 +72,16 @@ export class HistoryView {
     return first && this.joinsBuffer ? [...this.rows, { ...first, wrapped: true }, ...rest] : [...this.rows, ...buffer];
   }
 
+  /** The fetched rows as page text, oldest first, each with whether it continues the row above. */
+  pageRows(): { element: HTMLElement; wrapped: boolean }[] {
+    return this.rows.map((row, i) => ({ element: this.element.children[i] as HTMLElement, wrapped: row.wrapped }));
+  }
+
+  /** Whether the newest fetched row continues into xterm's first buffer row. */
+  get continuesIntoBuffer(): boolean {
+    return this.joinsBuffer;
+  }
+
   /** The pane was repainted from a snapshot, or the tab changed: what was fetched no longer sits above this buffer. */
   reset(): void {
     this.generation++;

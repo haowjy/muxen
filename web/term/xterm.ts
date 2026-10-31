@@ -105,6 +105,8 @@ export function createXtermRenderer(container: HTMLElement, options: RendererOpt
     return { width: (webgl ? Math.floor(width) : width) / dpr, height: Math.ceil(height * dpr) / dpr };
   };
 
+  const textRoot = (): HTMLElement | null => term.element?.querySelector<HTMLElement>(".xterm-rows") ?? null;
+
   // On a phone the rows are page text the user selects, and a redraw replaces a row's text and the
   // selection on it. A new theme redraws every row, so it waits for the selection to close.
   let pendingTheme: ITheme | undefined;
@@ -186,6 +188,11 @@ export function createXtermRenderer(container: HTMLElement, options: RendererOpt
     setInput: setDesktopInput,
     inputElement: () => term.textarea ?? null,
     selectionText: () => term.getSelection(),
+    textRoot,
+    textRows: () => {
+      const buffer = term.buffer.active;
+      return [...(textRoot()?.children ?? [])].map((element, i) => ({ element: element as HTMLElement, line: buffer.viewportY + i, wrapped: buffer.getLine(buffer.viewportY + i)?.isWrapped ?? false }));
+    },
     mouseMode: () => term.modes.mouseTrackingMode,
     mouseEncoding: () => encoding,
     altScreen: () => term.buffer.active.type === "alternate",

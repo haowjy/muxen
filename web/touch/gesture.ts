@@ -62,6 +62,11 @@ export class GestureRecognizer {
     return null;
   }
 
+  /** The finger has passed the slop vertically: the touch is a scroll, and the shell may cancel its moves. */
+  get scrolling(): boolean {
+    return this.state.kind === "scrolling";
+  }
+
   down(id: number, x: number, y: number, t: number): GestureAction[] {
     const s = this.state;
     if (s.kind === "idle") {

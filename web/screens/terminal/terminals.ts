@@ -125,7 +125,11 @@ export class Terminals extends Store<TerminalsView> {
     this.element.dataset["blank"] = "true"; // until the first snapshot: no pretend-live empty terminal
     this.sizer = new TerminalSizer({
       cell: () => this.renderer?.fontCell() ?? null,
-      onChange: (size) => { this.shownDriver()?.resize(size); },
+      // A new size redraws the rows, and a selection on them goes first.
+      onChange: (size) => {
+        this.view.dismissSelection();
+        this.shownDriver()?.resize(size);
+      },
     });
     this.pastes = new Pastes({
       app,
@@ -137,7 +141,8 @@ export class Terminals extends Store<TerminalsView> {
     });
     interceptClipboard(this.element, {
       onPaste: (pasted) => { this.pastes.paste(pasted); },
-      selectionText: () => this.renderer?.selectionText() ?? "",
+      // The phone's selection is page text; desktop's is xterm's own.
+      selectionText: () => this.view.pageText() || (this.renderer?.selectionText() ?? ""),
     });
     this.view = new TerminalView({
       element: this.element,
@@ -343,6 +348,7 @@ export class Terminals extends Store<TerminalsView> {
           // The renderer follows the snapshot's pane alone, never the tab's own resizes: DOM before xterm grows to a pane larger
           // than the box (a canvas that size runs the phone out of memory), WebGL again only once a fitting pane is in place.
           const box = this.sizer.sizeForWatch();
+          this.view.dismissSelection();
           this.paneLarge = snapshot.cols > box.cols || snapshot.rows > box.rows;
           if (this.paneLarge) this.renderer?.setWebgl(false);
           await this.renderer?.snapshot(snapshot);
@@ -502,6 +508,7 @@ export class Terminals extends Store<TerminalsView> {
   private refont(): void {
     const renderer = this.renderer;
     if (!renderer) return;
+    this.view.dismissSelection(); // a new font redraws every row
     const style = getComputedStyle(this.element);
     renderer.setFont(style.fontFamily, parseFloat(style.fontSize));
     requestAnimationFrame(() => { this.measure(); });
@@ -513,6 +520,9 @@ export class Terminals extends Store<TerminalsView> {
     if (!renderer) return;
     const { directInput } = this.viewport;
     const xterm = directInput === "xterm";
+    // The surface's own look follows the input (Terminal.module.css); a trackpad appearing on an iPad closes a phone's selection.
+    this.element.dataset["directInput"] = directInput;
+    this.view.dismissSelection();
     renderer.setWebgl(xterm && !this.paneLarge);
     renderer.setInput(
       xterm

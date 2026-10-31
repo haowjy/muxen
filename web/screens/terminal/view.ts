@@ -12,6 +12,7 @@ import { rowText } from "../../term/rows";
 import { HistoryView } from "./history";
 import { ScrollControl } from "./scroll";
 import { SelectionControl, type MenuState } from "./selection/control";
+import { PageSelection } from "./selection/pageSelection";
 import { TouchControl } from "./touchControl";
 
 interface ViewDeps {
@@ -44,6 +45,8 @@ export class TerminalView {
   private readonly history: HistoryView;
   readonly scroll: ScrollControl;
   private readonly selection: SelectionControl;
+  /** The phone's own selection of the rows' text (owned input). */
+  private readonly page: PageSelection;
   private readonly touch: TouchControl;
 
   constructor(private readonly deps: ViewDeps) {
@@ -71,8 +74,16 @@ export class TerminalView {
       menu: (menu) => { deps.onMenu(menu); },
       selecting: (on) => { deps.selecting(on); },
     });
+    this.page = new PageSelection({
+      roots: () => [deps.renderer()?.textRoot() ?? null, this.history.element],
+      rows: () => {
+        const live = deps.renderer()?.textRows() ?? [];
+        // A soft wrap across the seam between the history and xterm's first row.
+        return [...this.history.pageRows(), ...live.map(({ element, line, wrapped }) => ({ element, wrapped: wrapped || (line === 0 && this.history.continuesIntoBuffer) }))];
+      },
+    });
     // The recognizer owns every touch on the surface (§7.6): none moves focus, and what a touch means is decided when it resolves.
-    this.touch = new TouchControl({ ...deps, scroll: this.scroll, selection: this.selection, send: (events) => { this.send(events); } });
+    this.touch = new TouchControl({ ...deps, scroll: this.scroll, selection: this.selection, page: this.page, send: (events) => { this.send(events); } });
     // A mouse wheel past the buffer's top goes on into the history, as a swipe does.
     element.addEventListener("wheel", this.wheel, { capture: true, passive: false });
   }
@@ -87,8 +98,13 @@ export class TerminalView {
   /** A snapshot repainted the pane, or the tab changed: stop the coast and any gesture, and drop the selection and the fetched history. */
   reset(): void {
     this.touch.cancel();
-    this.selection.dismiss();
+    this.dismissSelection();
     this.scroll.reset();
+  }
+
+  /** The page selection's text, soft wraps joined; empty with none. */
+  pageText(): string {
+    return this.page.text();
   }
 
   /** Closes the selection and returns its logical text: the edit menu's Copy. */
@@ -98,8 +114,10 @@ export class TerminalView {
     return text;
   }
 
+  /** Closes whichever selection is up: the snapshot's (native input) or the page's. */
   dismissSelection(): void {
     this.selection.dismiss();
+    this.page.clear();
   }
 
   private send(events: InputEvent[]): void {
