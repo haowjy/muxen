@@ -307,20 +307,8 @@ fn failures_name_their_cause() {
         done(&replay, 4),
         &Err(TmuxError::Command("can't find window: @99".into()))
     );
-
-    let replay = whole("input");
-    assert_eq!(
-        done(&replay, 5),
-        &Err(TmuxError::BadRequest("unknown key name"))
-    );
-    assert!(!replay.lines.iter().any(|line| line.contains("S-Enter")));
-}
-
-/// Whichever command of a paste failed, its buffer is deleted in a group of its own:
-/// commands after a failure in a list never run.
-#[test]
-fn a_failed_paste_deletes_its_buffer() {
-    let replay = whole("paste");
+    // Whichever command of a paste failed, its buffer is deleted in a group of its own:
+    // commands after a failure in a list never run.
     assert_eq!(
         done(&replay, 5),
         &Err(TmuxError::Command("can't find window: @0".into())),
@@ -332,6 +320,13 @@ fn a_failed_paste_deletes_its_buffer() {
         .filter_map(|line| line.strip_prefix("delete-buffer -b "))
         .collect::<Vec<_>>();
     assert_eq!(deleted, ["muxen-3", "muxen-4", "muxen-5"]);
+
+    let replay = whole("input");
+    assert_eq!(
+        done(&replay, 5),
+        &Err(TmuxError::BadRequest("unknown key name"))
+    );
+    assert!(!replay.lines.iter().any(|line| line.contains("S-Enter")));
 }
 
 /// A hook that resizes the window after the state read changes the pane without

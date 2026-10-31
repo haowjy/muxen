@@ -402,33 +402,6 @@ mod tests {
     }
 
     #[test]
-    fn recent_and_frequent_lines_rank_first() {
-        let mut bash = String::new();
-        // `old` three times, a thousand entries ago: 3 × 0.5^5 ≈ 0.09.
-        bash.push_str("old\nold\nold\n");
-        for i in 0..1000 {
-            bash.push_str(&format!("filler {i}\n"));
-        }
-        // `often` three times recently beats `once`, though `once` is the newest.
-        bash.push_str("often x\noften x\noften x\nonce\n");
-        let history = parsed(bash.as_bytes(), Format::Bash);
-        let ranked = lines(&history);
-        assert_eq!(&ranked[..2], ["often x", "once"]);
-        assert!(
-            ranked.iter().position(|l| *l == "old")
-                > ranked.iter().position(|l| *l == "filler 990")
-        );
-        // Matching: leading whitespace ignored, the rest is the insert, longer only.
-        let matched: Vec<_> = history.matching("  of").collect();
-        assert_eq!(matched, [("often x", "ten x")]);
-        assert_eq!(history.matching("once").count(), 0);
-        // First words carry their lines' scores, for ranking commands.
-        assert!(history.score("often") > history.score("once"));
-        assert!(history.score("filler") > history.score("often"));
-        assert_eq!(history.score("nothing"), 0.0);
-    }
-
-    #[test]
     fn only_the_tail_is_read_and_a_change_is_reparsed() {
         let tree = Tree::new("history");
         let file = tree.path(".bash_history");

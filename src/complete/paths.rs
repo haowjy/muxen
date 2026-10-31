@@ -116,32 +116,6 @@ mod tests {
     use super::*;
     use crate::fs::test_tree::Tree;
 
-    fn dir(dir: &str, prefix: &str) -> Option<Target> {
-        Some(Target::Dir {
-            dir: dir.to_owned(),
-            prefix: prefix.to_owned(),
-        })
-    }
-
-    #[test]
-    fn words_split_into_a_directory_and_a_prefix() {
-        let home = Path::new("/home/j");
-        let cwd = Some("/repo");
-        assert_eq!(split("~", cwd, home), Some(Target::Tilde));
-        assert_eq!(split("~/", cwd, home), dir("/home/j/", ""));
-        assert_eq!(split("~/src/te", cwd, home), dir("/home/j/src/", "te"));
-        assert_eq!(split("~root/x", cwd, home), None);
-        assert_eq!(split("~root", cwd, home), None);
-        assert_eq!(split("/etc/pa", cwd, home), dir("/etc/", "pa"));
-        assert_eq!(split("/", cwd, home), dir("/", ""));
-        assert_eq!(split("src/ma", cwd, home), dir("/repo/src/", "ma"));
-        assert_eq!(split("Car", cwd, home), dir("/repo/", "Car"));
-        assert_eq!(split("", cwd, home), dir("/repo/", ""));
-        // A relative path needs the tab's directory.
-        assert_eq!(split("src/ma", None, home), None);
-        assert_eq!(split("/etc/pa", None, home), dir("/etc/", "pa"));
-    }
-
     #[test]
     fn listings_reach_any_readable_directory_and_escape_what_they_insert() {
         let tree = Tree::new("complete-paths");

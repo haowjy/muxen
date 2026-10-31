@@ -1320,70 +1320,33 @@ async fn locate_session(endpoint: &Endpoint, session: SessionId) -> Result<Reply
     oneshot::run(endpoint, &OneShotCmd::Locate { session }).await
 }
 
+/// How a control client ends, and what a Locate one-shot finds afterwards, one way out
+/// at a time on a single private server: only the last, `kill-server`, takes it down.
 #[tokio::test]
-async fn kill_server_ends_the_client_with_exit_and_then_there_is_no_server() {
-    let Some((_serial, server)) = setup("kill-server").await else {
+async fn a_control_client_ends_with_or_without_exit_and_locate_tells_what_is_left() {
+    let Some((_serial, server)) = setup("lifecycle").await else {
         return;
     };
-    let mut client = Client::attach(&server, SessionId(0)).await;
-    server.run(&["kill-server"]).expect("kill-server");
-    client.exit().await;
-    assert!(client.events.contains(&Event::Exit));
-    server.wait_until_no_server();
-    assert_eq!(
-        locate_session(&server.endpoint(), SessionId(0)).await,
-        Err(TmuxError::NoServer)
-    );
-}
+    let session_lives = |client: &Client, found| {
+        matches!(found, Ok(Reply::Location(Location {
+            server,
+            found: Some(Found { session: SessionId(0), .. })
+        })) if server == client.server())
+    };
 
-#[tokio::test]
-async fn kill_session_ends_the_client_with_exit_and_the_session_is_gone() {
-    let Some((_serial, server)) = setup("kill-session").await else {
-        return;
-    };
-    server
-        .run(&["new-session", "-d", "-s", "other"])
-        .expect("another session keeps the server up");
-    let mut client = Client::attach(&server, SessionId(0)).await;
-    server
-        .run(&["kill-session", "-t", SESSION])
-        .expect("kill-session");
-    client.exit().await;
-    assert!(client.events.contains(&Event::Exit));
-    assert_eq!(
-        locate_session(&server.endpoint(), SessionId(0)).await,
-        Ok(Reply::Location(Location {
-            server: client.server(),
-            found: None
-        }))
-    );
-}
-
-#[tokio::test]
-async fn a_detached_client_ends_with_exit_and_its_session_lives() {
-    let Some((_serial, server)) = setup("detach").await else {
-        return;
-    };
+    // Detached: %exit, the session lives.
     let mut client = Client::attach(&server, SessionId(0)).await;
     server
         .run(&["detach-client", "-s", SESSION])
         .expect("detach-client");
     client.exit().await;
     assert!(client.events.contains(&Event::Exit));
-    assert!(matches!(
-        locate_session(&server.endpoint(), SessionId(0)).await,
-        Ok(Reply::Location(Location {
-            server,
-            found: Some(Found { session: SessionId(0), .. })
-        })) if server == client.server()
+    assert!(session_lives(
+        &client,
+        locate_session(&server.endpoint(), SessionId(0)).await
     ));
-}
 
-#[tokio::test]
-async fn a_killed_control_client_ends_without_exit_and_its_session_lives() {
-    let Some((_serial, server)) = setup("sigkill").await else {
-        return;
-    };
+    // SIGKILLed: no %exit, the session lives.
     let mut client = Client::attach(&server, SessionId(0)).await;
     let clients = server
         .run(&["list-clients", "-F", "#{client_pid} #{client_control_mode}"])
@@ -1402,13 +1365,39 @@ async fn a_killed_control_client_ends_without_exit_and_its_session_lives() {
         !client.events.contains(&Event::Exit),
         "a crash has no %exit"
     );
-    assert!(matches!(
+    assert!(session_lives(
+        &client,
+        locate_session(&server.endpoint(), SessionId(0)).await
+    ));
+
+    // Session killed: %exit, the session is gone and another keeps the server up.
+    server
+        .run(&["new-session", "-d", "-s", "other"])
+        .expect("another session keeps the server up");
+    let mut client = Client::attach(&server, SessionId(0)).await;
+    server
+        .run(&["kill-session", "-t", SESSION])
+        .expect("kill-session");
+    client.exit().await;
+    assert!(client.events.contains(&Event::Exit));
+    assert_eq!(
         locate_session(&server.endpoint(), SessionId(0)).await,
         Ok(Reply::Location(Location {
-            server,
-            found: Some(Found { session: SessionId(0), .. })
-        })) if server == client.server()
-    ));
+            server: client.server(),
+            found: None
+        }))
+    );
+
+    // Server killed: %exit, then there is no server.
+    let mut client = Client::attach(&server, SessionId(1)).await;
+    server.run(&["kill-server"]).expect("kill-server");
+    client.exit().await;
+    assert!(client.events.contains(&Event::Exit));
+    server.wait_until_no_server();
+    assert_eq!(
+        locate_session(&server.endpoint(), SessionId(0)).await,
+        Err(TmuxError::NoServer)
+    );
 }
 
 #[tokio::test]

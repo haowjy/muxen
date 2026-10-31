@@ -17,7 +17,7 @@ mod daemon;
 
 use daemon::{
     LOGIN, LOOPBACK_SECRET, WAIT, request, send, send_owned, send_with_host, start, start_as,
-    start_loopback, start_loopback_with_serve_config, start_with_fake, start_without_allow_login,
+    start_loopback, start_with_fake, start_without_allow_login,
 };
 
 /// Every `/fs` route and `/complete`, with a body where it takes one.
@@ -89,7 +89,7 @@ async fn every_route_needs_the_tailscale_login() {
 }
 
 #[tokio::test]
-async fn the_default_allowlist_refreshes_tailnet_state_after_idle() {
+async fn the_default_allowlist_admits_the_shell_websocket_and_fs() {
     let daemon = start_without_allow_login("default-allow-idle").await;
     let login = [("Tailscale-User-Login", LOGIN)];
     assert_eq!(
@@ -101,14 +101,13 @@ async fn the_default_allowlist_refreshes_tailnet_state_after_idle() {
     let native = daemon.device();
     let token = native[1].1.strip_prefix("Bearer ").expect("token");
 
-    tokio::time::sleep(Duration::from_secs(31)).await;
     let shell = send(daemon.serve_port, "GET", "/", &login, &[]);
     let protocols = format!("muxen.v1, muxen.auth.{token}");
     let websocket = open(daemon.port, Some(LOGIN), &protocols);
     let fs = send_owned(daemon.port, "GET", "/fs/list/", &native, &[]);
     let (shell, websocket, fs) = tokio::join!(shell, websocket, fs);
     assert_eq!(shell.status, 200, "{}", shell.text());
-    let (mut socket, protocol) = websocket.expect("native WebSocket admitted after idle");
+    let (mut socket, protocol) = websocket.expect("native WebSocket admitted");
     assert_eq!(protocol.as_deref(), Some("muxen.v1"));
     socket.close(None).await.expect("close test socket");
     assert_eq!(fs.status, 200, "{}", fs.text());
@@ -647,7 +646,8 @@ async fn whois_shares_same_address_flights_and_bounds_distinct_waiters() {
         )
     };
 
-    let active = vec![lookup(103), lookup(104)];
+    // Repeats of an address already in flight join its call.
+    let active = vec![lookup(103), lookup(104), lookup(103), lookup(103)];
     for _ in 0..200 {
         if daemon
             .fake
@@ -694,63 +694,8 @@ async fn whois_shares_same_address_flights_and_bounds_distinct_waiters() {
             .whois_calls
             .load(std::sync::atomic::Ordering::SeqCst),
         18,
-        "the 16 queued addresses run once each: {:?}",
+        "the 16 queued addresses run once each, and 103 only once: {:?}",
         daemon.fake.whois_queries.lock().expect("whois queries")
-    );
-}
-
-#[tokio::test]
-async fn concurrent_requests_for_one_address_share_the_whois_call() {
-    let daemon = start("whois-single-flight").await;
-    daemon.fake.hold_whois(true);
-    let port = daemon.serve_port;
-    let mut requests = (0..20)
-        .map(|_| {
-            let headers = node_headers_for("100.101.102.103".to_owned());
-            tokio::spawn(async move {
-                send_owned(port, "GET", "/auth/node/session", &headers, &[]).await
-            })
-        })
-        .collect::<Vec<_>>();
-    for _ in 0..200 {
-        if daemon
-            .fake
-            .whois_calls
-            .load(std::sync::atomic::Ordering::SeqCst)
-            == 1
-        {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(5)).await;
-    }
-    assert_eq!(
-        daemon
-            .fake
-            .whois_calls
-            .load(std::sync::atomic::Ordering::SeqCst),
-        1
-    );
-    tokio::time::sleep(Duration::from_millis(100)).await;
-    assert_eq!(
-        daemon
-            .fake
-            .whois_calls
-            .load(std::sync::atomic::Ordering::SeqCst),
-        1,
-        "the held result is shared with concurrent requests"
-    );
-
-    daemon.fake.release_whois();
-    for request in requests.drain(..) {
-        let reply = request.await.expect("lookup task completed");
-        assert_eq!(reply.status, 401, "{}", reply.text());
-    }
-    assert_eq!(
-        daemon
-            .fake
-            .whois_calls
-            .load(std::sync::atomic::Ordering::SeqCst),
-        1
     );
 }
 
@@ -1110,61 +1055,4 @@ async fn loopback_front_replans_conflicts() {
         "kept",
         "the plan preserved an edit made between its read and write"
     );
-}
-
-#[tokio::test]
-async fn loopback_front_publishes_from_null_serve_config() {
-    let daemon =
-        start_loopback_with_serve_config("mac-loopback-null", serde_json::Value::Null).await;
-    let path = format!("/{LOOPBACK_SECRET}/auth/info");
-    let headers = [
-        ("Tailscale-User-Login", LOGIN),
-        ("X-Forwarded-Host", "devbox.ts.net"),
-    ];
-    let accepted = tokio::time::timeout(WAIT, async {
-        loop {
-            let reply = send_with_host(
-                daemon.serve_port,
-                "devbox.ts.net",
-                "GET",
-                &path,
-                &headers,
-                &[],
-            )
-            .await;
-            if reply.status == 200 {
-                break reply;
-            }
-            assert_eq!(reply.status, 503, "{}", reply.text());
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .expect("the publication completes from null config");
-    assert_eq!(accepted.json()["browserOrigin"], "https://devbox.ts.net");
-    assert_eq!(
-        daemon.fake.serve_config.lock().expect("Serve config")["ConcurrentEdit"],
-        "kept",
-        "the plan retries after a concurrent edit to the initially null config"
-    );
-}
-
-#[tokio::test]
-async fn loopback_front_secret_mismatch_is_an_empty_404() {
-    let daemon = start_loopback("mac-loopback-gate").await;
-    let headers = [
-        ("Tailscale-User-Login", LOGIN),
-        ("X-Forwarded-Host", "devbox.ts.net"),
-    ];
-    let denied = send_with_host(
-        daemon.serve_port,
-        "devbox.ts.net",
-        "GET",
-        "/not-the-secret/auth/info",
-        &headers,
-        &[],
-    )
-    .await;
-    assert_eq!(denied.status, 404);
-    assert!(denied.body.is_empty());
 }

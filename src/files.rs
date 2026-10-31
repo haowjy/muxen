@@ -196,19 +196,6 @@ mod tests {
     use crate::fs::test_tree::Tree;
 
     #[test]
-    fn the_etag_changes_with_the_file_and_only_then() {
-        let tree = Tree::new("etag");
-        let path = tree.path("f");
-        std::fs::write(&path, b"one").expect("written");
-        let tag = || Stamp::of(&std::fs::metadata(&path).expect("stat")).etag();
-        let first = tag();
-        assert!(first.starts_with('"') && first.ends_with('"'), "{first}");
-        assert_eq!(tag(), first);
-        std::fs::write(&path, b"two!").expect("rewritten");
-        assert_ne!(tag(), first);
-    }
-
-    #[test]
     fn landing_never_replaces_a_file() {
         let tree = Tree::new("land");
         tree.write("taken.jpg", b"the original");

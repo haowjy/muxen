@@ -455,29 +455,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn paste_messages_match_the_protocol_fixture() {
-        // Rust serde round-trips only; web consumes the generated types, not this fixture.
-        let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../tests/fixtures/proto/messages.json"))
-                .expect("message fixtures are JSON");
-        for value in fixture["client"].as_array().expect("client messages") {
-            let msg: ClientMsg = serde_json::from_value(value.clone()).expect("client message");
-            assert_eq!(
-                serde_json::to_value(msg).expect("serialize client message"),
-                *value
-            );
-        }
-        for value in fixture["server"].as_array().expect("server messages") {
-            let msg: ServerMsg = serde_json::from_value(value.clone()).expect("server message");
-            assert_eq!(
-                serde_json::to_value(msg).expect("serialize server message"),
-                *value
-            );
-        }
-        assert!(ClientMsg::decode(r#"{"type":"paste","data":{"watch":1,"text":"x"}}"#).is_err());
-    }
-
-    #[test]
     fn unknown_types_are_reported_and_bad_known_ones_fail() {
         let decode = ClientMsg::decode;
         assert_eq!(

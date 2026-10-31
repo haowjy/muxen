@@ -9,8 +9,8 @@ control-client lines and one-shot arguments alike; the formats it asks tmux to p
 live in `reply.rs` beside their parsers. Unknown protocol lines are
 non-fatal. Never log raw pane output or reply bodies.
 
-`fake.rs` is test support for faking a tmux server (the hub's tests use it): it reads
-the command text `command.rs` writes, so change the two together.
+`tests/support/fake_tmux.rs` fakes a tmux server for the hub's tests: it reads the
+command text `command.rs` writes, so change the two together.
 
 Tests replay recorded tmux streams and require `Session` to write exactly the recorded
 lines (`.in`); the same replays check that events do not depend on chunking, while

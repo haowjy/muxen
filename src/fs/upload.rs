@@ -360,29 +360,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn an_upload_lands_0600_under_its_final_name() {
-        use std::os::unix::fs::PermissionsExt as _;
-        let tree = Tree::new("upload");
-        let lane = Lanes::default().fs;
-        let chunks = vec![vec![1; 100_000], vec![2; 50_000], vec![3; 7]];
-        let uploaded = receive(&lane, dir(&tree), "IMG.JPG", MAX_UPLOAD, body(chunks))
-            .await
-            .expect("uploaded");
-        assert_eq!(uploaded.size, 150_007);
-        let path = Path::new(&uploaded.path);
-        assert_eq!(path.parent(), Some(tree.root()));
-        assert!(uploaded.path.ends_with(".jpg"), "{}", uploaded.path);
-        let bytes = std::fs::read(path).expect("read");
-        assert_eq!(
-            (bytes.len(), bytes[99_999], bytes[100_000], bytes[150_006]),
-            (150_007, 1, 2, 3)
-        );
-        let mode = std::fs::metadata(path).expect("stat").permissions().mode();
-        assert_eq!(mode & 0o777, 0o600);
-        assert_eq!(names(&tree).len(), 1);
-    }
-
-    #[tokio::test]
     async fn over_the_cap_the_part_file_is_deleted() {
         let tree = Tree::new("upload-cap");
         let lane = Lanes::default().fs;

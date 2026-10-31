@@ -1033,7 +1033,20 @@ fn parse_host_port(host_port: &str) -> Option<(String, u16)> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ServeConfig, ServeTarget};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::Duration;
+
+    use bytes::Bytes;
+    use http_body_util::Full;
+    use hyper::body::Incoming;
+    use hyper::server::conn::http1;
+    use hyper::service::service_fn;
+    use hyper::{Request, Response};
+    use hyper_util::rt::TokioIo;
+    use tokio::net::UnixListener;
+
+    use super::{LocalApi, ServeConfig, ServeTarget, TailnetStateCell};
     use crate::auth::MacFront;
 
     const SECRET: &str = "muxen-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
@@ -1086,5 +1099,47 @@ mod tests {
         let config = serve(&format!("http://127.0.0.1:7851/{SECRET}"));
         assert!(!format!("{target:?}").contains(SECRET));
         assert!(!format!("{config:?}").contains(SECRET));
+    }
+
+    /// A state older than the hold window is refreshed on the next read, not refused.
+    #[tokio::test(start_paused = true)]
+    async fn an_idle_cell_refreshes_instead_of_refusing() {
+        let directory =
+            std::env::temp_dir().join(format!("muxen-identity-idle-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).expect("test directory");
+        let socket = directory.join("tailscaled.sock");
+        let listener = UnixListener::bind(&socket).expect("fake LocalAPI socket");
+        let status_reads = Arc::new(AtomicUsize::new(0));
+        let counted = status_reads.clone();
+        let fake = tokio::spawn(async move {
+            while let Ok((stream, _)) = listener.accept().await {
+                let counted = counted.clone();
+                let service = service_fn(move |request: Request<Incoming>| {
+                    let counted = counted.clone();
+                    async move {
+                        let body = if request.uri().path().ends_with("/status") {
+                            counted.fetch_add(1, Ordering::SeqCst);
+                            r#"{"Self":{"ID":"n1","UserID":1,"DNSName":"devbox.ts.net."},"User":{"1":{"LoginName":"me@example.com"}}}"#
+                        } else {
+                            r#"{"Web":{},"TCP":{}}"#
+                        };
+                        Ok::<_, std::convert::Infallible>(Response::new(Full::new(
+                            Bytes::from_static(body.as_bytes()),
+                        )))
+                    }
+                });
+                tokio::spawn(http1::Builder::new().serve_connection(TokioIo::new(stream), service));
+            }
+        });
+
+        let cell = TailnetStateCell::new(LocalApi::at(socket), |_| {});
+        assert_eq!(cell.get().await.expect("first read").self_id, "n1");
+        tokio::time::advance(Duration::from_secs(31)).await;
+        assert_eq!(cell.get().await.expect("read after idling").self_id, "n1");
+        assert_eq!(status_reads.load(Ordering::SeqCst), 2);
+
+        fake.abort();
+        std::fs::remove_dir_all(directory).expect("remove test directory");
     }
 }

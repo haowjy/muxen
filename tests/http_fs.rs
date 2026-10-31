@@ -121,6 +121,11 @@ async fn uploads_land_one_at_a_time_and_leave_no_part_file() {
         "{path}"
     );
     assert_eq!(std::fs::read(path).expect("the upload"), jpeg);
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        let mode = std::fs::metadata(path).expect("stat").permissions().mode();
+        assert_eq!(mode & 0o777, 0o600);
+    }
 
     // Over the cap by Content-Length: refused before the body.
     let device = daemon.device();

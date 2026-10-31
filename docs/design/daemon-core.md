@@ -121,15 +121,13 @@ src/tmux/
   layout.rs    pure: layout string -> pane sizes
   pump.rs      I/O: spawn `tmux -u -N -C`, bytes out, lines in
   oneshot.rs   I/O: one-shot `tmux -u -N` commands
-  fake.rs      test support: a fake tmux server for the hub's tests (§8)
 ```
 
 Everything but `pump.rs` and `oneshot.rs` is pure and tested from recorded fixtures.
 `command.rs` puts a format into a command and `reply.rs` parses what tmux prints for it,
 so each format and its parser change together; the snapshot's state format stays with
-its parser in `snapshot.rs`. `fake.rs` is not part of the bridge: it reads the command
-text `command.rs` writes, and the hub's tests use it (it is compiled in because the
-integration tests in `tests/` need it).
+its parser in `snapshot.rs`. The hub's tests fake a tmux server in
+`tests/support/fake_tmux.rs`, which reads the command text `command.rs` writes.
 
 ### 3.1 Invoking tmux
 
@@ -2186,7 +2184,7 @@ box, 3.7b on the Mac, both committed (3.7b: `src/tmux/.context/TODO`).
 - **`hub::State` and `Outbox`** (`tests/hub_state.rs`, with its fake hub in
   `tests/support/fake_hub.rs`, and a unit test in `outbox.rs`): scripted inputs → effects,
   against a fake tmux that answers the lines the hub writes. The fake is built on
-  `tmux/fake.rs`, which splits a line into its
+  `tests/support/fake_tmux.rs`, which splits a line into its
   commands the way tmux's parser does (quotes and escapes removed), decodes
   `display-message` (target and format) and `capture-pane`, expands `#{name}` formats,
   and frames replies (`%begin`/`%end`/`%error`, numbered, none after an error). The

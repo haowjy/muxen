@@ -55,6 +55,6 @@ Rules the code relies on, which are easy to break:
 - Logs carry ids, kinds and lengths only, never pane output, reply bodies or input.
 
 `tests/hub_state.rs` drives `State` against a fake tmux that answers the lines the hub
-writes (through `tmux::fake`, so it never spells tmux commands); `tests/hub_real.rs`
+writes (through `tests/support/fake_tmux.rs`, so it never spells tmux commands); `tests/hub_real.rs`
 runs the hub with real pumps on a private tmux server (`MUXEN_TMUX_TESTS=1`, under
 `nice -n 10`).

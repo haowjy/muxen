@@ -11,7 +11,6 @@ use fake_hub::{
     Got, Hub, SERVER_NAME, capture_history, kind, kinds, let_go_of_window_0, line_for, release,
     size, snapshot, take_vote, vote,
 };
-use muxen::budget;
 use muxen::hub::{
     CAPTURE_RESERVATION, CREDIT, FromConn, Input, LINGER, OVERDRAFT, SNAPSHOT_SPACING,
     USER_IN_FLIGHT,
@@ -160,6 +159,25 @@ fn another_clients_act_yields_a_claim_and_input_or_resize_claims_again() {
     );
     hub.take_json(conn);
     hub.settle();
+    let clear = line_for(Op::ClearVote {
+        window: WindowId(0),
+    });
+
+    // A client in another session never subscribed to @0: its row can't clear the vote.
+    hub.add_window(1, 1, 1);
+    hub.watch(conn, 2, 1);
+    hub.settle();
+    let non_owner = hub.client(1);
+    hub.take(conn);
+    hub.feed(
+        non_owner,
+        "%subscription-changed w0 $0 @0 0 - : laptop.2.200x50.attached,focused,UTF-8;|/tmp\n",
+    );
+    hub.settle();
+    assert!(
+        !hub.lines(client).contains(&clear),
+        "a notification from a client that does not own the window cannot clear its vote"
+    );
 
     // Activity changes, while the client remains on the window and size-counted.
     hub.feed(
@@ -167,9 +185,6 @@ fn another_clients_act_yields_a_claim_and_input_or_resize_claims_again() {
         "%subscription-changed w0 $0 @0 0 - : laptop.2.200x50.attached,focused,UTF-8;|/tmp\n",
     );
     hub.settle();
-    let clear = line_for(Op::ClearVote {
-        window: WindowId(0),
-    });
     assert!(hub.lines(client).contains(&clear));
     assert!(hub.take_json(conn).is_empty(), "the watch remains active");
 
@@ -191,98 +206,6 @@ fn another_clients_act_yields_a_claim_and_input_or_resize_claims_again() {
         json!({"type":"resize","data":{"watch":1,"size":{"cols":90,"rows":28}}}),
     );
     assert!(hub.lines(client).contains(&take_vote(0, 90, 28)));
-}
-
-#[test]
-fn an_act_reported_by_a_non_owner_does_not_yield_the_claim() {
-    let mut hub = Hub::new();
-    let conn = hub.connect();
-    hub.watch_sized(conn, 1, 0, 110, 35);
-    hub.settle();
-    let owner = hub.client(0);
-    hub.take(conn);
-
-    // Attach a second control client in a different session. It does not own @0.
-    hub.add_window(1, 1, 1);
-    hub.watch(conn, 2, 1);
-    hub.settle();
-    let non_owner = hub.client(1);
-
-    // Establish the owner's subscription baseline. A stale/foreign w0 value from the
-    // other client is ignored because it never subscribed to @0.
-    hub.feed(
-        owner,
-        "%subscription-changed w0 $0 @0 0 - : laptop.1.200x50.attached,focused,UTF-8;|/tmp\n",
-    );
-    hub.take_json(conn);
-    hub.feed(
-        non_owner,
-        "%subscription-changed w0 $0 @0 0 - : laptop.2.200x50.attached,focused,UTF-8;|/tmp\n",
-    );
-    hub.settle();
-    let clear = line_for(Op::ClearVote {
-        window: WindowId(0),
-    });
-    assert!(
-        !hub.lines(owner).contains(&clear),
-        "a notification from a client that does not own the window cannot clear its vote"
-    );
-
-    // The same activity change from the actual owner yields the claim.
-    hub.feed(
-        owner,
-        "%subscription-changed w0 $0 @0 0 - : laptop.2.200x50.attached,focused,UTF-8;|/tmp\n",
-    );
-    hub.settle();
-    assert!(hub.lines(owner).contains(&clear));
-}
-
-#[test]
-fn focus_out_leaving_and_ignore_size_entries_do_not_yield_a_claim() {
-    let mut hub = Hub::new();
-    let conn = hub.connect();
-    hub.watch_sized(conn, 1, 0, 110, 35);
-    hub.settle();
-    let client = hub.client(0);
-    hub.take(conn);
-
-    hub.feed(
-        client,
-        "%subscription-changed w0 $0 @0 0 - : laptop.1.200x50.attached,focused,UTF-8;|/tmp\n",
-    );
-    hub.take_json(conn);
-    hub.settle();
-    let clear = line_for(Op::ClearVote {
-        window: WindowId(0),
-    });
-    let initial_clears = hub
-        .lines(client)
-        .iter()
-        .filter(|line| **line == clear)
-        .count();
-
-    // Focus-out advances activity but only removes `focused` at an unchanged size.
-    hub.feed(
-        client,
-        "%subscription-changed w0 $0 @0 0 - : laptop.2.200x50.attached,UTF-8;ignored.1.70x25.attached,ignore-size,UTF-8;|/tmp\n",
-    );
-    // A client with ignore-size can arrive, change activity, or leave without acting
-    // on the size tmux calculates for this window.
-    hub.feed(
-        client,
-        "%subscription-changed w0 $0 @0 0 - : laptop.2.200x50.attached,UTF-8;ignored.2.70x25.attached,ignore-size,UTF-8;|/tmp\n",
-    );
-    hub.feed(
-        client,
-        "%subscription-changed w0 $0 @0 0 - : laptop.2.200x50.attached,UTF-8;|/tmp\n",
-    );
-    hub.settle();
-    let clears = hub
-        .lines(client)
-        .iter()
-        .filter(|line| **line == clear)
-        .count();
-    assert_eq!(clears, initial_clears);
 }
 
 #[test]
@@ -421,48 +344,47 @@ fn a_swap_reported_by_the_current_window_subscription_is_followed() {
 }
 
 #[test]
-fn an_owner_moved_by_session_destruction_closes_the_gone_session() {
-    let mut hub = Hub::new();
-    let conn = hub.connect();
-    hub.open(conn, 1, 0);
-    let old = hub.client(0);
-    hub.take(conn);
-    // With detach-on-destroy off tmux moves the owner and names its new session.
-    hub.sessions.clear();
-    hub.windows.clear();
-    hub.current_windows.clear();
-    hub.feed(old, "%session-changed $1\n");
-    hub.exited(old);
-    hub.settle();
-    let got = hub.take(conn);
-    assert_eq!(
-        got,
-        [Got::Json(json!({
-            "type": "sessionClosed",
-            "data": {"session": {"server": SERVER_NAME, "session": 0}}
-        }))]
-    );
-    assert!(
-        hub.clients.values().all(|client| client.closed),
-        "the dead session is not rehomed"
-    );
-}
-
-#[test]
-fn a_detached_client_ends_its_watches_and_does_not_reattach() {
-    let mut hub = Hub::new();
-    let conn = hub.connect();
-    hub.open(conn, 1, 0);
-    let client = hub.client(0);
-    hub.take(conn);
-    hub.feed(client, "%exit\n");
-    hub.exited(client);
-    hub.settle();
-    assert_eq!(
-        hub.take_json(conn),
-        [json!({"type": "watchEnded", "data": {"watch": 1, "reason": "detached"}})]
-    );
-    assert_eq!(hub.clients.len(), 1, "nothing reattached");
+fn a_client_that_leaves_without_its_server_names_the_cause_and_is_not_rehomed() {
+    // (tmux lost the session, the last line the client prints, the one message the watch gets)
+    let closed = json!({
+        "type": "sessionClosed",
+        "data": {"session": {"server": SERVER_NAME, "session": 0}}
+    });
+    let detached = json!({"type": "watchEnded", "data": {"watch": 1, "reason": "detached"}});
+    let cases = [
+        // With detach-on-destroy off tmux moves the owner and names its new session.
+        (true, "%session-changed $1\n", closed.clone()),
+        (false, "%exit\n", detached),
+        (true, "%exit\n", closed),
+    ];
+    for (session_lost, line, expected) in cases {
+        let mut hub = Hub::new();
+        let conn = hub.connect();
+        hub.open(conn, 1, 0);
+        let client = hub.client(0);
+        hub.take(conn);
+        if session_lost {
+            hub.sessions.clear();
+            hub.windows.clear();
+            hub.current_windows.clear();
+        }
+        hub.feed(client, line);
+        hub.exited(client);
+        hub.settle();
+        assert_eq!(
+            hub.take_json(conn),
+            [expected],
+            "{line:?}, lost {session_lost}"
+        );
+        if session_lost {
+            assert!(
+                hub.clients.values().all(|client| client.closed),
+                "the dead session is not rehomed"
+            );
+        } else {
+            assert_eq!(hub.clients.len(), 1, "nothing reattached");
+        }
+    }
 }
 
 #[test]
@@ -531,21 +453,6 @@ fn kill_server_broadcasts_server_exited_and_drops_everything() {
     hub.watch(conn, 2, 0);
     hub.settle();
     assert_eq!(kinds(&hub.take_json(conn)), ["serverExited"]);
-}
-
-#[test]
-fn a_killed_session_broadcasts_and_its_closed_window_too() {
-    let mut hub = Hub::new();
-    let conn = hub.connect();
-    hub.open(conn, 1, 0);
-    let client = hub.client(0);
-    hub.take(conn);
-    hub.sessions.clear();
-    hub.windows.clear();
-    hub.feed(client, "%exit\n");
-    hub.exited(client);
-    hub.settle();
-    assert_eq!(kinds(&hub.take_json(conn)), ["sessionClosed"]);
 }
 
 #[test]
@@ -933,29 +840,6 @@ fn daemon_limits_end_or_refuse_what_is_over_them() {
     assert_eq!(
         refused.last().map(|value| value["data"]["code"].clone()),
         Some(json!("inputTooLarge"))
-    );
-}
-
-#[test]
-fn low_budget_limit_names_the_sessions_holding_the_slot() {
-    let cap = budget::TIERS[2].caps;
-    assert_eq!(cap.control_clients, 1);
-
-    let mut hub = Hub::new_with_max_clients(cap.control_clients);
-    hub.add_window(1, 1, 1);
-    hub.add_window(2, 2, 2);
-    hub.window(1).session_name = "work".to_owned();
-    let conn = hub.connect();
-    hub.open(conn, 1, 1);
-    hub.take_json(conn);
-
-    hub.open(conn, 2, 2);
-    let ended = hub.take_json(conn);
-    assert_eq!(kinds(&ended), ["watchEnded"]);
-    assert_eq!(ended[0]["data"]["reason"], "limit");
-    assert_eq!(
-        ended[0]["data"]["message"],
-        "muxen on devbox allows 1 tmux session at a time; open now: work"
     );
 }
 

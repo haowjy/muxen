@@ -1,9 +1,9 @@
 //! Test support for faking a tmux server under `Session`s: the commands in the lines a
 //! session writes, and tmux's stdout answering them. It reads `command.rs`'s text, so it
-//! lives beside it and changes with it; the fake's server decides only what each
+//! lives in `tests/support/` and changes with it; the fake's server decides only what each
 //! command finds, never how muxen spells it.
 
-use super::PaneId;
+use muxen::tmux::{PaneId, WindowId};
 
 /// One command in a line, as far as a fake tmux needs to answer it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -16,7 +16,7 @@ pub enum Command {
     /// `capture-pane -p` of a pane; tmux fails it when the pane is gone.
     Capture { pane: PaneId, rows: Capture },
     /// `paste-buffer` targeted at a window.
-    PasteBuffer { window: super::WindowId },
+    PasteBuffer { window: WindowId },
     /// Anything else muxen sends, which prints nothing.
     Other,
 }
@@ -48,7 +48,7 @@ fn command(words: &[String]) -> Command {
     match words.first().map(String::as_str) {
         Some("paste-buffer") => Command::PasteBuffer {
             window: value("-t")
-                .and_then(|window| super::WindowId::parse(window.as_bytes()))
+                .and_then(|window| WindowId::parse(window.as_bytes()))
                 .unwrap_or_else(|| panic!("paste-buffer without a window: {words:?}")),
         },
         Some("display-message") => Command::Display {

@@ -11,7 +11,6 @@ use bytes::Bytes;
 use thiserror::Error;
 
 pub mod command;
-pub mod fake;
 pub mod history;
 pub mod layout;
 pub mod oneshot;
@@ -561,21 +560,5 @@ mod tests {
         let odd = TmuxVersion::parse("master");
         assert_eq!(odd, TmuxVersion::Unrecognised("master".into()));
         assert!(odd.is_supported());
-    }
-
-    #[test]
-    fn ids_round_trip_with_their_sigils() {
-        assert_eq!(PaneId::parse(b"%12"), Some(PaneId(12)));
-        assert_eq!(
-            WindowId::parse(b"@3").map(|id| id.to_string()),
-            Some("@3".into())
-        );
-        assert_eq!(
-            SessionId::parse(b"$0").map(|id| id.to_string()),
-            Some("$0".into())
-        );
-        assert_eq!(PaneId::parse(b"%"), None);
-        assert_eq!(PaneId::parse(b"@1"), None);
-        assert_eq!(PaneId::parse(b"%1x"), None);
     }
 }

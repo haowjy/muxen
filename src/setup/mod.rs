@@ -23,8 +23,6 @@ use thiserror::Error;
 
 use crate::auth::Store;
 use crate::auth::identity;
-#[cfg(test)]
-use crate::auth::identity::ServeTarget;
 use crate::auth::localapi::{LocalApi, LocalApiError};
 use crate::auth::publish::{self, PlanError};
 use crate::config::{self, Config, ConfigError, ConfigFile};
@@ -517,7 +515,7 @@ async fn verify_new_daemon(
 
 #[derive(Clone, Copy)]
 enum WriteOperation {
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(target_os = "linux")]
     BackgroundSetup,
     #[cfg(target_os = "linux")]
     ForegroundSetup,
@@ -527,7 +525,7 @@ enum WriteOperation {
 impl WriteOperation {
     fn command(self) -> &'static str {
         match self {
-            #[cfg(any(target_os = "linux", test))]
+            #[cfg(target_os = "linux")]
             Self::BackgroundSetup => "muxen setup --background",
             #[cfg(target_os = "linux")]
             Self::ForegroundSetup => "muxen setup",
@@ -782,103 +780,4 @@ fn write_file(host: &Host) -> Result<(), SetupError> {
         .and_then(|temp| temp.replace(target, &host.expected_file))
         .map_err(|error| SetupError::new(format!("{}: {error}", host.service_file.display())))?;
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use axum::http::StatusCode;
-    use bytes::Bytes;
-    use http_body_util::{BodyExt as _, Full};
-    use hyper::body::Incoming;
-    use hyper::server::conn::http1;
-    use hyper::service::service_fn;
-    use hyper::{Request, Response};
-    use hyper_util::rt::TokioIo;
-    use tokio::net::UnixListener;
-
-    use super::*;
-
-    #[tokio::test]
-    async fn fake_localapi_write_statuses_map_to_setup_messages() {
-        let cases = [
-            (
-                403,
-                "Tailscale refused the write: your account isn't its operator. Run `sudo tailscale set --operator=$USER`, then rerun muxen setup --background.",
-            ),
-            (
-                401,
-                "Tailscale 1.104 lets an operator change a Serve config that serves a Unix socket only if root can run `sudo --other-user=<your full name> --list tailscale`; it uses your account's full name, not your login name (tailscale/tailscale#21204). If they differ, run `sudo chfn -f $USER $USER`; check that `sudo -l tailscale` lists tailscale; then rerun muxen setup --background.",
-            ),
-            (
-                412,
-                "Tailscale's Serve config kept changing while muxen wrote it; rerun muxen setup --background.",
-            ),
-        ];
-        for (index, (status, expected)) in cases.into_iter().enumerate() {
-            let directory = std::env::temp_dir().join(format!(
-                "muxen-setup-localapi-{}-{index}",
-                std::process::id()
-            ));
-            let _ = std::fs::remove_dir_all(&directory);
-            std::fs::create_dir_all(&directory).expect("test directory");
-            let api_socket = directory.join("tailscaled.sock");
-            let listener = UnixListener::bind(&api_socket).expect("fake LocalAPI socket");
-            let fake = tokio::spawn(async move {
-                loop {
-                    let Ok((stream, _)) = listener.accept().await else {
-                        break;
-                    };
-                    tokio::spawn(fake_write_connection(stream, status));
-                }
-            });
-            let target_path = directory.join("muxen-target.sock");
-            let _target = UnixListener::bind(&target_path).expect("target socket");
-            let target = ServeTarget::unix(target_path.clone()).expect("target identity");
-            let api = LocalApi::at(api_socket);
-            let error = publish::publish_target(&api, "host.ts.net", &target)
-                .await
-                .expect_err("the fake write is refused");
-            assert_eq!(
-                write_error(&error, "1.104", WriteOperation::BackgroundSetup).to_string(),
-                expected
-            );
-            fake.abort();
-            std::fs::remove_dir_all(directory).expect("remove test directory");
-        }
-    }
-
-    async fn fake_write_connection(stream: tokio::net::UnixStream, write_status: u16) {
-        let service = service_fn(move |request: Request<Incoming>| async move {
-            let is_get = request.method() == "GET";
-            if !is_get {
-                let _ = request.into_body().collect().await;
-            }
-            let (status, body) = if is_get {
-                (
-                    StatusCode::OK,
-                    Bytes::from_static(br#"{"Web":{},"TCP":{}}"#),
-                )
-            } else if write_status == 403 {
-                (
-                    StatusCode::FORBIDDEN,
-                    Bytes::from_static(b"serve config denied"),
-                )
-            } else {
-                (
-                    StatusCode::from_u16(write_status).expect("test status"),
-                    Bytes::from_static(b"fake Serve write refusal"),
-                )
-            };
-            Ok::<_, std::convert::Infallible>(
-                Response::builder()
-                    .status(status)
-                    .header("Etag", "\"fake\"")
-                    .body(Full::new(body))
-                    .expect("fake LocalAPI response"),
-            )
-        });
-        let _ = http1::Builder::new()
-            .serve_connection(TokioIo::new(stream), service)
-            .await;
-    }
 }

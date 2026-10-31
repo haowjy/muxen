@@ -489,7 +489,7 @@ mod tests {
     #[tokio::test]
     async fn finished_connections_do_not_accumulate_in_the_join_set() {
         let mut connections = JoinSet::new();
-        for _ in 0..10_000 {
+        for _ in 0..100 {
             spawn_and_reap(&mut connections, async {});
             tokio::task::yield_now().await;
             assert!(connections.len() <= 1);

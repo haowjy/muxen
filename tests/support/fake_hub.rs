@@ -1,6 +1,6 @@
 //! `hub::State` driven by scripted inputs (daemon-core.md §8): a fake tmux server
 //! answers the lines the hub writes, the way tmux 3.4 would, and each test checks what
-//! reaches the connections and which ops the control clients ran. `tmux::fake` reads
+//! reaches the connections and which ops the control clients ran. `fake_tmux.rs` reads
 //! the lines and frames the answers; this server only decides what each command finds,
 //! and tests name ops by the lines `command::op` builds for them.
 
@@ -14,7 +14,6 @@ use muxen::blocking::Lanes;
 use muxen::budget::DEFAULT_CAPS;
 use muxen::hub::{ConnId, Effect, Endpoints, FromConn, Input, PasteFile, State, ToConn};
 use muxen::proto::{self, ClientMsg, SessionRef};
-use muxen::tmux::fake::{self, Capture, Command};
 use muxen::tmux::{
     Bell, ClientId, Created, Endpoint, Found, ListedSession, Listing, Location, OneShotCmd, Op,
     PaneId, PumpMsg, Reply, ServerInstance, SessionId, Size, Socket, Tag, TmuxError, TmuxVersion,
@@ -22,6 +21,10 @@ use muxen::tmux::{
 };
 use serde_json::{Value, json};
 use tokio::sync::Semaphore;
+
+#[path = "fake_tmux.rs"]
+mod fake;
+use fake::{Capture, Command};
 
 const SERVER: ServerInstance = ServerInstance {
     pid: 42,
@@ -79,10 +82,6 @@ pub(super) struct Hub {
 impl Hub {
     /// Session `$0` holds window `@0` (pane `%0`, 80×24).
     pub(super) fn new() -> Self {
-        Self::new_with_max_clients(DEFAULT_CAPS.control_clients)
-    }
-
-    pub(super) fn new_with_max_clients(max_clients: usize) -> Self {
         let endpoint = Endpoint {
             program: PathBuf::from("tmux"),
             socket: Socket::Name("fake".into()),
@@ -92,7 +91,7 @@ impl Hub {
             state: State::new(
                 Endpoints { main: endpoint },
                 now,
-                max_clients,
+                DEFAULT_CAPS.control_clients,
                 "devbox".to_owned(),
                 None,
             ),

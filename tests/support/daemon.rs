@@ -84,10 +84,6 @@ impl FakeLocalApi {
         *self.status_answer.lock().expect("status answer lock") = answer;
     }
 
-    pub fn set_serve_config(&self, config: serde_json::Value) {
-        *self.serve_config.lock().expect("serve config lock") = config;
-    }
-
     pub fn hold_whois(&self, hold: bool) {
         self.hold_whois.store(hold, Ordering::SeqCst);
     }
@@ -173,20 +169,6 @@ pub async fn start_without_allow_login(name: &str) -> Daemon {
 
 /// Starts the Mac Loopback front against a TCP fake LocalAPI that requires Basic auth.
 pub async fn start_loopback(name: &str) -> Daemon {
-    start_loopback_with_serve_config(
-        name,
-        serde_json::json!({
-            "UnknownRoot": { "keep": true }
-        }),
-    )
-    .await
-}
-
-/// Starts a Loopback front with the given initial Serve-config response.
-pub async fn start_loopback_with_serve_config(
-    name: &str,
-    initial_serve_config: serde_json::Value,
-) -> Daemon {
     use base64::Engine as _;
 
     let dir = std::env::temp_dir().join(format!("muxen-http-{}-{name}", std::process::id()));
@@ -228,7 +210,9 @@ pub async fn start_loopback_with_serve_config(
             "User": { "1": { "LoginName": LOGIN } },
             "Peer": {}
         }))),
-        serve_config: Arc::new(Mutex::new(initial_serve_config)),
+        serve_config: Arc::new(Mutex::new(serde_json::json!({
+            "UnknownRoot": { "keep": true }
+        }))),
         conflict_next_serve_write: Arc::new(AtomicBool::new(true)),
         expected_authorization: Arc::new(Mutex::new(Some(format!(
             "Basic {}",

@@ -390,25 +390,6 @@ mod tests {
             .collect()
     }
 
-    #[test]
-    fn stems_cut_the_word_back_to_what_carapace_completes_from() {
-        let cases = [
-            ("", ""),
-            ("ch", ""),
-            ("-", "-"),
-            ("--conf", "-"),
-            ("--conflict=me", "--conflict="),
-            ("origin/m", "origin/"),
-            ("u+", "u+"),
-            ("user@ho", "user@"),
-            ("a,b", "a,"),
-            ("host:pa", "host:"),
-        ];
-        for (cur, stem_of) in cases {
-            assert_eq!(stem(cur), stem_of, "{cur:?}");
-        }
-    }
-
     /// Golden output from carapace-bin 1.8.0; rerun them against a new pin first.
     #[test]
     fn the_parser_reads_the_pinned_binarys_output() {

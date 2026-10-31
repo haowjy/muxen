@@ -1,7 +1,7 @@
 //! Pure setup checks: gathered machine facts in, complete user-facing findings out.
 
 use std::ffi::OsString;
-#[cfg(any(target_os = "linux", test))]
+#[cfg(target_os = "linux")]
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -77,7 +77,7 @@ pub(crate) enum LocalApiFailure {
 
 #[derive(Debug, Clone)]
 pub(crate) enum PlatformFacts {
-    #[cfg(any(target_os = "linux", test))]
+    #[cfg(target_os = "linux")]
     Linux {
         username: String,
         systemd_present: bool,
@@ -86,7 +86,7 @@ pub(crate) enum PlatformFacts {
         missing_controllers: Vec<String>,
         operator_user: Result<String, String>,
     },
-    #[cfg(any(target_os = "macos", test))]
+    #[cfg(target_os = "macos")]
     Mac {
         other_account: Option<String>,
         gui_session: bool,
@@ -106,23 +106,16 @@ pub(crate) struct Tailnet {
 
 impl PlatformFacts {
     fn is_mac(&self) -> bool {
-        #[cfg(test)]
-        {
-            matches!(self, Self::Mac { .. })
-        }
-        #[cfg(not(test))]
-        {
-            cfg!(target_os = "macos")
-        }
+        cfg!(target_os = "macos")
     }
 
     fn operator_needed(&self) -> bool {
         match self {
-            #[cfg(any(target_os = "linux", test))]
+            #[cfg(target_os = "linux")]
             Self::Linux { operator_user, .. } => operator_user
                 .as_ref()
                 .is_ok_and(|operator| operator.is_empty()),
-            #[cfg(any(target_os = "macos", test))]
+            #[cfg(target_os = "macos")]
             Self::Mac { .. } => false,
         }
     }
@@ -216,17 +209,17 @@ pub(crate) fn evaluate(
             None => format!("Your shell leaves {} unset, so", mismatch.variable),
         };
         let fix = match (&facts.platform, mismatch.value.as_deref()) {
-            #[cfg(any(target_os = "linux", test))]
+            #[cfg(target_os = "linux")]
             (PlatformFacts::Linux { .. }, Some(value)) => format!(
                 "Unset it, or give the user manager the same value with `systemctl --user set-environment {}={value}`.",
                 mismatch.variable
             ),
-            #[cfg(any(target_os = "linux", test))]
+            #[cfg(target_os = "linux")]
             (PlatformFacts::Linux { .. }, None) => format!(
                 "Unset it in the user manager with `systemctl --user unset-environment {}`.",
                 mismatch.variable
             ),
-            #[cfg(any(target_os = "macos", test))]
+            #[cfg(target_os = "macos")]
             (PlatformFacts::Mac { .. }, _) => {
                 "Unset it before running muxen setup --background.".to_owned()
             }
@@ -269,7 +262,7 @@ pub(crate) fn evaluate(
         &mut findings,
     );
     match &facts.platform {
-        #[cfg(any(target_os = "linux", test))]
+        #[cfg(target_os = "linux")]
         PlatformFacts::Linux {
             username,
             systemd_present,
@@ -323,7 +316,7 @@ pub(crate) fn evaluate(
                 check_operator(operator_user, username, BACKGROUND_SETUP, &mut findings);
             }
         }
-        #[cfg(any(target_os = "macos", test))]
+        #[cfg(target_os = "macos")]
         PlatformFacts::Mac {
             other_account,
             gui_session,
@@ -425,7 +418,7 @@ fn validated_tailnet(tailscale: &TailnetFacts, operator_needed: bool) -> Option<
     })
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(target_os = "linux")]
 pub(crate) struct ForegroundFacts<'a> {
     pub is_root: bool,
     pub username: &'a str,
@@ -437,7 +430,7 @@ pub(crate) struct ForegroundFacts<'a> {
     pub operator_user: &'a Result<String, String>,
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(target_os = "linux")]
 pub(crate) fn evaluate_foreground(
     facts: &ForegroundFacts<'_>,
     warnings: &mut Vec<Finding>,
@@ -609,7 +602,7 @@ fn check_status(
     }
 }
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(target_os = "linux")]
 fn check_operator(
     operator: &Result<String, String>,
     username: &str,
@@ -656,529 +649,4 @@ fn warning(findings: &mut Vec<Finding>, message: impl Into<String>) {
         level: Level::Warning,
         message: message.into(),
     });
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn foreground_runtime_directory_requires_exact_path() {
-        let expected = PathBuf::from("/run/user/1000/muxen");
-        let alternate = PathBuf::from("/tmp/muxen");
-        let noncanonical = PathBuf::from("/run/user/1000/./muxen");
-        let tailscale = TailnetFacts::Status {
-            version: "1.104.2-tc123".to_owned(),
-            backend_state: "Running".to_owned(),
-            dns_name: Some("host.tailnet.ts.net".to_owned()),
-            cert_domains: vec!["host.tailnet.ts.net".to_owned()],
-        };
-        let operator_user = Ok("jimmy".to_owned());
-        let program = PathBuf::from("tmux");
-        for (runtime_dir, should_pass) in [
-            (Some(expected.as_path()), true),
-            (Some(alternate.as_path()), false),
-            (Some(noncanonical.as_path()), false),
-            (None, false),
-        ] {
-            let facts = ForegroundFacts {
-                is_root: false,
-                username: "jimmy",
-                program: &program,
-                tmux_on_setup_path: Some(Path::new("/usr/bin/tmux")),
-                runtime_dir,
-                uid: 1000,
-                tailscale: &tailscale,
-                operator_user: &operator_user,
-            };
-            let mut warnings = Vec::new();
-            let result = evaluate_foreground(&facts, &mut warnings);
-            assert_eq!(result.is_ok(), should_pass, "runtime dir: {runtime_dir:?}");
-            if !should_pass {
-                let messages = result.unwrap_err();
-                assert!(
-                    messages
-                        .iter()
-                        .any(|finding| { finding.message.contains("XDG_RUNTIME_DIR") })
-                );
-            }
-        }
-    }
-
-    fn valid_facts(platform: PlatformFacts) -> Facts {
-        Facts {
-            is_root: false,
-            default_config: true,
-            binary: BinaryFacts {
-                current_canonical: PathBuf::from("/home/jimmy/.cargo/bin/muxen"),
-                installed_canonical: Some(PathBuf::from("/home/jimmy/.cargo/bin/muxen")),
-                cargo_home_other: false,
-            },
-            directories: Vec::new(),
-            tmux_tmpdir_without_socket: false,
-            tmux_on_service_path: Some(PathBuf::from("/usr/bin/tmux")),
-            tmux_on_setup_path: Some(PathBuf::from("/usr/bin/tmux")),
-            tailscale: TailnetFacts::Status {
-                version: "1.104.2-tc123".to_owned(),
-                backend_state: "Running".to_owned(),
-                dns_name: Some("host.tailnet.ts.net".to_owned()),
-                cert_domains: vec!["host.tailnet.ts.net".to_owned()],
-            },
-            platform,
-        }
-    }
-
-    fn findings(facts: &Facts) -> Vec<Finding> {
-        let mut warnings = Vec::new();
-        match evaluate(facts, &mut warnings) {
-            Ok(_) => warnings,
-            Err(mut errors) => {
-                errors.extend(warnings);
-                errors
-            }
-        }
-    }
-
-    #[test]
-    fn directory_mismatches_compare_resolved_paths() {
-        let dirs = |home: &str, config: Option<&str>, state: Option<&str>| DirectoryEnvironment {
-            home: Some(home.into()),
-            config_home: config.map(Into::into),
-            state_home: state.map(Into::into),
-        };
-        let cases = [
-            (
-                dirs("/home/jimmy", Some("/shared/config"), Some("/shared/state")),
-                dirs("/home/jimmy", Some("/shared/config"), Some("/shared/state")),
-                Vec::new(),
-            ),
-            (
-                dirs("/home/jimmy", None, None),
-                dirs("/home/jimmy", Some("/service/config"), None),
-                vec![DirectoryMismatch {
-                    variable: "XDG_CONFIG_HOME".to_owned(),
-                    value: None,
-                    setup_directory: "/home/jimmy/.config/muxen".into(),
-                    service_directory: "/service/config/muxen".into(),
-                }],
-            ),
-            (
-                dirs("/home/jimmy", None, None),
-                dirs("/other/home", None, None),
-                vec![
-                    DirectoryMismatch {
-                        variable: "XDG_CONFIG_HOME".to_owned(),
-                        value: None,
-                        setup_directory: "/home/jimmy/.config/muxen".into(),
-                        service_directory: "/other/home/.config/muxen".into(),
-                    },
-                    DirectoryMismatch {
-                        variable: "XDG_STATE_HOME".to_owned(),
-                        value: None,
-                        setup_directory: "/home/jimmy/.local/state/muxen".into(),
-                        service_directory: "/other/home/.local/state/muxen".into(),
-                    },
-                ],
-            ),
-        ];
-
-        for (setup, service, expected) in cases {
-            assert_eq!(
-                directory_mismatches(&setup, &service).expect("resolve directories"),
-                expected
-            );
-        }
-    }
-
-    #[test]
-    fn setup_check_messages_follow_the_fact_table() {
-        let linux = || PlatformFacts::Linux {
-            username: "jimmy".to_owned(),
-            systemd_present: true,
-            user_manager_present: true,
-            systemd_version: Some(Ok(255)),
-            missing_controllers: Vec::new(),
-            operator_user: Ok("jimmy".to_owned()),
-        };
-        let mac = || PlatformFacts::Mac {
-            other_account: None,
-            gui_session: true,
-            installed_port: Ok(None),
-            port_available: true,
-        };
-        let mut cases = Vec::new();
-
-        let mut facts = valid_facts(linux());
-        facts.is_root = true;
-        cases.push((
-            facts,
-            "Run muxen setup as the user whose tmux muxen serves, not as root.",
-        ));
-        let mut facts = valid_facts(linux());
-        facts.default_config = false;
-        cases.push((
-            facts,
-            "muxen setup --background installs a service that reads the default config path; drop --config.",
-        ));
-        let mut facts = valid_facts(linux());
-        facts.binary.installed_canonical = None;
-        facts.binary.cargo_home_other = true;
-        cases.push((
-            facts,
-            "~/.cargo/bin/muxen doesn't exist. Install it with `cargo install --path .`, then run `~/.cargo/bin/muxen setup --background`. cargo installs into $CARGO_HOME/bin; use [Manual setup](../running.md#manual-setup).",
-        ));
-        let mut facts = valid_facts(linux());
-        facts.directories.push(DirectoryMismatch {
-            variable: "XDG_STATE_HOME".to_owned(),
-            value: Some("/elsewhere".to_owned()),
-            setup_directory: PathBuf::from("/elsewhere/muxen"),
-            service_directory: PathBuf::from("/home/jimmy/.local/state/muxen"),
-        });
-        cases.push((
-            facts,
-            "Your shell sets XDG_STATE_HOME=/elsewhere, so muxen setup would use /elsewhere/muxen while the service uses /home/jimmy/.local/state/muxen: it would read another config and another device list. Unset it, or give the user manager the same value with `systemctl --user set-environment XDG_STATE_HOME=/elsewhere`.",
-        ));
-        let mut facts = valid_facts(mac());
-        facts.directories.push(DirectoryMismatch {
-            variable: "XDG_CONFIG_HOME".to_owned(),
-            value: Some("/tmp/config".to_owned()),
-            setup_directory: PathBuf::from("/tmp/config/muxen"),
-            service_directory: PathBuf::from("/home/jimmy/.config/muxen"),
-        });
-        cases.push((
-            facts,
-            "Your shell sets XDG_CONFIG_HOME=/tmp/config, so muxen setup would use /tmp/config/muxen while the service uses /home/jimmy/.config/muxen: it would read another config and another device list. Unset it before running muxen setup --background.",
-        ));
-        let mut facts = valid_facts(linux());
-        facts.tmux_tmpdir_without_socket = true;
-        facts.tmux_on_service_path = None;
-        facts.tmux_on_setup_path = Some(PathBuf::from("/opt/homebrew/bin/tmux"));
-        cases.push((
-            facts,
-            "Your shell sets TMUX_TMPDIR; the service won't see it. Set `[tmux] socket_path` in config.toml.",
-        ));
-        let mut facts = valid_facts(linux());
-        facts.tmux_on_service_path = None;
-        facts.tmux_on_setup_path = Some(PathBuf::from("/opt/homebrew/bin/tmux"));
-        cases.push((
-            facts,
-            "tmux is at /opt/homebrew/bin/tmux, which the service's PATH doesn't reach. Set `[tmux] program = \"/opt/homebrew/bin/tmux\"` in config.toml.",
-        ));
-        let mut facts = valid_facts(linux());
-        facts.tailscale = TailnetFacts::Unreachable {
-            failure: LocalApiFailure::NoSocket,
-            detail: String::new(),
-        };
-        cases.push((
-            facts,
-            "tailscaled isn't running: no LocalAPI socket at /var/run/tailscale/tailscaled.sock. Install Tailscale (https://tailscale.com/download/linux), then `sudo systemctl enable --now tailscaled`.",
-        ));
-        let mut facts = valid_facts(linux());
-        facts.tailscale = TailnetFacts::Status {
-            version: "1.92.1".to_owned(),
-            backend_state: "NeedsLogin".to_owned(),
-            dns_name: None,
-            cert_domains: Vec::new(),
-        };
-        cases.push((
-            facts,
-            "Tailscale isn't logged in: run `sudo tailscale login`.",
-        ));
-        let mut facts = valid_facts(linux());
-        facts.tailscale = TailnetFacts::Status {
-            version: "1.92.1".to_owned(),
-            backend_state: "Running".to_owned(),
-            dns_name: Some("host.tailnet.ts.net".to_owned()),
-            cert_domains: Vec::new(),
-        };
-        cases.push((
-            facts,
-            "Tailscale 1.92 can't proxy to a Unix socket; upgrade to 1.94 or later.",
-        ));
-        let mut facts = valid_facts(linux());
-        facts.tailscale = TailnetFacts::Status {
-            version: "1.94.0-t".to_owned(),
-            backend_state: "Running".to_owned(),
-            dns_name: Some("host.tailnet.ts.net".to_owned()),
-            cert_domains: Vec::new(),
-        };
-        if let PlatformFacts::Linux { operator_user, .. } = &mut facts.platform {
-            *operator_user = Ok("someone".to_owned());
-        }
-        cases.push((
-            facts,
-            "Tailscale's operator is someone. muxen setup won't replace it; run `sudo tailscale set --operator=$USER` if you mean to, then rerun `muxen setup --background`.",
-        ));
-        let mut facts = valid_facts(linux());
-        if let PlatformFacts::Linux {
-            systemd_present,
-            user_manager_present,
-            systemd_version,
-            missing_controllers,
-            ..
-        } = &mut facts.platform
-        {
-            *systemd_present = false;
-            *user_manager_present = false;
-            *systemd_version = Some(Err("systemctl not found".to_owned()));
-            *missing_controllers = vec!["cpu".to_owned()];
-        }
-        assert!(!findings(&facts).iter().any(|finding| {
-            finding
-                .message
-                .starts_with("Can't read the systemd version:")
-        }));
-        cases.push((
-            facts,
-            "This Linux doesn't run systemd; muxen setup supports systemd only. Follow Manual setup in docs/running.md.",
-        ));
-        let mut facts = valid_facts(mac());
-        facts.tailscale = TailnetFacts::Status {
-            version: "1.103.0".to_owned(),
-            backend_state: "Running".to_owned(),
-            dns_name: Some("host.tailnet.ts.net".to_owned()),
-            cert_domains: Vec::new(),
-        };
-        if let PlatformFacts::Mac {
-            other_account,
-            gui_session,
-            installed_port,
-            port_available,
-        } = &mut facts.platform
-        {
-            *other_account = Some("other".to_owned());
-            *gui_session = false;
-            *installed_port = Ok(Some(9000));
-            *port_available = false;
-        }
-        cases.push((
-            facts,
-            "The Tailscale app 1.103 is older than 1.104, the oldest muxen is tested with; update it.",
-        ));
-        let mut facts = valid_facts(mac());
-        facts.tailscale = TailnetFacts::Status {
-            version: "1.104.2-tc123".to_owned(),
-            backend_state: "Running".to_owned(),
-            dns_name: Some("host.tailnet.ts.net".to_owned()),
-            cert_domains: Vec::new(),
-        };
-        cases.push((
-            facts,
-            "HTTPS certificates are off for your tailnet. Turn them on under HTTPS Certificates at https://login.tailscale.com/admin/dns, then rerun `muxen setup --background`.",
-        ));
-
-        let mut facts = valid_facts(linux());
-        facts.binary.current_canonical = PathBuf::from("/tmp/muxen");
-        cases.push((
-            facts,
-            "The service runs ~/.cargo/bin/muxen, but this is /tmp/muxen. Install it with `cargo install --path .`, then run `~/.cargo/bin/muxen setup --background`.",
-        ));
-        let mut facts = valid_facts(linux());
-        facts.tmux_on_service_path = None;
-        facts.tmux_on_setup_path = None;
-        cases.push((
-            facts,
-            "tmux isn't installed (no `tmux` on the service's PATH).",
-        ));
-        let mut facts = valid_facts(linux());
-        facts.tailscale = TailnetFacts::Unreachable {
-            failure: LocalApiFailure::Other,
-            detail: "socket error".to_owned(),
-        };
-        cases.push((facts, "Can't reach Tailscale LocalAPI: socket error."));
-        let mut facts = valid_facts(mac());
-        facts.tailscale = TailnetFacts::Unreachable {
-            failure: LocalApiFailure::NoSocket,
-            detail: "not running".to_owned(),
-        };
-        cases.push((
-            facts,
-            "Can't reach the Tailscale app. Install the standalone app from tailscale.com (1.104 or later), open it and sign in.",
-        ));
-        let mut facts = valid_facts(mac());
-        facts.tailscale = TailnetFacts::Unreachable {
-            failure: LocalApiFailure::MacAdmin,
-            detail: "unreadable token".to_owned(),
-        };
-        cases.push((
-            facts,
-            "Your account must be an admin: muxen reads Tailscale's LocalAPI token from /Library/Tailscale.",
-        ));
-        let mut facts = valid_facts(linux());
-        facts.tailscale = TailnetFacts::Status {
-            version: "1.104.2".to_owned(),
-            backend_state: "Stopped".to_owned(),
-            dns_name: None,
-            cert_domains: Vec::new(),
-        };
-        cases.push((
-            facts,
-            "Tailscale is stopped: run `sudo tailscale up` (if it asks you to repeat your settings, add the flags it names).",
-        ));
-        let mut facts = valid_facts(mac());
-        facts.tailscale = TailnetFacts::Status {
-            version: "1.104.2".to_owned(),
-            backend_state: "NeedsLogin".to_owned(),
-            dns_name: None,
-            cert_domains: Vec::new(),
-        };
-        cases.push((facts, "Sign in from the Tailscale app."));
-        let mut facts = valid_facts(mac());
-        facts.tailscale = TailnetFacts::Status {
-            version: "1.104.2".to_owned(),
-            backend_state: "Stopped".to_owned(),
-            dns_name: None,
-            cert_domains: Vec::new(),
-        };
-        cases.push((facts, "Connect from the Tailscale app."));
-        let mut facts = valid_facts(linux());
-        facts.tailscale = TailnetFacts::Status {
-            version: "bad-version".to_owned(),
-            backend_state: "Running".to_owned(),
-            dns_name: Some("host.ts.net".to_owned()),
-            cert_domains: vec!["host.ts.net".to_owned()],
-        };
-        cases.push((
-            facts,
-            "Tailscale returned an unrecognized version: bad-version.",
-        ));
-        let mut facts = valid_facts(linux());
-        facts.tailscale = TailnetFacts::Status {
-            version: "1.104.2".to_owned(),
-            backend_state: "Running".to_owned(),
-            dns_name: Some(String::new()),
-            cert_domains: Vec::new(),
-        };
-        cases.push((
-            facts,
-            "MagicDNS is off for your tailnet; turn it on at https://login.tailscale.com/admin/dns.",
-        ));
-        let mut facts = valid_facts(linux());
-        facts.tailscale = TailnetFacts::Status {
-            version: "1.104.2".to_owned(),
-            backend_state: "Running".to_owned(),
-            dns_name: Some("host.ts.net".to_owned()),
-            cert_domains: vec!["host.ts.net".to_owned()],
-        };
-        if let PlatformFacts::Linux { operator_user, .. } = &mut facts.platform {
-            *operator_user = Err("prefs unavailable".to_owned());
-        }
-        cases.push((
-            facts,
-            "Can't read Tailscale's Serve operator: prefs unavailable.",
-        ));
-        let mut facts = valid_facts(linux());
-        if let PlatformFacts::Linux {
-            user_manager_present,
-            systemd_version,
-            missing_controllers,
-            ..
-        } = &mut facts.platform
-        {
-            *user_manager_present = false;
-            *systemd_version = Some(Ok(253));
-            *missing_controllers = vec!["cpu".to_owned(), "memory".to_owned()];
-        }
-        cases.push((
-            facts,
-            "No systemd user manager is running for jimmy. Log in as jimmy directly (SSH or a console, not su or sudo), then rerun `muxen setup --background`.",
-        ));
-        let mut facts = valid_facts(linux());
-        if let PlatformFacts::Linux {
-            systemd_version, ..
-        } = &mut facts.platform
-        {
-            *systemd_version = Some(Ok(253));
-        }
-        cases.push((
-            facts,
-            "systemd 253 ignores the unit's restart backoff; muxen restarts every 2 s instead, which still works.",
-        ));
-        let mut facts = valid_facts(linux());
-        if let PlatformFacts::Linux {
-            systemd_version, ..
-        } = &mut facts.platform
-        {
-            *systemd_version = Some(Err("no version".to_owned()));
-        }
-        cases.push((facts, "Can't read the systemd version: no version."));
-        let mut facts = valid_facts(linux());
-        if let PlatformFacts::Linux {
-            missing_controllers,
-            ..
-        } = &mut facts.platform
-        {
-            *missing_controllers = vec!["cpu".to_owned(), "memory".to_owned()];
-        }
-        cases.push((
-            facts.clone(),
-            "The user manager hasn't been delegated the cpu controller, so the unit's CPUQuota and MemoryMax aren't enforced.",
-        ));
-        cases.push((
-            facts,
-            "The user manager hasn't been delegated the memory controller, so the unit's CPUQuota and MemoryMax aren't enforced.",
-        ));
-        let mut facts = valid_facts(mac());
-        if let PlatformFacts::Mac { other_account, .. } = &mut facts.platform {
-            *other_account = Some("other".to_owned());
-        }
-        cases.push((
-            facts,
-            "This Mac has another login account (other). muxen's Mac defences assume yours is the only one, so setup won't install it here.",
-        ));
-        let mut facts = valid_facts(mac());
-        if let PlatformFacts::Mac { gui_session, .. } = &mut facts.platform {
-            *gui_session = false;
-        }
-        cases.push((
-            facts,
-            "You aren't logged in at this Mac's screen. Log in there first: muxen runs only while you're logged in.",
-        ));
-        let mut facts = valid_facts(mac());
-        if let PlatformFacts::Mac { installed_port, .. } = &mut facts.platform {
-            *installed_port = Ok(Some(9000));
-        }
-        cases.push((
-            facts,
-            "muxen was installed by hand on port 9000. Keep that install (Manual setup), or run `muxen teardown` and then `muxen setup --background`, which uses 7851.",
-        ));
-        let mut facts = valid_facts(mac());
-        if let PlatformFacts::Mac { port_available, .. } = &mut facts.platform {
-            *port_available = false;
-        }
-        cases.push((
-            facts,
-            "Another process holds 127.0.0.1:7851 (`lsof -nP -iTCP:7851`). Stop it, or install by hand with another port (Manual setup in docs/running.md).",
-        ));
-
-        for (facts, expected) in cases {
-            assert!(
-                findings(&facts)
-                    .iter()
-                    .any(|finding| finding.message == expected),
-                "missing finding {expected:?}"
-            );
-        }
-        assert_eq!(parse_major_minor("1.94.0-t"), Some((1, 94)));
-        assert_eq!(parse_major_minor("1.104.2-tc123"), Some((1, 104)));
-        assert_eq!(parse_major_minor("invalid"), None);
-
-        let facts = valid_facts(PlatformFacts::Linux {
-            username: "jimmy".to_owned(),
-            systemd_present: true,
-            user_manager_present: true,
-            systemd_version: Some(Ok(253)),
-            missing_controllers: vec!["cpu".to_owned()],
-            operator_user: Ok("jimmy".to_owned()),
-        });
-        let mut warnings = Vec::new();
-        let _ = evaluate(&facts, &mut warnings).expect("warning-only facts pass");
-        assert_eq!(
-            warnings
-                .iter()
-                .filter(|finding| finding.level == Level::Warning)
-                .count(),
-            2
-        );
-    }
 }

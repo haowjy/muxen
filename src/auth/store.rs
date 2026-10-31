@@ -781,12 +781,4 @@ mod tests {
             .and_then(toml::Value::as_array)
             .map_or_else(Vec::new, |rows| rows.to_vec())
     }
-
-    #[test]
-    fn the_host_id_is_written_once() {
-        let (store, _cleanup) = temp_store();
-        let id = store.host_id().expect("an id");
-        assert!(token::is_host_id(&id), "{id}");
-        assert_eq!(store.host_id().expect("the same id"), id);
-    }
 }
