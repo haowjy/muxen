@@ -345,11 +345,14 @@ export class RowList {
 
   /**
    * The one place rows leave the list: a selection over them closes (J7) before they go. Removes the rows whose
-   * `seq` lies in `first..last`; a block it empties goes with them.
+   * `seq` lies in `first..last` and reports the seqs of the rows it actually removes, so callers may pass wide
+   * bounds (`clear` passes infinite ones); a block it empties goes with them.
    */
   private remove(first: number, last: number): void {
-    for (const listener of this.dropped) listener(first, last);
     const seq = (row: HTMLElement | undefined): number => Number(row?.dataset["seq"]);
+    const doomed = this.blocks.flatMap((block) => block.rows.filter((row) => seq(row) >= first && seq(row) <= last));
+    if (doomed.length === 0) return;
+    for (const listener of this.dropped) listener(seq(doomed[0]), seq(doomed.at(-1)));
     this.blocks = this.blocks.filter((block) => {
       if (seq(block.rows.at(-1)) < first || seq(block.rows[0]) > last) return true;
       const kept = block.rows.filter((row) => seq(row) < first || seq(row) > last);
@@ -379,7 +382,7 @@ export class RowList {
   }
 
   private clear(): void {
-    if (this.count > 0) this.remove(0, this.seq - 1);
+    this.remove(-Infinity, Infinity);
     this.run.replaceChildren();
     this.blocks = [];
     this.gapRow = null;
@@ -502,7 +505,7 @@ export class RowList {
 
   /** No gesture and no fling: what waited for rest may go. */
   private rest(): void {
-    this.flushPending();
+    if (this.element.scrollTop >= 0) this.flushPending();
     this.trim();
     this.follow();
   }

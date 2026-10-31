@@ -11,7 +11,7 @@ import { boxOf, near, type PageSelection } from "./pageSelection";
 import styles from "./Mark.module.css";
 
 interface MarkDeps {
-  /** The row list's scroller: the handles are its children, placed in its content's coordinates. It clips, so a start knob that would lie above its content's top hangs below its line. */
+  /** The row list's scroller: the handles are its children, placed in its content's coordinates. It clips, so a start knob that would lie above its visible top hangs below its line. */
   layer(): HTMLElement | null;
   page: PageSelection;
   /** The platform's edit menu, or undefined where there is none (a browser): the mark is the app's. */
@@ -208,8 +208,8 @@ export class Mark {
       element.style.left = `${String(x - host.left + layer.scrollLeft)}px`;
       element.style.top = `${String(rect.top - host.top + layer.scrollTop)}px`;
       element.style.height = `${String(rect.height)}px`;
-      // The scroller clips: a start knob that would lie above its content's top hangs below its line, as the end knob does.
-      const below = end === "end" || rect.top - host.top + layer.scrollTop < 2 * KNOB_OFFSET;
+      // The scroller clips: a start knob that would lie above its visible top hangs below its line, as the end knob does.
+      const below = end === "end" || rect.top - host.top < 2 * KNOB_OFFSET;
       element.toggleAttribute("data-below", below);
       return { knob: { x, y: below ? rect.bottom + KNOB_OFFSET : rect.top - KNOB_OFFSET }, text: { x, y: rect.top + rect.height / 2 } };
     };
