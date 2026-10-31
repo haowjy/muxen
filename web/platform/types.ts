@@ -76,6 +76,12 @@ export interface Lifecycle {
 }
 
 export type Unsubscribe = () => void;
+export interface MenuRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 export type HapticKind = "selection" | "rigid" | "key" | "modifier";
 export type FocusMode = "terminal" | "line" | "hidden" | "webText" | "select";
 
@@ -234,6 +240,9 @@ export type PlatformEvent =
   | { type: "lineEdit"; gen: number; text: string; tab: TabKey; selection: TextRange; marked: TextRange | null }
   | { type: "lineReturn"; gen: number; text: string; tab: TabKey }
   | { type: "draftChanged"; key: TabKey }
+  /** The app's edit menu over the terminal's mark: Copy or Paste was chosen (`Platform.editMenu`), or Paste on iOS's own menu over a terminal selection. */
+  | { type: "menuCopy" }
+  | { type: "menuPaste" }
   | { type: "storage"; state: "closing" | "closed" }
   | { type: "update"; state: UpdateState };
 
@@ -255,6 +264,8 @@ export interface Platform {
   /** Whether the platform's own back swipe may run (native: WebKit's left-edge swipe, which pops the page's history). Browser: no-op, since Safari owns the edge swipe. */
   setBackSwipe(enabled: boolean): void;
   restart(reason: "stuck" | "update"): void;
+  /** Shows the platform's edit menu (Copy, Paste) over `rect`, in the page's client px, or hides it with null. Choices come back as `menuCopy` and `menuPaste`. The app only: it is what lets the terminal mark text while the keyboard is up. */
+  editMenu?: (rect: MenuRect | null) => void;
   /** Opens the platform's own screen for adding, pairing and removing servers. Native only. */
   manageHosts?: () => void;
   /** Chooses when Face ID asks again. Native only. A longer interval needs a fresh Face ID there, so the answer may be the unchanged `preferences`. */

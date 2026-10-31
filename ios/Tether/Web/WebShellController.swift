@@ -294,6 +294,13 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
 
         let result = TetherWebView(frame: .zero, configuration: configuration)
         result.suppressesEditMenu = { [weak self] in self?.focus.selecting == true }
+        // With the keyboard down iOS's own menu over a terminal selection gets a Paste; the page's mark has its own menu.
+        result.addsTerminalPaste = { [weak self] in self.map { $0.activeTab != nil && $0.keyboardCover.height == 0 } ?? false }
+        result.onMenuChoice = { [weak self] choice in self?.send(choice, fields: [:]) }
+        // iOS's selection handles, and the page's own (they read `--color-accent`): --blue-7 in light, --blue-9 in dark.
+        result.tintColor = UIColor { $0.userInterfaceStyle == .dark
+            ? UIColor(red: 113 / 255, green: 193 / 255, blue: 247 / 255, alpha: 1)
+            : UIColor(red: 0, green: 101 / 255, blue: 180 / 255, alpha: 1) }
         result.translatesAutoresizingMaskIntoConstraints = false
         result.navigationDelegate = self
         result.uiDelegate = self
@@ -378,6 +385,14 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
             case .backSwipe:
                 backSwipe = try request.field("enabled")
                 reply(NSNull(), nil)
+            case .editMenu:
+                let rect: JSONValue = try request.field("rect")
+                if case .null = rect { webView.hideMarkMenu() }
+                else {
+                    let r = try rect.decode(MenuRect.self)
+                    webView.showMarkMenu(over: CGRect(x: r.x, y: r.y, width: r.width, height: r.height))
+                }
+                reply(NSNull(), nil)
             case .manageHosts:
                 model.showingServers = true
                 reply(NSNull(), nil)
@@ -458,7 +473,7 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
                 reply(NSNull(), nil)
             case .ack:
                 reply(NSNull(), nil)
-            case .input, .lineEdit, .lineReturn, .viewport, .lifecycle, .hosts, .upload:
+            case .input, .lineEdit, .lineReturn, .viewport, .lifecycle, .hosts, .upload, .menuCopy, .menuPaste:
                 throw BridgeError.malformed
             }
         } catch {
@@ -759,11 +774,33 @@ private final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandlerWi
 }
 
 
-/// While the terminal's selection is up (`FocusController.selecting`), the page draws tether's own Copy and Paste: only its
-/// Paste reaches tmux. WebKit's menu for the same selection would stack under it, so it is emptied then.
-/// Web text fields keep the system menu.
-final class TetherWebView: WKWebView {
+/// Native's two edit menus over the terminal. The page's mark (keyboard up) is no selection, so WebKit offers
+/// nothing there and the page asks for `showMarkMenu`. With the keyboard down iOS's own selection menu gets a Paste.
+/// In native input mode the page draws its own menu over a snapshot selection and WebKit's is emptied
+/// (`suppressesEditMenu`); web text fields keep the system menu.
+final class TetherWebView: WKWebView, UIEditMenuInteractionDelegate {
     var suppressesEditMenu: () -> Bool = { false }
+    var addsTerminalPaste: () -> Bool = { false }
+    var onMenuChoice: (BridgeMessageType) -> Void = { _ in }
+    private lazy var markMenu = UIEditMenuInteraction(delegate: self)
+    private var markRect = CGRect.zero
+
+    func showMarkMenu(over rect: CGRect) {
+        if markMenu.view == nil { addInteraction(markMenu) }
+        markRect = rect
+        markMenu.presentEditMenu(with: UIEditMenuConfiguration(identifier: nil, sourcePoint: CGPoint(x: rect.midX, y: rect.midY)))
+    }
+
+    func hideMarkMenu() { markMenu.dismissMenu() }
+
+    func editMenuInteraction(_ interaction: UIEditMenuInteraction, menuFor configuration: UIEditMenuConfiguration, suggestedActions: [UIMenuElement]) -> UIMenu? {
+        UIMenu(children: [
+            UIAction(title: "Copy") { [weak self] _ in self?.onMenuChoice(.menuCopy) },
+            UIAction(title: "Paste") { [weak self] _ in self?.onMenuChoice(.menuPaste) },
+        ])
+    }
+
+    func editMenuInteraction(_ interaction: UIEditMenuInteraction, targetRectFor configuration: UIEditMenuConfiguration) -> CGRect { markRect }
 
     // WebKit's content view asks the web view whether each edit action may run; refusing them all leaves
     // its menu empty, so it never shows. (Removing menus in `buildMenu` left it up.)
@@ -776,6 +813,11 @@ final class TetherWebView: WKWebView {
     override func buildMenu(with builder: any UIMenuBuilder) {
         super.buildMenu(with: builder)
         if suppressesEditMenu() { builder.remove(menu: .autoFill) }
+        else if addsTerminalPaste() {
+            builder.insertChild(
+                UIMenu(options: .displayInline, children: [UIAction(title: "Paste") { [weak self] _ in self?.onMenuChoice(.menuPaste) }]),
+                atEndOfMenu: .standardEdit)
+        }
     }
 }
 

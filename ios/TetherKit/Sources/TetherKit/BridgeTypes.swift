@@ -1,7 +1,15 @@
 import Foundation
 
 public enum BridgeContract {
-    public static let version = 8
+    public static let version = 9
+}
+
+/// Where the page asks for native's edit menu: client points, which are the web view's points.
+public struct MenuRect: Codable, Equatable, Sendable {
+    public var x: Double
+    public var y: Double
+    public var width: Double
+    public var height: Double
 }
 
 public struct SafeArea: Codable, Equatable, Sendable {

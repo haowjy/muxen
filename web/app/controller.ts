@@ -388,6 +388,8 @@ export class AppController extends Store<AppView> {
         break; // The app-started native line owner subscribes directly to the platform.
       case "input":
       case "draftChanged":
+      case "menuCopy":
+      case "menuPaste":
         break; // owned by the terminal and draft lanes, which subscribe on the platform themselves
     }
   }
