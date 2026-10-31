@@ -100,12 +100,34 @@ describe("decideKey, owned input", () => {
     expect(name(decideKey(ev("A", { ctrlKey: true, shiftKey: true, code: "KeyA" }), "owned"))).toBe("C-A");
     expect(name(decideKey(ev("A", { ctrlKey: true, altKey: true, shiftKey: true, code: "KeyA" }), "owned"))).toBe("C-M-A");
   });
+
+  it("names a Ctrl letter from the layout, not the physical key", () => {
+    // AZERTY: the physical Q types a, W types z, M types a comma, and the digit row types symbols.
+    expect(name(decideKey(ev("a", { ctrlKey: true, code: "KeyQ" }), "owned"))).toBe("C-a");
+    expect(name(decideKey(ev("z", { ctrlKey: true, code: "KeyW" }), "owned"))).toBe("C-z");
+    expect(decideKey(ev(",", { ctrlKey: true, code: "KeyM" }), "owned")).toEqual({ kind: "default" });
+    expect(decideKey(ev("&", { ctrlKey: true, code: "Digit1" }), "owned")).toEqual({ kind: "default" });
+    expect(name(decideKey(ev("A", { ctrlKey: true, shiftKey: true, code: "KeyQ" }), "owned"))).toBe("C-A");
+    expect(name(decideKey(ev("a", { altKey: true, code: "KeyQ" }), "owned"))).toBe("M-a");
+  });
+
+  it("falls back to the physical key when `key` is no ASCII character", () => {
+    expect(name(decideKey(ev("с", { ctrlKey: true, code: "KeyC" }), "owned"))).toBe("C-c");
+    expect(name(decideKey(ev("¡", { altKey: true, code: "Digit1" }), "owned"))).toBe("M-1");
+  });
 });
 
 // The rules of the app's native KeyMapper (ios/TetherKit), which these cases came from.
 describe("decideKey, owned input: punctuation chords", () => {
   const bytes = (...codes: number[]): KeyDecision => ({ kind: "bytes", bytes: btoa(String.fromCharCode(...codes)) });
-  const owned = (key: string, over: Partial<KeyFacts> = {}): KeyDecision => decideKey(ev(key, over), "owned");
+  /** The US-layout physical keys the punctuation characters come from, so events carry the `code` a browser reports. */
+  const CODES: Record<string, string> = {
+    "[": "BracketLeft", "{": "BracketLeft", "]": "BracketRight", "}": "BracketRight", "\\": "Backslash", "|": "Backslash", "/": "Slash", "?": "Slash",
+    ".": "Period", ">": "Period", ",": "Comma", "<": "Comma", ";": "Semicolon", ":": "Semicolon", "'": "Quote", '"': "Quote", "`": "Backquote", "~": "Backquote",
+    "-": "Minus", "_": "Minus", "=": "Equal", "+": "Equal", "^": "Digit6", "&": "Digit7", "*": "Digit8", "(": "Digit9", ")": "Digit0",
+    "!": "Digit1", "@": "Digit2", "#": "Digit3", "$": "Digit4", "%": "Digit5",
+  };
+  const owned = (key: string, over: Partial<KeyFacts> = {}): KeyDecision => decideKey(ev(key, { code: CODES[key] ?? "", ...over }), "owned");
 
   it("sends Ctrl on [ \\ ] ^ _ / ? as the control byte", () => {
     expect(owned("[", { ctrlKey: true })).toEqual(bytes(0x1b));

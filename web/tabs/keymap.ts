@@ -62,19 +62,23 @@ function modified(e: KeyFacts, name: string, shiftable: boolean): string {
   return `${e.ctrlKey ? "C-" : ""}${e.altKey ? "M-" : ""}${shiftable && e.shiftKey ? "S-" : ""}${name}`;
 }
 
-/** The punctuation keys of a US layout, unshifted and shifted, for when Option on macOS has changed `key`. */
+/** The punctuation keys of a US layout, unshifted and shifted, for when `key` is no ASCII character (Option on macOS). */
 const PUNCTUATION: Record<string, readonly [string, string]> = {
   Backquote: ["`", "~"], Minus: ["-", "_"], Equal: ["=", "+"], BracketLeft: ["[", "{"], BracketRight: ["]", "}"],
   Backslash: ["\\", "|"], Semicolon: [";", ":"], Quote: ["'", '"'], Comma: [",", "<"], Period: [".", ">"], Slash: ["/", "?"],
 };
 
-/** The character a Ctrl or Alt chord means, from the physical key: Option on macOS changes `key`. */
+/**
+ * The character a Ctrl or Alt chord means: what the layout typed (`key`), so Ctrl+A is `C-a` on AZERTY
+ * where A is the physical Q. Only when `key` is no ASCII character does the physical key stand in: Option
+ * on macOS turns `key` into a symbol, and a Cyrillic or Greek layout types no Latin letter.
+ */
 function printable(e: KeyFacts): string | null {
+  if (/^[\x21-\x7e]$/.test(e.key)) return e.key;
   const letter = /^Key([A-Z])$/.exec(e.code)?.[1];
-  if (letter) return e.shiftKey ? letter : letter.toLowerCase();
+  if (letter) return letter.toLowerCase();
   const digit = /^Digit(\d)$/.exec(e.code)?.[1];
   if (digit) return digit;
-  if (/^[\x21-\x7e]$/.test(e.key)) return e.key;
   return PUNCTUATION[e.code]?.[e.shiftKey ? 1 : 0] ?? null;
 }
 
