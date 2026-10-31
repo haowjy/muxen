@@ -74,13 +74,17 @@ Decided by Jimmy, 2026-10-21 unless an entry gives another date.
   reconnect without a server-side emulator, and its tab could not use the protocol;
   dropping scratch shells from the product.
 
-### Scope: no agent dashboards or notification service
+### Scope: no agent dashboards; notifications come from outside
 
 - **What:** tmux tabs, a session list, cheap reconnect, a Termius-grade keyboard with
-  tool completion, a file manager.
-- **Why:** Jimmy's agent harness already handles notifications.
+  tool completion, a file manager. tether runs no notification service of its own:
+  anything (an agent harness, a script, CI) can notify the app about a tmux pane, and
+  the app opens that pane's tab (2026-10-31, "The name: muxen").
+- **Why:** Jimmy's agent harness already decides when to notify; tether owns the last
+  step, getting him to the right tab.
 - **Rejected:** agent dashboards and agent-wrapping apps (studied in
-  [research/prior-art.md](research/prior-art.md)).
+  [research/prior-art.md](research/prior-art.md)); tether deciding on its own when
+  something deserves a notification.
 
 ### Keyboard: native Swift shell first
 
@@ -4183,3 +4187,27 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   is the window shown. The fill no longer means "has a tab": it means "is the thing you are looking
   at", which is what a fill means on the pills too. Rejected: a checkmark for the row on screen
   (a third mark beside the fill and the word).
+
+## The name: muxen
+
+Decided by Jimmy, 2026-10-31.
+
+- **What:** tether is renamed `muxen`: the binary, crate, config and state directories,
+  bundle ID (`com.jimmyyao.muxen`), web scheme, docs and repo. "All your tmux, in your
+  pocket": many muxes, as ox → oxen, because one app reaches the tmux on several servers.
+  It is for anyone who runs tmux, not only Meridian users; anything can extend it by
+  notifying the app about a pane (`muxen notify`), and Meridian is one such caller.
+  Renamed in one pass, before the first release and before push ties a bundle ID to
+  Apple. Live state under the old name gets a one-time manual step, not compatibility
+  code. The plan and inventory: `.meridian/work/tether-mvp/rename-muxen.md`.
+- **Why:** "tether" is hard to type (Jimmy: "i keep trying to start with th..."), and
+  the command is typed all day. A made-up word is findable in the App Store and on
+  crates.io; the plural says what the app does that `tmux attach` doesn't.
+- **Rejected:** "Meridian tmux" (implies Meridian is required and owns your tmux; cut
+  off on the home screen); naming it as a meridian-cli subcommand (the daemon and
+  Meridian change independently, and tmux users without Meridian couldn't use it);
+  `muxi` (Jimmy's first pick: crates.io `muxi` is a tmux session-bookmark tool and
+  muxi-ai/muxi is agent infrastructure); `muxo` and `moxu` (free, but the letter means
+  nothing); `pane`, `perch`, `kite`, `beckon` (Jimmy preferred the muxi style); `omux`,
+  `amux`, `muxy`, `tuxi`, `plexo` (taken, `amux` and `omux` by tmux-and-agent tools);
+  a short alias beside `tether` (two names forever).
