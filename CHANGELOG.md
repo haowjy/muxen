@@ -5,6 +5,7 @@ version section on release.
 
 ## [Unreleased]
 
+- muxen has an icon: a terminal with ox horns, on the iPhone app (which had none) and the installed web app.
 - The enrolment code field takes a pasted code (with or without its dash) and typing on an iPhone, which stopped after the first character.
 - tether is now muxen. The command is `muxen`, config lives in `~/.config/muxen`, and the iPhone app is a new app (`com.jimmyyao.muxen`). Before installing, run `tether teardown` on each host, then `muxen setup`, re-enroll each device, and update any shell config that sources `contrib/shell/tether.zsh` or `tether.bash`.
 - In the iPhone app's web keyboard test, holding a word in the terminal with the keyboard up marks it without lowering the keyboard: drag your finger or the two handles to extend it, then iOS's Copy and Paste menu appears over it (tap the mark to show or hide the menu, tap elsewhere to clear it). With the keyboard down, iOS's own selection menu gains a Paste item. The app's selection handles use muxen's accent colour. Output keeps running, so a mark on rows that redraw goes away.
