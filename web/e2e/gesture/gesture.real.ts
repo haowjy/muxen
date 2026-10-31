@@ -252,6 +252,29 @@ for (const version of VERSIONS) {
       await expect(page.getByRole("button", { name: "Jump to latest" })).toHaveCount(0);
     });
 
+    test("a finger whose end never arrived is forgotten: the next one-finger swipe still scrolls", async ({ page }) => {
+      const s = newSession();
+      stack.tmux("send-keys", "-t", s, "seq 1 400 | sed 's/^/row /'", "Enter");
+      await paneIncludes(s, /row 400/);
+      const finger = await open(page, s);
+      const at = await mid(page, s, 4);
+      // A touch that began on a row xterm then replaced: its end went to a detached node, so none reached the surface.
+      await page.evaluate(({ x, y }) => {
+        const touch = new Touch({ identifier: 777, target: document.body, clientX: x, clientY: y });
+        const host = document.elementFromPoint(x, y) ?? document.body;
+        host.dispatchEvent(new TouchEvent("touchstart", { bubbles: true, touches: [touch], targetTouches: [touch], changedTouches: [touch] }));
+      }, at);
+      for (let i = 0; i < 2; i++) {
+        await finger.down(at.x, at.y);
+        await finger.drag(at.x, at.y, at.x, at.y + 300, 8, 6);
+        await finger.up();
+        await page.waitForTimeout(700);
+        await expect(page.getByRole("button", { name: "Jump to latest" })).toBeVisible();
+        await page.getByRole("button", { name: "Jump to latest" }).tap();
+        await expect(page.getByRole("button", { name: "Jump to latest" })).toHaveCount(0);
+      }
+    });
+
     test("horizontal swipes send nothing", async ({ page }) => {
       const cat = newSession("cat -vt");
       const catFinger = await open(page, cat);

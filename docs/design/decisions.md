@@ -4340,3 +4340,16 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 - **Rejected: a menu the web draws over the mark.** Step 0's Safari test failed it: a touch on a web-drawn menu
   moves the selection or the keyboard, and it does not match the system's.
 - **Rejected: a `menuClosed` event** for the stale state; native owning the state needs no extra message.
+
+## The touch shell counts the fingers the platform lists, not the ends it was sent (2026-10-31)
+
+- **A touch whose end never arrives must not outlive the next touch.** On the iPhone (DOM renderer, rows replaced as
+  output arrives) a touch that began on a row xterm then replaced was dispatched to a detached node, so no end reached
+  `.host`; the leaked finger made every later swipe a two-finger one, which the recognizer ignores. Every touch event now
+  checks `event.touches`: a counted finger it no longer lists cancels the gesture it belonged to (never a tap), and the
+  next touch starts clean. `touchmove`, `touchend` and `touchcancel` are listened for on the document, filtered to the
+  fingers counted; `touchstart` stays on the surface.
+- **The pointer path is left as it is.** It captures the pointer on the surface at `pointerdown`, so its events target the
+  surface, not a row, and `lostpointercapture` already ends a gesture whose pointer was taken.
+- **Rejected: a timeout on a counted finger.** A held finger is long and legitimate; the platform's list says exactly
+  which fingers are down.
