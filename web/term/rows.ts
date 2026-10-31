@@ -26,8 +26,8 @@ export interface Row {
   runs: Run[];
   /** This row continues the one above it: a soft wrap, not a line break. */
   wrapped: boolean;
-  /** The row cell by cell, as the terminal laid it out (see {@link rowCells}); absent for rows read from text. */
-  cells?: string[];
+  /** The row cell by cell, as the terminal laid it out: a wide character is followed by an empty cell. */
+  cells: string[];
 }
 
 export function rowText(row: Row): string {
@@ -35,10 +35,11 @@ export function rowText(row: Row): string {
 }
 
 // Characters xterm gives two cells: East Asian wide and fullwidth forms, Hangul, and the
-// emoji that default to emoji presentation (not © ® ™ and the like, which take one).
+// emoji that default to emoji presentation (not © ® ™ and the like, which take one). A guess,
+// kept only for text xterm did not lay out: the prompt line (`PromptLine` is text, not cells).
 const WIDE = /[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹯＀-｠￠-￦]|\p{Emoji_Presentation}|[\u{20000}-\u{3fffd}]/u;
 
-/** A row's text cell by cell: a wide character is followed by an empty cell, a combining mark joins its base. */
+/** Text cell by cell: a wide character is followed by an empty cell, a combining mark joins its base. */
 export function cellsOf(text: string): string[] {
   const cells: string[] = [];
   for (const char of text) {
@@ -52,11 +53,6 @@ export function cellsOf(text: string): string[] {
     if (WIDE.test(char)) cells.push("");
   }
   return cells;
-}
-
-/** The row's cells: the terminal's own where it gave them, else worked out from the text (history rows). */
-export function rowCells(row: Row): string[] {
-  return row.cells ?? cellsOf(rowText(row));
 }
 
 /** Drops the blanks at the end of a row that nothing paints: a colour behind them keeps them. */
@@ -116,65 +112,4 @@ export function styleCss(style: Style, theme: TerminalTheme): string {
   if (style.italic) out.push("font-style:italic");
   if (style.underline) out.push("text-decoration:underline");
   return out.join(";");
-}
-
-const CSI = /\x1b\[([0-9;:]*)([\x40-\x7e])/g;
-const decoder = new TextDecoder();
-
-/** Applies one SGR parameter list to `style`; unknown parameters are ignored. */
-function applySgr(style: Style, params: string): Style {
-  let next: Style = { ...style };
-  const codes = params === "" ? [0] : params.split(/[;:]/).map((p) => (p === "" ? 0 : Number(p)));
-  for (let i = 0; i < codes.length; i++) {
-    const code = codes[i] ?? 0;
-    if (code === 0) next = {};
-    else if (code === 1) next.bold = true;
-    else if (code === 2) next.dim = true;
-    else if (code === 3) next.italic = true;
-    else if (code === 4) next.underline = true;
-    else if (code === 7) next.inverse = true;
-    else if (code === 22) { delete next.bold; delete next.dim; }
-    else if (code === 23) delete next.italic;
-    else if (code === 24) delete next.underline;
-    else if (code === 27) delete next.inverse;
-    else if ((code >= 30 && code <= 37) || (code >= 40 && code <= 47)) next[code < 40 ? "fg" : "bg"] = code % 10;
-    else if ((code >= 90 && code <= 97) || (code >= 100 && code <= 107)) next[code < 100 ? "fg" : "bg"] = (code % 10) + 8;
-    else if (code === 39) delete next.fg;
-    else if (code === 49) delete next.bg;
-    else if (code === 38 || code === 48) {
-      const key = code === 38 ? "fg" : "bg";
-      if (codes[i + 1] === 5) {
-        next[key] = codes[i + 2] ?? 0;
-        i += 2;
-      } else if (codes[i + 1] === 2) {
-        next[key] = hex(codes[i + 2] ?? 0, codes[i + 3] ?? 0, codes[i + 4] ?? 0);
-        i += 4;
-      }
-    }
-  }
-  return next;
-}
-
-/** One row of `capture-pane -e` (history chunks): text with SGR sequences; any other escape is dropped. */
-export function parseSgrRow(bytes: Uint8Array): Run[] {
-  const text = decoder.decode(bytes);
-  const runs: Run[] = [];
-  let style: Style = {};
-  let at = 0;
-  for (const match of text.matchAll(CSI)) {
-    pushRun(runs, text.slice(at, match.index), style);
-    at = match.index + match[0].length;
-    if (match[2] === "m") style = applySgr(style, match[1] ?? "");
-  }
-  pushRun(runs, text.slice(at), style);
-  return runs;
-}
-
-/** History rows (`capture-pane -e`, one per physical row) as rows; a row wraps when the one before it continued. */
-export function historyRows(rows: readonly { bytes: Uint8Array; continues: boolean }[]): Row[] {
-  return rows.map((row, index) => {
-    const runs = parseSgrRow(row.bytes);
-    if (!row.continues) trimRow(runs);
-    return { runs, wrapped: rows[index - 1]?.continues ?? false };
-  });
 }

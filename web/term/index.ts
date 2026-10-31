@@ -1,14 +1,16 @@
-// The renderer boundary: nothing outside term/ imports xterm.js, so ghostty-web could
-// replace it (plan.md "Layout").
+// The terminal boundary: nothing outside term/ imports xterm.js, so ghostty-web could
+// replace it (plan.md "Layout"). `TerminalModel` parses a pane's output into frames; the view draws.
+// Until phase 6 both platforms are drawn by the interim xterm view over the model's Terminal.
 import type { Snapshot } from "./pipeline";
 import type { CellSize } from "./size";
 import type { Row } from "./rows";
 import type { MouseEncoding, MouseMode } from "./mouse";
 import type { InputSink } from "./xterm-input";
-import { createXtermRenderer } from "./xterm";
+import { TerminalModel, type CursorShape, type Frame } from "./model";
+import { createXtermView } from "./xterm";
 
-export type { CellSize, InputSink, MouseEncoding, MouseMode, Row, Snapshot };
-export { createXtermRenderer };
+export type { CellSize, CursorShape, Frame, InputSink, MouseEncoding, MouseMode, Row, Snapshot };
+export { createXtermView, TerminalModel };
 
 /** A cell in the visible screen, zero-based from its top-left. */
 export interface CellPosition {
@@ -37,7 +39,7 @@ export interface PromptLine {
   cwd: string | null;
 }
 
-export interface RendererOptions {
+export interface ViewOptions {
   fontFamily: string;
   fontSize: number;
   theme: TerminalTheme;
@@ -47,22 +49,17 @@ export interface RendererOptions {
   openLink(url: string): void;
 }
 
-export interface TerminalRenderer {
-  /** Queue pane output behind every earlier write. */
-  output(bytes: Uint8Array): void;
-  /** Reset, resize and repaint once every earlier write has parsed; resolves when restored. */
-  snapshot(snapshot: Snapshot): Promise<void>;
+/** The interim xterm view over a {@link TerminalModel}: what xterm draws, scrolls and selects. */
+export interface XtermView {
   /** One cell's size in CSS pixels, null until the first paint; changes with font size. */
   cellSize(): CellSize | null;
-  /** One cell's size in CSS pixels from the font alone: current at once and while hidden, which the laid-out {@link cellSize} is not. Sizes tmux. */
+  /** {@link fontCell} for this view's font and renderer (the WebGL floor applies only while that renderer is live). */
   fontCell(): CellSize | null;
   /** Applies a theme; while a selection is on the rows it waits, since redrawing them would end the selection. */
   setTheme(theme: TerminalTheme): void;
   /** Calls `listener` whenever the view moves onto or off the newest line. */
   onScrolledUp(listener: (scrolledUp: boolean) => void): void;
   scrollToBottom(): void;
-  /** Calls `listener` whenever the {@link PromptLine} changes. */
-  onPromptLine(listener: (line: PromptLine | null) => void): void;
   /** A density change: the cell, and so tmux's size, follow it. */
   setFont(fontFamily: string, fontSize: number): void;
   /**
@@ -85,13 +82,7 @@ export interface TerminalRenderer {
    * the row above (a soft wrap). Empty while WebGL draws.
    */
   textRows(): { element: HTMLElement; wrapped: boolean }[];
-  /** Whether the application asked for mouse reports. */
-  mouseMode(): MouseMode;
-  /** The report format the application selected (DECSET 1006 and 1005). */
-  mouseEncoding(): MouseEncoding;
-  /** The alternate screen is showing: a full-screen application, which has no scrollback. */
-  altScreen(): boolean;
-  /** Where the cursor is on the visible screen. */
+  /** Where the cursor is on the visible screen (interim: callers read the frame's cursor once the view takes frames). */
   cursor(): CellPosition;
   /** Scrollback rows above the visible screen, and how many of them the view is scrolled up by. */
   scrollback(): { rows: number; up: number };

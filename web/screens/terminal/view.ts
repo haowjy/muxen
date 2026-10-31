@@ -7,7 +7,7 @@
 import type { Owner } from "../../app/focus";
 import type { HapticKind, InputEvent, MenuRect } from "../../platform/types";
 import type { HistoryRow } from "../../tabs/driver";
-import type { PromptLine, TerminalRenderer, TerminalTheme } from "../../term";
+import type { PromptLine, TerminalModel, TerminalTheme, XtermView } from "../../term";
 import { rowText } from "../../term/rows";
 import { HistoryView } from "./history";
 import { ScrollControl } from "./scroll";
@@ -19,7 +19,8 @@ import { TouchControl } from "./touchControl";
 interface ViewDeps {
   /** The surface: the host of the renderer, the history rows and the snapshot. */
   element: HTMLElement;
-  renderer(): TerminalRenderer | null;
+  renderer(): XtermView | null;
+  model(): TerminalModel | null;
   theme(): TerminalTheme;
   /** Scrollback rows `start..=end` of the tab shown, or null when none is live. */
   fetchHistory(start: number, end: number): Promise<HistoryRow[]> | null;
@@ -58,6 +59,7 @@ export class TerminalView {
     const { element } = deps;
     this.history = new HistoryView({
       fetch: (start, end) => deps.fetchHistory(start, end),
+      cols: () => deps.model()?.cols() ?? 80,
       scrollbackRows: () => deps.renderer()?.scrollback().rows ?? 0,
       theme: () => deps.theme(),
       onRows: () => { this.scroll.apply(); },
@@ -66,6 +68,7 @@ export class TerminalView {
     element.append(this.history.element);
     this.scroll = new ScrollControl({
       renderer: () => deps.renderer(),
+      model: () => deps.model(),
       history: this.history,
       send: (events) => { this.send(events); },
       onScrolled: (scrolled) => { deps.onScrolled(scrolled); },
@@ -74,6 +77,7 @@ export class TerminalView {
     this.selection = new SelectionControl({
       host: element,
       renderer: () => deps.renderer(),
+      model: () => deps.model(),
       joinHistory: (buffer) => this.history.join(buffer),
       theme: () => deps.theme(),
       menu: (menu) => { deps.onMenu(menu); },

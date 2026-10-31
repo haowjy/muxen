@@ -1,43 +1,34 @@
-import { Terminal, type ITheme } from "@xterm/xterm";
-import { Unicode11Addon } from "@xterm/addon-unicode11";
+import type { ITheme } from "@xterm/xterm";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import "@xterm/xterm/css/xterm.css";
-import type { CellSize, RendererOptions, TerminalRenderer } from ".";
+import type { ViewOptions, XtermView } from ".";
 import { bufferRows } from "./lines";
-import type { MouseEncoding } from "./mouse";
-import { WritePipeline, type Snapshot } from "./pipeline";
-import { PromptTracker } from "./prompt";
-import { terminalBottomPan } from "./size";
+import type { TerminalModel } from "./model";
+import { fontCell, terminalBottomPan, type CellSize } from "./size";
 import { createDesktopInput } from "./xterm-input";
 
 /** Context losses tolerated before settling on the DOM renderer. */
 const MAX_WEBGL_RECREATIONS = 3;
 
 /**
- * xterm.js 6 behind {@link TerminalRenderer}. WebGL when the context can be had, the DOM
- * renderer otherwise; a lost context is recreated, a few times, since the buffer lives in
- * the Terminal and survives the renderer.
+ * The interim xterm view (deleted in phase 6): opens the model's Terminal on the page. WebGL when the
+ * context can be had, the DOM renderer otherwise; a lost context is recreated, a few times, since the
+ * buffer lives in the Terminal and survives the renderer.
  */
-export function createXtermRenderer(container: HTMLElement, options: RendererOptions): TerminalRenderer {
-  // Stdin is off until a source is chosen: with native or muxen's owned input, xterm's helper
-  // textarea must never take focus (ios-shell.md "Keyboard"). `setInput` turns it on for desktop.
-  const term = new Terminal({
-    allowProposedApi: true, // unicode11 needs it
-    disableStdin: true,
-    scrollback: 5000,
-    fontFamily: options.fontFamily,
-    fontSize: options.fontSize,
-    theme: withoutScrollbar(options.theme),
-  });
-  term.loadAddon(new Unicode11Addon());
-  term.unicode.activeVersion = "11";
+export function createXtermView(model: TerminalModel, container: HTMLElement, options: ViewOptions): XtermView {
+  const { term } = model;
+  term.options.fontFamily = options.fontFamily;
+  term.options.fontSize = options.fontSize;
+  term.options.theme = withoutScrollbar(options.theme);
   // A tapped URL leaves the app through native, never `window.open` (ios-shell.md "Web content security").
   term.loadAddon(new WebLinksAddon((_event, url) => { options.openLink(url); }));
   term.open(container);
   // The DOM rows draw no cursor until the terminal first takes focus or switches buffers, and a phone's input never
   // focuses xterm. Selecting the normal buffer, which is already showing, marks the cursor drawable.
   if (!options.webgl) term.write("\x1b[?47l");
+  // Stdin is off until a source is chosen: with native or muxen's owned input, xterm's helper
+  // textarea must never take focus (ios-shell.md "Keyboard"). `setInput` turns it on for desktop.
   const setDesktopInput = createDesktopInput(term);
   setDesktopInput(null);
 
@@ -61,48 +52,12 @@ export function createXtermRenderer(container: HTMLElement, options: RendererOpt
   };
   if (webglWanted) attachWebgl();
 
-  // xterm keeps the report format private; the parser sees the same DECSET that sets it.
-  let encoding: MouseEncoding = "x10";
-  const encodingMode = (set: boolean) => (params: (number | number[])[]): boolean => {
-    for (const param of params) {
-      if (param === 1006) encoding = set ? "sgr" : "x10";
-      else if (param === 1005 && encoding !== "sgr") encoding = set ? "utf8" : "x10";
-    }
-    return false; // xterm still applies it
-  };
-  term.parser.registerCsiHandler({ prefix: "?", final: "h" }, encodingMode(true));
-  term.parser.registerCsiHandler({ prefix: "?", final: "l" }, encodingMode(false));
-
-  const prompt = new PromptTracker(term);
-  const pipeline = new WritePipeline({
-    write: (data, callback) => { term.write(data, callback); },
-    reset: () => {
-      encoding = "x10";
-      prompt.reset();
-      term.reset();
-    },
-    resize: (cols, rows) => { term.resize(cols, rows); },
-  });
   const cellSize = (): CellSize | null => {
     // The screen element is exactly cols × rows cells, so this needs no private API.
     const screen = term.element?.querySelector(".xterm-screen");
     if (!screen || term.cols === 0 || term.rows === 0) return null;
     const { width, height } = screen.getBoundingClientRect();
     return width > 0 && height > 0 ? { width: width / term.cols, height: height / term.rows } : null;
-  };
-
-  // The cell from the font alone, with the rounding the active renderer applies to device pixels
-  // (xterm's RenderService: the WebGL renderer floors the width, both ceil the height). It needs no
-  // layout, so it is current while the terminal is hidden, where `.xterm-screen` measures nothing.
-  const metrics = document.createElement("canvas").getContext("2d");
-  const fontCell = (): CellSize | null => {
-    if (!metrics) return null;
-    metrics.font = `${String(term.options.fontSize)}px ${term.options.fontFamily ?? ""}`;
-    const text = metrics.measureText("W");
-    const dpr = window.devicePixelRatio;
-    const width = text.width * dpr;
-    const height = text.fontBoundingBoxAscent + text.fontBoundingBoxDescent;
-    return { width: (webgl ? Math.floor(width) : width) / dpr, height: Math.ceil(height * dpr) / dpr };
   };
 
   const textRoot = (): HTMLElement | null => term.element?.querySelector<HTMLElement>(".xterm-rows") ?? null;
@@ -146,14 +101,12 @@ export function createXtermRenderer(container: HTMLElement, options: RendererOpt
   term.onResize(() => { pan(false); });
 
   return {
-    output: (bytes) => { pipeline.output(bytes); },
-    snapshot: (snapshot: Snapshot) => pipeline.snapshot(snapshot),
     cellSize,
-    fontCell,
+    // The WebGL renderer floors the cell's width; only the view knows whether it is live.
+    fontCell: () => fontCell(term.options.fontFamily ?? "", term.options.fontSize ?? 0, webgl !== undefined),
     setTheme: (theme) => { term.options.theme = withoutScrollbar(theme); },
     onScrolledUp: (listener) => { scrollListeners.push(listener); },
     scrollToBottom: () => { term.scrollToBottom(); },
-    onPromptLine: (listener) => { prompt.onLine(listener); },
     setFont: (fontFamily, fontSize) => {
       term.options.fontFamily = fontFamily;
       term.options.fontSize = fontSize;
@@ -176,9 +129,6 @@ export function createXtermRenderer(container: HTMLElement, options: RendererOpt
       const buffer = term.buffer.active;
       return [...(textRoot()?.children ?? [])].map((element, i) => ({ element: element as HTMLElement, wrapped: buffer.getLine(buffer.viewportY + i)?.isWrapped ?? false }));
     },
-    mouseMode: () => term.modes.mouseTrackingMode,
-    mouseEncoding: () => encoding,
-    altScreen: () => term.buffer.active.type === "alternate",
     cursor: () => ({ col: term.buffer.active.cursorX, row: term.buffer.active.cursorY }),
     scrollback: () => {
       const buffer = term.buffer.active;

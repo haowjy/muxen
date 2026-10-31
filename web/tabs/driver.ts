@@ -1,7 +1,7 @@
 import type { ClientMsg, ServerMsg, SessionRef, ShownWindow, Size } from "../proto/generated/messages";
 import type { Frame } from "../proto/frames";
 import type { Host, PasteResult, TabPort } from "../net/host";
-import type { TerminalRenderer } from "../term";
+import type { TerminalModel } from "../term";
 import { acceptsInsert, initialState, reduce, type ConnectionEvent, type ConnectionState } from "./connection";
 import type { InputEvent } from "../platform/types";
 import { cannotInsert, shellQuote, toMessages } from "./input";
@@ -25,7 +25,7 @@ const BAND_RTT_MARGIN_MS = 500;
 
 export interface TabOptions {
   session: SessionRef;
-  renderer: Pick<TerminalRenderer, "output" | "snapshot">;
+  renderer: Pick<TerminalModel, "output" | "snapshot">;
   /** The host's shared socket. */
   host: Host;
   /** The terminal's size right now, in cells. */

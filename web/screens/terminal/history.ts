@@ -4,7 +4,8 @@
 // terminal down and these rows in; nothing is fetched until someone scrolls there.
 import type { HistoryRow } from "../../tabs/driver";
 import type { CellSize, TerminalTheme } from "../../term";
-import { historyRows, rowText, type Row } from "../../term/rows";
+import { decodeChunk } from "../../term/decode";
+import { rowText, type Row } from "../../term/rows";
 import { ANCHOR_ROWS, locateRun } from "./anchor";
 import { fitText, rowElement } from "./rows/rowsDom";
 import styles from "./rows/Rows.module.css";
@@ -23,6 +24,8 @@ export interface HistoryDeps {
   fetch(start: number, end: number): Promise<HistoryRow[]> | null;
   /** Scrollback rows xterm holds now: tmux's history above them is what this view shows. */
   scrollbackRows(): number;
+  /** The pane's width in columns, which tmux's rows are laid out at. */
+  cols(): number;
   /** The text of the first `count` rows of xterm's buffer. */
   bufferHead(count: number): string[];
   theme(): TerminalTheme;
@@ -146,8 +149,9 @@ export class HistoryView {
       return;
     }
     if (generation !== this.generation) return;
+    const all = await decodeChunk(fetched, this.deps.cols());
+    if (generation !== this.generation) return;
     this.loading = false;
-    const all = historyRows(fetched);
     // Where the anchor starts in the chunk, and where it would if nothing moved. A first chunk that does not
     // show xterm's rows (its text differs) is taken as it falls; a later one that does not show the known rows
     // means they no longer line up.

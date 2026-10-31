@@ -12,7 +12,7 @@ import { acceptsInsert, type ConnectionState } from "../../tabs/connection";
 import { TabDriver } from "../../tabs/driver";
 import { decideKey } from "../../tabs/keymap";
 import type { SessionRef, ShownWindow } from "../../proto/generated/messages";
-import { createXtermRenderer, type PromptLine, type TerminalRenderer } from "../../term";
+import { createXtermView, TerminalModel, type PromptLine, type XtermView } from "../../term";
 import { TerminalSizer } from "../../term/size";
 import { ArmedModifiers } from "../../touch/armed";
 import { routeHardwareKey, type RowKey } from "../../touch/keyRoute";
@@ -83,7 +83,8 @@ export function terminalsOf(app: AppController): Terminals {
 export class Terminals extends Store<TerminalsView> {
   /** The element the renderer draws into; the screen places it and never creates it. */
   readonly element: HTMLDivElement = document.createElement("div");
-  private renderer: TerminalRenderer | null = null;
+  private renderer: XtermView | null = null;
+  private model: TerminalModel | null = null;
   private creating = false;
   private readonly drivers = new Map<string, TabDriver>();
   private readonly sizer: TerminalSizer;
@@ -149,6 +150,7 @@ export class Terminals extends Store<TerminalsView> {
     this.view = new TerminalView({
       element: this.element,
       renderer: () => this.renderer,
+      model: () => this.model,
       theme: terminalTheme,
       fetchHistory: (start, end) => this.shownDriver()?.history(start, end) ?? null,
       send: (id, events) => { this.typeTo(id, events); },
@@ -353,7 +355,7 @@ export class Terminals extends Store<TerminalsView> {
     const driver = new TabDriver({
       session,
       renderer: {
-        output: (bytes) => { this.renderer?.output(bytes); },
+        output: (bytes) => { this.model?.output(bytes); },
         snapshot: async (snapshot) => {
           // The renderer follows the snapshot's pane alone, never the tab's own resizes: DOM before xterm grows to a pane larger
           // than the box (a canvas that size runs the phone out of memory), WebGL again only once a fitting pane is in place.
@@ -361,7 +363,7 @@ export class Terminals extends Store<TerminalsView> {
           this.view.dismissSelection();
           this.paneLarge = snapshot.cols > box.cols || snapshot.rows > box.rows;
           if (this.paneLarge) this.renderer?.setWebgl(false);
-          await this.renderer?.snapshot(snapshot);
+          await this.model?.snapshot(snapshot);
           if (!this.paneLarge && this.viewport.directInput === "xterm") this.renderer?.setWebgl(true);
           // What was fetched or selected sat above the buffer this snapshot replaced.
           this.view.reset();
@@ -504,7 +506,8 @@ export class Terminals extends Store<TerminalsView> {
     const size = style.fontSize;
     await Promise.all([document.fonts.load(`${size} muxen-mono`), document.fonts.load(`bold ${size} muxen-mono`)]).catch(() => undefined);
     const font = getComputedStyle(this.element);
-    const renderer = createXtermRenderer(this.element, {
+    const model = new TerminalModel();
+    const renderer = createXtermView(model, this.element, {
       fontFamily: font.fontFamily,
       fontSize: parseFloat(font.fontSize),
       theme: terminalTheme(),
@@ -512,9 +515,10 @@ export class Terminals extends Store<TerminalsView> {
       webgl: this.viewport.directInput === "xterm",
       openLink: (url) => { this.app.platform.openURL(url); },
     });
+    this.model = model;
     this.renderer = renderer;
     renderer.setPanArea(this.panArea);
-    renderer.onPromptLine((line) => { this.promptLine = line; });
+    model.onPromptLine((line) => { this.promptLine = line; });
     renderer.onScrolledUp(() => { this.view.scroll.scrolledChanged(); });
     // The symbols fallback arrives after first paint: its glyphs draw once the atlas is cleared.
     document.fonts.addEventListener("loadingdone", () => { renderer.refreshGlyphs(); });

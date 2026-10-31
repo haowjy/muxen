@@ -31,6 +31,6 @@ describe("a buffer row's cells", () => {
     const term = new Terminal({ cols: 12, rows: 2, allowProposedApi: true });
     await new Promise<void>((resolve) => { term.write("© 日本x", resolve); });
     const [row] = bufferRows(term.buffer.active, 0).rows;
-    expect(row?.cells?.slice(0, 8)).toEqual(["©", " ", "日", "", "本", "", "x", " "]);
+    expect(row?.cells.slice(0, 8)).toEqual(["©", " ", "日", "", "本", "", "x", " "]);
   });
 });

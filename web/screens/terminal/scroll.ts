@@ -5,7 +5,7 @@
 // has no mouse mode, since that application owns its own scrolling. Swiping down shows older
 // content in both.
 import type { InputEvent } from "../../platform/types";
-import type { CellPosition, TerminalRenderer } from "../../term";
+import type { CellPosition, TerminalModel, XtermView } from "../../term";
 import { mouseInput } from "../../term/mouse";
 import type { CellSize } from "../../term/size";
 import { Momentum } from "../../touch/momentum";
@@ -15,7 +15,8 @@ import type { HistoryView } from "./history";
 const MAX_EVENTS_PER_FRAME = 4;
 
 interface ScrollDeps {
-  renderer(): TerminalRenderer | null;
+  renderer(): XtermView | null;
+  model(): TerminalModel | null;
   history: HistoryView;
   /** Typed input for the tab this view is showing. */
   send(events: InputEvent[]): void;
@@ -55,8 +56,8 @@ export class ScrollControl {
     this.remainder = 0;
     this.measure();
     if (anchor) this.anchor = anchor;
-    const renderer = this.deps.renderer();
-    this.app = renderer !== null && (renderer.altScreen() || renderer.mouseMode() !== "none");
+    const model = this.deps.model();
+    this.app = model !== null && (model.altScreen() || model.mouseMode() !== "none");
   }
 
   /** The finger moved `dy` px downward. */
@@ -72,7 +73,8 @@ export class ScrollControl {
    */
   wheelPastTop(dy: number): boolean {
     const renderer = this.deps.renderer();
-    if (!renderer || renderer.altScreen() || renderer.mouseMode() !== "none") return false;
+    const model = this.deps.model();
+    if (!renderer || !model || model.altScreen() || model.mouseMode() !== "none") return false;
     const { rows, up } = renderer.scrollback();
     if (this.shift === 0 && !(dy > 0 && up === rows)) return false;
     this.stop();
@@ -151,7 +153,7 @@ export class ScrollControl {
   };
 
   /** The distance from the newest line, in px: the buffer's rows, the part row, and the slide onto the history. */
-  private position(renderer: TerminalRenderer, cell: CellSize): number {
+  private position(renderer: XtermView, cell: CellSize): number {
     return renderer.scrollback().up * cell.height + this.remainder + this.shift;
   }
 
@@ -205,15 +207,15 @@ export class ScrollControl {
 
   /** Wheel events (or arrows) for `dy` px; returns whether any row's worth was due. */
   private wheel(dy: number, cell: CellSize, cap: number): boolean {
-    const renderer = this.deps.renderer();
-    if (!renderer) return false;
+    const model = this.deps.model();
+    if (!model) return false;
     this.remainder += dy;
     let rows = Math.trunc(this.remainder / cell.height);
     this.remainder -= rows * cell.height;
     if (rows === 0) return true;
     const up = rows > 0; // the finger moved down: older content, the wheel turns up
     rows = Math.min(Math.abs(rows), cap);
-    const events = mouseInput(up ? "wheelUp" : "wheelDown", this.anchor.col, this.anchor.row, renderer.mouseMode(), renderer.mouseEncoding()) ?? [{ key: up ? "Up" : "Down" }];
+    const events = mouseInput(up ? "wheelUp" : "wheelDown", this.anchor.col, this.anchor.row, model.mouseMode(), model.mouseEncoding()) ?? [{ key: up ? "Up" : "Down" }];
     this.deps.send(Array.from({ length: rows }, () => events).flat());
     return true;
   }

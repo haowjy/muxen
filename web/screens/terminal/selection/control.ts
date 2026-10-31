@@ -3,8 +3,8 @@
 // drags the far end of the selection along; lifting it shows the edit menu and leaves the rest
 // to the system's selection handles. A long-press over a blank cell opens the edit menu with
 // Paste alone on release. New output goes on underneath; the snapshot is dropped on dismiss.
-import type { TerminalRenderer, TerminalTheme } from "../../../term";
-import { rowCells, rowText, type Row } from "../../../term/rows";
+import type { TerminalModel, TerminalTheme, XtermView } from "../../../term";
+import { rowText, type Row } from "../../../term/rows";
 import { budgetStart, cellSpan, MAX_SNAPSHOT_HISTORY_ROWS, wordAt } from "../../../touch/selection";
 import { fitText } from "../rows/rowsDom";
 import { SelectionLayer } from "./SelectionLayer";
@@ -24,7 +24,8 @@ const MENU_ROOM = 56;
 
 interface SelectionDeps {
   host: HTMLElement;
-  renderer(): TerminalRenderer | null;
+  renderer(): XtermView | null;
+  model(): TerminalModel | null;
   /** The history view's rows above the buffer's, joined to them. */
   joinHistory(buffer: readonly Row[]): Row[];
   theme(): TerminalTheme;
@@ -77,7 +78,7 @@ export class SelectionControl {
     const origin = renderer?.screenOrigin();
     if (!renderer || !cell || !origin) return;
     this.dismiss();
-    const alt = renderer.altScreen();
+    const alt = this.deps.model()?.altScreen() ?? false;
     const top = renderer.viewportTop();
     const hostRect = host.getBoundingClientRect();
     const visible = Math.ceil(hostRect.height / cell.height);
@@ -95,7 +96,7 @@ export class SelectionControl {
     const topRow = hostRow - keep;
     const index = Math.floor(topRow + (y - hostRect.top) / cell.height);
     const row = rows[index];
-    const word = row && wordAt(rowCells(row), Math.floor((x - origin.left) / cell.width));
+    const word = row && wordAt(row.cells, Math.floor((x - origin.left) / cell.width));
     this.released = false;
     // Native's flag is on before the finger lifts, when WebKit builds its edit menu for the selection: told
     // only on release, the menu sometimes beat it and iOS's AutoFill showed over muxen's.
@@ -123,7 +124,7 @@ export class SelectionControl {
     const { anchor } = drag;
     const last = drag.rows.length - 1;
     const row = Math.max(0, Math.min(last, Math.floor(drag.topRow + (y - drag.hostTop) / drag.cell.height)));
-    const cells = rowCells(drag.rows[row] as Row);
+    const cells = (drag.rows[row] as Row).cells;
     const at = cellSpan(cells, Math.max(0, Math.floor((x - drag.left) / drag.cell.width)));
     const before = row < anchor.row || (row === anchor.row && at.from < anchor.from);
     layer.select(before ? { row, offset: at.from } : { row: anchor.row, offset: anchor.from }, before ? { row: anchor.row, offset: anchor.to } : { row, offset: row === anchor.row ? Math.max(at.to, anchor.to) : at.to });

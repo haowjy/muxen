@@ -16,7 +16,7 @@
 // press builds the selection snapshot.
 import type { Owner } from "../../app/focus";
 import type { HapticKind, InputEvent } from "../../platform/types";
-import type { PromptLine, TerminalRenderer } from "../../term";
+import type { PromptLine, TerminalModel, XtermView } from "../../term";
 import { mouseInput } from "../../term/mouse";
 import { DEFAULT_GESTURE, GestureRecognizer, type GestureAction } from "../../touch/gesture";
 import { charsAcross } from "../../touch/selection";
@@ -27,7 +27,8 @@ import type { PageSelection } from "./selection/pageSelection";
 
 interface TouchDeps {
   element: HTMLElement;
-  renderer(): TerminalRenderer | null;
+  renderer(): XtermView | null;
+  model(): TerminalModel | null;
   scroll: ScrollControl;
   selection: SelectionControl;
   page: PageSelection;
@@ -415,6 +416,7 @@ export class TouchControl {
   /** A short press, resolved to the one thing it does (`tapAction`). */
   private tap(x: number, y: number): void {
     const renderer = this.deps.renderer();
+    const model = this.deps.model();
     if (this.deps.directInput() === "xterm") {
       this.deps.focusTerminal();
       return;
@@ -424,14 +426,14 @@ export class TouchControl {
       owner: this.deps.owner(),
       cell: cell !== null,
       nearCursor: cell !== null && renderer !== null && Math.abs(cell.row - renderer.cursor().row) <= 1,
-      mouse: renderer !== null && renderer.mouseMode() !== "none",
+      mouse: model !== null && model.mouseMode() !== "none",
       raises: this.deps.directInput() === "native",
     });
     if (action === "focus" || action === "focusAndClick") this.deps.focusTerminal();
-    if (!renderer || !cell) return;
+    if (!model || !cell) return;
     if (action === "click" || action === "focusAndClick") {
-      const mode = renderer.mouseMode();
-      const events = mode === "none" ? null : mouseInput("tap", cell.col, cell.row, mode, renderer.mouseEncoding());
+      const mode = model.mouseMode();
+      const events = mode === "none" ? null : mouseInput("tap", cell.col, cell.row, mode, model.mouseEncoding());
       if (events) this.deps.send(events);
     } else if (action === "moveCursor") this.moveCursorTo(cell.col, cell.row);
   }

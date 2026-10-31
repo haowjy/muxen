@@ -16,6 +16,24 @@ const MIN_SIZE: Size = { cols: 20, rows: 4 };
 /** Only the trailing size is sent, so dragging a window edge doesn't resize tmux for every cell. */
 const SETTLE_MS = 150;
 
+let metrics: CanvasRenderingContext2D | null | undefined;
+
+/**
+ * One cell's size in CSS pixels from the font alone: current at once and while hidden, which a laid-out
+ * cell is not. Sizes tmux. It applies the rounding of xterm's RenderService to device pixels: the
+ * WebGL renderer floors the width (`floorWidth`), both ceil the height.
+ */
+export function fontCell(fontFamily: string, fontSize: number, floorWidth: boolean): CellSize | null {
+  metrics ??= document.createElement("canvas").getContext("2d");
+  if (!metrics) return null;
+  metrics.font = `${String(fontSize)}px ${fontFamily}`;
+  const text = metrics.measureText("W");
+  const dpr = window.devicePixelRatio;
+  const width = text.width * dpr;
+  const height = text.fontBoundingBoxAscent + text.fontBoundingBoxDescent;
+  return { width: (floorWidth ? Math.floor(width) : width) / dpr, height: Math.ceil(height * dpr) / dpr };
+}
+
 /** Whole cells that fit in `width x height` CSS pixels. */
 function fitSize(width: number, height: number, cell: CellSize): Size {
   return {

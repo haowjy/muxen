@@ -26,18 +26,15 @@ function styleOf(cell: IBufferCell): Style {
 }
 
 /**
- * The buffer's rows from `from` (moved up to the start of its logical line, and returned, so
- * a wrapped line is never cut) up to `to` exclusive, styled run by run. A row that nothing continues loses the blanks at its end.
+ * Rows `from` up to `to` exclusive, styled run by run. `wrapped(y)` says row `y` continues the one above it;
+ * a row that nothing continues loses the blanks at its end.
  */
-export function bufferRows(buffer: IBuffer, from: number, to = buffer.length): { rows: Row[]; from: number } {
-  let start = Math.max(0, from);
-  while (start > 0 && buffer.getLine(start)?.isWrapped) start--;
+export function readRows(buffer: IBuffer, from: number, to: number, wrapped: (y: number) => boolean = (y) => buffer.getLine(y)?.isWrapped ?? false): Row[] {
   const rows: Row[] = [];
   let cell: IBufferCell | undefined;
-  for (let y = start; y < buffer.length; y++) {
+  for (let y = Math.max(0, from); y < Math.min(to, buffer.length); y++) {
     const line = buffer.getLine(y);
-    // Past `to` only to finish a wrapped line.
-    if (!line || (y >= to && !line.isWrapped)) break;
+    if (!line) break;
     const runs: Run[] = [];
     const cells: string[] = [];
     for (let x = 0; x < line.length; x++) {
@@ -53,8 +50,20 @@ export function bufferRows(buffer: IBuffer, from: number, to = buffer.length): {
       cells.push(chars);
       pushRun(runs, chars, styleOf(cell));
     }
-    if (!buffer.getLine(y + 1)?.isWrapped) trimRow(runs);
-    rows.push({ runs, wrapped: line.isWrapped, cells });
+    if (!wrapped(y + 1)) trimRow(runs);
+    rows.push({ runs, wrapped: wrapped(y), cells });
   }
-  return { rows, from: start };
+  return rows;
+}
+
+/**
+ * The buffer's rows from `from` (moved up to the start of its logical line, and returned, so
+ * a wrapped line is never cut) up to `to` exclusive (default: the end; run on to finish a wrapped line).
+ */
+export function bufferRows(buffer: IBuffer, from: number, to = buffer.length): { rows: Row[]; from: number } {
+  let start = Math.max(0, from);
+  while (start > 0 && buffer.getLine(start)?.isWrapped) start--;
+  let end = Math.min(to, buffer.length);
+  while (end < buffer.length && buffer.getLine(end)?.isWrapped) end++;
+  return { rows: readRows(buffer, start, end), from: start };
 }

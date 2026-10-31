@@ -764,7 +764,8 @@ web/           one Preact app embedded by the daemon and bundled into the iOS ap
   proto/          generated wire types, binary frames, HostLink and session identity
   net/            host.ts, http.ts, hosts.ts (registry), admission.ts (pure)
   tabs/           connection.ts, driver.ts, input.ts, keymap.ts, status.ts
-  term/           pipeline.ts, size.ts, prompt.ts, xterm.ts, xterm-input.ts
+  term/           model.ts (TerminalModel: frames), decode.ts, pipeline.ts, size.ts, prompt.ts,
+                  xterm.ts (the xterm view over the model), xterm-input.ts
   touch/          phone-owned input, gesture recognizer and selection
   workspace/      pure tab state, active tab, restore, pruning and labels
   sessions/       per-host listing cache, search, expansion and creation requests
@@ -777,7 +778,7 @@ web/           one Preact app embedded by the daemon and bundled into the iOS ap
     home/         the workspace list and settings entry
     sessions/     the tab overview, Open session and the tab row's menus
     terminal/     tab row, terminal surface, status band and the phone dock; terminals.ts
-                  holds the renderer and every tab's driver outside Preact
+                  holds the terminal model and view and every tab's driver outside Preact
     files/        folder list, preview, upload and path insertion
     enrol/        enrolment and admission-problem screens
     settings/     Remove this device, Clear local data, Add to Home Screen
