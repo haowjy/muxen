@@ -5,6 +5,7 @@ version section on release.
 
 ## [Unreleased]
 
+- In phone Safari and the app's web keyboard test, a hardware Ctrl+[, Ctrl+/ and Option+punctuation (Option+. in bash) now reach tmux as they do in the app, and the key row's armed ctrl and alt do the same for the next punctuation key. Ctrl+Shift+letter is named with the capital (`C-A`), as in the app.
 - Icons are now Lucide's: Settings is a gear (it was a sun-like circle with rays), and Hide keyboard is a keyboard with a slash through it.
 - On an iPhone in Safari (and in the app's web keyboard test), every text box (the line box, the Files path box, the enrol screen's code box, and the Device name, Session name and search fields) no longer shows a row of word predictions or autocorrects your typing: autocorrect was meant to be off on the first three, and was being switched on; the others never turned it off. The line box's Return key reads return instead of Send.
 - In the iPhone app, a long press on a word in the terminal selects it and shows tether's Copy and Paste again, anywhere on a full screen; it used to select nothing. A long press no longer lowers the keyboard: it stays as it was, and with it up the dock stays drawn above it. Apple Intelligence's Writing Tools button no longer appears over the selection. A tap anywhere on a selection closes it, so the next long press always starts a new one; a tap on the selected word used to leave it up and the next long press did nothing.

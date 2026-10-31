@@ -17,7 +17,7 @@ describe("apply", () => {
 
   it("turns the next character into its chord and disarms", () => {
     expect(apply("ctrl", [{ text: "c" }])).toEqual({ events: [{ key: "C-c" }], armed: null });
-    expect(apply("ctrl", [{ text: "C" }])).toEqual({ events: [{ key: "C-c" }], armed: null });
+    expect(apply("ctrl", [{ text: "C" }])).toEqual({ events: [{ key: "C-C" }], armed: null });
     expect(apply("alt", [{ text: "b" }])).toEqual({ events: [{ key: "M-b" }], armed: null });
     expect(apply("alt", [{ text: " " }])).toEqual({ events: [{ key: "M-Space" }], armed: null });
   });
@@ -26,8 +26,14 @@ describe("apply", () => {
     expect(apply("ctrl", [{ key: "Up" }, { text: "x" }])).toEqual({ events: [{ key: "C-Up" }, { text: "x" }], armed: null });
   });
 
+  it("sends armed Ctrl on punctuation as its control byte and armed Alt as ESC and the character", () => {
+    expect(apply("ctrl", [{ text: "[" }])).toEqual({ events: [{ bytes: btoa("\x1b") }], armed: null });
+    expect(apply("ctrl", [{ text: "/" }])).toEqual({ events: [{ bytes: btoa("\x1f") }], armed: null });
+    expect(apply("alt", [{ text: "." }])).toEqual({ events: [{ bytes: btoa("\x1b.") }], armed: null });
+  });
+
   it("only disarms for what has no chord: a multi-character insert, punctuation, a paste", () => {
-    for (const events of [[{ text: "ab" }], [{ text: "/" }], [{ paste: "x" }], [{ key: "F1" }]]) {
+    for (const events of [[{ text: "ab" }], [{ text: "." }], [{ paste: "x" }], [{ key: "F1" }]]) {
       const result = apply("ctrl", events);
       expect(result.armed).toBeNull();
       expect(result.events).toBe(events);
