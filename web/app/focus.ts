@@ -244,7 +244,7 @@ export class FocusController extends Store<FocusView> implements FocusPort {
     if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
   }
 
-  /** The selection snapshot holds the touch (§7.6) while `on`: native's mode follows it. */
+  /** The terminal's selection is up (§7.6) while `on`: native keeps the keyboard and empties its edit menus. */
   selecting(on: boolean): void {
     this.isSelecting = on;
     this.rest();

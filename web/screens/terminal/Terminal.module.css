@@ -1,7 +1,10 @@
 .terminal { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .terminal[hidden] { display: none; }
+/* Its layers (the selection snapshot, the band, the edit menu) stack inside it: with the keyboard up the
+   dock rides over the surface's bottom, and the opaque snapshot must not paint over it. */
 .surface {
   position: relative;
+  isolation: isolate;
   flex: 1;
   min-height: 0;
   overflow: hidden;

@@ -264,7 +264,7 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         configuration.userContentController.addScriptMessageHandler(messageHandlerProxy, contentWorld: .page, name: "tether")
 
         let result = TetherWebView(frame: .zero, configuration: configuration)
-        result.suppressesEditMenu = { [weak self] in self?.focus.mode == .select }
+        result.suppressesEditMenu = { [weak self] in self?.focus.selecting == true }
         result.translatesAutoresizingMaskIntoConstraints = false
         result.navigationDelegate = self
         result.uiDelegate = self
@@ -707,7 +707,7 @@ private final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandlerWi
 }
 
 
-/// While the terminal's selection is up (`.select`), the page draws tether's own Copy and Paste: only its
+/// While the terminal's selection is up (`FocusController.selecting`), the page draws tether's own Copy and Paste: only its
 /// Paste reaches tmux. WebKit's menu for the same selection would stack under it, so it is emptied then.
 /// Web text fields keep the system menu.
 final class TetherWebView: WKWebView {
@@ -717,5 +717,12 @@ final class TetherWebView: WKWebView {
     // its menu empty, so it never shows. (Removing menus in `buildMenu` left it up.)
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
         suppressesEditMenu() ? false : super.canPerformAction(action, withSender: sender)
+    }
+
+    // AutoFill is a submenu, not an action, so the refusal above leaves it: it showed alone once native's
+    // field stayed first responder through the selection.
+    override func buildMenu(with builder: any UIMenuBuilder) {
+        super.buildMenu(with: builder)
+        if suppressesEditMenu() { builder.remove(menu: .autoFill) }
     }
 }

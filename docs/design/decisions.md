@@ -3343,7 +3343,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
     A tap never lowers the keyboard; taps elsewhere keep their meaning. The tap that
     raises the keyboard does not also move the prompt's cursor: that happens only when the
     terminal's input held the keyboard before the tap.
-  - **`focus select` goes to native when the finger lifts.** The highlight and the drag
+  - **`focus select` goes to native when the finger lifts** (superseded 2026-10-30: it goes when the long press selects). The highlight and the drag
     are the web's while the finger is down, over a snapshot layer that takes no pointer
     events, so WebKit's own long-press cannot take the touch and send `pointercancel`.
 - **Why:** the pad drew nothing, so a press meant to select looked like a dead control
@@ -4208,3 +4208,27 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   80 to 140 ms. Not taken for now: the web resting Files in `hidden` while no field is focused would
   avoid the handoff altogether; the native hold already keeps the page still, and the web's focus flow
   is the ux-lead's to change.
+
+## The terminal's selection keeps the keyboard; `select` is a flag (2026-10-30)
+
+- **`focus select` no longer changes first responder or the keyboard.** Native's `FocusController`
+  keeps the keyboard's target (`hidden`, `terminal`, `line`, `webText`) and a separate `selecting`
+  flag; `select` sets the flag and any other mode clears it. Resigning the native field there dropped
+  the keyboard (Jimmy: "if i long press with the keyboard up... it actually closes the keyboard... the
+  keyboard should only be dropped with the button... even if i do something outside of it"), and on
+  his phone WebKit cleared the page's selection 1 to 100 ms after the resign, so every long press on a
+  word selected nothing (Jimmy: "long tap is bugged... it should select a word... but it just...
+  doesn't work"; a debug build's log on the phone showed it on each press that found a word). A
+  separate flag, not a fifth mode, because the field's mode and native's mode would otherwise disagree
+  in a selection: an app cover and uncover then brought the field back in `webText`, and line edits
+  were dropped. Rejected: the web ignoring a selection-less change for a while after release (the
+  selection was gone, not just reported gone); keeping the resign for WebKit's handles (the
+  Simulator shows them without it; dragging a handle is still to check on the phone).
+- **The web sends `focus select` when the long press selects, not when the finger lifts.** This
+  supersedes "`focus select` goes to native when the finger lifts" (2026-10-24). That rule kept WebKit
+  from taking the held touch, which only resigning the native field allowed; `select` no longer does.
+  While the flag is on, the web view refuses every edit action and removes WebKit's AutoFill submenu
+  (which no refusal reaches). Told only on release, the flag sometimes came after WebKit built that
+  menu, and AutoFill showed over tether's Copy and Paste in the Simulator.
+- **The terminal's surface isolates its stacking.** The opaque selection snapshot (z 3) painted over
+  the dock (z 2) once the dock rode over the surface with the keyboard up.

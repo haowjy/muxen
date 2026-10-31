@@ -348,7 +348,7 @@ responder. Terminal's native responder stays the same object while its target ch
 | `terminal` | `KeyboardInput` | up | `focus terminal`: toggle from `hidden`; a tap on the cursor row or the row above/below while down; a terminal tap or esc from `line` while up; restore after interruption |
 | `line` | `KeyboardInput` | up, Return labelled Send | `focus line`: tap the dock box; restore after interruption |
 | `webText` | WebKit content view | WebKit's | a sheet or Files screen needs its own field; overlay / destination opens |
-| `select` | WebKit content view | down | `focus select` when terminal selection needs WebKit |
+| `select` | unchanged | unchanged | `focus select`: not a target but a flag over the current one (`selecting`); any other mode clears it |
 
 - **One responder, two targets.** Switching `terminal` ↔ `line` changes the mode and
   Return label, then calls `reloadInputViews()` on the same field. Tapping the dock box
@@ -358,15 +358,20 @@ responder. Terminal's native responder stays the same object while its target ch
 - **Hidden keeps native ownership.** `hidden` sets `KeyboardInput.inputView` to the
   empty view and reloads it. Hardware keys still arrive and route to the terminal; a page
   tap cannot steal first responder.
-- **The guard.** In `hidden`, `terminal` and `line`, `canResignFirstResponder` refuses
-  WebKit's attempt to take the responder, unless `FocusController` is explicitly moving
-  to `webText` or `select`.
+- **The guard.** Outside `webText`, `canResignFirstResponder` refuses WebKit's attempt
+  to take the responder.
 - **Fields off Terminal.** Before a sheet or another destination's editable field is
   used, the web asks for `webText`, which resigns `KeyboardInput`; WebKit then owns the
   sheet field and its ordinary keyboard chrome. On close the held Terminal target is
   restored synchronously; the app does not require a new tap to raise the keyboard.
-- **Selection** ([plan.md](plan.md#select-copy-and-paste)) still uses the web selection
-  layer and its `select` focus mode when it needs WebKit. The line mirror has its own
+- **Selection** ([plan.md](plan.md#select-copy-and-paste)) uses the web selection layer.
+  `focus select` sets `FocusController.selecting` and leaves the target alone: the keyboard
+  stays as it was, typing goes where it went, and only the hide button lowers it. Resigning
+  the field there dropped the keyboard, and on the phone WebKit cleared the page's
+  selection 1–100 ms later, so the long press selected nothing. The next target the web
+  sends clears the flag; a cover and uncover restore the target and leave the flag. While
+  it is on, WebKit's edit menu is emptied, and the layer sets `-webkit-touch-callout: none`
+  (tether draws Copy and Paste; iOS otherwise offers AutoFill for the native field). The line mirror has its own
   tap-to-place caret and Paste / Select all / Clear menu; it has no handles and does not
   borrow WebKit focus.
 - **Native coverage gates focus and input.** While the lock screen or native server
@@ -688,7 +693,7 @@ ios/
     Media/               Uploader; picker and video presentation
     Support/             Haptics
   TetherKit/             Foundation-only Swift package and tests
-    Tests/Fixtures/bridge/ one flat fixture for each v4 message, shared with web tests
+    Tests/Fixtures/bridge/ one flat fixture for each bridge message, shared with web tests
     Tests/Fixtures/auth/   auth DTO fixtures emitted by src/proto/auth.rs
   scripts/check.sh       XcodeGen, `swift test`, simulator `xcodebuild`
   scripts/build-web.sh   Xcode build phase: pnpm build → bundled WebUI/
@@ -743,7 +748,7 @@ and fix this spec from them. The current Simulator cannot show the software keyb
 | Hidden keeps input | Hidden with the empty `inputView`: no blank keyboard area; hardware keys still reach the terminal; only a tap on or beside the cursor opens the keyboard |
 | One keyboard / line target | With the keyboard up, one tap on the box selects `line`; a terminal tap or esc returns to `terminal` without hiding it (the tap does nothing else: no click in a mouse-mode app), and Hide closes either mode. Confirm the idle box has no caret, the focused box has a caret and Send, the terminal cursor is solid or hollow as appropriate, and no first tap is lost. Send (the web button, `lineSubmit`) acts as Return and keeps line focus. Long press opens Paste / Select all / Clear; tap places the caret and spacebar trackpad follows it. The line wraps to five visual lines and scrolls internally. |
 | Key row with the box focused | ← and → step the caret one character: a held arrow repeats at 33 ms without skipping or lagging, an emoji or accented letter is one step, a selection collapses toward the arrow. ↑ ↓ ^R ^C tab ⇧tab ⏎ reach tmux. esc and a terminal tap return typing to the terminal with the keyboard up. Exactly one cursor is live: the terminal's solid block or the box's caret, never both, and no tap is lost. During Chinese/Korean composition the row's ← → do nothing (note whether that feels dead and committing first would be better). Hardware ← → move the caret and hardware Esc returns to the terminal. The row marks esc ← → \| ~ / - as acting on the box. |
-| Selection | With `line` holding the native keyboard, verify whether WebKit's selection handles and Copy work; when they need WebKit, `focus select` must release it and release restores `line` |
+| Selection | A long press on a word selects it and shows tether's Copy/Paste, with the keyboard down, up in `terminal`, and up in `line`; the keyboard stays as it was, and typing afterwards goes where it went |
 | Keyboard toggle / restore | Toggle raises `terminal` from hidden and closes `terminal` or `line`; system dismissal resets the web owner; selection and sheet close restore the expected mode. Background, native server sheet, 10 s in background, Notification / Control Center, and web-process restart restore `line` as `line` without a new tap. |
 | Geometry | The key row meets the keyboard with no blank band and the box sits above it, in both geometry variants; WebKit does not also scroll for the keyboard; tmux's size changes only on rotation, including a rotation with the keyboard up |
 | Appearance | System follows device changes; explicit Light and Dark survive them and agree in native chrome (lock screen, the server sheet, the keyboard) and web content, including after a relaunch and with the app locked at launch |
@@ -761,9 +766,6 @@ and fix this spec from them. The current Simulator cannot show the software keyb
 - **Hidden UITextField behavior** (high): verify `.no` traits remove predictive strip in
   `line`, and confirm terminal-target dictation revisions after send-and-clear, Chinese/Korean
   composition, IME candidate Return and the spacebar trackpad on Jimmy's iOS version.
-- **Selection while the line target holds the keyboard** (medium): determine whether WebKit's
-  handles or Copy require `select`; if so, verify the selection target releases and restores
-  the same native line responder.
 - **Target switch continuity** (medium): `reloadInputViews()` may flicker or reset the
   keyboard page when switching terminal ↔ line; phone check.
 - **Mirror latency and hit testing** (medium): `lineEdit` must keep up with typing and

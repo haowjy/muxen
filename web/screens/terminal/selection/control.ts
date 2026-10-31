@@ -28,7 +28,7 @@ interface SelectionDeps {
   joinHistory(buffer: readonly Row[]): Row[];
   theme(): TerminalTheme;
   menu(menu: MenuState | null): void;
-  /** Native keeps the web view's selection while this is on (`setFocus("select")`). */
+  /** From the long press until dismiss (`setFocus("select")`): native empties the system edit menus meanwhile. */
   selecting(on: boolean): void;
 }
 
@@ -93,8 +93,11 @@ export class SelectionControl {
     const row = rows[index];
     const word = row && wordAt(rowCells(row), Math.floor((x - origin.left) / cell.width));
     this.released = false;
+    // Native's flag is on before the finger lifts, when WebKit builds its edit menu for the selection: told
+    // only on release, the menu sometimes beat it and iOS's AutoFill showed over tether's.
     if (!word) {
       this.menuOnly = { x, y };
+      this.deps.selecting(true);
       return;
     }
     const layer = new SelectionLayer(rows, this.deps.theme(), cell.height);
@@ -106,6 +109,7 @@ export class SelectionControl {
     layer.select({ row: index, offset: word.from }, { row: index, offset: word.to });
     this.unsubscribe = layer.onChange(() => { this.changed(); });
     document.addEventListener("keydown", this.escape);
+    this.deps.selecting(true);
   }
 
   /** The held finger moved to (`x`, `y`): the selection's far end follows it, by cell. */
@@ -124,8 +128,6 @@ export class SelectionControl {
   /** The finger lifted: the edit menu opens on what is selected, or over a blank cell. */
   release(): void {
     this.released = true;
-    // Native hands the touch to the web view's selection only now: while the finger is down the host owns it.
-    this.deps.selecting(true);
     this.layer?.element.removeAttribute("data-held");
     const { menuOnly } = this;
     if (!menuOnly) {
