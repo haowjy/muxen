@@ -66,7 +66,6 @@ export function LineField({ tab, label, onNote }: LineFieldProps) {
       return;
     }
     element.value = text;
-    element.style.height = `${String(Math.min(element.scrollHeight, 114))}px`;
     onNote({ tone: "error", text: result === "tooLarge" ? "Draft too large: the limit is 64 KiB" : "Too many saved drafts: clear one" });
   };
 
