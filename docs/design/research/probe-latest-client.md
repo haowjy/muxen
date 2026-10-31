@@ -2,13 +2,13 @@
 
 ## Result
 
-**Yes.** On tmux **3.4, 3.7b, and 3.8**, the tether control-mode client participates in `window-size latest` after it has a per-window size, and its size is used when tmux considers it `window->latest`. Real key events routed through `send-keys -K -c CLIENT` update its latest status; real input typed into the 80x24 PTY then takes latest status back and returns the window to 80x23. `refresh-client -C` alone does not mark a stale control client latest; `display-message -c` does not either.
+**Yes.** On tmux **3.4, 3.7b, and 3.8**, the muxen control-mode client participates in `window-size latest` after it has a per-window size, and its size is used when tmux considers it `window->latest`. Real key events routed through `send-keys -K -c CLIENT` update its latest status; real input typed into the 80x24 PTY then takes latest status back and returns the window to 80x23. `refresh-client -C` alone does not mark a stale control client latest; `display-message -c` does not either.
 
 There is not a completely transparent, side-effect-free way to do this while preserving the current raw pane-input semantics. `send-keys -K` dispatches keys through the target client's key table (prefixes/bindings can be consumed or run). A same-session `switch-client` call also sets latest, without injecting a key, but runs session-switch bookkeeping and resets that control client's key table. In this probe, tmux 3.4's `send-keys -K` updated latest but did **not** put ASCII `x` or `Enter` into the pane; UTF-8 `é` was visible. The 3.7b and 3.8 probes did put ASCII, UTF-8, and Enter into the pane. So for a cross-version implementation that must preserve current pane input, the practical supported fallback is to call same-session `switch-client` immediately before the existing pane-input command, subject to the key-table/session side effects below. If those side effects are unacceptable, the answer is **no clean mechanism**.
 
 ## Real-system run
 
-Ran isolated servers only, with `tmux -L p225-*`; binaries were `~/.cache/tether-tmux/3.4/bin/tmux`, `~/.cache/tether-tmux/3.7b/bin/tmux`, and system `tmux` 3.8. Each server used a `cat` pane, `window-size latest`, an actual 80x24 PTY attachment, and a `tmux -C attach` control client. `refresh-client -C @0:200x50` supplied the tether vote. `display-message` recorded `#{window_width}x#{window_height}`; `list-clients` recorded client name, `client_activity`, dimensions, flags, and key table; `capture-pane` checked pane input. The laptop-typing step wrote `p\n` / `l\n` to the PTY master (not `tmux send-keys`), so it exercised actual client input.
+Ran isolated servers only, with `tmux -L p225-*`; binaries were `~/.cache/muxen-tmux/3.4/bin/tmux`, `~/.cache/muxen-tmux/3.7b/bin/tmux`, and system `tmux` 3.8. Each server used a `cat` pane, `window-size latest`, an actual 80x24 PTY attachment, and a `tmux -C attach` control client. `refresh-client -C @0:200x50` supplied the muxen vote. `display-message` recorded `#{window_width}x#{window_height}`; `list-clients` recorded client name, `client_activity`, dimensions, flags, and key table; `capture-pane` checked pane input. The laptop-typing step wrote `p\n` / `l\n` to the PTY master (not `tmux send-keys`), so it exercised actual client input.
 
 | tmux | Method / sequence | Window result | Pane / client result and side effects |
 |---|---|---|---|
@@ -59,9 +59,9 @@ The relevant upstream tagged source was read directly for each version:
 
 ## Caveats / decision
 
-- `send-keys -K` is the most direct activity signal and works end-to-end for ordinary text and special keys in 3.7b/3.8. It routes those keys through tmux's binding table, so `C-b` starts the prefix table, prefix+binding keys can run tmux commands, and bound/special keys may not be forwarded to the pane. It is not equivalent to tether's current raw-pane-input command.
+- `send-keys -K` is the most direct activity signal and works end-to-end for ordinary text and special keys in 3.7b/3.8. It routes those keys through tmux's binding table, so `C-b` starts the prefix table, prefix+binding keys can run tmux commands, and bound/special keys may not be forwarded to the pane. It is not equivalent to muxen's current raw-pane-input command.
 - 3.4 supports the `-K` flag in source and accepts it at runtime, and it updates latest; nevertheless, the tested ASCII `x` and Enter did not appear in the pane, while UTF-8 `é` did. This discrepancy makes `-K` alone a poor cross-version input replacement without a focused follow-up on the 3.4 input quirk.
-- `switch-client` is the supported cross-version way found to set latest without injecting a key. Use only with tether's current session and serialize it with existing raw input; assess its session side effects and control-client key-table reset.
+- `switch-client` is the supported cross-version way found to set latest without injecting a key. Use only with muxen's current session and serialize it with existing raw input; assess its session side effects and control-client key-table reset.
 - `display-message -c` only chooses where/formats a message; `refresh-client` flags tested here do not activate the client. `select-window` has no `-c` option in these releases.
 - Once the control client becomes latest, actual laptop PTY input moves latest back and the window becomes 80x23 again. The existing manual `resize-window` concern is avoided: `show-window-options -t @0 window-size` remained `window-size latest` throughout.
 

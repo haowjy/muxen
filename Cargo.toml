@@ -1,14 +1,14 @@
 [package]
-name = "tether"
+name = "muxen"
 version = "0.0.1"
 edition = "2024"
 rust-version = "1.85"
 description = "Phone-first client for tmux sessions on a dev server, over Tailscale"
-repository = "https://github.com/haowjy/tether"
+repository = "https://github.com/haowjy/muxen"
 publish = false
 
 [[bin]]
-name = "tether"
+name = "muxen"
 path = "src/main.rs"
 
 [dependencies]

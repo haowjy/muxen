@@ -1,8 +1,8 @@
-# tether: product and UX spec
+# muxen: product and UX spec
 
-tether is a phone-first client for the tmux sessions on Jimmy's dev servers, reached
+muxen is a phone-first client for the tmux sessions on Jimmy's dev servers, reached
 only over his tailnet. This document is the product and UX spec and the index of the
-design: what tether does and how it looks and behaves on the phone. Each subsystem
+design: what muxen does and how it looks and behaves on the phone. Each subsystem
 has its own spec, and every decision, with the alternatives rejected, is logged in
 [decisions.md](decisions.md).
 
@@ -19,7 +19,7 @@ and record decisions in decisions.md.
 | [ios-shell.md](ios-shell.md) | The native iOS app: keyboard, focus, bridge, scheme handler, lifecycle, media |
 | [auth.md](auth.md) | Native device tokens, enrolled-node browser admission, enrolment and auth routes |
 | [fs.md](fs.md) | `src/fs/`: path resolution, the `/fs/*` routes, uploads, their limits |
-| [setup.md](setup.md) | `src/setup/`: foreground and background `tether setup`, `tether teardown`, publishing on the tailnet, and setup checks |
+| [setup.md](setup.md) | `src/setup/`: foreground and background `muxen setup`, `muxen teardown`, publishing on the tailnet, and setup checks |
 | [complete.md](complete.md) | `src/complete/`: `POST /complete`, the history, PATH, carapace and path sources, the shell snippet, how they stay inside the budget |
 | [decisions.md](decisions.md) | The decision log: what, why, alternatives rejected, who, when |
 | [plan-review.md](plan-review.md) | The first review of this plan, kept as a record |
@@ -44,21 +44,21 @@ his tailnet. It needs:
 Agent dashboards and notifications are out of scope: Jimmy's agent harness already
 handles notifications. The one exception: a terminal bell puts an attention dot on its
 tab and session row ([Bell attention](#reading-on-a-small-screen)).
-Why tether is worth building, and which projects to study, is in [research/prior-art.md](research/prior-art.md).
+Why muxen is worth building, and which projects to study, is in [research/prior-art.md](research/prior-art.md).
 
 ## Invariants
 
 Four rules hold whatever the design. A change that breaks one makes a different
 product; it is not a decision to log.
 
-- **tmux is the source of truth.** tether is a window onto Jimmy's tmux, never its
-  owner. It never starts the tmux server, and tmux keeps running whether tether runs or
-  not. Closing a tab only detaches. tether never kills tmux on its own, or without a
+- **tmux is the source of truth.** muxen is a window onto Jimmy's tmux, never its
+  owner. It never starts the tmux server, and tmux keeps running whether muxen runs or
+  not. Closing a tab only detaches. muxen never kills tmux on its own, or without a
   confirmation that names what ends (Jimmy, 2026-10-30).
 - **Every byte on the network costs the user.** The phone is often on a weak link.
   Nothing polls over the network: the daemon sends changes, and a reconnect costs one
   fresh snapshot.
-- **tether stays light on a busy host.** Its CPU and memory are bounded and capped
+- **muxen stays light on a busy host.** Its CPU and memory are bounded and capped
   where Jimmy chooses ([Resource budget](#resource-budget)).
 - **Content from disk or tmux never runs as the app.** Rendered Markdown and Mermaid
   are sanitized (DOMPurify, Mermaid's strict mode), and proxied files are served
@@ -85,13 +85,13 @@ Jimmy's decisions, as they stand ([log](decisions.md#jimmys-decisions)):
 - **Client:** a native Swift app hosting the web UI in a WKWebView, with a native
   first responder owning the keyboard ([ios-shell.md](ios-shell.md)). Installed from
   Xcode on Jimmy's paid team until TestFlight is set up.
-- **tmux:** 3.4 on the server; tether supports 3.4 and newer. `window-size latest`, default prefix
+- **tmux:** 3.4 on the server; muxen supports 3.4 and newer. `window-size latest`, default prefix
   `C-b`, the laptop sometimes attached at the same time. A window takes the size of
   the client that acted on it last, as tmux's `latest` does: opening a tab, typing,
   pasting, rotating, a font change or Fit sizes it to exactly the phone's size, whether
   the laptop's terminal is larger or smaller, and the laptop typing takes it back; a
-  window tether stops holding with nobody else acting there keeps the size it had when
-  tether attached until the laptop types ([daemon-core.md §3.6](daemon-core.md#36-sizing)). The keyboard
+  window muxen stops holding with nobody else acting there keeps the size it had when
+  muxen attached until the laptop types ([daemon-core.md §3.6](daemon-core.md#36-sizing)). The keyboard
   never resizes it.
 - **Tabs:** a terminal tab follows one tmux session, as `tmux attach` does: it shows
   the current window's active pane and follows current-window changes from any client.
@@ -105,16 +105,16 @@ Jimmy's decisions, as they stand ([log](decisions.md#jimmys-decisions)):
   new file and rename come in v2. Move, mkdir and delete are done in the terminal.
 - **Auth:** allowlisted Tailscale login plus two device lanes: an iOS device token
   behind Face ID and an enrolled tailnet node for the browser/PWA. Both use the same
-  one-time code and can be revoked with `tether device remove` ([auth.md](auth.md)).
-- **Access:** tether is reachable only from Jimmy's tailnet.
+  one-time code and can be revoked with `muxen device remove` ([auth.md](auth.md)).
+- **Access:** muxen is reachable only from Jimmy's tailnet.
 - **Hosts:** several servers are part of the product, not a later extension: Home lists one
   workspace per server, and each workspace holds only its server's tabs. The app connects
   to each host's daemon directly. A browser/PWA is still bound to its page origin until a
   multi-server browser design lands (an origin and admission design that keeps the
   browser boundary; [interaction contract](client/browser-behaviors.md#product-boundaries-and-vocabulary)).
 - **Server platform:** Linux is the primary host. A Mac can host too, with the
-  standalone Tailscale app, under a weaker local boundary: Serve reaches tether on a
-  loopback port guarded by a path secret that tether publishes and rotates at each
+  standalone Tailscale app, under a weaker local boundary: Serve reaches muxen on a
+  loopback port guarded by a path secret that muxen publishes and rotates at each
   start, instead of a socket in a private directory. It is supported only on a Mac
   whose one user account is Jimmy's, and serves only
   while he is logged in ([auth.md](auth.md#the-mac-front)). A Mac
@@ -126,22 +126,22 @@ Jimmy's decisions, as they stand ([log](decisions.md#jimmys-decisions)):
 
 ## Architecture
 
-The daemon runs as Jimmy on the dev box. On Linux, plain `tether setup` runs it in
-the terminal; `tether setup --background` installs it as a systemd user unit. On a Mac,
+The daemon runs as Jimmy on the dev box. On Linux, plain `muxen setup` runs it in
+the terminal; `muxen setup --background` installs it as a systemd user unit. On a Mac,
 the LaunchAgent in Jimmy's login session owns the front phones can reach. It talks to
 tmux directly through control mode: no SSH, no wrapping of commands or agents.
 
 ```mermaid
 flowchart TB
-  phone["iPhone: tether app (Swift + WKWebView)<br/>xterm.js is the only terminal emulator"]
+  phone["iPhone: muxen app (Swift + WKWebView)<br/>xterm.js is the only terminal emulator"]
   serve["tailscale serve<br/>HTTPS on the *.ts.net name, tailnet only"]
-  subgraph unit["tether daemon process (foreground or systemd user unit), runs as Jimmy"]
-    daemon["tether daemon<br/>one static Rust binary"]
+  subgraph unit["muxen daemon process (foreground or systemd user unit), runs as Jimmy"]
+    daemon["muxen daemon<br/>one static Rust binary"]
     cc["tmux -C control clients<br/>one per session with a watched tab"]
   end
   dev["Vite dev proxy<br/>native token, local.sock"]
   carapace["carapace, one run at a time, on demand<br/>own transient scope, outside the unit's limits"]
-  tmux["Jimmy's tmux server<br/>started outside tether, never by it"]
+  tmux["Jimmy's tmux server<br/>started outside muxen, never by it"]
   scratch["scratch tmux server<br/>own transient scope"]
   phone -- "HTTPS + one WebSocket per host" --> serve
   serve -- "serve.sock (private Unix socket)" --> daemon
@@ -162,20 +162,20 @@ Inside the daemon ([layout](#code-structure-and-standards)):
 - **auth**: the Tailscale check, native-token and enrolled-node lanes, and live
   revocation ([auth.md](auth.md)).
 
-**tether never starts Jimmy's tmux server.** A tmux server first started from inside a
+**muxen never starts Jimmy's tmux server.** A tmux server first started from inside a
 systemd unit lives in that unit's cgroup: it dies on `systemctl --user stop`, and
-tether's memory limit would cover tmux and every agent in it
-([probe-tmux.md §7](research/probe-tmux.md)). So Jimmy starts tmux outside tether, as
-today, and tether runs every tmux command with `-N`, which fails instead of starting a
+muxen's memory limit would cover tmux and every agent in it
+([probe-tmux.md §7](research/probe-tmux.md)). So Jimmy starts tmux outside muxen, as
+today, and muxen runs every tmux command with `-N`, which fails instead of starting a
 server ([daemon-core.md §3.1](daemon-core.md#31-invoking-tmux)). With no server
 running, the app says so and offers nothing that would start one. The scratch server
 is the one exception, started in its own transient scope so it never lives in
-tether's cgroup.
+muxen's cgroup.
 
 ### Workspaces and tabs
 
 A terminal tab opens one tmux session on its current window, follows it when the laptop,
-a script or tether changes the window, and follows the active pane inside it. Its label
+a script or muxen changes the window, and follows the active pane inside it. Its label
 is the session name then the window name; identity is the stable server/session ID. Files
 is also a tab: any number can be open, each with its own saved folder or preview. Closing
 a tab only detaches.
@@ -240,7 +240,7 @@ Versions verified 2026-10-21 ([libraries.md](research/libraries.md),
 | Area | Pick | Notes |
 |---|---|---|
 | Runtime | tokio, current-thread runtime, 8 blocking threads split into bounded-wait lanes | see [Resource budget](#resource-budget) |
-| HTTP | axum 0.8, tower-http 0.7 | `/fs/raw` stays custom, so descriptor opens and range limits are tether's own |
+| HTTP | axum 0.8, tower-http 0.7 | `/fs/raw` stays custom, so descriptor opens and range limits are muxen's own |
 | Web assets | built by Vite and embedded in the daemon | the same web UI is bundled in the iOS app; the daemon serves browser/PWA shell paths |
 | Auth | sha2, subtle, getrandom | [auth.md](auth.md#crates) |
 | Tailscale LocalAPI | bounded keep-alive client over tailscaled's Unix socket: status, Serve config and per-request whois | |
@@ -255,7 +255,7 @@ Versions verified 2026-10-21 ([libraries.md](research/libraries.md),
 
 ### Config
 
-`~/.config/tether/config.toml`. Every key is optional, the file may not exist, and
+`~/.config/muxen/config.toml`. Every key is optional, the file may not exist, and
 unknown keys are ignored, so an older daemon reads a newer config. An annotated example,
 and the note on `TMUX_TMPDIR` under systemd, are in [running.md](../running.md).
 
@@ -266,23 +266,23 @@ and the note on `TMUX_TMPDIR` under systemd, are in [running.md](../running.md).
 | `[tmux] program` | `tmux` | the tmux executable; an absolute path if the unit's `PATH` doesn't find it |
 | `[tmux] socket_name` | none | `tmux -L <name>` |
 | `[tmux] socket_path` | none | `tmux -S <path>`; not together with `socket_name` |
-| `uploads_dir` | `~/tether-uploads` | the uploads folder; read on every upload request ([fs.md](fs.md#the-uploads-folder)) |
+| `uploads_dir` | `~/muxen-uploads` | the uploads folder; read on every upload request ([fs.md](fs.md#the-uploads-folder)) |
 | `[complete] history` | the most recently modified of `~/.zsh_history`, `~/.bash_history`, fish's history | the one history file the suggestion strip reads; set it when the shell's `$HISTFILE` is elsewhere ([complete.md](complete.md#history)) |
 | `[complete] path` | the daemon's own `PATH` | the `PATH` the command index scans and carapace runs with; set it to the interactive shell's `PATH`, since the systemd user manager's lacks what rc files add ([complete.md](complete.md#commands-on-path)) |
 | `[complete] carapace` | `carapace` on that `PATH` | the carapace binary; absent or failing means no flag chips ([complete.md](complete.md#carapace)) |
 
-With neither socket key, tether uses tmux's default socket.
+With neither socket key, muxen uses tmux's default socket.
 
 ## Resource budget
 
-The dev server is already overloaded and crashes, and more than one user may run tether
+The dev server is already overloaded and crashes, and more than one user may run muxen
 there. Targets: daemon idle RSS under ~5 MB with no phone connected, about 0% CPU when
 nobody is connected, a hard cap on CPU and memory on Linux that the user can tighten,
 and no way to make the existing crashes worse. On macOS the budget only sizes counts;
 there is no cgroup or hard memory/CPU cap.
 
 - **Event-driven:** control-mode events, no periodic capture, no `tmux ls` loop. With
-  no phone connected, tether holds no control clients and no pane state once the
+  no phone connected, muxen holds no control clients and no pane state once the
   control-client linger has passed.
 - **Nothing held for panes nobody views:** a pane's state exists only while a tab on
   screen shows it, and unviewed panes are paused in tmux.
@@ -317,18 +317,18 @@ there is no cgroup or hard memory/CPU cap.
   2 MiB.
 - **No heavy server work:** HEIC conversion happens on the phone; videos stream as-is
   over HTTP Range; no thumbnails, no transcoding, no file watcher.
-- **Crash safety:** tmux is the source of truth. If tether restarts, clients reconnect
+- **Crash safety:** tmux is the source of truth. If muxen restarts, clients reconnect
   and repaint from snapshots.
 
-**systemd user unit** (`contrib/tether.service`): `Type=notify`, `KillMode=mixed`,
+**systemd user unit** (`contrib/muxen.service`): `Type=notify`, `KillMode=mixed`,
 `Restart=on-failure` with a backoff (`RestartSec=2`, `RestartSteps=5`,
 `RestartMaxDelaySec=60`, `StartLimitIntervalSec=0`), `RestartPreventExitStatus=78`,
 `MemoryMax=72M`, `CPUQuota=50%`, `CPUQuotaPeriodSec=10ms`, `CPUWeight=20`, `Nice=10`,
 `IOWeight=10`, `IOSchedulingClass=idle`, `TasksMax=32`, `OOMScoreAdjust=500` (the
-kernel kills tether before tmux or the agents), and
+kernel kills muxen before tmux or the agents), and
 `Environment=GLIBC_TUNABLES=glibc.malloc.mmap_threshold=131072`.
 
-- `KillMode=mixed` sends SIGTERM to tether alone, so it closes sockets with 4004 and its
+- `KillMode=mixed` sends SIGTERM to muxen alone, so it closes sockets with 4004 and its
   control clients itself. Under the default kill mode, systemd also signals the
   `tmux -C` clients directly, and the hub would report them as detached while the
   sockets close, so a phone could get `watchEnded { detached }` instead of reconnecting.
@@ -344,7 +344,7 @@ kernel kills tether before tmux or the agents), and
 - `CPUQuota=50%` holds the whole unit to half of one core. The quota is per cgroup and
   spent across CPUs. A throttled keystroke can wait at most one 10 ms period, within one
   60 Hz frame; the 50% quota stretches bursts by up to double. `CPUWeight` and `Nice`
-  still make tether yield under contention.
+  still make muxen yield under contention.
 - `GLIBC_TUNABLES` pins glibc's mmap threshold at 128 KiB. glibc raises that threshold
   after the first large free, so completion's indexes would land in the heap and stay
   resident after its idle drop; pinned, each is its own mapping and goes back to the
@@ -477,7 +477,7 @@ alt arm the next key. Arrows repeat while held. Command recall is the shell's ow
 ^R), including commands typed on the desktop; the line field keeps no history. Details
 are in [Phone dock](client/browser-behaviors.md#phone-dock).
 
-- **^B sends one Ctrl+B.** tether's `send-keys` writes straight to the pane, past
+- **^B sends one Ctrl+B.** muxen's `send-keys` writes straight to the pane, past
   tmux's key bindings, so the prefix never intercepts it.
 - **No tmux-prefix key**, for the same reason; tmux actions live in the app's UI.
 - More keys (⇧tab, esc esc, Ctrl+J newline) are candidates from what the agent CLIs
@@ -485,7 +485,7 @@ are in [Phone dock](client/browser-behaviors.md#phone-dock).
 
 ### Sending keys and tmux.conf
 
-tether sends input with `send-keys`; only Shift+Enter is hand-encoded. Checked on tmux
+muxen sends input with `send-keys`; only Shift+Enter is hand-encoded. Checked on tmux
 3.4 ([probe-tmux.md §6](research/probe-tmux.md)):
 
 | Input | Command | Bytes the pane receives |
@@ -503,14 +503,14 @@ CSI-u bytes unrequested is checked in spike 3; Ctrl+J stays the default newline.
 and function keys go by tmux key name, so tmux encodes them for the pane's cursor-key
 mode.
 
-**tmux.conf.** tether never edits it, and its input path needs none of these; Jimmy
+**tmux.conf.** muxen never edits it, and its input path needs none of these; Jimmy
 agreed to add them for the laptop:
 
 - `set -s escape-time 10`: how long tmux waits after an Esc typed in a terminal
   client. Keys from `send-keys` skip that parser.
 - `set -s extended-keys on` with `set -as terminal-features '*:extkeys'`: modified keys
   such as Shift+Enter from a modern terminal reach the app.
-- `set -g set-clipboard on`: optional; tether sees OSC 52 either way.
+- `set -g set-clipboard on`: optional; muxen sees OSC 52 either way.
 
 ## Touch
 
@@ -549,7 +549,7 @@ The [researched interaction design](client/terminal-interaction-design.md) is th
 current direction. A long-press fires with a haptic and highlights the word under the
 finger at once. Dragging while still held moves the selection's far end to the cell under
 the finger, across rows, within the snapshot (the rows in view and those kept above them;
-no autoscroll at the edges). Releasing shows the handles to adjust it and tether's edit
+no autoscroll at the edges). Releasing shows the handles to adjust it and muxen's edit
 menu: Copy, and Paste, which sends the clipboard to the terminal as one paste without
 Enter. A long-press over a blank cell opens the menu with Paste alone on release. It must not trigger a remote click. Prototype
 native selection handles with a bounded, immutable logical-text snapshot; rendering
@@ -589,12 +589,12 @@ width.
 - **Bell attention:** a terminal bell (BEL) puts a dot on its tab pill, its tab overview row and
   its Open session row, until this device shows that tab. The only source is a
   server-global `alert-bell` hook the daemon installs at runtime, at the fixed index 9100
-  (`set-hook -g`; it counts the ringing session's bells in a tether user option with
+  (`set-hook -g`; it counts the ringing session's bells in a muxen user option with
   `set-option -F`); it removes only that entry when it stops, and never edits
   `.tmux.conf` or changes `monitor-bell` or `bell-action`; behavior verified on tmux 3.4,
   3.7b and 3.8 (decisions.md, "Bell attention"). The daemon does not scan pane output for
   BEL: the tab on screen counts as seen on its device, so a bell in it needs no dot
-  (Jimmy, 2026-10-27, "Hook only"). "Seen" is tether's own per-device state; tmux's shared
+  (Jimmy, 2026-10-27, "Hook only"). "Seen" is muxen's own per-device state; tmux's shared
   bell flags are never cleared for the phone. While at least one device is connected, the
   daemon reads each session's count with the session listing it already has, every 5
   seconds, and tells the devices only when a count changed: no network bytes while nothing
@@ -605,7 +605,7 @@ width.
   excludes the window suppresses the hook; the client says so for that session in words,
   and says separately when the daemon cannot read tmux at all. **Bells before the first
   device connects after a tmux start are lost**, since the hook is installed only when a
-  device is connected (or the daemon started with the server up); and with **two tether
+  device is connected (or the daemon started with the server up); and with **two muxen
   daemons on one server** the first to stop removes the shared entry, so the other loses
   bells until it next reinstalls, at its next connected device's listing. Agents must ring
   BEL: Claude Code does so
@@ -626,15 +626,15 @@ at `~`; existing tabs are restored by selecting them.
 the terminal can; a device token already runs commands in tmux, so a boundary would
 guard against nothing but Jimmy. There are no favorites: the path field heads every
 Files tab and works like a browser's address bar, so going somewhere is typing its path.
-The uploads folder (`uploads_dir`, default `~/tether-uploads`) is set in `config.toml`.
-No file watcher: listings are read on open, on pull-to-refresh, and after tether's own
+The uploads folder (`uploads_dir`, default `~/muxen-uploads`) is set in `config.toml`.
+No file watcher: listings are read on open, on pull-to-refresh, and after muxen's own
 file operations. Typed into, the path field completes the next existing folder from
 listings the client already holds, one request per folder entered, never one per
 keystroke ([interaction contract](client/browser-behaviors.md#files)).
 
 **API.** The routes, path resolution, the uploads folder, limits and errors are in
 [fs.md](fs.md). The web reaches them through its host's scheme-handler origin,
-`tether-app://h-{host}/fs/…` ([ios-shell.md](ios-shell.md#where-the-web-ui-comes-from));
+`muxen-app://h-{host}/fs/…` ([ios-shell.md](ios-shell.md#where-the-web-ui-comes-from));
 video goes to the native player instead. MVP: list, raw (Range) and upload. v2: save
 an edit, new file, rename.
 
@@ -674,7 +674,7 @@ load as they scroll into view; upload has a "resize / send original" toggle.
 background service, and attaches to his tmux server directly.
 
 **Tailnet only.** The daemon binds `serve.sock` and `local.sock` in
-`$XDG_RUNTIME_DIR/tether/`, a private `0700` directory. `tether setup` publishes only
+`$XDG_RUNTIME_DIR/muxen/`, a private `0700` directory. `muxen setup` publishes only
 `serve.sock` (Tailscale 1.94 or later), as Tailscale's operator
 ([setup.md](setup.md)). The daemon starts
 without LocalAPI and refuses Funnel traffic per request; it does not make Funnel a
@@ -687,7 +687,7 @@ token on either front. A browser/PWA presents no credential and is admitted as i
 Tailscale node only on `serve.sock`, only when that socket is the single root HTTPS
 Serve handler and its node stable ID plus login is enrolled in `auth.toml`. The node
 lane rejects tagged, shared-in, subnet-routing and self nodes. `local.sock` is native
-only. `tether device remove` revokes either kind; live sockets are rechecked every 10
+only. `muxen device remove` revokes either kind; live sockets are rechecked every 10
 seconds. The full rules are in [auth.md](auth.md).
 
 **Canonical origin and browser requests.** The daemon trusts the browser lane only
@@ -697,7 +697,7 @@ handler of one HTTPS entry with Funnel off. It checks `Host: localhost`, one
 and `Sec-Fetch-Site: same-origin` on reads. API responses are `no-store` with
 `Cross-Origin-Resource-Policy: same-origin`; the embedded shell has a restrictive
 CSP. Native auth remains cookie-free and needs no Origin exception.
-The native UI at `tether-app://ui` has a separate scheme-handler CSP and sandbox for
+The native UI at `muxen-app://ui` has a separate scheme-handler CSP and sandbox for
 daemon responses ([ios-shell.md](ios-shell.md#web-content-security)).
 
 **Device files fail closed.** The daemon reads `auth.toml` on every check. An unreadable
@@ -713,7 +713,7 @@ file contents. File writes are logged by path and action.
 
 **File safety:** every path is canonicalized and opened through a descriptor with
 `O_NOFOLLOW` (no scope: reads reach what the terminal reaches); creates and renames never replace a file; size caps on
-upload and edit; nothing in the uploads folder is ever executed by tether
+upload and edit; nothing in the uploads folder is ever executed by muxen
 ([fs.md](fs.md#path-resolution-fsopen)).
 ## Long-term
 
@@ -731,7 +731,7 @@ upload and edit; nothing in the uploads folder is ever executed by tether
   newer config.
 - **repo-viewer parity (v2):** the viewer list above; repo-viewer is archived only
   after it lands.
-- **Meridian:** the only link is a CLI command, `tether notify` (later), which Jimmy's
+- **Meridian:** the only link is a CLI command, `muxen notify` (later), which Jimmy's
   harness could call to badge a tab.
 
 ## Code structure and standards
@@ -751,7 +751,7 @@ src/auth/      LocalAPI identity, native/node devices, admission and enrolment (
 src/runtime.rs private runtime directory, single-instance lock, serve/local Unix sockets
 src/fs/        the only place paths are resolved and opened
 src/complete/  /complete: history, PATH index, carapace runner (bounded, cached; complete.md)
-src/setup/     tether setup and teardown: checks, foreground run, service install and publication (setup.md)
+src/setup/     muxen setup and teardown: checks, foreground run, service install and publication (setup.md)
 web/           one Preact app embedded by the daemon and bundled into the iOS app:
   main.tsx, index.html pick the Platform, boot it and render App
   platform/
@@ -792,7 +792,7 @@ web/           one Preact app embedded by the daemon and bundled into the iOS ap
   harness/        test-mode entry, imports per-lane fixtures; never in production builds
   e2e/            opt-in end-to-end scripts (`*.real.ts`): a real daemon on a private tmux
                   through shared/stack.ts
-ios/           Swift app (XcodeGen) and the TetherKit package (ios-shell.md)
+ios/           Swift app (XcodeGen) and the MuxenKit package (ios-shell.md)
 ```
 
 Dependency rules: `hub/` never sees HTTP, `http/` never talks to tmux, and
@@ -856,7 +856,7 @@ slice they need and storage coalesces writes within a microtask.
   transitive imports. The keyboard and viewport are checked on the phone. The `*.real.ts`
   end-to-end scripts (`pnpm --dir web run e2e:real`) run a real daemon on a private tmux 3.4
   and 3.8 and exercise full behaviour end to end; they are where performance recording will
-  live. They need the tmux builds under `~/.cache/tether-tmux` and are never part of preflight.
+  live. They need the tmux builds under `~/.cache/muxen-tmux` and are never part of preflight.
 
 ## Phases
 
@@ -911,7 +911,7 @@ The spikes come first. The native app's keyboard checks are in
 
 - WebTransport or QUIC.
 - "Open via dev box" for `localhost` links.
-- `tether notify`, a hook Jimmy's harness can call to badge a tab.
+- `muxen notify`, a hook Jimmy's harness can call to badge a tab.
 - A server-side terminal model (`vt100`), if a feature needs screen contents on the
   server.
 - A ghostty-web renderer, if Unicode width problems persist.
@@ -928,7 +928,7 @@ with the phone spikes.
 1. **Keyboard ownership** has no spike: input is the web dock, and its open native
    questions are in [ios-shell.md's device checklist](ios-shell.md#device-checklist),
    run during P4.
-2. **Daemon core against real tmux** (server only), as tether's own integration tests
+2. **Daemon core against real tmux** (server only), as muxen's own integration tests
    ([daemon-core.md §8](daemon-core.md#8-testing)): the snapshot boundary on 3.4 here
    and 3.7b on the Mac, recording the fixtures; `send-keys` bypassing `escape-time`
    and the prefix; and the memory ceiling measured, with completion active (carapace itself runs in its
@@ -938,7 +938,7 @@ with the phone spikes.
    (does it flash?); WebGL context loss after backgrounding; echo latency on cellular;
    whether agents accept CSI-u Shift+Enter.
 4. **Auth end to end:** enrolment from the app against the real `*.ts.net` host, the
-   token surviving a daemon restart, `tether device remove` closing a live socket.
+   token surviving a daemon restart, `muxen device remove` closing a live socket.
 5. **Selection overlay:** native handles over xterm.js, alignment at different font
    sizes.
 6. **Momentum scroll** with lazy history (the DOM view above the live terminal), plus
@@ -950,15 +950,15 @@ with the phone spikes.
 
 ### Running the phone spikes
 
-Spikes are throwaway code, kept out of `src/`, `web/` and `ios/Tether/`, and deleted
+Spikes are throwaway code, kept out of `src/`, `web/` and `ios/Muxen/`, and deleted
 once they've answered.
 
 - **Spikes 3–8** run their web pages inside the app, through the Debug build's
   dev-server switch ([ios-shell.md](ios-shell.md#where-the-web-ui-comes-from)). That
   switch is deferred (`ios/.context/FUTURE`), so these steps need it built first:
-  1. Run the page from Vite behind a private Unix socket using `TETHER_SOCKET`.
+  1. Run the page from Vite behind a private Unix socket using `MUXEN_SOCKET`.
      Its proxy presents a native token to `local.sock`. A spike that needs a live terminal attaches to a tmux server on
-     its own socket (`tmux -L tether-spike`), which Jimmy starts from a shell; spike
+     its own socket (`tmux -L muxen-spike`), which Jimmy starts from a shell; spike
      code never starts it.
   2. Publish it on the tailnet with root: `sudo tailscale serve --bg --https=8443
      unix:<the Vite socket>`. Never `tailscale funnel`; `tailscale serve status` should

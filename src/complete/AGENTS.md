@@ -53,7 +53,7 @@ Rules the code relies on, which are easy to break:
   the drop. The once-per-process log flags are the exception, by design.
 - **Large allocations are single buffers** (`Packed`, the read buffer, the run's
   output) so they are mmapped and go back to the kernel when freed; the unit pins
-  glibc's mmap threshold for that (`contrib/tether.service`).
+  glibc's mmap threshold for that (`contrib/muxen.service`).
 
 Tests: the lexer table (`context.rs`); each history format, ranking and the tail read
 (`history.rs`); the `PATH` index's refresh (`commands.rs`); splitting, escaping and

@@ -23,7 +23,7 @@ revocation, session lifetime and reauthentication remain design decisions.
 
 ## Settings and client behavior
 
-Use **Server** for a saved Tether endpoint, not “Tailscale connection.” A server
+Use **Server** for a saved Muxen endpoint, not “Tailscale connection.” A server
 profile has a display name, HTTPS URL, and connection/authentication status. Keep
 terminal state and saved drafts scoped to stable server/session identity; names and
 URLs alone are not durable identity. Credentials belong to that server, never to
@@ -40,7 +40,7 @@ whichever profile happens to be active when a request completes.
   origin policy, storage isolation and connectivity design. Do not enable wildcard
   CORS or forward one machine's credentials to another to make switching work.
 - **Tailscale account/tailnet:** selected in the operating system's Tailscale app,
-  not controlled by Tether's server picker. Report an unreachable endpoint without
+  not controlled by Muxen's server picker. Report an unreachable endpoint without
   claiming to know whether the cause is Tailscale, DNS, the server, or a firewall.
 
 ## Authentication versus reachability

@@ -26,7 +26,7 @@ export const fixtures: Fixtures = {
   filesCode: at({ kind: "file", path: `${REPO}/src/main.rs` }),
   filesImage: at({ kind: "file", path: `${REPO}/shot.png` }),
   filesVideo: at({ kind: "file", path: `${REPO}/demo.mp4` }),
-  filesBinary: at({ kind: "file", path: `${REPO}/tether.bin` }),
+  filesBinary: at({ kind: "file", path: `${REPO}/muxen.bin` }),
   filesEmpty: at({ kind: "dir", path: `${REPO}/empty` }),
   /** `/`: no up row. */
   filesRoot: at({ kind: "dir", path: "/" }),
@@ -35,7 +35,7 @@ export const fixtures: Fixtures = {
   filesOutsideFile: at({ kind: "file", path: `${ETC}/hosts` }),
   /** A folder that was deleted or moved since the tab last showed it. */
   filesGone: at({ kind: "dir", path: `${HOME}/gone/deeper` }),
-  /** Finding folders by path (the path field), in `~/repos/tether`. */
+  /** Finding folders by path (the path field), in `~/repos/muxen`. */
   filesFind: at({ kind: "dir", path: FIND_ROOT }, findTree()),
   /** Listing `src` never answers (slow), `docs` is refused (denied), the network drops `src` (offline), the daemon cuts `web` short at its scan cap (capped). */
   filesFindSlow: at({ kind: "dir", path: FIND_ROOT }, findTree(), (fs) => { fs.hanging.add(`${FIND_ROOT}/src`); }),

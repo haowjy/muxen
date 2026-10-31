@@ -35,8 +35,8 @@ use crate::proto::{
 };
 
 /// The subprotocol the daemon answers; the token rides beside it.
-const PROTOCOL: &str = "tether.v1";
-/// Paste files waiting for tmux, daemon-wide: they sit on tmpfs, in tether's memory.
+const PROTOCOL: &str = "muxen.v1";
+/// Paste files waiting for tmux, daemon-wide: they sit on tmpfs, in muxen's memory.
 pub(super) const PASTE_SLOTS: usize = 4;
 /// Larger inbound messages close the socket with 4009.
 const MAX_INBOUND: usize = 512 * 1024;
@@ -120,8 +120,8 @@ async fn run(
             Err(_) => End::Gone,
             Ok((id, channel)) => {
                 let mut host = ctx.app.host.clone();
-                if host.name == "tether" {
-                    host.name = ctx.app.auth.machine_name("tether").await;
+                if host.name == "muxen" {
+                    host.name = ctx.app.auth.machine_name("muxen").await;
                 }
                 let welcome = ServerMsg::Welcome {
                     protocol,

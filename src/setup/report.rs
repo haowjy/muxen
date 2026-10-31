@@ -39,12 +39,12 @@ pub(crate) fn render_success(
     let link = enrolment_link(report);
     let mut output = match report.mode {
         Mode::Service(service) => format!(
-            "tether {} is running as your {} and {}",
+            "muxen {} is running as your {} and {}",
             report.version, service.name, service.startup
         ),
         #[cfg(target_os = "linux")]
         Mode::Foreground => format!(
-            "tether {} is running in this terminal. Ctrl-C stops it",
+            "muxen {} is running in this terminal. Ctrl-C stops it",
             report.version
         ),
     };
@@ -74,7 +74,7 @@ pub(crate) fn render_success(
         output.push('\n');
     }
     output.push_str(&format!(
-        "Enrolment code: {} (one device, 10 minutes)\nFor another device, run `tether enroll`.\n",
+        "Enrolment code: {} (one device, 10 minutes)\nFor another device, run `muxen enroll`.\n",
         report.code
     ));
     Ok(output)

@@ -1,4 +1,4 @@
-//! tether's own whole-file writes, below both the file API (`fs`) and `auth`: a file's
+//! muxen's own whole-file writes, below both the file API (`fs`) and `auth`: a file's
 //! `Stamp`, the state directory's lock, and `Temp`, the one way a file is written whole.
 //! Every name is relative to an open directory (`Dir`), so a path component swapped
 //! after the directory was opened can't redirect a write. Everything here blocks: call
@@ -44,7 +44,7 @@ impl Stamp {
     }
 }
 
-/// The state directory's `flock`, held until dropped: every tether writer holds it for
+/// The state directory's `flock`, held until dropped: every muxen writer holds it for
 /// its read-modify-write of `auth.toml`, the CLI's included.
 pub fn lock(state_dir: &Path) -> io::Result<File> {
     let file = OpenOptions::new()

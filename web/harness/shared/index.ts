@@ -12,7 +12,7 @@ export const LISTING: TmuxListing = {
   sessions: [
     {
       id: 1,
-      name: "tether",
+      name: "muxen",
       bell: { mark: 0, covered: true },
       windows: [
         { id: 1, index: 0, name: "agent", active: true, activity: 0 },
@@ -35,7 +35,7 @@ export const savedWith = (tabs: SavedTab[], last: string): SavedWorkspaces => ({
 /** Two tabs saved by a previous page load; the third names a session the daemon no longer has. */
 export const SAVED: SavedWorkspaces = savedWith(
   [
-    { kind: "terminal", key: key(1), session: "tether", window: "agent" },
+    { kind: "terminal", key: key(1), session: "muxen", window: "agent" },
     { kind: "terminal", key: key(2), session: "notes", window: "shell" },
     { kind: "terminal", key: key(99), session: "gone", window: "window" },
   ],

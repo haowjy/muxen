@@ -8,8 +8,21 @@ muxes, like oxen). It serves anyone who runs tmux; anything can extend it by not
 (`muxen notify`), and Meridian is one such caller. Rename everything now, before the first release
 and before push notifications tie a bundle ID to Apple. Logged in `docs/design/decisions.md`.
 
-**Status:** inventory and plan written; no code or doc text renamed yet. The swap lands as
-one commit, code and docs together (AGENTS.md: docs stay accurate in the same commit as the code).
+**Status (2026-10-31):** tab-chip merged into main (8a52964), then the swap landed as one commit,
+code and docs together. Remaining: the machine runbook (§1), the GitHub repo, the local folder,
+dotfiles, and current KB pages (kb-lead). This work item and `.meridian/` history keep the name
+`tether-mvp`; docs link into it by that path.
+
+How the swap was done: a case-aware replace (`TETHER`/`Tether`/`tether` → `MUXEN`/`Muxen`/`muxen`)
+over tracked files outside `.meridian/` and generated agent dirs, `git mv` for 12 paths, then hand
+fixes: links into `.meridian/work/tether-mvp/` restored, the rename decision's own wording, the
+released 0.0.1 changelog section restored, one ASCII mockup (the typed prefix `te|ther`), `cargo fmt`
+(the shorter name reflowed lines), `xcodegen` for `ios/Muxen.xcodeproj`. Every hit was the
+product's name; "tether" never appears as the ordinary word.
+
+Meridian finds this project by `meridian.toml`'s `[project] id`, not by path, so moving the folder
+keeps sessions and work. Move it only when no session runs in it, then `git worktree repair` for
+worktrees such as `~/repos/tether-tab-chip`.
 
 ## Mapping
 
@@ -111,6 +124,4 @@ machine holds the old name. No compatibility code reads the old names: one user,
 
 ## Open
 
-- Display case on the home screen and App Store: "muxen" or "Muxen". Default: lowercase, as tether
-  is written today.
-- Whether to rename the local folder (depends on the Meridian path check).
+- Display name: lowercase `muxen` (`PRODUCT_NAME` in `ios/project.yml`), as tether was written.

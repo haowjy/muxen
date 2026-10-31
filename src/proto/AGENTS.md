@@ -1,7 +1,7 @@
 # proto
 
 The wire protocol, defined once: serde types for the JSON messages, the binary frame
-codec, the version range and close codes. A leaf module: it names no other tether
+codec, the version range and close codes. A leaf module: it names no other muxen
 module, so `http/` and `hub/` both use it.
 
 `web/proto/generated/messages.ts` is rendered from these types (ts-rs) by the test in

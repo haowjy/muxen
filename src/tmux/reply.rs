@@ -1,4 +1,4 @@
-//! What tmux prints for tether's formats, each format beside the parser of its rows
+//! What tmux prints for muxen's formats, each format beside the parser of its rows
 //! (daemon-core.md §3.4, §3.8). `command.rs` puts the formats in commands; `session.rs`
 //! and `oneshot.rs` parse the answers. The snapshot's `STATE_FORMAT` lives with its
 //! parser in `snapshot.rs`.
@@ -70,16 +70,16 @@ pub(super) fn location(row: &[u8]) -> Option<Location> {
 
 /// The listing's first line.
 pub(super) const LISTING_SERVER_FORMAT: &str = "#{version}\t#{pid}\t#{start_time}";
-/// The server-global `alert-bell` entry tether owns (daemon-core.md §4.8).
+/// The server-global `alert-bell` entry muxen owns (daemon-core.md §4.8).
 pub(super) const BELL_HOOK_INDEX: u32 = 9100;
-/// True while the entry at tether's index starts with tether's hook text, whatever
+/// True while the entry at muxen's index starts with muxen's hook text, whatever
 /// build wrote it. A session resolves the entry, so a session-level `alert-bell` hook
 /// (which shadows the global array) hides it: the listing then reports no coverage, and
 /// the guards skip.
-pub(super) const BELL_OURS: &str = "#{m:set-option -F @tether-bell*,#{alert-bell[9100]}}";
+pub(super) const BELL_OURS: &str = "#{m:set-option -F @muxen-bell*,#{alert-bell[9100]}}";
 
 /// One line per window, and no field can hold a line break: the ids and numbers are
-/// tmux's own, `@tether-bell` goes through arithmetic (a user can set it to any text),
+/// tmux's own, `@muxen-bell` goes through arithmetic (a user can set it to any text),
 /// tmux refuses a line break in a session name on 3.8 and stores it escaped on 3.4,
 /// and the window name, which 3.4 lets `-n` store raw, prints a line break as `\n`
 /// (`#{s/<LF>/\\n/:…}`; the argv holds a literal line feed). The name goes last
@@ -89,7 +89,7 @@ pub(super) const BELL_OURS: &str = "#{m:set-option -F @tether-bell*,#{alert-bell
 pub(super) fn listing_window_format() -> String {
     format!(
         "#{{session_id}}\t#{{window_id}}\t#{{window_index}}\t#{{window_active}}\t#{{window_activity}}\t\
-         #{{e|+:#{{@tether-bell}},0}}\t\
+         #{{e|+:#{{@muxen-bell}},0}}\t\
          #{{&&:#{{&&:{BELL_OURS},#{{monitor-bell}}}},#{{==:#{{bell-action}},any}}}}\t\
          #{{session_name}}\t#{{s/\n/\\\\n/:window_name}}"
     )

@@ -19,7 +19,7 @@ import styles from "./Gallery.module.css";
 const ICONS: IconName[] = ["home", "back", "sessions", "folder", "plus", "close", "keyboard", "chevron", "chevronDown", "search", "terminal", "file", "refresh", "settings", "upload", "check", "alert", "image", "film", "external"];
 
 const PILLS: Pill[] = [
-  { id: "a", host: "h", kind: "terminal", session: "tether", window: "agent", full: "tether agent", tone: "live", state: "connected", bell: false },
+  { id: "a", host: "h", kind: "terminal", session: "muxen", window: "agent", full: "muxen agent", tone: "live", state: "connected", bell: false },
   { id: "b", host: "h", kind: "terminal", session: "notes", window: "shell", full: "notes shell", tone: "reconnecting", state: "reconnecting", bell: true },
   { id: "c", host: "h", kind: "terminal", session: "a-very-long-session-name", window: "a-very-long-window-name", full: "a-very-long-session-name a-very-long-window-name", tone: "error", state: "limited", bell: false },
   { id: "d", host: "h", kind: "terminal", session: "scratch", window: "vim", full: "scratch vim", tone: "gone", state: "closed", bell: false },
@@ -73,7 +73,7 @@ export function Gallery() {
       </Section>
       <Section title="Rows">
         <RovingList label="Sessions" class={styles.stack}>
-          <Row roving icon="sessions" label="tether" meta="2 windows" selected />
+          <Row roving icon="sessions" label="muxen" meta="2 windows" selected />
           <Row roving icon="sessions" label="notes" meta="1 window" />
           <Row roving icon="folder" label="src" meta="Folder" trailing="chevron" />
           <Row roving icon="file" label="README.md" meta="2 KB" trailing="chevron" />
@@ -85,12 +85,12 @@ export function Gallery() {
       <Section title="Status">
         <Banner title="Can't reach pop-os" tone="warning" action={{ label: "Retry", onAction: () => undefined }}>Check that Tailscale is on, then retry.</Banner>
         <Banner title="Update ready" action={{ label: "Update", onAction: () => undefined }} />
-        <Banner title="This device isn't enrolled on pop-os" tone="error">Run tether enroll on the server for a code.</Banner>
+        <Banner title="This device isn't enrolled on pop-os" tone="error">Run muxen enroll on the server for a code.</Banner>
         <div class={styles.band}>
           <StatusBand tone="reconnecting" text="Reconnecting to pop-os" hint="Retrying in 4s" action={{ label: "Retry now", onAction: () => undefined }} />
         </div>
         <div class={styles.band}>
-          <StatusBand tone="error" text="tether on pop-os allows 3 tmux sessions at a time" hint="Close tabs from other sessions, in this or another tether window or the app, to open this one." action={{ label: "Retry", onAction: () => undefined }} />
+          <StatusBand tone="error" text="muxen on pop-os allows 3 tmux sessions at a time" hint="Close tabs from other sessions, in this or another muxen window or the app, to open this one." action={{ label: "Retry", onAction: () => undefined }} />
         </div>
         <div class={styles.wrap}><Spinner /><span>Updating</span></div>
         <EmptyState icon="terminal" title="Open a window with + or from Home." />

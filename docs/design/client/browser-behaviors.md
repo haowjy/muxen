@@ -1,4 +1,4 @@
-# Tether browser and mobile interaction contract
+# Muxen browser and mobile interaction contract
 
 Status: interaction contract for the client redesign; implementation and device-specific gates remain. This contract supersedes conflicting navigation and layout rules in the earlier plan. The workspace, its tab row and the phone dock are specified below; their touch implementation remains to verify on an iPhone. See [README.md](README.md) for precedence and Mac setup.
 
@@ -11,8 +11,8 @@ Interactive mockup: [mockups/index.html](mockups/index.html). It predates this r
 - Host is the server, e.g. pop-os. Session is a real tmux session, e.g. a1 or bio2. A session contains windows; one of them is its current window. A terminal tab opens one tmux session, as `tmux attach` does: it shows the session's current window (that window's active pane) and follows it when the current window changes, whichever client changed it. A Files tab holds one folder or file preview on a host.
 - Session lists use actual session names. A terminal tab's label is the session name, then the current window's name in regular weight; a Files tab uses its current folder or file name, and "~" at the host's home. One function names a tab, so it reads the same in its pill, the overview, the dock's line field and a notice. A workspace is one server's, so a label never names the host.
 - Minimal initial product. No custom shortcut system, command palette, expanded desktop sidebar, split-pane management, SSH/SFTP/serial connection choices, or app-drawn keyboard: the dock's key row supplements the system keyboard and never replaces it.
-- Existing-session selection must be clearly distinct from session creation. Opening an existing session never creates another shell. Closing a tether tab only detaches; only Kill window and Kill session, each behind a confirmation, end tmux state.
-- Connecting may resize a real tmux window. The setup must not suggest tether is read-only or isolated when connected to the user's server.
+- Existing-session selection must be clearly distinct from session creation. Opening an existing session never creates another shell. Closing a muxen tab only detaches; only Kill window and Kill session, each behind a confirmation, end tmux state.
+- Connecting may resize a real tmux window. The setup must not suggest muxen is read-only or isolated when connected to the user's server.
 
 ## Platform layout
 
@@ -56,7 +56,7 @@ tab to an index; the order and the last tab are saved per device with the rest o
 Each workspace's last terminal tab is where Insert path and uploads go, from a Files tab too; when
 that tab closes, the nearest remaining terminal tab (right-hand neighbour first) takes over. When
 a server is removed, its workspace and tabs go with it; nothing in tmux changes. A workspace saved
-in the earlier single-strip format is discarded whole at boot, as earlier formats were: tether
+in the earlier single-strip format is discarded whole at boot, as earlier formats were: muxen
 starts at Home with no tabs, and the sessions are one Open session away.
 
 | Surface | Desktop browser | Phone browser / PWA / iPhone app |
@@ -117,7 +117,7 @@ proves its session, or “Reconnecting…” while unreachable. Phone Safari Hom
 Home Screen instructions.
 
 No servers shows enrolment instructions and Add server. If a server's tmux is not running,
-its row says so; tether never starts Jimmy's tmux server. Server management includes adding,
+its row says so; muxen never starts Jimmy's tmux server. Server management includes adding,
 removing and re-enrolling a server. Settings is a separate screen reached from Home's gear (its header, or docked its bottom bar), with
 appearance, terminal text size, this device/browser and local-data controls. The app also
 offers the Face ID relock setting ([auth.md](../auth.md#swift-side-keychain-item-and-app-lock));
@@ -133,20 +133,20 @@ stopped daemon is explained. Returning from the background keeps the screen the 
 
 - Selecting a tab activates it; other tabs remain open. Opening a session already represented by a tab activates that tab. Implementation identity must use server/session IDs, not mutable display names.
 - **The tab follows its session.** When the session's current window changes (prefix-n on the laptop, the window switcher below, a window exiting, a script), the tab shows the new window: its snapshot replaces the old one in place and the label changes. The tab, its draft and its place in the tab order stay. Typing, the line field, paste and an inserted path go to the window the tab is showing on this screen, so keys sent just before a change made elsewhere still reach the window the user was looking at. Opening or activating a tab enters Terminal through the router; desktop focus lands on the terminal after that screen is rendered.
-- Closing the active tab activates its right-hand neighbour, or the left-hand neighbour if it was last. Only the active tab shows ×, in the tab row on every surface; every tab keeps the space for one, so changing tabs never moves the others. It closes that tether tab, never its tmux session or process. Scroll the active tab into view. Closing the last tab shows the tab overview. Creation-dialog cancellation/Escape restores focus to its opener.
+- Closing the active tab activates its right-hand neighbour, or the left-hand neighbour if it was last. Only the active tab shows ×, in the tab row on every surface; every tab keeps the space for one, so changing tabs never moves the others. It closes that muxen tab, never its tmux session or process. Scroll the active tab into view. Closing the last tab shows the tab overview. Creation-dialog cancellation/Escape restores focus to its opener.
 - The tab row's ‹ and the system back gesture go to Home, preserving open tabs and the active tab. + opens Open session and Open files.
 - Switching tabs preserves the terminal and running process.
 - Terminal output is not editable mock text masquerading as live input. The prototype says it is sample content and sends no input.
 - On the terminal, show connection status only when not live. Reconnecting/error is visible in text, with Retry, and is distinct from active-tab selection and the bell dot. Home's workspace rows still show live or offline status.
 - Real connection states inherit the existing reconnect contract: disconnect does not silently close tabs; reconnect/error appears with the affected tab; viewing Home/Files must not kill tmux.
-- When the daemon refuses a socket for its connection cap (close code 4005), the host banner says “Too many connections to pop-os” with “Close tether in another browser or the app, then retry” and a Retry button, until a socket is welcomed. It is a host problem: the tabs keep their own “Reconnecting” state and the socket keeps its normal backoff.
+- When the daemon refuses a socket for its connection cap (close code 4005), the host banner says “Too many connections to pop-os” with “Close muxen in another browser or the app, then retry” and a Retry button, until a socket is welcomed. It is a host problem: the tabs keep their own “Reconnecting” state and the socket keeps its normal backoff.
 - Scroll behavior, paste, mouse handling, focus delivery, reconnect, server identity, tmux geometry ownership, and keyboard viewport behavior require implementation-phase verification. No claim of those working is made from static mockups.
 
 - Desktop keys go to tmux by name: Shift+Enter sends the modified-Enter bytes once, and IME composition sends nothing until it ends. Cmd combinations and F5, F6, F11 and F12 stay the browser's on every platform; Ctrl+Shift+C copies the selection as logical lines on every platform. Ctrl+Shift+F leaves the focused terminal for the tab row (focus lands on the active tab; Enter returns), handled before the key is sent; Settings lists it under Keyboard. Keystrokes are batched for 8 ms into one input message.
 - Paste sends one paste message and is refused over 256 KiB, saying so. An image paste uploads, then types the quoted path into the tab it was pasted in, if that tab is connected when the upload ends; otherwise a notice says the file is in Files.
 - A tab the daemon refused for its session limit reads “session limit” in the error colour, shows the daemon's message and Retry, and retries with a growing delay. Retry asks at once and keeps the delay.
 - The terminal stays blank until the shown tab's own snapshot paints, so another tab's content never sits under a pill that is not its own. tmux is never sized before the renderer has measured a cell.
-- A window takes the size of whichever terminal acted on it last. Opening or returning to a tab, typing, pasting, rotating, Fit, and choosing or creating a window in the window switcher size the shown window to exactly this screen's size, whether the laptop's terminal is larger or smaller; typing in another terminal (the laptop) takes it back, and the tab stays live. A tab that just stays on screen never takes it back, and neither does a reconnect after a network blip, unless the tab held the window before it. When the tab follows a window change made elsewhere (the laptop's prefix-n, a window exiting, a script), the new window keeps the size it had until this screen acts on it. The window left behind goes to the laptop's size after its prefix-n; after a change no terminal made, it takes the size the window had when tether attached to the session, until a terminal types there. The same holds when this screen stops holding a window and nobody else acts there (the tab leaves the screen, the connection drops): it takes the size it had when tether attached, until the laptop types. A window sized for another terminal is drawn at this screen's own font from the left edge: wider content is cut off at the right, and taller content follows the cursor, as it does above the keyboard. A window smaller than the screen sits in the top-left corner on the terminal background. Whenever the window's size (from `watching`, the whole window, not a split pane) has differed from the size this screen sent for longer than the wait, larger or smaller, the band on the terminal's top edge says “Sized for another terminal” with Fit, which sizes the window to this screen. While this screen holds the window the two sizes match, so there is no band; the wait, one second or the last measured ping round trip plus half a second, whichever is longer, restarted at each claiming send (opening, typing, pasting, rotating, Fit, choosing a window), keeps it from flashing while a claim's resize is on its way over a slow link. Reconnecting and error states replace the band.
+- A window takes the size of whichever terminal acted on it last. Opening or returning to a tab, typing, pasting, rotating, Fit, and choosing or creating a window in the window switcher size the shown window to exactly this screen's size, whether the laptop's terminal is larger or smaller; typing in another terminal (the laptop) takes it back, and the tab stays live. A tab that just stays on screen never takes it back, and neither does a reconnect after a network blip, unless the tab held the window before it. When the tab follows a window change made elsewhere (the laptop's prefix-n, a window exiting, a script), the new window keeps the size it had until this screen acts on it. The window left behind goes to the laptop's size after its prefix-n; after a change no terminal made, it takes the size the window had when muxen attached to the session, until a terminal types there. The same holds when this screen stops holding a window and nobody else acts there (the tab leaves the screen, the connection drops): it takes the size it had when muxen attached, until the laptop types. A window sized for another terminal is drawn at this screen's own font from the left edge: wider content is cut off at the right, and taller content follows the cursor, as it does above the keyboard. A window smaller than the screen sits in the top-left corner on the terminal background. Whenever the window's size (from `watching`, the whole window, not a split pane) has differed from the size this screen sent for longer than the wait, larger or smaller, the band on the terminal's top edge says “Sized for another terminal” with Fit, which sizes the window to this screen. While this screen holds the window the two sizes match, so there is no band; the wait, one second or the last measured ping round trip plus half a second, whichever is longer, restarted at each claiming send (opening, typing, pasting, rotating, Fit, choosing a window), keeps it from flashing while a claim's resize is on its way over a slow link. Reconnecting and error states replace the band.
 
 ## Tab row
 
@@ -186,7 +186,7 @@ switches tabs leaves focus on the terminal. Move to start and Move to end are th
 reorder. The + menu closes the same way and returns focus to +. On touch the menus never move
 the keyboard.
 
-tmux prefix keys sent by tether reach the pane, not tmux's key tables.
+tmux prefix keys sent by muxen reach the pane, not tmux's key tables.
 
 ## Tab overview
 
@@ -226,7 +226,7 @@ refusal (another client created it first) re-lists and attaches. tmux's `new-ses
 used: from the daemon it fails on an existing name. A new session starts in `~`. Its tab opens from the
 next listing that contains it; after 5 seconds, say it was created but has not appeared. A refused
 name shows the daemon's reason under the field. Creating is not offered while the server has no
-tmux server, which tether never starts, and is disabled with its reason while the server can't be
+tmux server, which muxen never starts, and is disabled with its reason while the server can't be
 reached. Loading, empty, offline and refused states are distinct.
 
 **Open files** opens a new Files tab at `~/` and makes it active (Jimmy, 2026-10-30: “it should
@@ -271,16 +271,16 @@ Each Files tab presents one folder list under one path field. At rest the field 
 ```text
 phone, at rest                           phone, typing (keyboard up)
 ┌──────────────────────────────────┐     ┌──────────────────────────────────┐
-│ [ ~/repos/tether            ]    │     │ [ ~/repos/te|ther/     ] Cancel  │  ghost: "ther/"
+│ [ ~/repos/muxen             ]    │     │ [ ~/repos/mu|xen/      ] Cancel  │  ghost: "xen/"
 │ ‹ repos                          │     │ ‹ ..                             │
-│ ▸ docs                         › │     │ ▸ tether                         │  predicted, highlighted
-│ ▸ src                          › │     │ ▸ tether-old                     │
+│ ▸ docs                         › │     │ ▸ muxen                          │  predicted, highlighted
+│ ▸ src                          › │     │ ▸ muxen-old                      │
 │ ▸ web                          › │     │ ▸ test-data                      │
 │   Cargo.toml              2.1 KB │     │──────────────────────────────────│
 │   README.md               9.8 KB │     │ iOS keyboard, Return key "go"    │
 │ Show hidden files                │     │                                  │
 │ [Upload]                         │     │                                  │
-│ ‹ (tether) (claude) (~/repos) + ⌨│     │                                  │
+│ ‹ (muxen) (claude) (~/repos) + ⌨ │     │                                  │
 └──────────────────────────────────┘     └──────────────────────────────────┘
 ```
 
@@ -291,11 +291,11 @@ phone, at rest                           phone, typing (keyboard up)
 - **`/` typed after a name that is not itself a folder there**, which accepts the prediction in place of the literal `/` ("rep/" becomes "repos/"); after an exact folder name, or with no prediction, `/` is typed as is;
 - **Tab**, or → with the caret at the end, on a hardware keyboard, where ↑ and ↓ move the highlight (and can highlight a row while the segment is empty).
 
-**Go** (the keyboard's Return, Enter on desktop) opens a folder and ends editing: the highlighted folder, or with no highlight the folder the text names. So right after a keyboard accept, Go opens the folder just accepted. A path naming nothing says "No folder ~/repos/tetherx" under the field and opens nothing. Opening adds a history entry, as a tap into a folder does, so Back returns to the folder the user left.
+**Go** (the keyboard's Return, Enter on desktop) opens a folder and ends editing: the highlighted folder, or with no highlight the folder the text names. So right after a keyboard accept, Go opens the folder just accepted. A path naming nothing says "No folder ~/repos/muxenx" under the field and opens nothing. Opening adds a history entry, as a tap into a folder does, so Back returns to the folder the user left.
 
 **Anywhere.** The field completes folders in any directory the daemon's user can read, from one `/fs/list` listing per folder, the same as browsing. A path naming nothing says "No folder …".
 
-**Cost on a spotty network: one listing per folder, never one per keystroke.** Completion filters a listing the client already holds. Entering a folder (an accept, a typed `/`, a pasted path) asks for that folder's first page once, after typing pauses 250 ms, and only for the folder the field names when it settles; answers for a folder the field has left are never shown, and are kept in the cache. Listings are cached per host for the Files session: the first pages of the 32 most recently loaded folders, whether the field or browsing loaded them (keyed by path and the hidden flag). Showing a folder that is cached (opening it from the field, switching to another Files tab, Back or Forward, returning to a preview's folder) costs no request, and returning to a file already probed does not probe again. A failed listing is asked for again when the field next names that folder. Pull-to-refresh and tether's own uploads drop the affected ones. Directories sort first, so one page of 200 entries holds every subfolder of almost any folder. A page that is all folders is followed by the next, each a fresh scan on the daemon, up to 5 pages (1,000 folders); past that, or when the daemon says the folder is past its scan cap, the list ends "Only the first 1,000 folders are searched, keep typing to narrow". While a listing loads, the list says “Loading”; a refusal shows in plain words with "Try again", never as an empty list.
+**Cost on a spotty network: one listing per folder, never one per keystroke.** Completion filters a listing the client already holds. Entering a folder (an accept, a typed `/`, a pasted path) asks for that folder's first page once, after typing pauses 250 ms, and only for the folder the field names when it settles; answers for a folder the field has left are never shown, and are kept in the cache. Listings are cached per host for the Files session: the first pages of the 32 most recently loaded folders, whether the field or browsing loaded them (keyed by path and the hidden flag). Showing a folder that is cached (opening it from the field, switching to another Files tab, Back or Forward, returning to a preview's folder) costs no request, and returning to a file already probed does not probe again. A failed listing is asked for again when the field next names that folder. Pull-to-refresh and muxen's own uploads drop the affected ones. Directories sort first, so one page of 200 entries holds every subfolder of almost any folder. A page that is all folders is followed by the next, each a fresh scan on the daemon, up to 5 pages (1,000 folders); past that, or when the daemon says the folder is past its scan cap, the list ends "Only the first 1,000 folders are searched, keep typing to narrow". While a listing loads, the list says “Loading”; a refusal shows in plain words with "Try again", never as an empty list.
 
 **Hidden folders** are left out of completion unless the typed segment starts with `.` (that folder is then asked for with `hidden=1`, cached separately) or the hidden-files toggle is on.
 
@@ -315,7 +315,7 @@ phone, at rest                           phone, typing (keyboard up)
 
 - Navigation between Home, the tab overview and tabs preserves open tabs and process state. Each Files tab retains its own folder or preview, including across reload, locally on that device.
 - Home/list refresh runs on entry and on debounced sessionsChanged while visible; there is no polling or network search per keystroke. Fetch when Open session opens, when a long-press menu opens without a listing newer than the last `sessionsChanged`, and on reconnect, and prune tabs only from authoritative listings for the matching host and tmux endpoint. A listing from the same endpoint decides all that endpoint's tabs, including live tabs: matching sessions from the same tmux run remain; a different run at that endpoint closes the old run's tabs. A scratch endpoint is never touched by the main-endpoint listing, and a null listing (no server) decides nothing. One notice reports closures. The hub serializes one-shot requests and answers an overlapping request with `busy`, so a listing cannot straddle a window-creation reply. Explicit user retry handles list errors.
-- Restore terminal tabs after reload using validated session identities and Files tabs with their own host and saved folder or preview. An unavailable session must not be silently replaced with a same-named session from another server. A workspace saved before tabs followed sessions (format version 1, window tabs) is discarded whole at boot, and so are drafts keyed by its window tabs: tether starts at Home with no tabs. Each workspace's last terminal tab is saved too, so Insert path after a reload still goes where it went before, and so is its server's home folder (learned from the listing of `~` that Open files makes anyway), so a Files tab at home reads "~" at once.
+- Restore terminal tabs after reload using validated session identities and Files tabs with their own host and saved folder or preview. An unavailable session must not be silently replaced with a same-named session from another server. A workspace saved before tabs followed sessions (format version 1, window tabs) is discarded whole at boot, and so are drafts keyed by its window tabs: muxen starts at Home with no tabs. Each workspace's last terminal tab is saved too, so Insert path after a reload still goes where it went before, and so is its server's home folder (learned from the listing of `~` that Open files makes anyway), so a Files tab at home reads "~" at once.
 - Mockup state is deliberately in-memory. Changing preview-platform selector is a presentation-only reset to Home, not a production control. Full reload returns fictional defaults.
 - Touch input follows Phone dock below. Desktop click-to-focus is unchanged.
 - Tab display keeps the session name visible and spends what width is left on the current window's name, which truncates first. Full combined name is the tooltip and accessible label. Window rows use the actual tmux window index, not array position; mock indices are illustrative. The server/session identity, not label, owns tab state through renames and window changes.
@@ -401,7 +401,7 @@ input.
   cursor's row raises terminal input. Scroll and selection do not toggle the keyboard
   (it is sticky, above).
 - **Safari's form accessory bar.** The phone browser/PWA may put its own ⌃ ⌄ Done bar
-  between tether's key row and the keyboard; the page cannot remove it. Done lowers the
+  between muxen's key row and the keyboard; the page cannot remove it. Done lowers the
   keyboard and the toggle follows. The native terminal/line responder is not a WebKit
   field; WebKit-owned sheet fields retain their ordinary form bar.
 
@@ -457,4 +457,4 @@ Terminal context uses a bold primary session name, regular window name, and smal
 
 ## Touch and clipboard research gate
 
-The interaction contract is [terminal-interaction-design.md](terminal-interaction-design.md). On the phone, selection is iOS's own on the terminal's rows, drawn as page text: a long press selects a word with iOS's handles and menu, tether draws nothing of it, and Copy joins soft wraps into logical lines; a tap elsewhere, a scroll or a redraw of the selected rows closes it. In the app with the keyboard up (the terminal input or the line box holds it), the keyboard never drops for a selection: a hold of about 380 ms marks the word under the finger with tether's highlight, the finger and two handles extend it, and iOS's edit menu shows Copy and Paste over it; a tap elsewhere, a scroll, or output redrawing the marked rows clears it (output never pauses). With the keyboard down the app's selection is iOS's, with Paste added to its menu. In a browser the hold with the keyboard up does nothing. Elsewhere, Paste on the phone is the line box's. The app's native input keeps tether's own long-press gesture and Copy/Paste menu until its removal. A touch sends no mouse event, in mouse-mode apps too (Jimmy, 2026-10-24). Vertical swipes in alternate-screen apps still send ↑/↓ or wheel events. Copy must preserve logical newlines, not visual wraps. Real iPhone Safari and app selection, keyboard and clipboard checks remain required.
+The interaction contract is [terminal-interaction-design.md](terminal-interaction-design.md). On the phone, selection is iOS's own on the terminal's rows, drawn as page text: a long press selects a word with iOS's handles and menu, muxen draws nothing of it, and Copy joins soft wraps into logical lines; a tap elsewhere, a scroll or a redraw of the selected rows closes it. In the app with the keyboard up (the terminal input or the line box holds it), the keyboard never drops for a selection: a hold of about 380 ms marks the word under the finger with muxen's highlight, the finger and two handles extend it, and iOS's edit menu shows Copy and Paste over it; a tap elsewhere, a scroll, or output redrawing the marked rows clears it (output never pauses). With the keyboard down the app's selection is iOS's, with Paste added to its menu. In a browser the hold with the keyboard up does nothing. Elsewhere, Paste on the phone is the line box's. The app's native input keeps muxen's own long-press gesture and Copy/Paste menu until its removal. A touch sends no mouse event, in mouse-mode apps too (Jimmy, 2026-10-24). Vertical swipes in alternate-screen apps still send ↑/↓ or wheel events. Copy must preserve logical newlines, not visual wraps. Real iPhone Safari and app selection, keyboard and clipboard checks remain required.

@@ -8,26 +8,26 @@ allowlisted Tailscale login. Past that, a request is admitted on one of two
 Keychain behind Face ID and sent as a bearer token or a WebSocket subprotocol. A
 browser or PWA presents nothing: it is admitted as an **enrolled node**, because
 the tailnet node it runs on, which the daemon learns from tailscaled, is in
-`auth.toml`. Browser nodes are enrolled with the one-time code from `tether enroll`.
+`auth.toml`. Browser nodes are enrolled with the one-time code from `muxen enroll`.
 When an iPhone setup link is opened in Safari, Safari hands the code to the native
 app without spending it; the app enrols the phone's node and then mints its token.
 One code admits the phone, so Safari and the PWA on it need no separate code. The app
 on an already enrolled node can mint a node-bound token without redeeming another
 code. The node's removal route revokes its browser admission and any native token
 minted from it.
-tether never authenticates with a cookie.
+muxen never authenticates with a cookie.
 
 Serve reaches the daemon through a **front**, which differs by host. On Linux it is
 `serve.sock`, a Unix socket in a `0700` directory that only root and Jimmy can open.
-On a Mac, which tether supports only when Jimmy's is its one user account, the
+On a Mac, which muxen supports only when Jimmy's is its one user account, the
 Tailscale app's sandboxed extension can't connect to Unix sockets, so the front is a loopback TCP port that any local process can open. The **path secret**
-guards it: tether publishes itself at a random path that Serve adds to every request
+guards it: muxen publishes itself at a random path that Serve adds to every request
 ([The Mac front](#the-mac-front)). Everything after the front is the same on both.
 
 ## Threat model
 
 One user, a tailnet with only his own devices, tailnet-only hosts. The dev box may
-have other Unix users, each running their own tether. The daemon is remote code
+have other Unix users, each running their own muxen. The daemon is remote code
 execution for whoever passes it, so the checks guard against:
 
 - another tailnet user reaching the daemon, if the tailnet is ever shared (the login
@@ -37,9 +37,9 @@ execution for whoever passes it, so the checks guard against:
 - **pages on any other origin using an enrolled node's identity through the
   browser**: other sites, pages served by other machines in the tailnet (all one
   "site", since `ts.net` is a public suffix), other ports on the dev box, another
-  user's tether ([Browser admission](#browser-admission));
-- **anything else served at tether's origin, or anything else reaching the
-  front**: another app mounted beside tether in its Serve entry, or a Serve TCP
+  user's muxen ([Browser admission](#browser-admission));
+- **anything else served at muxen's origin, or anything else reaching the
+  front**: another app mounted beside muxen in its Serve entry, or a Serve TCP
   forward to the front ([Canonical origin](#canonical-origin));
 - **another Unix user on the dev box** forging Tailscale headers, and any local
   user or process reaching the daemon from the host's own node (on Linux the socket
@@ -67,12 +67,12 @@ holding the 64 connection permits; other Unix users on a Linux box can't.
 **Accepted:**
 
 - **An enrolled node is trusted whole.** Every browser profile, app and OS account
-  on it reaches the daemon as that node, with no further check, until `tether
+  on it reaches the daemon as that node, with no further check, until `muxen
   device remove`. On a phone whose node is enrolled, Safari and the PWA reach the
   host without Face ID. The native app can mint a portable token from that node, but
   browser script cannot reach that mint. The token uses the native lane from any
   node and does not re-run the source node's Tailscale rules; it remains usable if
-  those rules later fail, until the node is removed from tether. Removing the node
+  those rules later fail, until the node is removed from muxen. Removing the node
   revokes the token.
 - Anyone holding Jimmy's unlocked laptop or phone can use the browser client. A lock
   screen drawn by the page would protect nothing the node isn't already sending. The
@@ -80,11 +80,11 @@ holding the 64 connection permits; other Unix users on a Linux box can't.
   shorter than the chosen interval, or until its process ends with At launch selected.
 - An HTTP response already streaming when its device is removed runs to its end
   ([Live sockets](#live-sockets-and-revocation)).
-- Removing a node in the Tailscale admin console takes effect in tether only once
-  tailscaled on the dev box learns of it, with no documented bound. `tether device
-  remove` takes effect at once, and is the revocation tether relies on.
+- Removing a node in the Tailscale admin console takes effect in muxen only once
+  tailscaled on the dev box learns of it, with no documented bound. `muxen device
+  remove` takes effect at once, and is the revocation muxen relies on.
 - Tailnet state is up to 10 s old when used, and up to 30 s while LocalAPI is
-  failing ([security state](#security-state-is-read-when-it-is-used)): a handler added beside tether, or a change to the box's own node,
+  failing ([security state](#security-state-is-read-when-it-is-used)): a handler added beside muxen, or a change to the box's own node,
   is acted on within 10 s while LocalAPI answers.
 
 **Trusted, out of scope:** root and the Tailscale operator (they can write the
@@ -92,11 +92,11 @@ serve config, or drive tmux directly; [running.md](../running.md) says how to ke
 operator out), processes on the server that run as Jimmy (on a Mac, those outside an
 app sandbox), on a Mac macOS's own role accounts (`_www`, `nobody` and the rest, which
 run Apple's services), a jailbroken phone, malware on an enrolled device, browser
-extensions granted access to `*.ts.net`, and script injected into tether's own page.
+extensions granted access to `*.ts.net`, and script injected into muxen's own page.
 The last is kept small by the CSP, DOMPurify, and raw files that never run
 ([fs.md](fs.md#get-fsrawpath)).
 
-**A Mac host has one user account, Jimmy's.** That is its precondition: tether
+**A Mac host has one user account, Jimmy's.** That is its precondition: muxen
 supports no Mac with another login account, and the Mac defences below assume none.
 On Linux the kernel keeps every other account off `serve.sock` and off LocalAPI's
 socket, and Serve's target carries no secret. On a Mac the front is a loopback port
@@ -115,31 +115,31 @@ So the Mac host also trusts:
 - **that copies of the secret leaving the Mac stay harmless.** Tailscale's log upload
   carries it: the extension logs every handler's target through its uploading logger,
   and the app has no opt-out. A sysdiagnose Jimmy sends and the Mac's backups carry it
-  too. A copy is useless without code running on the Mac, and goes stale at tether's
+  too. A copy is useless without code running on the Mac, and goes stale at muxen's
   next start, which picks a new secret;
-- **that nothing binds tether's port while the agent is unloaded.** While tether's
+- **that nothing binds muxen's port while the agent is unloaded.** While muxen's
   LaunchAgent is loaded and its socket bound, launchd holds the port across crashes
-  and restarts. tether never removes its Serve entry, so whenever the agent is
+  and restarts. muxen never removes its Serve entry, so whenever the agent is
   unloaded (logout, `launchctl bootout`, or turning it off under Login Items) Serve
   still points at the port, now free, and a process that binds it receives Serve's
   requests, among them the iOS app's device token, which it can replay through Serve
   from the Mac's own node on the native lane: code execution as Jimmy. While Jimmy is
   logged out only root, the role accounts and processes of his that survive logout run,
-  all trusted. While he is logged in, the window lasts from an unload until tether's
-  entry is removed: `tether teardown` removes it straight after the unload, and so
+  all trusted. While he is logged in, the window lasts from an unload until muxen's
+  entry is removed: `muxen teardown` removes it straight after the unload, and so
   does every documented stop. At the
   next load, if something already holds the port, launchd's bind fails silently and
-  hands tether an unbound socket (probed, p177); the daemon then withdraws its old
+  hands muxen an unbound socket (probed, p177); the daemon then withdraws its old
   handler and exits ([The listener](#the-mac-front)), so the window lasts from that
   process's bind until the withdrawal lands;
 - **that nothing binds LocalAPI's port while the Tailscale extension is stopped.**
   `/Library/Tailscale/ipnport` may keep naming the old port (gate M5). A process that
   binds it receives a proof token that is already dead (the extension picks a new one
-  at each start) and answers tether's LocalAPI reads, and it receives the path secret
-  if tether publishes then. Turning that into access still needs an enrolled node's
-  stable ID and login. A publication to it also costs availability: tether counts
+  at each start) and answers muxen's LocalAPI reads, and it receives the path secret
+  if muxen publishes then. Turning that into access still needs an enrolled node's
+  stable ID and login. A publication to it also costs availability: muxen counts
   itself published and never writes again, so the real Serve keeps the previous
-  start's handler and answers `404` until tether restarts;
+  start's handler and answers `404` until muxen restarts;
 - **that no local process fills the 64 connection permits.** Any process can connect
   to the front and hold a connection without the secret, so any can deny service.
 
@@ -157,7 +157,7 @@ state changes: tailscaled's IPN bus carries no serve-config change, and `auth.to
 is edited by another process. A live socket's re-check re-reads what can revoke it:
 its device on both lanes, and on the node lane its node and the canonical origin
 ([Live sockets](#live-sockets-and-revocation)). The allowlist is judged per request
-and at the upgrade; `tether device remove` is the revocation for a live socket.
+and at the upgrade; `muxen device remove` is the revocation for a live socket.
 
 | State | Read from | Read when | If the read fails |
 |---|---|---|---|
@@ -181,7 +181,7 @@ the auto-detected allowlist; an open native WebSocket does not refresh it.
 
 | Constant | Value |
 |---|---|
-| tether's runtime directory | `$XDG_RUNTIME_DIR/tether/` on Linux, `$TMPDIR/tether/` on macOS; `0700`, owned by the daemon's user. Holds `lock`, `serve.sock` (Linux only), `local.sock` (both `0600`) and `paste/` |
+| muxen's runtime directory | `$XDG_RUNTIME_DIR/muxen/` on Linux, `$TMPDIR/muxen/` on macOS; `0700`, owned by the daemon's user. Holds `lock`, `serve.sock` (Linux only), `local.sock` (both `0600`) and `paste/` |
 | whois calls in flight | 2 daemon-wide; up to 16 distinct addresses waiting, the 17th `503 busy` |
 | LocalAPI timeout; answer limit | 2 s; 64 KiB (a real whois answer is 1.5–2.5 KB) |
 | tailnet-state cell | a value at most 10 s old is used; after a failed read the held value is used until 30 s old; background retry starts at 2 s and doubles to 30 s |
@@ -189,28 +189,28 @@ the auto-detected allowlist; an open native WebSocket does not refresh it.
 | minimum browsers | Safari and iOS 17.5, Chrome 123, Firefox 120: the minimums support `light-dark()` and send `Sec-Fetch-Site` |
 | minimum Tailscale on the server | Linux: 1.94, the first with `unix:` proxy targets. Mac: the standalone app (macsys) 1.104 |
 | the Mac front | `127.0.0.1:7851` by default, a socket launchd binds when Jimmy logs in and holds across restarts until he logs out; published on `<MagicDNS name>:443` |
-| the path secret | `tether-` followed by 43 base64url characters (256 bits from `getrandom`), new at each start, held only in memory |
+| the path secret | `muxen-` followed by 43 base64url characters (256 bits from `getrandom`), new at each start, held only in memory |
 
 ## Sockets and the Tailscale check
 
 **Startup**, in this order:
 
-1. **The runtime directory.** `$XDG_RUNTIME_DIR/tether/`. On Linux, without
+1. **The runtime directory.** `$XDG_RUNTIME_DIR/muxen/`. On Linux, without
    `XDG_RUNTIME_DIR` the daemon refuses to start: a fallback under `/tmp` is a path
    another user can create first. On macOS it is the per-user temporary directory
    (`$TMPDIR`). The daemon creates the directory with mode
    `0700` if it is missing. If it exists, it must be a directory, not a symlink,
    owned by the daemon's user, with mode `0700`; otherwise the daemon refuses to
    start. The directory is never deleted or recreated.
-2. **The lock.** The daemon opens `tether/lock` (creating it, `0600`) and takes a
+2. **The lock.** The daemon opens `muxen/lock` (creating it, `0600`) and takes a
    non-blocking `flock` on it, held for its whole life. If another daemon holds it,
-   this one exits with "tether is already running". The kernel drops the lock when
+   this one exits with "muxen is already running". The kernel drops the lock when
    its holder dies, so a crash leaves nothing to clean up.
 3. **The sockets**, only once the lock is ours: unlink a stale `serve.sock` and
    `local.sock`, and bind both. On macOS, bind `local.sock` alone, and with
    `--publish` take the Mac front's socket from launchd ([The Mac front](#the-mac-front));
    the extension couldn't reach a `serve.sock`.
-4. **Leftovers**, once the lock is ours: empty `tether/paste/` (a subdirectory,
+4. **Leftovers**, once the lock is ours: empty `muxen/paste/` (a subdirectory,
    never the runtime directory itself) and delete stale upload part files.
 
 Refusals at steps 1–2 for the directory exit 78, since a restart can't fix them;
@@ -220,7 +220,7 @@ requires. tailscaled runs as root and reaches `serve.sock` through Serve's `unix
 proxy target.
 
 **Startup needs no LocalAPI.** The daemon starts even when tailscaled is down, so a
-boot that starts tether first costs no restart loop. It starts one background fill
+boot that starts muxen first costs no restart loop. It starts one background fill
 of the tailnet-state cell, retrying with backoff from 2 s to 30 s until it succeeds,
 then logs the canonical origin or the refusal message; it logs again whenever that
 changes. On a Mac with `--publish`, the publication waits for LocalAPI with the same
@@ -251,7 +251,7 @@ do:
 
 | Front | Who connects | Lanes | Host |
 |---|---|---|---|
-| `serve.sock` (Linux) | Serve's HTTP proxy, through tether's one HTTPS entry ([Canonical origin](#canonical-origin)) | node and native | must be `localhost` |
+| `serve.sock` (Linux) | Serve's HTTP proxy, through muxen's one HTTPS entry ([Canonical origin](#canonical-origin)) | node and native | must be `localhost` |
 | the Mac front (macOS, `--publish`) | Serve's HTTP proxy; any local process can connect, and only a request carrying the path secret goes further ([The Mac front](#the-mac-front)) | node and native | the published authority |
 | `local.sock` | Jimmy's dev proxy, tests, Playwright | native only | not checked |
 
@@ -288,7 +288,7 @@ entry with Funnel on ([canonical origin](#canonical-origin)).
 with `/<path secret>/`, checked in constant time before anything else is read. Then
 the front's `Host` rule applies, then the Tailscale check and the lanes, exactly as
 on `serve.sock`. Serve adds the path secret to every request it proxies, and a client
-can't remove it: a client that sends `/<secret>/x` reaches tether as
+can't remove it: a client that sends `/<secret>/x` reaches muxen as
 `/<secret>/<secret>/x`. So a request that carries it came through Serve, or from
 something that read the secret ([Threat model](#threat-model)).
 
@@ -307,12 +307,12 @@ session, whose `Sockets` entry `Listener` binds `127.0.0.1:7851` (the port is th
 plist's to change). launchd binds it when Jimmy logs in, before it starts the daemon,
 and keeps it bound while the daemon crashes, is killed or restarts; connections that
 arrive meanwhile wait in its backlog. So once launchd has bound it, the publication
-points at a socket only tether accepts from until Jimmy logs out: a second bind of the port,
+points at a socket only muxen accepts from until Jimmy logs out: a second bind of the port,
 wildcard or not, with any `SO_REUSEADDR`/`SO_REUSEPORT` combination, fails while
 launchd holds it (probed). At logout launchd sends the daemon `SIGTERM` and closes the
-socket; while Jimmy is logged out tether doesn't run and the phone can't reach it on
+socket; while Jimmy is logged out muxen doesn't run and the phone can't reach it on
 this Mac. The daemon takes the socket from launchd at startup (`src/launchd.rs`,
-[Module shape](#module-shape)) and reads the port from it. `tether serve --publish`
+[Module shape](#module-shape)) and reads the port from it. `muxen serve --publish`
 without that socket, run by hand or from a plist without `Sockets`, exits 78 with "no
 launchd socket `Listener`": the daemon publishes only a socket launchd holds. launchd
 gives the same error when the process isn't one of its jobs and when the plist names
@@ -325,13 +325,13 @@ p177). So the daemon requires the socket's address to be `127.0.0.1` with a non-
 port. Otherwise it **withdraws**, then exits 78 with "launchd couldn't bind the Mac
 front's port; another process holds it": for at most 2 s it tries to remove every
 handler in `Web["<MagicDNS name>:443"]` whose proxy is
-`http://127.0.0.1:<any port>/tether-<43 base64url characters>`, by the publication's
+`http://127.0.0.1:<any port>/muxen-<43 base64url characters>`, by the publication's
 plan and compare-and-swap, so Serve stops sending the phone's requests to that
-process. The entry is tether's alone by the publication rule, so this removes nothing
+process. The entry is muxen's alone by the publication rule, so this removes nothing
 of another app's. launchd restarts the daemon every 10 s, and each start tries again. Without `--publish` a Mac daemon has no
 Serve front, only `local.sock`; the e2e stack and dev runs use that, and never touch
 the serve config. On Linux `--publish` is a configuration error (exit 78): on Linux
-`tether setup` writes the publication, once ([setup.md](setup.md#publication)).
+`muxen setup` writes the publication, once ([setup.md](setup.md#publication)).
 
 **The path secret check runs before routing.** It runs in the accept loop's
 per-request service, before the router, because axum routes before any
@@ -371,11 +371,11 @@ Once LocalAPI answers, it:
    `null` answer (a profile that has never configured Serve) as an empty config for
    both this plan and the tailnet-state cell;
 2. plans the new config with a pure function over the config's JSON, preserving every
-   field it doesn't change, including fields tether doesn't know. A handler is
-   **tether-shaped** when its proxy is `http://127.0.0.1:<the front's port>/tether-<43
+   field it doesn't change, including fields muxen doesn't know. A handler is
+   **muxen-shaped** when its proxy is `http://127.0.0.1:<the front's port>/muxen-<43
    base64url characters>`: a publication of this front by an earlier start. The plan
    touches only the background config:
-   - it removes every tether-shaped handler, wherever it is (one under an old MagicDNS
+   - it removes every muxen-shaped handler, wherever it is (one under an old MagicDNS
      name after a rename, say), drops a `Web` entry left with no handler, and drops a
      `TCP` port entry that is exactly `{HTTPS: true}` when no `Web` entry uses that
      port any more;
@@ -396,16 +396,16 @@ Once LocalAPI answers, it:
 The canonical-origin refusal carries a typed cause and is rendered for the serve
 target. It names the actual conflict (including Funnel, the incompatible TCP entry,
 or a sibling handler's mount), never its proxy URL, and explains how to clear it. On
-Linux it names `tether setup` as the fix; on a Mac it tells Jimmy
+Linux it names `muxen setup` as the fix; on a Mac it tells Jimmy
 which handler or TCP forward to remove, or that Funnel must be turned off, then to
-restart tether to retry publication. A refused plan is logged once and reported in
+restart muxen to retry publication. A refused plan is logged once and reported in
 `/auth/info`'s `browserRefused`; the daemon doesn't publish again until it restarts.
 LocalAPI I/O failures and timeouts retry quietly with the cell's 2–30 s
 backoff. Other retryable failures, including a rejected write, a missing `Etag`, or
 three consecutive compare-and-swap conflicts, stay in `Waiting`; each distinct error
-is warned once and is shown by `/auth/info`'s `browserRefused` while tether retries.
+is warned once and is shown by `/auth/info`'s `browserRefused` while muxen retries.
 After publication the daemon never writes the config again while it runs: if Jimmy
-resets Serve to take tether off the tailnet, it stays off until the next start. The
+resets Serve to take muxen off the tailnet, it stays off until the next start. The
 canonical-origin rule judges whatever the config holds from then on.
 
 **No unpublishing.** Apart from a withdrawal at a socket launchd couldn't bind, the
@@ -413,11 +413,11 @@ daemon never removes its Serve entry, on any exit. A crash or
 restart leaves the socket with launchd, and the next start replaces the stale handler
 with one carrying a new secret. Logout, or unloading the agent, leaves the entry
 pointing at a closed port, and Serve answers `502` until Jimmy logs in again; the next
-start replaces it the same way. To stop tether, Jimmy runs `tether teardown`, which
-unloads the agent, removes tether's handlers and the entries and plain-HTTPS ports
+start replaces it the same way. To stop muxen, Jimmy runs `muxen teardown`, which
+unloads the agent, removes muxen's handlers and the entries and plain-HTTPS ports
 they leave unused, and removes the plist ([setup.md](setup.md#teardown)). By hand he
 unloads the agent and runs `tailscale serve --https=443 off`, which removes the whole
-entry: tether refuses to share it, so the entry is tether's alone ([Threat
+entry: muxen refuses to share it, so the entry is muxen's alone ([Threat
 model](#threat-model)); to stop it for good he also removes the plist, which launchd
 otherwise loads at the next login.
 
@@ -432,7 +432,7 @@ it, and the device token is judged on the native lane.
 **The unified log, and Tailscale's log upload.** The Tailscale extension logs the
 full target, path secret included, when a handler is created ("serve: creating a new
 proxy handler for …") and when it is removed ("serve: closing idle connections to
-…"). tether can't avoid the line: a Serve proxy target is a URL, and the extension
+…"). muxen can't avoid the line: a Serve proxy target is a URL, and the extension
 logs it. Only admins can read the unified log. The same logger uploads to Tailscale's
 log servers, and the app can't turn that off: `TS_NO_LOGS_NO_SUPPORT` and
 `--no-logs-no-support` work only for the open-source `tailscaled`
@@ -440,9 +440,9 @@ log servers, and the app can't turn that off: `TS_NO_LOGS_NO_SUPPORT` and
 secret at each start makes every uploaded copy stale once the daemon that published
 it stops.
 
-**`tether enroll` on a Mac** asks the running daemon: `GET /auth/info` over
+**`muxen enroll` on a Mac** asks the running daemon: `GET /auth/info` over
 `local.sock`, with the owner login from LocalAPI's status as `Tailscale-User-Login`.
-It prints the daemon's `browserOrigin` or `browserRefused`, or says that tether isn't
+It prints the daemon's `browserOrigin` or `browserRefused`, or says that muxen isn't
 running. Only the daemon knows its secret, so only it can apply the canonical-origin
 rule.
 
@@ -532,32 +532,32 @@ Otherwise there is no canonical origin and every node-lane request is `403
 bad_origin`. The typed refusal names the actual cause—such as the second reference,
 the TCP entry, Funnel, a non-root mount, or the sibling handler's mount—without
 printing a proxy URL, which may contain the Mac path secret. Each serve target gets
-its own repair instruction: on Linux, fix the named conflict and run `tether setup`;
+its own repair instruction: on Linux, fix the named conflict and run `muxen setup`;
 on a Mac, remove the named handler or TCP forward (or turn Funnel off), then restart
-tether to retry publication.
+muxen to retry publication.
 
 | Rule | Why |
 |---|---|
-| the serve target named nowhere else | A Serve `TCP` forward to the socket or port (`--tcp`, `--tls-terminated-tcp`, from Tailscale 1.102) relays raw bytes from tailscaled itself, so a client writes its own `Host`, `X-Forwarded-For`, `X-Forwarded-Host` and `Tailscale-User-Login`. Only the serve config can show that every connection on the front is Serve's HTTP proxy. A second `Web` publication of the same tether is refused by the same count; choosing among several isn't worth a setting |
-| tether is the only handler in its entry | A second handler on the same `host:port` (`--set-path /grafana 3000`, a `Path` handler serving a directory, a `Text` handler) serves pages with tether's origin. They can open `/ws`, `fetch` `/fs/*` and post to `/complete` with exact `Origin` and `Sec-Fetch-Site: same-origin`, and no header tells them apart from tether's page |
+| the serve target named nowhere else | A Serve `TCP` forward to the socket or port (`--tcp`, `--tls-terminated-tcp`, from Tailscale 1.102) relays raw bytes from tailscaled itself, so a client writes its own `Host`, `X-Forwarded-For`, `X-Forwarded-Host` and `Tailscale-User-Login`. Only the serve config can show that every connection on the front is Serve's HTTP proxy. A second `Web` publication of the same muxen is refused by the same count; choosing among several isn't worth a setting |
+| muxen is the only handler in its entry | A second handler on the same `host:port` (`--set-path /grafana 3000`, a `Path` handler serving a directory, a `Text` handler) serves pages with muxen's origin. They can open `/ws`, `fetch` `/fs/*` and post to `/complete` with exact `Origin` and `Sec-Fetch-Site: same-origin`, and no header tells them apart from muxen's page |
 | mount path `/` | The shell and the API assume the root |
 | HTTPS | Browsers need a secure context for the service worker, and Serve marks only TLS requests `https` |
 | Funnel off | Funnel puts the entry on the internet; the node lane is tailnet-only |
 
 **When it is read.** From the tailnet-state cell ([security state](#security-state-is-read-when-it-is-used)): on every node-lane request,
-every node-lane socket re-check, `GET /auth/info` and `tether enroll`. A handler
-added beside tether, or a stray reference to the serve target, is therefore acted on
+every node-lane socket re-check, `GET /auth/info` and `muxen enroll`. A handler
+added beside muxen, or a stray reference to the serve target, is therefore acted on
 within 10 s, by new requests and by live sockets alike. Request headers (`Host`,
 `X-Forwarded-Host`) never choose the origin. On a Mac the daemon wrote the
-publication itself, and this rule still judges it: a handler Jimmy adds beside tether,
+publication itself, and this rule still judges it: a handler Jimmy adds beside muxen,
 or Funnel turned on, refuses browsers within 10 s as on Linux.
 
 **Upgrading from loopback TCP (Linux).** When there is no canonical origin and the
 `/` handler of a `:443` Web entry proxies to `http://127.0.0.1:7850`, the old
-daemon's publication, the message names that entry and names `tether setup`, whose
+daemon's publication, the message names that entry and names `muxen setup`, whose
 publication plan removes that handler and publishes `serve.sock` in its place. A
 7850 handler anywhere else gets the plain refusal. Any other loopback target is someone else's app and gets the plain
-refusal. The daemon logs the message, `tether enroll` prints it, and `GET
+refusal. The daemon logs the message, `muxen enroll` prints it, and `GET
 /auth/info` carries it in `browserRefused`. Only the Unix serve target looks for
 this.
 
@@ -566,14 +566,14 @@ the message). `browserPending` is true while a Mac publication is still waiting 
 retrying, so `browserRefused` holds its last error rather than a final refusal;
 Background setup keeps waiting while it is set. Foreground setup publishes and
 refreshes in-process before it prints. It is always false on Linux. The shell compares it with `location.origin` before connecting, and
-on a mismatch shows "Open tether at `<browserOrigin>`" and opens no socket; with
+on a mismatch shows "Open muxen at `<browserOrigin>`" and opens no socket; with
 `null` it shows the message.
 
 ## Browser admission
 
 Node identity is ambient: a page on any origin, open in a browser on an enrolled
 node, can make the browser send requests that arrive with that node's identity.
-These rules make sure a node-lane request was sent by tether's own page. The
+These rules make sure a node-lane request was sent by muxen's own page. The
 browser sets `Origin`, its `Host` and `Sec-Fetch-*` itself and no page can change
 them; Serve copies the browser's `Host` into `X-Forwarded-Host` after deleting any
 inbound copy. So they are trustworthy for browsers. They are no barrier to a
@@ -592,8 +592,8 @@ and the canonical origin.
 | `Sec-Fetch-Site`, on `GET` and `HEAD` | present and `same-origin` | **The required control on reads.** Browsers usually send no `Origin` on a GET, so `<img>`, `<video>`, `<script>` or a link from another page would otherwise load `/fs/raw` media, or leak a file's size and dimensions, under the node's identity |
 | Origin, on `GET` and `HEAD` | if present, equal to the canonical origin | Cheap, and refuses the few cross-origin GETs that do carry it |
 
-These rules stop pages on other origins. Pages on tether's own origin are kept to
-tether's by the canonical-origin rule that tether is alone in its entry.
+These rules stop pages on other origins. Pages on muxen's own origin are kept to
+muxen's by the canonical-origin rule that muxen is alone in its entry.
 
 A refusal is `403 bad_origin`; a refused upgrade gets a plain 403 and no socket.
 Each route keeps its own body rule (JSON routes take `application/json` through
@@ -601,7 +601,7 @@ axum's `Json`; `POST /fs/upload` takes a raw body); the content type is no
 cross-site defence, the exact `Origin` is. **No CORS:** the daemon sends no
 `Access-Control-*` header and answers no preflight. **No anti-CSRF token:** every
 admitted mutation carries an exact `Origin`, which no page can forge. A browser
-older than the minimums sends no `Sec-Fetch-Site`, so its GETs are refused; tether
+older than the minimums sends no `Sec-Fetch-Site`, so its GETs are refused; muxen
 doesn't support it.
 
 The shell routes (`/`, `/manifest.webmanifest`, `/sw.js`, `/icons/*`,
@@ -613,14 +613,14 @@ The shell is the client's code and carries no host data.
 ## Carrying the token
 
 The daemon looks at what the request presents. Any `Authorization` header counts,
-whatever its scheme (matched case-insensitively), and so does a `tether.auth.`
+whatever its scheme (matched case-insensitively), and so does a `muxen.auth.`
 WebSocket subprotocol. `Cookie` is ignored.
 
 | Presented | Lane |
 |---|---|
-| exactly one `Authorization: Bearer <token>`, or exactly one `tether.auth.<token>` subprotocol | native, on either front: today's rules, no origin check, no node identity. Another scheme, or an empty token, is `401 auth_required` |
+| exactly one `Authorization: Bearer <token>`, or exactly one `muxen.auth.<token>` subprotocol | native, on either front: today's rules, no origin check, no node identity. Another scheme, or an empty token, is `401 auth_required` |
 | nothing | node, on a Serve front only: [Node identity](#node-identity), [Canonical origin](#canonical-origin) and [Browser admission](#browser-admission). On `local.sock`, `401 auth_required` |
-| two `Authorization` headers, two `tether.auth.` subprotocols, or one of each | ambiguous: `401 auth_required` / close 4401 |
+| two `Authorization` headers, two `muxen.auth.` subprotocols, or one of each | ambiguous: `401 auth_required` / close 4401 |
 
 A request that presents a token never falls back to the node lane when the token
 is wrong: it is 401. A native token works from any node while its device row (and
@@ -631,7 +631,7 @@ enrolled phone node.
 **`POST /auth/enroll` refuses browser requests.** It returns a token in JSON,
 so it refuses any request carrying `Origin` or `Sec-Fetch-Site` with `403
 bad_origin`. A browser never needs a portable token, and refusing keeps script on
-tether's origin that sees a typed code from trading it for one.
+muxen's origin that sees a typed code from trading it for one.
 
 `POST /auth/node/enroll` can also return a native token, but only for an already
 enrolled node and only when `code` is empty. It reaches that branch after the node
@@ -639,7 +639,7 @@ lane has checked the canonical HTTPS `Origin`, the `X-Forwarded-Host` for this
 daemon, and tailscaled's whois identity and node rules. The empty-code branch is for
 the native app only: it refuses any `Sec-Fetch-Site`, `Sec-Fetch-Mode` or
 `Sec-Fetch-Dest` header with `403 bad_origin`, which keeps browser script on
-tether's origin from minting a portable token. The native app sends no fetch metadata;
+muxen's origin from minting a portable token. The native app sends no fetch metadata;
 its `Origin` must still pass the node admission check. Non-empty-code requests keep
 the browser enrolment path unchanged. The empty-code branch does not redeem a code,
 and an unenrolled node gets the same `401 not_enrolled` refusal as
@@ -660,7 +660,7 @@ check is repeated for native-token use.
 |---|---|---|
 | `401 not_enrolled`; close 4401 | this node isn't enrolled, or was removed; or, for a socket, the canonical origin changed | asks `GET /auth/node/session` why: `401` shows the enrolment screen, `403 bad_origin` reloads `/auth/info` |
 | `403 node_refused` (reason) | this node can never be admitted | a screen naming the reason ("This device is a subnet router"), no retry |
-| `403 bad_origin` | the page isn't at the canonical origin, or there is none | reloads `GET /auth/info` and shows "Open tether at …" or the refusal message |
+| `403 bad_origin` | the page isn't at the canonical origin, or there is none | reloads `GET /auth/info` and shows "Open muxen at …" or the refusal message |
 | `503 identity_unavailable`, `auth_unavailable`, `busy`; close 4503 | the daemon can't decide now | keeps its state and retries with the usual backoff |
 | close 4005 | over the socket cap | "Too many connections" |
 
@@ -688,12 +688,12 @@ node enrols at its own route:
    two groups of four, whose separator is drawn and never typed, then the device name,
    prefilled with the node's name, which Jimmy can edit. A setup link's `#code=` fills
    the cells and waits for a tap; it never enrols by itself. The screen says "This lets
-   every browser and app on <node> use tether on <host>." A refused node gets
+   every browser and app on <node> use muxen on <host>." A refused node gets
    `403 node_refused` and no code field.
 
    On a phone that has the app, the page does not get this far: as soon as it knows the
-   host's origin it fires `tether://add?host=<origin>&code=<code>` and leaves the prefilled
-   screen and its "Open in the tether app" action as the fallback for when nothing handles
+   host's origin it fires `muxen://add?host=<origin>&code=<code>` and leaves the prefilled
+   screen and its "Open in the muxen app" action as the fallback for when nothing handles
    the scheme. The link belongs to the app, which spends the code; Safari never enrols.
 
    On an iPhone, opening the setup link in Safari hands the code to the app; the
@@ -727,8 +727,8 @@ node enrols at its own route:
    node's empty-code path. The row's node ID is a revocation binding, not a restriction
    to requests from that node: the token uses the native lane from any node while its
    source node row remains. `POST /auth/node/remove {}` and
-   `tether device remove <node-name>` remove it with its node;
-   `tether device remove <token-name>` can also revoke it individually. An empty-code
+   `muxen device remove <node-name>` remove it with its node;
+   `muxen device remove <token-name>` can also revoke it individually. An empty-code
    request from `Session::NodeUnenrolled` returns `401
    {error: "not_enrolled", node: {name}}` without reading or changing the code. The
    token path never enrols a node.
@@ -753,7 +753,7 @@ An upgraded connection carries one client for its whole life, so the identity
 recorded at the upgrade stays the identity of every message on it; the whois
 re-check catches the node leaving the tailnet or changing hands. Tolerating two
 failed calls keeps a briefly slow tailscaled on a busy box from dropping every
-live socket, which would cost each a reconnect; `tether device remove` still takes
+live socket, which would cost each a reconnect; `muxen device remove` still takes
 effect within 10 s, because step 1 needs no LocalAPI call. The cost is at most one
 whois per open node-lane socket per 10 s, plus the shared cell read, and none when
 only native or nobody is connected.
@@ -802,8 +802,8 @@ by name; other rows keep working. New device names avoid names in both admitted 
 refused rows. A later version may add fields that narrow a
 device (an expiry, a scope); an older daemon that ignored them would grant that
 device full power. Refused rows remain as raw TOML values across writes to other
-rows or `[pending]`; `tether device list` marks named refused rows, and
-`tether device remove <name>` can remove one by name.
+rows or `[pending]`; `muxen device list` marks named refused rows, and
+`muxen device remove <name>` can remove one by name.
 
 ```toml
 [[device]]
@@ -825,12 +825,12 @@ enrolled_by = "jimmy@github"
 
 | Command | Effect |
 |---|---|
-| `tether setup` | On Linux, run in the terminal and publish; `--background` installs the service. On a Mac, use `--background` for the LaunchAgent. Both print the link, its QR code and a new code ([setup.md](setup.md)) |
-| `tether teardown` | Stop an installed service if present, remove it, and remove tether's Serve handlers; devices and config stay |
-| `tether enroll [--ttl 10m]` | Print a new code, the host URL for the app, and the browser URL (`browserOrigin`, or the refusal message with its fix). The code works for either kind |
-| `tether device list` | Devices with name, kind, enrolled date and `enrolled_by`; for nodes, the stored stable ID; a bound native token shows its node's name; named refused rows are marked `refused` |
-| `tether device remove <name>` | Remove a device of either kind; removing a node also reports and removes its bound native tokens; requests are refused at once and sockets close at the next re-check |
-| `tether device add <name>` | Add a **native** device and print its token once, for the dev shim or Playwright against a real daemon |
+| `muxen setup` | On Linux, run in the terminal and publish; `--background` installs the service. On a Mac, use `--background` for the LaunchAgent. Both print the link, its QR code and a new code ([setup.md](setup.md)) |
+| `muxen teardown` | Stop an installed service if present, remove it, and remove muxen's Serve handlers; devices and config stay |
+| `muxen enroll [--ttl 10m]` | Print a new code, the host URL for the app, and the browser URL (`browserOrigin`, or the refusal message with its fix). The code works for either kind |
+| `muxen device list` | Devices with name, kind, enrolled date and `enrolled_by`; for nodes, the stored stable ID; a bound native token shows its node's name; named refused rows are marked `refused` |
+| `muxen device remove <name>` | Remove a device of either kind; removing a node also reports and removes its bound native tokens; requests are refused at once and sockets close at the next re-check |
+| `muxen device add <name>` | Add a **native** device and print its token once, for the dev shim or Playwright against a real daemon |
 
 ## Endpoints
 
@@ -849,7 +849,7 @@ unknown path under them, for any method, is a JSON 404, never the shell.
 | `POST /auth/node/enroll` | a token is `400 bad_request` | canonical origin, admission (mutation), whois, node rules | non-empty `{code, deviceName}` → `200 {deviceName}`; empty `{code: "", deviceName}` → native app only, no fetch metadata, enrolled node: `200 {token, deviceName}`; unenrolled node: `401 {error, node: {name}}`; `403 bad_code`, `bad_origin`, `node_refused`; `503` |
 | `GET /auth/node/session` | a token is `400 bad_request` | canonical origin, admission (GET), whois, node rules, lookup | `200 {deviceName}`; `401 {error, node: {name}}`; `403 bad_origin`, `node_refused`; `503` |
 | `POST /auth/node/remove` | a token is `400 bad_request` | canonical origin, admission (mutation), whois, node rules | `{}` → `204` |
-| `GET /ws` | subprotocol token | only `tether.v1` offered; canonical origin, admission (upgrade), whois, node rules, lookup | upgrade; not enrolled → close 4401; can't decide → 4503; bad origin → plain 403 |
+| `GET /ws` | subprotocol token | only `muxen.v1` offered; canonical origin, admission (upgrade), whois, node rules, lookup | upgrade; not enrolled → close 4401; can't decide → 4503; bad origin → plain 403 |
 | `GET /fs/*` | `Authorization: Bearer` | admission (GET) and the node lane | as fs.md |
 | `POST /fs/*`, `POST /complete` | `Authorization: Bearer` | admission (mutation) and the node lane | as fs.md, complete.md |
 | debug endpoint | `Authorization: Bearer` | admission for its method and the node lane | as plan.md |
@@ -884,14 +884,14 @@ pass through it.
 - `identity.rs`: the tailnet-state cell; Serve-config parsing, the serve target
   (`serve.sock` identity, or the Mac front's port and path secret) and canonical-origin
   calculation; Tailscale login decoding and the `local.sock` auth-info client used by
-  setup on both platforms and by `tether enroll` on a Mac. Cell fills and retries log
+  setup on both platforms and by `muxen enroll` on a Mac. Cell fills and retries log
   changes in origin or availability.
-- `mac_front.rs`: the Mac front identity and its proxy URL, strict tether-shaped
+- `mac_front.rs`: the Mac front identity and its proxy URL, strict muxen-shaped
   matcher, and assembly into the target, publication and request gate.
 - `publish.rs`: pure publication and withdrawal plans from Serve JSON and a target
   (Unix or Mac), preserving unknown fields and judging publication with the same
   canonical-origin rule used for admission. One three-attempt `If-Match` loop is shared
-  by the Mac daemon's publisher, Linux `tether setup`, and `tether teardown` on both
+  by the Mac daemon's publisher, Linux `muxen setup`, and `muxen teardown` on both
   platforms. It also owns best-effort withdrawal when launchd couldn't bind a socket;
   one task owns Mac publication state and retries with the cell's 2–30 s backoff. The
   serve-config types redact proxy URLs in `Debug`.
@@ -918,8 +918,8 @@ pass through it.
   it, and every block carries a `// SAFETY:` comment); no other code converts a raw
   fd. A null array is an empty list. The caller sets `FD_CLOEXEC` unconditionally and
   sets the fd non-blocking before handing it to tokio.
-- `config.rs`: `runtime_dir()` returns `$XDG_RUNTIME_DIR/tether` on Linux or
-  `$TMPDIR/tether` on macOS; both are private, checked directories.
+- `config.rs`: `runtime_dir()` returns `$XDG_RUNTIME_DIR/muxen` on Linux or
+  `$TMPDIR/muxen` on macOS; both are private, checked directories.
 - `build.rs`: embeds the shell assets and computes their gzip payloads and ETags at
   build time.
 - The log never carries `Authorization` or `Sec-WebSocket-Protocol` values, the
@@ -955,14 +955,14 @@ row fields means an older daemon never reads a guest row as a full device.
 
 - **256 bits of entropy**, generated by the daemon. A guess is hopeless, so token
   checks need no rate limit or lockout.
-- **The `tether_` prefix** makes a leaked token recognisable in logs, pastes and
+- **The `muxen_` prefix** makes a leaked token recognisable in logs, pastes and
   secret scanners. Every character is valid in an HTTP header and in a WebSocket
   subprotocol token.
 - **The daemon stores only `sha256(token)`**, hex. Reading the state file (a dotfile
   backup, a `cat` on a shared screen) yields no credential. A check hashes the
   presented token and compares it with every device's hash in constant time, scanning
   the whole list with no early exit.
-- **No expiry.** The token works until `tether device remove`; on the phone, the Face
+- **No expiry.** The token works until `muxen device remove`; on the phone, the Face
   ID lock bounds who can use it.
 - **No session token.** The device token goes on every request. A short-lived token
   derived from it would protect only against capture in transit or from the page, and
@@ -973,13 +973,13 @@ row fields means an older daemon never reads a guest row as a full device.
 
 
 **One Keychain item holds every host's token**: a generic password, service
-`tether.tokens`, whose data is JSON `{ "<host_id>": "<token>" }`.
+`muxen.tokens`, whose data is JSON `{ "<host_id>": "<token>" }`.
 
 - Access control: `SecAccessControlCreateWithFlags(nil,
   kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly, .biometryCurrentSet, nil)`. Never
   synced, not in backups, deleted by iOS if the passcode is removed.
 - **Reading the item is the unlock.** `SecItemCopyMatching` with an `LAContext` whose
-  `localizedReason` is "Unlock tether" shows the Face ID prompt. One read returns every
+  `localizedReason` is "Unlock muxen" shows the Face ID prompt. One read returns every
   host's token, so one prompt unlocks every host. Reads and writes run on a serial
   background queue, not the main thread or a WebKit bridge callback. The tokens stay in
   native memory until the app locks; bridge and HTTP requests read memory only and never
@@ -1013,7 +1013,7 @@ stateDiagram-v2
   does not lock the app.
 - **Changing the choice.** Relock is a security control the web alone can't weaken. Choosing
   a longer interval or At launch asks for a fresh Face ID evaluation in the app before it
-  applies, and the prompt names the choice ("Ask for Face ID only when tether starts"); cancelling or failing it leaves the setting unchanged. A shorter interval applies
+  applies, and the prompt names the choice ("Ask for Face ID only when muxen starts"); cancelling or failing it leaves the setting unchanged. A shorter interval applies
   at once. Nothing changes while the app is locked. The background time is measured on a
   clock that counts through sleep and can't be set back, and an unknown (negative) elapsed
   time locks.
@@ -1035,13 +1035,13 @@ stateDiagram-v2
 
 | Situation | What happens | Fix |
 |---|---|---|
-| Face ID re-enrolled, or an appearance added | `.biometryCurrentSet` makes the item unreadable for good. The read fails with an error that isn't cancel or lockout, possibly "item not found" (the [iOS device checklist](ios-shell.md#device-checklist) records which); "not found" while `HostStore` lists hosts counts as this case | The lock screen offers "Reset tokens": after confirmation it deletes the item and treats every host as "not enrolled"; Jimmy runs `tether enroll` on each host and adds them again. The app never deletes on its own: a misread error would cost re-enrolling every host |
-| Phone lost | Tokens stay on the lost phone, behind its Face ID | On each host, `tether device remove <name>`; live sockets close at the next re-check |
+| Face ID re-enrolled, or an appearance added | `.biometryCurrentSet` makes the item unreadable for good. The read fails with an error that isn't cancel or lockout, possibly "item not found" (the [iOS device checklist](ios-shell.md#device-checklist) records which); "not found" while `HostStore` lists hosts counts as this case | The lock screen offers "Reset tokens": after confirmation it deletes the item and treats every host as "not enrolled"; Jimmy runs `muxen enroll` on each host and adds them again. The app never deletes on its own: a misread error would cost re-enrolling every host |
+| Phone lost | Tokens stay on the lost phone, behind its Face ID | On each host, `muxen device remove <name>`; live sockets close at the next re-check |
 | Device removed while the app still has its token | 401 or close 4401 | The host shows "not enrolled" with Add host |
 | `auth.toml` unreadable on the server (a bad hand edit) | 503 or close 4503, including on live sockets at their next re-check | Nothing on the phone: it keeps its token and retries. Fix the file on the server (the log names the line) |
 | New phone, or restored from a backup | The host list (`UserDefaults`) came back; the tokens item (`ThisDeviceOnly`) didn't | Hosts without a token show "not enrolled"; Jimmy re-enrols and removes the old device |
 
-Recovery needs a shell on the server that isn't tether (the laptop, or SSH).
+Recovery needs a shell on the server that isn't muxen (the laptop, or SSH).
 
 
 ## Crates
@@ -1057,7 +1057,7 @@ Recovery needs a shell on the server that isn't tether (the laptop, or SSH).
 | launchd socket activation (macOS) | `libc`, a macOS-only direct dependency (already in the lockfile), through `src/launchd.rs` |
 
 On the Swift side, Security and LocalAuthentication cover everything.
-`ios/Tether/Auth/`:
+`ios/Muxen/Auth/`:
 
 - `TokenStore`: read the item with an `LAContext`, rewrite it, delete it.
 - `AppModel`: owns the lock state and holds the token map in memory while unlocked.
@@ -1072,7 +1072,7 @@ LocalAPI do not replace them. `browser-setup.md` links here for the complete che
 
 | Gate | Check on the real system | Settles |
 |---|---|---|
-| G1 | On the dev box with Tailscale 1.104.1, publish `serve.sock` with `tether setup` as the operator, and once by hand with `sudo tailscale serve --https=443 unix:<serve.sock>`; confirm a non-operator's write is refused, later Serve changes need root or an operator who may `sudo tailscale`, and another Unix user gets `EACCES` on the socket. The setup gates S1–S13 ([setup.md](setup.md#probe-gates)) cover the rest | Unix Serve publication and runtime-directory boundary |
+| G1 | On the dev box with Tailscale 1.104.1, publish `serve.sock` with `muxen setup` as the operator, and once by hand with `sudo tailscale serve --https=443 unix:<serve.sock>`; confirm a non-operator's write is refused, later Serve changes need root or an operator who may `sudo tailscale`, and another Unix user gets `EACCES` on the socket. The setup gates S1–S13 ([setup.md](setup.md#probe-gates)) cover the rest | Unix Serve publication and runtime-directory boundary |
 | G2 | Through Serve from laptop, phone browser and PWA, inspect Host, forwarded host/address and identity headers on GET, POST and WebSocket upgrade; try forged identity headers and Safari HTTP/2 WebSocket | Serve header trust and browser authority |
 | G3 | Check real whois fields and refusals for tagged, shared, subnet-router, self and login-mismatch nodes; admit only a plain owner node and an exit-node route; confirm `/status?peers=false` includes self ID and owner | Node rules and tailnet-state parsing |
 | G4 | Measure whois latency, tailscaled CPU and response sizes for 1,000 calls over new and keep-alive connections and for 20 concurrent calls; measure status and Serve-config answers | Per-request whois and bounded keep-alive pools |
@@ -1080,7 +1080,7 @@ LocalAPI do not replace them. `browser-setup.md` links here for the complete che
 | G6 | Confirm the app's `URLSession` sends `Origin` and no `Sec-Fetch-*` on both `POST /auth/node/enroll` requests in the code path and on the single empty-code mint | Native enrolment compatibility |
 | G7 | Compare canonical-origin results with `tailscale serve status` across Unix target, Service, path/text handlers, duplicate publications, TCP forwards, non-root mount, HTTP, Funnel and symlink spellings | Serve-config origin classification |
 | G8 | Open raw `.svg` and `.html` files top-level and verify scripts are sandboxed; verify raw `.js` is refused as a script and service worker | Same-origin file content isolation |
-| G9 | From another tailnet machine, another host port, another user's tether and the internet, exercise WebSocket hijack, POST, forms and raw media; add a co-resident handler while a tab is open | Cross-origin defence and live revocation |
+| G9 | From another tailnet machine, another host port, another user's muxen and the internet, exercise WebSocket hijack, POST, forms and raw media; add a co-resident handler while a tab is open | Cross-origin defence and live revocation |
 | G10 | In Safari, iOS Safari, PWA and Chrome, try typed URL, bookmark, cold PWA launch, external link and `<video>` Range requests | Cold shell and media fetch metadata |
 | G11 | Remove an enrolled node and measure live close latency; stop LocalAPI for 15 s and 40 s and verify two re-check failures are tolerated but the third closes with 4503 | Revocation and outage behavior |
 | G12 | Under the resource-limit R3 run, cold-load two browsers, fill distinct-address whois waiters and flood the 64-connection Serve backstop | Shell and admission headroom |
@@ -1091,12 +1091,12 @@ and G11 apply as written, plus:
 
 | Gate | Check on the real Mac (standalone Tailscale app) | Settles |
 |---|---|---|
-| M0 | Install the LaunchAgent plist as Jimmy, no sudo, and log out and in. The daemon has `HOME` and `TMPDIR` from launchd and `PATH` from the plist; tmux sessions list; it reads the proof file; with another process listening on the port before the agent loads, the daemon withdraws its handler and exits 78 naming the cause, and the phone's next request doesn't reach that process; at logout the daemon gets `SIGTERM` and the phone gets an error, and after login it publishes again with a new secret; with the screen locked the phone still reaches it; whether `/fs` reading `~/Documents` prompts (TCC), and whether the grant survives reinstalling the binary; whether `$TMPDIR/tether/` survives a reboot's temp cleanup; whether turning the job off in Login Items sends `SIGTERM` | The LaunchAgent setup |
-| M1 | As Jimmy, no sudo: the entry appears in `tailscale serve status`; unrelated entries, including fields tether doesn't parse, survive byte-for-byte; a `/` handler of another app, another handler in the entry, a TCP forward on 443 and Funnel each refuse without writing; a concurrent edit gets `412` and a re-plan; a tether-shaped handler under an old name is removed | Publication and compare-and-swap |
+| M0 | Install the LaunchAgent plist as Jimmy, no sudo, and log out and in. The daemon has `HOME` and `TMPDIR` from launchd and `PATH` from the plist; tmux sessions list; it reads the proof file; with another process listening on the port before the agent loads, the daemon withdraws its handler and exits 78 naming the cause, and the phone's next request doesn't reach that process; at logout the daemon gets `SIGTERM` and the phone gets an error, and after login it publishes again with a new secret; with the screen locked the phone still reaches it; whether `/fs` reading `~/Documents` prompts (TCC), and whether the grant survives reinstalling the binary; whether `$TMPDIR/muxen/` survives a reboot's temp cleanup; whether turning the job off in Login Items sends `SIGTERM` | The LaunchAgent setup |
+| M1 | As Jimmy, no sudo: the entry appears in `tailscale serve status`; unrelated entries, including fields muxen doesn't parse, survive byte-for-byte; a `/` handler of another app, another handler in the entry, a TCP forward on 443 and Funnel each refuse without writing; a concurrent edit gets `412` and a re-plan; a muxen-shaped handler under an old name is removed | Publication and compare-and-swap |
 | M2 | Through Serve, GET, HEAD, POST and a WebSocket upgrade arrive as `/<secret>/…` and route (an unenrolled WebSocket gets the device check's `403`, an enrolled one `101`, which M6 covers); directly on the port, no prefix, a wrong secret of the same length, a one-byte-short secret, `/<secret>` without a slash, a percent-encoded secret, `/x/../<secret>/` and `//<secret>/` all get the empty `404`; the daemon's log never shows the secret | Path secret gate and its place before routing |
 | M3 | A `Host` forged through Serve (curl `-H`), and a missing, doubled or forged `X-Forwarded-Host` directly on the port, are `403 forbidden`. A forged `X-Forwarded-Host` through Serve passes: Serve overwrites the header with the request's real Host (`addProxyForwardedHeaders`, `ipn/ipnlocal/serve.go:1089` at v1.104.2). The iPhone app and Safari pass | `Host` rule |
 | M4 | `kill -9` the daemon: the port stays bound (a second bind on `127.0.0.1`, `0.0.0.0` and `[::]` with `IPV6_V6ONLY` off fails), a request waits and the restarted daemon answers; the new start replaces the handler with a new secret and the old secret gets `404`. `launchctl bootout`, and turning the job off under Login Items: the entry stays and Serve answers `502`; `tailscale serve --https=443 off`, as Jimmy without sudo, removes it and nothing else; the next bootstrap publishes again | Socket ownership, rotation, stopping |
-| M5 | Start tether before Tailscale; quit Tailscale and check whether `ipnport` and `sameuserproof-*` remain; relaunch it (the port changes) while a tab is open and confirm the next request reconnects | Not a startup gate; endpoint rediscovery; how long a stale `ipnport` lasts |
+| M5 | Start muxen before Tailscale; quit Tailscale and check whether `ipnport` and `sameuserproof-*` remain; relaunch it (the port changes) while a tab is open and confirm the next request reconnects | Not a startup gate; endpoint rediscovery; how long a stale `ipnport` lasts |
 | M6 | Enrol the iPhone app and a Safari node against the Mac; hold a WebSocket for 10 minutes through Serve's pooled connections; revoke both | Native and node lanes through the Mac front |
 | M7 | Two daemon starts publish different secrets; after the second, the first secret gets the empty `404` through Serve and directly on the port | A logged secret goes stale at the next start |
 | M8 | Optional, if the App Store app is installed: `lsof` discovery finds the port and token, and M1 passes | App Store transport |
@@ -1122,8 +1122,8 @@ and G11 apply as written, plus:
 - The App Store app's discovery and write permission are designed from Tailscale's
   CLI source and untested.
 - A bad hand edit to `auth.toml` locks every device out until the file is fixed, though
-  the app keeps its credentials and retries. Recovery needs a shell outside tether.
+  the app keeps its credentials and retries. Recovery needs a shell outside muxen.
 - Face ID failure lockout remains accepted for this single-user tool: if Face ID
   cannot recognize Jimmy, no host is reachable until it can.
 - A server shell is needed for recovery if a Face ID change locks every host and the
-  laptop is away. Keep an SSH client available until tether has proved itself.
+  laptop is away. Keep an SSH client available until muxen has proved itself.

@@ -8,7 +8,7 @@
 The native shell and web adapter implement bridge v9; the device-only checks below still
 need Jimmy's iPhone.
 
-tether's phone client is a Swift app: a `WKWebView` runs the web UI (terminal, tabs,
+muxen's phone client is a Swift app: a `WKWebView` runs the web UI (terminal, tabs,
 the phone dock, sheets, file manager), and native code owns the first responder,
 keyboard geometry, auth, media and lifecycle.
 The web UI is bundled in the app and served from a custom scheme. The app connects to
@@ -22,7 +22,7 @@ and rejected alternatives are in [decisions.md](decisions.md).
 
 ```mermaid
 flowchart LR
-  subgraph app["tether.app (iPhone)"]
+  subgraph app["muxen.app (iPhone)"]
     subgraph native["Native (UIKit, Swift)"]
       input["KeyboardInput: UITextField<br/>first responder"]
       focus["FocusController"]
@@ -39,7 +39,7 @@ flowchart LR
   h2["host B daemon (v2)"]
   input -- "bridge: input events" --> ui
   ui -- "bridge: focus, line editing, active tab, haptics, socket" --> focus
-  ui -- "tether-app://h-{host}/…" --> scheme
+  ui -- "muxen-app://h-{host}/…" --> scheme
   scheme -- "HTTPS + Bearer" --> h1
   media -- "upload, Bearer" --> h1
   link -- "wss, token in subprotocol" --> h1
@@ -95,25 +95,25 @@ switch remains deferred to `ios/.context/FUTURE`. Separately, the daemon embeds 
 at its canonical tailnet origin ([auth.md](auth.md#canonical-origin)); the iOS app
 does not load that copy or register its service worker.
 
-**The scheme handler** (`ios/Tether/Web/AppSchemeHandler.swift`) serves two kinds of
+**The scheme handler** (`ios/Muxen/Web/AppSchemeHandler.swift`) serves two kinds of
 origin:
 
-- **`tether-app://ui/`**: web assets from the app bundle's `WebUI/` folder. The page and
+- **`muxen-app://ui/`**: web assets from the app bundle's `WebUI/` folder. The page and
   its scripts live here.
-- **`tether-app://h-{host_id}/…`**: a proxy to that host's daemon (`/fs/*`,
+- **`muxen-app://h-{host_id}/…`**: a proxy to that host's daemon (`/fs/*`,
   `/complete`) over HTTPS, with `Authorization: Bearer`
   ([auth.md](auth.md#carrying-the-token)). Each host gets its own origin, different
   from the UI's, so the UI's `script-src 'self'` can never cover a daemon response.
   The handler forwards the method (`GET`, `POST`, and `PUT` in v2) and the body;
   streams the response; passes the request headers `Range`, `If-Match`, `Content-Type`
   and the response headers `Content-Range`, `ETag`, `Content-Type`; adds the security
-  headers below and `Access-Control-Allow-Origin: tether-app://ui`, since the page
+  headers below and `Access-Control-Allow-Origin: muxen-app://ui`, since the page
   fetches these cross-origin. It also adds `Access-Control-Expose-Headers:
   Content-Range, ETag`: a cross-origin page can read only the CORS-safelisted response
   headers (`Content-Type`, `Content-Length` and a few others), so without the list the
   page could not read the file size from `Content-Range` or the validator from `ETag`.
   It answers a CORS preflight (`OPTIONS`) itself, allowing
-  `tether-app://ui`, those methods and those request headers, and never forwards one:
+  `muxen-app://ui`, those methods and those request headers, and never forwards one:
   the daemon answers no preflight ([auth.md](auth.md#carrying-the-token)). The routes
   are in [fs.md](fs.md). After `webView(_:stop:)` it cancels the
   upstream request and never calls that task again (WebKit raises an exception if it
@@ -126,7 +126,7 @@ origin:
     app. A check that gets no answer fails the held requests as a network error and is
     not remembered. Only a compatible answer is kept. The protocol version covers the HTTP routes
     ([daemon-core.md §5.2](daemon-core.md#52-handshake-and-versions)). The app's
-    version is `DaemonProtocol.version` (`TetherKit/AuthTypes.swift`), which moves with
+    version is `DaemonProtocol.version` (`MuxenKit/AuthTypes.swift`), which moves with
     `PROTOCOL_VERSION` (2 since tabs follow a session); enrolment checks it too.
   - Only `/fs/*`, `/complete`, and exact `GET /auth/info` are permitted. The
     percent-encoded path and trailing slash are forwarded unchanged. `OPTIONS` is
@@ -147,20 +147,20 @@ checks.
 
 The page holds the WebSocket token and can call the bridge, and the file viewer shows
 files from repos and agent output. Untrusted content must never run as script in
-`tether-app://ui`:
+`muxen-app://ui`:
 
 - **Navigation.** A `WKNavigationDelegate` allows only the app's own document
-  (`tether-app://ui/index.html`, and reloads of it) in the main frame. Every other
+  (`muxen-app://ui/index.html`, and reloads of it) in the main frame. Every other
   navigation, link or `window.open` is cancelled; `http`, `https` and `mailto` URLs go
   to `openURL` (Safari), anything else is dropped. In-app links (a relative link in
   rendered Markdown, a file path) are intercepted by the web router first. The web
   viewers use no iframes.
-- **Bridge.** The `tether` message handler rejects any message whose
-  `frameInfo.isMainFrame` is false or whose frame origin isn't `tether-app://ui`.
+- **Bridge.** The `muxen` message handler rejects any message whose
+  `frameInfo.isMainFrame` is false or whose frame origin isn't `muxen-app://ui`.
 - **CSP on the app's assets**, a response header set by the scheme handler:
   `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src
-  'self' tether-app: blob: data:; media-src 'self' blob:; connect-src 'self'
-  tether-app: wss:; frame-src 'none'; object-src 'none'; base-uri 'none'` (`wss:`
+  'self' muxen-app: blob: data:; media-src 'self' blob:; connect-src 'self'
+  muxen-app: wss:; frame-src 'none'; object-src 'none'; base-uri 'none'` (`wss:`
   because each host's socket is on its own `*.ts.net` name). P4a has no dev-server mode
   or relaxed CSP path.
 - **Every proxied response** also gets `Content-Security-Policy: sandbox` and
@@ -197,7 +197,7 @@ No Keychain read occurs in the WebKit callback; the app lock has already loaded 
 token map into memory.
 
 Rejected: `baseURL` on `PlatformHost` (exposes host routing in page state);
-`WebSocket` over `tether-app://` (a scheme handler cannot carry it); native
+`WebSocket` over `muxen-app://` (a scheme handler cannot carry it); native
 `URLSessionWebSocketTask` (the fallback below, only if spike 3 shows stuck sockets).
 
 *Fallback, behind the same `HostLink` interface:* a native `URLSessionWebSocketTask`
@@ -252,7 +252,7 @@ Standard user-driven paste remains required. The line mirror's Paste menu asks t
  terminal as one paste without Enter, and an image follows the existing image route. The
  terminal's edit menu Paste asks native over the bridge (`readPasteboard`); native reads
  `UIPasteboard`, sending text back and uploading an image itself. iOS shows its "Allow
- Paste" prompt unless Jimmy sets tether's Paste from Other Apps to Allow.
+ Paste" prompt unless Jimmy sets muxen's Paste from Other Apps to Allow.
 
 ### Hardware keyboard
 
@@ -281,7 +281,7 @@ Standard user-driven paste remains required. The line mirror's Paste menu asks t
   switch tab, with `wantsPriorityOverSystemBehavior`.
 - A hardware keyboard changes nothing in the dock: the key row stays as it is.
 
-`TetherKit/KeyMapper` turns a `UIKey` (`keyCode`, `modifierFlags`,
+`MuxenKit/KeyMapper` turns a `UIKey` (`keyCode`, `modifierFlags`,
 `charactersIgnoringModifiers`) into input events. It is pure,
 unit-tested, and the only place the Swift side spells key names.
 
@@ -371,12 +371,12 @@ responder. Terminal's native responder stays the same object while its target ch
   selection 1–100 ms later, so the long press selected nothing. The next target the web
   sends clears the flag; a cover and uncover restore the target and leave the flag. While
   it is on, WebKit's edit menu is emptied, and the layer sets `-webkit-touch-callout: none`
-  (tether draws Copy and Paste; iOS otherwise offers AutoFill for the native field). The line mirror has its own
+  (muxen draws Copy and Paste; iOS otherwise offers AutoFill for the native field). The line mirror has its own
   tap-to-place caret and Paste / Select all / Clear menu; it has no handles and does not
   borrow WebKit focus.
 - **Edit menus over the terminal under the web keyboard switch** (`directInput: "owned"`). With
   the keyboard up the page's mark is a CSS highlight, not a DOM selection, so WebKit offers no
-  menu; the page sends `editMenu { rect }` and `TetherWebView` presents its own
+  menu; the page sends `editMenu { rect }` and `MuxenWebView` presents its own
   `UIEditMenuInteraction` (Copy, Paste) there, and reports the choice as `menuCopy` or
   `menuPaste`. Native owns whether that menu is up (the interaction's `willPresent` and
   `willDismiss`, since iOS can dismiss it itself): `editMenu` with a rect shows it, or hides
@@ -384,7 +384,7 @@ responder. Terminal's native responder stays the same object while its target ch
   WebKit's, and `buildMenu` adds a Paste item (sending `menuPaste`) whenever no keyboard
   covers the web view, on a terminal or not: native keeps no terminal state for it, and the
   page ignores a Paste when no terminal is shown (`pasteFromMenu`). The web view's `tintColor` is the accent (`--blue-7` light, `--blue-9`
-  dark), so iOS's handles match tether's. `suppressesEditMenu` stays for native input only.
+  dark), so iOS's handles match muxen's. `suppressesEditMenu` stays for native input only.
 - **Native coverage gates focus and input.** While the lock screen or native server
   sheet covers the app, `FocusController.set` records requested state rather than
   changing the responder; uncovering applies the latest requested destination. A queued
@@ -484,14 +484,14 @@ triggers it when the bridge request arrives.
 
 ## The bridge
 
-Bridge version 8 has one `tether` message handler
+Bridge version 8 has one `muxen` message handler
 (`WKScriptMessageHandlerWithReply`) and a page entry point, invoked in the page
-content world: `window.__tether.receive(messages)` accepts an array of native events.
+content world: `window.__muxen.receive(messages)` accepts an array of native events.
 The native shell does not query page state; web sends `activeTab` when selection changes,
 and native uses that cache for terminal keyboard targeting. Uploads name their own host and id (below). Each bridge message is a
 flat JSON object with a `type`; request fields are beside `type`. Every message and
 representative reply has one shared fixture in
-`ios/TetherKit/Tests/Fixtures/bridge/`; the Swift tests decode and re-encode each one.
+`ios/MuxenKit/Tests/Fixtures/bridge/`; the Swift tests decode and re-encode each one.
 The web and Swift tests read those same files. The daemon never sees the bridge. The token
 normally stays inside `HostLink`; on refusal, `hostRejected` echoes the exact presented
 token to native solely for comparison and revocation, never into storage or logs.
@@ -537,7 +537,7 @@ token to native solely for comparison and revocation, never into storage or logs
 | `lifecycle { lifecycle: Lifecycle }` | `visible`, `online`, `locked`, `covered` | One state for app foreground, connectivity, app lock and native coverage |
 | `hosts { hosts: PlatformHost[] }` | Native host handles and labels; never base URLs or tokens | Refresh host admission / connection state |
 | `menuCopy` | Copy was chosen in the menu `editMenu` showed | The page copies its mark's joined text through `copy` and clears the mark |
-| `menuPaste` | Paste was chosen in that menu, or in the Paste item `TetherWebView` adds to iOS's own menu over a selection (keyboard down) | The page runs its menu paste: `readPasteboard`, the size limit, one paste to tmux without Enter, or an image upload |
+| `menuPaste` | Paste was chosen in that menu, or in the Paste item `MuxenWebView` adds to iOS's own menu over a selection (keyboard down) | The page runs its menu paste: `readPasteboard`, the size limit, one paste to tmux without Enter, or an image upload |
 | `upload { id, progress, path?, error?, cancelled? }` | `id` is the one the web sent with `pickMedia` or `readPasteboard`; the web routes by it alone. `path`, `error` or `cancelled` ends the stream; `cancelled` is a dismissed picker | Update upload UI; the web decides where the path goes (a pasted image inserts it, a Files upload offers it) |
 
 There are no separate `network`, `lock` or `lifecycle.covered` messages in v2. A
@@ -595,7 +595,7 @@ hydration never replaces a newer native edit with stale storage. `LineField` onl
 the resulting draft and native selection state.
 
 - `HostEntry` is native storage and includes the HTTPS `baseURL`; `PlatformHost` is the
-  bridge-safe form (`handle` resolves `tether-app://h-{handle}`, `pageOrigin: null`
+  bridge-safe form (`handle` resolves `muxen-app://h-{handle}`, `pageOrigin: null`
   means token admission). Never send the base URL or token to JS.
 - A terminal tab is a tmux session, so `TabKey` names the session (server instance and
   `$N`). Bridge version 8 carries `TabKey` in line, draft and active-tab messages; a Files
@@ -605,9 +605,9 @@ the resulting draft and native selection state.
   terminal and Files tabs, their identities, each Files tab's folder or preview, and the
   meaning of `active`; native does not turn the workspace into a parallel tab model. The
   web parser discards any version but the current one. Native deletes the old
-  `tether.workspace.v1` and `.v2` keys at launch.
+  `muxen.workspace.v1` and `.v2` keys at launch.
 - The auth DTO fixtures are generated by the Rust fixture test and live beside Swift's
-  tests in `ios/TetherKit/Tests/Fixtures/auth/`.
+  tests in `ios/MuxenKit/Tests/Fixtures/auth/`.
 
 ## Lifecycle and reconnect
 
@@ -648,9 +648,9 @@ pasteboard (`readPasteboard`) starts at step 1 too. Then:
    and only offers "Insert path" for a Files upload (client-architecture.md §7.5). If the tab
    closed meanwhile, the web explains that the file remains available but cannot be inserted.
 
-**Share extension (needs an explicit App ID).** A `TetherShare` target accepts images
+**Share extension (needs an explicit App ID).** A `MuxenShare` target accepts images
 and movies, copies them into the App Group container (`Inbox/<uuid>.<ext>` plus a
-manifest), and tells Jimmy to open tether. On the next foreground the app offers "Send
+manifest), and tells Jimmy to open muxen. On the next foreground the app offers "Send
 1 photo to main:1?" and runs the upload above. The extension never touches tokens or
 the network. It waits on an explicit App ID with the App Groups capability; the
 wildcard development profile has none (Distribution).
@@ -676,7 +676,7 @@ enrolls and stores the daemon's `host_id` and `https://<that name>`; a refusal s
 the device-name step, with Back preserving all entered fields.
 
 The browser's enrolment screen hands the host over as
-`tether://add?host=<origin>&code=<code>` (the code is optional). Native validates the
+`muxen://add?host=<origin>&code=<code>` (the code is optional). Native validates the
 HTTPS origin and opens Add host at step 1 with the host and, when present, code
 prefilled. The link never sends a request: the user taps Next, then Add. With a code,
 Add requests `/auth/info`, posts `POST /auth/node/enroll` with that code and
@@ -686,7 +686,7 @@ once if it fails. This one code enrols the phone's node, so Safari and the PWA o
 need no code of their own. Without a code, Add makes only the empty-code mint request.
 Both paths store the returned token and host on success. A wrong or expired code shows
 "That code is wrong or has expired", and a node policy refusal says this device can't use
-tether on this server, with the server's reason, on the device-name step; an empty-code
+muxen on this server, with the server's reason, on the device-name step; an empty-code
 `401 not_enrolled` stays there with its existing error.
 Back returns to step 1 without losing either field. The link doesn't choose a tmux session:
 the web owns the route and active tab, and native has no host/session-open bridge
@@ -699,16 +699,16 @@ native control.
 
 ```text
 ios/
-  project.yml            XcodeGen spec: Tether app; generated project is ignored
-  Tether/
-    TetherApp.swift, AppModel.swift, App/RootView.swift
+  project.yml            XcodeGen spec: Muxen app; generated project is ignored
+  Muxen/
+    MuxenApp.swift, AppModel.swift, App/RootView.swift
     Web/                 WebShellController, AppSchemeHandler
     Input/               KeyboardInput, FocusController
     Auth/                TokenStore, HostStore, DraftStore, AuthClient
     Hosts/               SwiftUI server list and enrolment form
     Media/               Uploader; picker and video presentation
     Support/             Haptics
-  TetherKit/             Foundation-only Swift package and tests
+  MuxenKit/             Foundation-only Swift package and tests
     Tests/Fixtures/bridge/ one flat fixture for each bridge message, shared with web tests
     Tests/Fixtures/auth/   auth DTO fixtures emitted by src/proto/auth.rs
   scripts/check.sh       XcodeGen, `swift test`, simulator `xcodebuild`
@@ -718,21 +718,21 @@ ios/
 - **UIKit for the shell, SwiftUI for screens.** First responder, input views and
   WKWebView control are UIKit concepts; the host list, Add host and lock screen are
   SwiftUI views.
-- **XcodeGen.** `project.yml` is committed; `Tether.xcodeproj` is generated and
+- **XcodeGen.** `project.yml` is committed; `Muxen.xcodeproj` is generated and
   gitignored. Agents on the Linux box can edit Swift files and the YAML but can't run
   Xcode, and a hand-edited `project.pbxproj` breaks easily.
 - **Generated Info.plist:** generated launch screen (required for full device-sized
   windows), `NSFaceIDUsageDescription` and `NSCameraUsageDescription`; no ATS exceptions
-  (`*.ts.net` certificates are publicly trusted). Bundle id is `com.jimmyyao.tether`.
+  (`*.ts.net` certificates are publicly trusted). Bundle id is `com.jimmyyao.muxen`.
   The signing team is deliberately unset; Jimmy selects it in Xcode.
 - **Builds and tests run on the Mac.** `ios/scripts/check.sh` runs `xcodegen`, `swift
-  test` for TetherKit, and an `xcodebuild` for the simulator. The Linux preflight
+  test` for MuxenKit, and an `xcodebuild` for the simulator. The Linux preflight
   doesn't build iOS.
 
 ### Protocol types in Swift
 
 Swift needs the bridge DTOs and the auth DTOs, the `/auth/*` bodies defined in `src/proto/auth.rs`
-([auth.md](auth.md#endpoints)). They are hand-written `Codable` types in TetherKit,
+([auth.md](auth.md#endpoints)). They are hand-written `Codable` types in MuxenKit,
 tested against JSON fixtures. The bridge fixtures are shared with P4b; auth fixtures are
 emitted by the Rust tests. Key names are strings checked against the daemon's shared key
 fixture. If the socket ever moves native, the WebSocket messages get the same treatment.
@@ -745,7 +745,7 @@ fixture. If the socket ever moves native, the WebSocket messages get the same tr
   no App Groups, so no share extension. Builds come from `xcodebuild` on the Mac (or
   Xcode); the team stays out of `project.yml` and is passed on the command line.
   Developer Mode must be on.
-- **Later:** an explicit App ID for `com.jimmyyao.tether`, which brings TestFlight
+- **Later:** an explicit App ID for `com.jimmyyao.muxen`, which brings TestFlight
   internal testing (builds last 90 days), App Groups, the share extension and push
   notifications.
 
@@ -765,7 +765,7 @@ and fix this spec from them. The current Simulator cannot show the software keyb
 | Hidden keeps input | Hidden with the empty `inputView`: no blank keyboard area; hardware keys still reach the terminal; only a tap on or beside the cursor opens the keyboard |
 | One keyboard / line target | With the keyboard up, one tap on the box selects `line`; a terminal tap or esc returns to `terminal` without hiding it (the tap does nothing else: no click in a mouse-mode app), and Hide closes either mode. Confirm the idle box has no caret, the focused box has a caret and Send, the terminal cursor is solid or hollow as appropriate, and no first tap is lost. Send (the web button, `lineSubmit`) acts as Return and keeps line focus. Long press opens Paste / Select all / Clear; tap places the caret and spacebar trackpad follows it. The line wraps to five visual lines and scrolls internally. |
 | Key row with the box focused | ← and → step the caret one character: a held arrow repeats at 33 ms without skipping or lagging, an emoji or accented letter is one step, a selection collapses toward the arrow. ↑ ↓ ^R ^C tab ⇧tab ⏎ reach tmux. esc and a terminal tap return typing to the terminal with the keyboard up. Exactly one cursor is live: the terminal's solid block or the box's caret, never both, and no tap is lost. During Chinese/Korean composition the row's ← → do nothing (note whether that feels dead and committing first would be better). Hardware ← → move the caret and hardware Esc returns to the terminal. The row marks esc ← → \| ~ / - as acting on the box. |
-| Selection | A long press on a word selects it and shows tether's Copy/Paste, with the keyboard down, up in `terminal`, and up in `line`; the keyboard stays as it was, and typing afterwards goes where it went |
+| Selection | A long press on a word selects it and shows muxen's Copy/Paste, with the keyboard down, up in `terminal`, and up in `line`; the keyboard stays as it was, and typing afterwards goes where it went |
 | Keyboard toggle / restore | Toggle raises `terminal` from hidden and closes `terminal` or `line`; system dismissal resets the web owner; selection and sheet close restore the expected mode. Background, native server sheet, 10 s in background, Notification / Control Center, and web-process restart restore `line` as `line` without a new tap. |
 | Geometry | The key row meets the keyboard with no blank band and the box sits above it, in both geometry variants; WebKit does not also scroll for the keyboard; tmux's size changes only on rotation, including a rotation with the keyboard up |
 | Appearance | System follows device changes; explicit Light and Dark survive them and agree in native chrome (lock screen, the server sheet, the keyboard) and web content, including after a relaunch and with the app locked at launch |
@@ -802,7 +802,7 @@ and fix this spec from them. The current Simulator cannot show the software keyb
   Tailscale issue (#20882) reports serve WebSocket failures over HTTP/2; WKWebView's
   WebSockets are expected to use HTTP/1.1, unverified.
 - **Cross-origin fetches and CSP on custom schemes**: whether WebKit applies CORS
-  between `tether-app://ui` and `tether-app://h-{host}` as expected, and honours
+  between `muxen-app://ui` and `muxen-app://h-{host}` as expected, and honours
   `sandbox` on custom-scheme responses, is unverified on iOS 26. The file-manager
   spike checks both; navigation and the bridge's origin check hold without them.
 - **Video through the native player with an auth header**: the file-manager spike.

@@ -20,7 +20,7 @@ const MANY: TmuxListing = {
 const SEVERAL: TmuxListing = {
   server: "main:1-1",
   version: "3.4",
-  sessions: ["tether", "notes", "blog", "infra", "dotfiles", "scratch", "mars", "a-session-with-a-very-long-name-that-has-to-truncate", "api"].map((name, i) => ({
+  sessions: ["muxen", "notes", "blog", "infra", "dotfiles", "scratch", "mars", "a-session-with-a-very-long-name-that-has-to-truncate", "api"].map((name, i) => ({
     id: i + 1,
     name,
     bell: { mark: 0, covered: true }, windows: [win(i * 10 + 1, 0, "zsh")],

@@ -1,7 +1,7 @@
 //! Test support for faking a tmux server under `Session`s: the commands in the lines a
 //! session writes, and tmux's stdout answering them. It reads `command.rs`'s text, so it
 //! lives beside it and changes with it; the fake's server decides only what each
-//! command finds, never how tether spells it.
+//! command finds, never how muxen spells it.
 
 use super::PaneId;
 
@@ -17,7 +17,7 @@ pub enum Command {
     Capture { pane: PaneId, rows: Capture },
     /// `paste-buffer` targeted at a window.
     PasteBuffer { window: super::WindowId },
-    /// Anything else tether sends, which prints nothing.
+    /// Anything else muxen sends, which prints nothing.
     Other,
 }
 

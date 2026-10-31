@@ -46,7 +46,7 @@ afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 describe("HostLink", () => {
   it("offers the token in the subprotocol list and says hello on open", () => {
     const { sock } = setup();
-    expect(sock.protocols).toEqual(["tether.v1", "tether.auth.tok"]);
+    expect(sock.protocols).toEqual(["muxen.v1", "muxen.auth.tok"]);
     sock.open();
     expect(JSON.parse(sock.sent[0] ?? "")).toEqual({
       type: "hello",
@@ -54,9 +54,9 @@ describe("HostLink", () => {
     });
   });
 
-  it("offers tether.v1 alone, as a web client, when there is no token", () => {
+  it("offers muxen.v1 alone, as a web client, when there is no token", () => {
     const { sock } = setup(null, "web");
-    expect(sock.protocols).toEqual(["tether.v1"]);
+    expect(sock.protocols).toEqual(["muxen.v1"]);
     sock.open();
     expect(JSON.parse(sock.sent[0] ?? "")).toMatchObject({ data: { client: { kind: "web" } } });
   });

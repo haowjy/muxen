@@ -81,7 +81,7 @@ pub(super) async fn run(
         .await;
 }
 
-/// Adopts or removes tether's `alert-bell` entry (daemon-core.md §4.8) outside the hub's
+/// Adopts or removes muxen's `alert-bell` entry (daemon-core.md §4.8) outside the hub's
 /// one-shot slot: nothing else runs yet or any more. A failure costs only the entry's
 /// tidiness, and no tmux server is not one.
 async fn bell_hook(endpoint: &Endpoint, cmd: OneShotCmd) {
@@ -113,7 +113,7 @@ impl Io {
     /// Closes every control client's stdin and waits for each pump to see its tmux
     /// exit, reading and dropping what tmux still writes. Returning sooner would leave
     /// the pumps to the runtime's end, which kills `tmux -C` (`kill_on_drop`). tmux
-    /// itself is unaffected either way. Meanwhile tether's `alert-bell` entry is removed,
+    /// itself is unaffected either way. Meanwhile muxen's `alert-bell` entry is removed,
     /// once the one-shot in flight has finished: its install could land after the
     /// removal otherwise. That wait is cut short to stay inside the daemon's wait for the
     /// hub; a leftover entry is adopted at the next start.

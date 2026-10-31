@@ -6,7 +6,7 @@ const LISTING: TmuxListing = {
   server: "main:1-1",
   version: "3.4",
   sessions: [
-    { id: 1, name: "Tether", bell: { mark: 0, covered: true }, windows: [] },
+    { id: 1, name: "Muxen", bell: { mark: 0, covered: true }, windows: [] },
     { id: 2, name: "notes", bell: { mark: 0, covered: true }, windows: [] },
     { id: 3, name: "web", bell: { mark: 0, covered: true }, windows: [] },
   ],
@@ -15,13 +15,13 @@ const names = (query: string): string[] => matching(LISTING, query).map((s) => s
 
 describe("matching", () => {
   it("keeps every session when there is no query", () => {
-    expect(names("")).toEqual(["Tether", "notes", "web"]);
+    expect(names("")).toEqual(["Muxen", "notes", "web"]);
     expect(names("   ")).toHaveLength(3);
   });
 
   it("matches a session name case-insensitively", () => {
-    expect(names("TETH")).toEqual(["Tether"]);
-    expect(names("t")).toEqual(["Tether", "notes"]);
+    expect(names("MUX")).toEqual(["Muxen"]);
+    expect(names("n")).toEqual(["Muxen", "notes"]);
   });
 
 

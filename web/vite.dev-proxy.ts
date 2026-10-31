@@ -2,8 +2,8 @@
 // unchanged browser adapter runs against Vite's dev server and a daemon on this box.
 //
 // - It talks to the daemon as a local peer and presents a native token: `Authorization` on
-//   HTTP, `tether.auth.<token>` beside `tether.v1` on `/ws`. The token lives here, in the
-//   proxy process (TETHER_DEV_TOKEN); page code never sees it.
+//   HTTP, `muxen.auth.<token>` beside `muxen.v1` on `/ws`. The token lives here, in the
+//   proxy process (MUXEN_DEV_TOKEN); page code never sees it.
 // - It answers `GET /auth/node/session` itself (a token-bearing request there is a 400), and
 //   rewrites `/auth/info.browserOrigin` to the dev server's own origin, so the page and
 //   `net/admission.ts` admit it as they would in production.
@@ -22,19 +22,19 @@ import type { Plugin, ProxyOptions } from "vite";
 const API_PATHS = ["/ws", "/auth", "/fs", "/complete"].map((path) => `^${path}(?:[/?]|$)`);
 const API_MATCHERS = API_PATHS.map((key) => new RegExp(key));
 
-/** The daemon's local front; TETHER_SOCKET overrides its platform runtime path. */
+/** The daemon's local front; MUXEN_SOCKET overrides its platform runtime path. */
 function daemonTarget(): { host: string; port: number; socketPath?: string } {
   const runtimeDir = process.platform === "darwin" ? process.env["TMPDIR"] : process.env["XDG_RUNTIME_DIR"];
-  const socketPath = process.env["TETHER_SOCKET"] ?? (runtimeDir && join(runtimeDir, "tether/local.sock"));
+  const socketPath = process.env["MUXEN_SOCKET"] ?? (runtimeDir && join(runtimeDir, "muxen/local.sock"));
   if (!socketPath || !isAbsolute(socketPath)) {
-    throw new Error("Set TETHER_SOCKET or an absolute XDG_RUNTIME_DIR (TMPDIR on macOS) for tether's local.sock.");
+    throw new Error("Set MUXEN_SOCKET or an absolute XDG_RUNTIME_DIR (TMPDIR on macOS) for muxen's local.sock.");
   }
   return { host: "127.0.0.1", port: 0, socketPath };
 }
 
 function token(): string {
-  const value = process.env["TETHER_DEV_TOKEN"];
-  if (!value) throw new Error("Set TETHER_DEV_TOKEN to a device token from `tether device add` (web/README.md).");
+  const value = process.env["MUXEN_DEV_TOKEN"];
+  if (!value) throw new Error("Set MUXEN_DEV_TOKEN to a device token from `muxen device add` (web/README.md).");
   return value;
 }
 
@@ -87,7 +87,7 @@ function authInfo(req: IncomingMessage, res: ServerResponse): void {
 
 export function devProxy(): Plugin {
   return {
-    name: "tether-dev-proxy",
+    name: "muxen-dev-proxy",
     apply: "serve",
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
@@ -127,7 +127,7 @@ export function devProxy(): Plugin {
                   proxyReq.setHeader("Authorization", `Bearer ${token()}`);
                 });
                 proxy.on("proxyReqWs", (proxyReq) => {
-                  proxyReq.setHeader("Sec-WebSocket-Protocol", `tether.v1, tether.auth.${token()}`);
+                  proxyReq.setHeader("Sec-WebSocket-Protocol", `muxen.v1, muxen.auth.${token()}`);
                 });
               },
             },

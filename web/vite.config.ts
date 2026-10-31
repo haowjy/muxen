@@ -8,7 +8,7 @@ import { devProxy } from "./vite.dev-proxy";
 /** A production build fails if its module graph holds a test adapter or the harness (client-architecture.md §5.11). */
 function forbidTestModules(): Plugin {
   return {
-    name: "tether-forbid-test-modules",
+    name: "muxen-forbid-test-modules",
     apply: "build",
     buildEnd() {
       const leaked = [...this.getModuleIds()].filter((id) => /\/(platform\/test|harness)\//.test(id) && !id.includes("node_modules"));
@@ -21,7 +21,7 @@ function forbidTestModules(): Plugin {
 function harnessImages(): Plugin {
   const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400"><rect width="640" height="400" fill="#3b6ea8"/><circle cx="320" cy="200" r="90" fill="white"/></svg>';
   return {
-    name: "tether-harness-images",
+    name: "muxen-harness-images",
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         if (/^\/fs\/raw\/[^?]*\.(png|jpe?g)(\?|$)/.test(req.url ?? "")) {

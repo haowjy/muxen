@@ -1,9 +1,9 @@
 //! Pure decisions for installing the embedded service file and applying it.
 
 #[cfg(target_os = "linux")]
-pub(crate) const SYSTEMD_UNIT: &str = include_str!("../../contrib/tether.service");
+pub(crate) const SYSTEMD_UNIT: &str = include_str!("../../contrib/muxen.service");
 #[cfg(any(target_os = "macos", test))]
-pub(crate) const LAUNCH_AGENT: &str = include_str!("../../contrib/com.jimmyyao.tether.plist");
+pub(crate) const LAUNCH_AGENT: &str = include_str!("../../contrib/com.jimmyyao.muxen.plist");
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum FileState {
@@ -166,11 +166,11 @@ mod tests {
     #[test]
     fn plist_substitutions_are_xml_escaped() {
         let rendered = launch_agent("/Users/jimmy & <home>", "/a<& path");
-        assert!(rendered.contains("/Users/jimmy &amp; &lt;home&gt;/.cargo/bin/tether"));
+        assert!(rendered.contains("/Users/jimmy &amp; &lt;home&gt;/.cargo/bin/muxen"));
         assert!(rendered.contains("/a&lt;&amp; path"));
         if cfg!(target_os = "macos") {
             let path =
-                std::env::temp_dir().join(format!("tether-plist-{}.plist", std::process::id()));
+                std::env::temp_dir().join(format!("muxen-plist-{}.plist", std::process::id()));
             std::fs::write(&path, rendered).expect("write rendered plist");
             let lint = std::process::Command::new("plutil")
                 .arg("-lint")

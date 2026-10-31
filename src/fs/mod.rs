@@ -99,7 +99,7 @@ pub(crate) mod test_tree {
             static NEXT: AtomicU32 = AtomicU32::new(0);
             let n = NEXT.fetch_add(1, Ordering::Relaxed);
             let dir =
-                std::env::temp_dir().join(format!("tether-fs-{}-{name}-{n}", std::process::id()));
+                std::env::temp_dir().join(format!("muxen-fs-{}-{name}-{n}", std::process::id()));
             let _ = std::fs::remove_dir_all(&dir);
             std::fs::create_dir_all(&dir).expect("a temp dir");
             Self(std::fs::canonicalize(&dir).expect("canonical"))

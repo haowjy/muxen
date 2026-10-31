@@ -1,12 +1,12 @@
-# Setup: `tether setup` and `tether teardown`
+# Setup: `muxen setup` and `muxen teardown`
 
-On Linux, plain `tether setup` runs tether in the terminal, publishes it on Jimmy's
+On Linux, plain `muxen setup` runs muxen in the terminal, publishes it on Jimmy's
 tailnet, and prints a link to open on his phone with a fresh enrolment code in its
-fragment, its QR code, and the code separately. Ctrl-C or SIGTERM stops that process; the Serve entry remains. `tether setup
+fragment, its QR code, and the code separately. Ctrl-C or SIGTERM stops that process; the Serve entry remains. `muxen setup
 --background` instead installs the systemd user service and runs it beyond the
-terminal. On a Mac, plain `tether setup` refuses without changing anything; use
+terminal. On a Mac, plain `muxen setup` refuses without changing anything; use
 `--background` to install the LaunchAgent, which owns the port phones can reach.
-`tether teardown` removes the service when installed and withdraws tether's Serve
+`muxen teardown` removes the service when installed and withdraws muxen's Serve
 entry. All commands run as Jimmy. On Linux, background setup may ask for a password
 up to twice, for linger and the Tailscale operator; foreground setup may ask only for
 the operator. Once the operator is set, setup and teardown need no `sudo`. On a Mac
@@ -14,7 +14,7 @@ nothing needs `sudo`.
 
 This spec assumes [auth.md](auth.md): its sections on sockets and the Tailscale
 check, the Mac front (the path secret and launchd's socket), and the canonical
-origin, the one rule that decides whether a Serve config publishes tether safely.
+origin, the one rule that decides whether a Serve config publishes muxen safely.
 
 ```mermaid
 flowchart LR
@@ -47,7 +47,7 @@ picks up where it stopped.
 
 | Background step | Linux (systemd user unit) | Mac (LaunchAgent) |
 |---|---|---|
-| Install | `~/.config/systemd/user/tether.service`, the embedded `contrib/tether.service`, as is | `~/Library/LaunchAgents/com.jimmyyao.tether.plist`, the embedded `contrib/com.jimmyyao.tether.plist` with `@HOME@` and `@PATH@` filled in |
+| Install | `~/.config/systemd/user/muxen.service`, the embedded `contrib/muxen.service`, as is | `~/Library/LaunchAgents/com.jimmyyao.muxen.plist`, the embedded `contrib/com.jimmyyao.muxen.plist` with `@HOME@` and `@PATH@` filled in |
 | Restart | `daemon-reload`, `enable`, `restart` | `bootstrap`, or `bootout` then `bootstrap` when the plist changed, or `kickstart -k` |
 | Publish | setup writes the Serve entry through LocalAPI | the daemon writes it at its start |
 | Verify | the new daemon's `GET /auth/info` over `local.sock` reports `browserOrigin` | the same |
@@ -58,7 +58,7 @@ Setup first gathers facts without changing anything, judges them all, and report
 every failed check in one run. Any failed check stops setup before it changes
 anything. Warnings print and setup carries on.
 
-These rows describe `tether setup --background`. Plain Linux `tether setup` keeps only
+These rows describe `muxen setup --background`. Plain Linux `muxen setup` keeps only
 the checks for non-root, the runtime directory, a usable configured tmux program on
 setup's own `PATH`, and Tailscale reachability, login, version, MagicDNS, certificates
 and operator. Its `TMUX_TMPDIR` is inherited by the daemon, and it can use `--config`, so
@@ -68,27 +68,27 @@ Mac, plain setup refuses before it reads config or changes anything.
 
 | Check | How | Message when it fails |
 |---|---|---|
-| Not root | effective UID | "Run tether setup as the user whose tmux tether serves, not as root." |
-| Default config | no `--config` | "tether setup --background installs a service that reads the default config path; drop --config." |
-| The binary is the one the service runs | the canonical path of `current_exe()` equals the canonical path of `~/.cargo/bin/tether`, which both `contrib/` files name | "The service runs ~/.cargo/bin/tether, but this is <path>. Install it with `cargo install --path .`, then run `~/.cargo/bin/tether setup --background`." If `~/.cargo/bin/tether` is missing, the first sentence becomes "~/.cargo/bin/tether doesn't exist." If `CARGO_HOME` is set to another directory, the message adds "cargo installs into $CARGO_HOME/bin; use [Manual setup](../running.md#manual-setup)." |
-| The service sees the same files | the config path and `state_dir()` each side resolves, with `config::xdg()`'s rules, from setup's environment and from the service's (Linux: `systemctl --user show-environment`; Mac: launchd sets no `XDG_*`) | "Your shell sets <VAR>=<value>, so tether setup would use <dir> while the service uses <dir>: it would read another config and another device list." Linux fix: "Unset it, or give the user manager the same value with `systemctl --user set-environment <VAR>=<value>`." Mac fix: "Unset it before running `tether setup --background`." |
+| Not root | effective UID | "Run muxen setup as the user whose tmux muxen serves, not as root." |
+| Default config | no `--config` | "muxen setup --background installs a service that reads the default config path; drop --config." |
+| The binary is the one the service runs | the canonical path of `current_exe()` equals the canonical path of `~/.cargo/bin/muxen`, which both `contrib/` files name | "The service runs ~/.cargo/bin/muxen, but this is <path>. Install it with `cargo install --path .`, then run `~/.cargo/bin/muxen setup --background`." If `~/.cargo/bin/muxen` is missing, the first sentence becomes "~/.cargo/bin/muxen doesn't exist." If `CARGO_HOME` is set to another directory, the message adds "cargo installs into $CARGO_HOME/bin; use [Manual setup](../running.md#manual-setup)." |
+| The service sees the same files | the config path and `state_dir()` each side resolves, with `config::xdg()`'s rules, from setup's environment and from the service's (Linux: `systemctl --user show-environment`; Mac: launchd sets no `XDG_*`) | "Your shell sets <VAR>=<value>, so muxen setup would use <dir> while the service uses <dir>: it would read another config and another device list." Linux fix: "Unset it, or give the user manager the same value with `systemctl --user set-environment <VAR>=<value>`." Mac fix: "Unset it before running `muxen setup --background`." |
 | `TMUX_TMPDIR` | set in setup's environment, and `[tmux]` has no socket key | Warning: "Your shell sets TMUX_TMPDIR; the service won't see it. Set `[tmux] socket_path` in config.toml." |
 | tmux | `[tmux] program` from `config.toml`, found on the service's `PATH` (Linux: the user manager's; Mac: setup's own `PATH`, which goes into the plist) | Not found anywhere: "tmux isn't installed (no `tmux` on the service's PATH)." Found only on setup's `PATH`: "tmux is at <path>, which the service's PATH doesn't reach. Set `[tmux] program = "<path>"` in config.toml." |
 | Linux foreground: tmux | `[tmux] program` from `config.toml`, executable on setup's own `PATH` | "tmux isn't available at <program> on this shell's PATH. Install tmux or set `[tmux] program` to its executable path." |
-| Linux foreground: runtime directory | `config::runtime_dir()` equals `/run/user/<uid>/tether` exactly | "Plain tether setup requires XDG_RUNTIME_DIR=/run/user/<uid> (so config::runtime_dir() is /run/user/<uid>/tether); got <path>." If unset or invalid, the message says so instead of `<path>`. |
-| tailscaled reachable | LocalAPI `/status` answers | Linux: "tailscaled isn't running: no LocalAPI socket at /var/run/tailscale/tailscaled.sock. Install Tailscale (https://tailscale.com/download/linux), then `sudo systemctl enable --now tailscaled`." Mac: "Can't reach the Tailscale app. Install the standalone app from tailscale.com (1.104 or later), open it and sign in." Mac, token unreadable: "Your account must be an admin: tether reads Tailscale's LocalAPI token from /Library/Tailscale." |
+| Linux foreground: runtime directory | `config::runtime_dir()` equals `/run/user/<uid>/muxen` exactly | "Plain muxen setup requires XDG_RUNTIME_DIR=/run/user/<uid> (so config::runtime_dir() is /run/user/<uid>/muxen); got <path>." If unset or invalid, the message says so instead of `<path>`. |
+| tailscaled reachable | LocalAPI `/status` answers | Linux: "tailscaled isn't running: no LocalAPI socket at /var/run/tailscale/tailscaled.sock. Install Tailscale (https://tailscale.com/download/linux), then `sudo systemctl enable --now tailscaled`." Mac: "Can't reach the Tailscale app. Install the standalone app from tailscale.com (1.104 or later), open it and sign in." Mac, token unreadable: "Your account must be an admin: muxen reads Tailscale's LocalAPI token from /Library/Tailscale." |
 | Logged in | `BackendState` is `Running` and `Self` is present; `Starting` is polled for up to 10 s | Linux `NeedsLogin`: "Tailscale isn't logged in: run `sudo tailscale login`." Linux `Stopped`: "Tailscale is stopped: run `sudo tailscale up` (if it asks you to repeat your settings, add the flags it names)." Mac: "Sign in from the Tailscale app" or "Connect from the Tailscale app." |
-| Version | `Version` from `/status`, major.minor | Linux below 1.94: "Tailscale <v> can't proxy to a Unix socket; upgrade to 1.94 or later." Mac below 1.104: "The Tailscale app <v> is older than 1.104, the oldest tether is tested with; update it." |
-| MagicDNS and HTTPS certificates | `Self.DNSName`, its trailing dot stripped, is set and in `CertDomains` | No DNS name: "MagicDNS is off for your tailnet; turn it on at https://login.tailscale.com/admin/dns." Not in `CertDomains` while logged in: "HTTPS certificates are off for your tailnet. Turn them on under HTTPS Certificates at https://login.tailscale.com/admin/dns, then rerun `tether setup --background`." |
-| Linux: systemd | `/run/systemd/system` exists | "This Linux doesn't run systemd; tether setup supports systemd only. Follow Manual setup in docs/running.md." |
+| Version | `Version` from `/status`, major.minor | Linux below 1.94: "Tailscale <v> can't proxy to a Unix socket; upgrade to 1.94 or later." Mac below 1.104: "The Tailscale app <v> is older than 1.104, the oldest muxen is tested with; update it." |
+| MagicDNS and HTTPS certificates | `Self.DNSName`, its trailing dot stripped, is set and in `CertDomains` | No DNS name: "MagicDNS is off for your tailnet; turn it on at https://login.tailscale.com/admin/dns." Not in `CertDomains` while logged in: "HTTPS certificates are off for your tailnet. Turn them on under HTTPS Certificates at https://login.tailscale.com/admin/dns, then rerun `muxen setup --background`." |
+| Linux: systemd | `/run/systemd/system` exists | "This Linux doesn't run systemd; muxen setup supports systemd only. Follow Manual setup in docs/running.md." |
 | Linux: user manager | `/run/user/<uid>/systemd/private` exists. Setup runs every `systemctl --user` with `XDG_RUNTIME_DIR=/run/user/<uid>` when its own environment lacks it, as under `su -` | "No systemd user manager is running for <user>. Log in as <user> directly (SSH or a console, not su or sudo), then rerun." |
-| Linux: systemd version | `systemctl --version`, only when `/run/systemd/system` exists | Warning below 254: "systemd <v> ignores the unit's restart backoff; tether restarts every 2 s instead, which still works." |
+| Linux: systemd version | `systemctl --version`, only when `/run/systemd/system` exists | Warning below 254: "systemd <v> ignores the unit's restart backoff; muxen restarts every 2 s instead, which still works." |
 | Linux: cgroup controllers | the user manager's `cgroup.controllers` lists `cpu` and `memory` | Warning, also when the file is missing (cgroup v1 or hybrid): "The user manager hasn't been delegated the <controller> controller, so the unit's CPUQuota and MemoryMax aren't enforced." |
-| Linux: operator | `/localapi/v0/prefs` `OperatorUser`, which needs only read access | Empty or Jimmy: passes (empty becomes a grant, below). Another user: "Tailscale's operator is <other>. tether setup won't replace it; run `sudo tailscale set --operator=$USER` if you mean to, then rerun." |
-| Mac: one account | `dscl . -list /Users UniqueID`, accounts with UID 501 or above | "This Mac has another login account (<name>). tether's Mac defences assume yours is the only one, so setup won't install it here." |
-| Mac: a GUI session | `launchctl print gui/<uid>` succeeds | "You aren't logged in at this Mac's screen. Log in there first: tether runs only while you're logged in." |
-| Mac: a hand install | the installed plist, if any, names port 7851 | "tether was installed by hand on port <n>. Keep that install (Manual setup), or run `tether teardown` and then `tether setup --background`, which uses 7851." |
-| Mac: the front's port | when no loaded job of tether's holds it, bind `127.0.0.1:7851` and close it | "Another process holds 127.0.0.1:7851 (`lsof -nP -iTCP:7851`). Stop it, or install by hand with another port (Manual setup in docs/running.md)." |
+| Linux: operator | `/localapi/v0/prefs` `OperatorUser`, which needs only read access | Empty or Jimmy: passes (empty becomes a grant, below). Another user: "Tailscale's operator is <other>. muxen setup won't replace it; run `sudo tailscale set --operator=$USER` if you mean to, then rerun." |
+| Mac: one account | `dscl . -list /Users UniqueID`, accounts with UID 501 or above | "This Mac has another login account (<name>). muxen's Mac defences assume yours is the only one, so setup won't install it here." |
+| Mac: a GUI session | `launchctl print gui/<uid>` succeeds | "You aren't logged in at this Mac's screen. Log in there first: muxen runs only while you're logged in." |
+| Mac: a hand install | the installed plist, if any, names port 7851 | "muxen was installed by hand on port <n>. Keep that install (Manual setup), or run `muxen teardown` and then `muxen setup --background`, which uses 7851." |
+| Mac: the front's port | when no loaded job of muxen's holds it, bind `127.0.0.1:7851` and close it | "Another process holds 127.0.0.1:7851 (`lsof -nP -iTCP:7851`). Stop it, or install by hand with another port (Manual setup in docs/running.md)." |
 
 An unreadable installed plist socket port is a setup check error, so it joins any
 other failures before setup changes anything. Other Tailscale diagnostics include
@@ -97,7 +97,7 @@ unrecognized version: <version>.", Linux's "Can't reach Tailscale LocalAPI: <cau
 and "Can't read Tailscale's Serve operator: <cause>." when prefs fail.
 
 Foreground setup also requires the resolved runtime path to be exactly
-`/run/user/<uid>/tether`. That is the path the Linux Serve matcher and teardown recognize;
+`/run/user/<uid>/muxen`. That is the path the Linux Serve matcher and teardown recognize;
 an alternate `XDG_RUNTIME_DIR` would publish a handler teardown could not remove.
 
 If the shell leaves an XDG directory variable unset while the user manager has a
@@ -105,7 +105,7 @@ different value, the check says "Your shell leaves <VAR> unset" and shows both
 resolved paths. On Linux it offers `systemctl --user unset-environment <VAR>`; the
 same comparison uses each process's home directory when the XDG variable is unset.
 
-A missing tmux server isn't a failure: tether attaches when one starts. A successful
+A missing tmux server isn't a failure: muxen attaches when one starts. A successful
 setup adds "No tmux server yet on <socket>; start tmux as you usually do." as a note,
 not a change. Serve conflicts, such as another app at `/` of the
 MagicDNS name, Funnel, or a TCP forward on 443, aren't checks either: the
@@ -116,25 +116,25 @@ canonical-origin rule judges them at publication ([Publication](#publication)).
 Foreground setup opens the daemon before any operator grant. Opening resolves the
 budget and runtime directory, then acquires the daemon-wide flock and binds sockets. If
 the lock is held, setup refuses before a grant or publication. When the systemd user
-service is active, it says: "tether is already running as your service. `tether setup
---background` restarts it and prints a new code; `systemctl --user stop tether` frees
-this terminal's run." Otherwise it says: "Another tether is already running; stop it
+service is active, it says: "muxen is already running as your service. `muxen setup
+--background` restarts it and prints a new code; `systemctl --user stop muxen` frees
+this terminal's run." Otherwise it says: "Another muxen is already running; stop it
 first." Background setup uses a non-blocking probe of that same lock before grants and
-install. If it is held and the service is not active, it refuses with "tether is running
-in a terminal; Ctrl-C it, then rerun `tether setup --background`." An active service is
+install. If it is held and the service is not active, it refuses with "muxen is running
+in a terminal; Ctrl-C it, then rerun `muxen setup --background`." An active service is
 allowed because background setup restarts it. The service-state query only distinguishes
 the service from a terminal run; the flock remains the single-instance mechanism.
 
 ## One-time grants (Linux)
 
-After the checks pass, `tether setup --background` makes the two system changes Linux
-needs; plain `tether setup` only makes the operator grant. Each grant is skipped when
+After the checks pass, `muxen setup --background` makes the two system changes Linux
+needs; plain `muxen setup` only makes the operator grant. Each grant is skipped when
 already in place. Setup prints each command before running it, attached to the terminal,
 so `sudo` or polkit asks for the password there. Without a terminal on stdin, setup
 prints only the grant commands still needed (not as commands it is running) and exits 1
 with "Linux grants need a terminal. Rerun `<the same setup command>` in a terminal, or
-run the printed commands first." For a background run this is `tether setup
---background`; for a foreground run it is `tether setup`. No foreground run enables
+run the printed commands first." For a background run this is `muxen setup
+--background`; for a foreground run it is `muxen setup`. No foreground run enables
 linger because it ends with its terminal.
 
 1. **Linger**, so the service starts at boot and outlives logout. If `loginctl
@@ -146,11 +146,11 @@ linger because it ends with its terminal.
    LocalAPI. If `OperatorUser` is empty, setup prints
    `sudo tailscale set --operator=<user>`, then runs it.
 
-These are the only privileged commands tether runs.
+These are the only privileged commands muxen runs.
 
 ## Installing the background service
 
-Only `tether setup --background` installs or updates a service. Plain Linux setup
+Only `muxen setup --background` installs or updates a service. Plain Linux setup
 leaves service files and service state alone; on a Mac it refuses before changing
 anything.
 
@@ -160,9 +160,9 @@ setup's `HOME` and `PATH`, XML-escaped (`&`, `<`, `>`).
 
 The installed file belongs to setup. When it differs from what setup would write,
 setup copies the old file to `state_dir()/setup-backup/<file name>.<UTC timestamp>`,
-replaces it, and says so: "Replaced tether.service, which differed from this
-tether's; the old copy is <path>." On Linux, Jimmy's own settings live in drop-ins
-(`systemctl --user edit tether`), which setup never touches and lists as notes when it
+replaces it, and says so: "Replaced muxen.service, which differed from this
+muxen's; the old copy is <path>." On Linux, Jimmy's own settings live in drop-ins
+(`systemctl --user edit muxen`), which setup never touches and lists as notes when it
 finds them. A Mac has no drop-ins; a hand-edited plist is replaced like any other
 difference.
 
@@ -171,28 +171,28 @@ Before restarting, setup reads the running daemon's `daemonVersion` from `GET
 can say which version it replaced and verification can tell the new daemon from the
 old.
 
-**Linux restart:** `systemctl --user daemon-reload`, `enable tether`, then `restart
-tether`, which also starts a stopped unit. The unit is `Type=notify`, so `restart`
+**Linux restart:** `systemctl --user daemon-reload`, `enable muxen`, then `restart
+muxen`, which also starts a stopped unit. The unit is `Type=notify`, so `restart`
 returns once the new daemon has bound its sockets, or fails; on failure setup prints
-the last 20 lines of `journalctl --user -u tether` and exits 1.
+the last 20 lines of `journalctl --user -u muxen` and exits 1.
 
 **Mac restart:** if the job is disabled (`launchctl print-disabled gui/<uid>` lists
-`"com.jimmyyao.tether" => disabled` or the older `=> true`), setup first runs
-`launchctl enable gui/<uid>/com.jimmyyao.tether`. Then: if the job isn't loaded,
+`"com.jimmyyao.muxen" => disabled` or the older `=> true`), setup first runs
+`launchctl enable gui/<uid>/com.jimmyyao.muxen`. Then: if the job isn't loaded,
 `launchctl bootstrap gui/<uid> <plist>`; if it's loaded and the plist changed,
 `bootout` and then `bootstrap`, since launchd rereads a plist only at bootstrap.
-Setup polls `launchctl print gui/<uid>/com.jimmyyao.tether` for up to 5 s after
+Setup polls `launchctl print gui/<uid>/com.jimmyyao.muxen` for up to 5 s after
 `bootout` before bootstrapping; if the job still appears loaded, setup stops with an
 error. If it's loaded and unchanged, setup runs `launchctl kickstart -k
-gui/<uid>/com.jimmyyao.tether`. The success report lists "Enabled tether in Login
+gui/<uid>/com.jimmyyao.muxen`. The success report lists "Enabled muxen in Login
 Items" as a change when it first runs `enable`. If `bootstrap`
-fails, setup prints launchctl's error and "If tether is off under System Settings →
+fails, setup prints launchctl's error and "If muxen is off under System Settings →
 General → Login Items, turn it on and rerun." On macOS 13 and later the first
 bootstrap shows a "Background Items Added" notification.
 
-**Every background run restarts tether**, so `tether setup --background` applies an
+**Every background run restarts muxen**, so `muxen setup --background` applies an
 upgrade, a `config.toml` change or a fix. The phone reconnects by itself. A foreground
-run stops with its terminal; stop it with Ctrl-C before starting it again. `tether
+run stops with its terminal; stop it with Ctrl-C before starting it again. `muxen
 enroll` prints a fresh code without touching a running daemon.
 
 ## Publication
@@ -206,15 +206,15 @@ accepting requests. Both use the same plan, judge and compare-and-swap as the Ma
 over `ServeTarget::Unix`:
 
 1. `GET /localapi/v0/serve-config` and its `Etag`.
-2. `plan_publish(config, name, &target)` removes tether's handlers from every Web
+2. `plan_publish(config, name, &target)` removes muxen's handlers from every Web
    entry, then drops entries left without handlers and `TCP` entries left unused
    whose only field is `HTTPS: true`. It adds `{"Proxy":
-   "unix:/run/user/<uid>/tether/serve.sock"}`, the service's runtime directory, at `/` of
+   "unix:/run/user/<uid>/muxen/serve.sock"}`, the service's runtime directory, at `/` of
    `Web["<MagicDNS name>:443"]` (the name's trailing dot stripped), and adds
    `TCP["443"] = {HTTPS: true}` if that port has no entry. `Web` entries store only
    handlers; HTTPS is represented by `TCP[port].HTTPS`. Every other field and handler
    is kept. A handler re-added unchanged at its existing entry and mount is not
-   reported as removed; each other removed handler is printed ("Removed tether's old
+   reported as removed; each other removed handler is printed ("Removed muxen's old
    handler at <entry> <mount>").
 3. The planned config is parsed and judged with `canonical_origin(&target)`. A refused
    plan writes nothing, and setup prints the refusal, which names the conflict and its
@@ -226,12 +226,12 @@ over `ServeTarget::Unix`:
    Foreground setup refreshes that daemon's shared tailnet-state cache in process before
    it prints; it does not poll `local.sock` or start serving before the report.
 
-**Tether's handlers** are the ones a matcher recognises from the proxy string alone,
+**Muxen's handlers** are the ones a matcher recognises from the proxy string alone,
 with no live socket, so publication and teardown share it. On Linux: a proxy of
-exactly `unix:/run/user/<uid>/tether/serve.sock`, plus, in publication only, the old loopback
+exactly `unix:/run/user/<uid>/muxen/serve.sock`, plus, in publication only, the old loopback
 daemon's `http://127.0.0.1:7850` at `/` of a `:443` entry, where that daemon's
-instructions put it. On a Mac: a tether-shaped proxy
-(`http://127.0.0.1:<port>/tether-<43 base64url characters>`) on the plist's port.
+instructions put it. On a Mac: a muxen-shaped proxy
+(`http://127.0.0.1:<port>/muxen-<43 base64url characters>`) on the plist's port.
 The socket's inode matters only to the judge, which still refuses a second reference
 to the socket under another spelling.
 
@@ -243,31 +243,31 @@ Each failed POST gets its own message, from typed `SetServeConfigError` variants
 
 | Answer | Cause | Setup prints |
 |---|---|---|
-| `403`, body `serve config denied` | Jimmy isn't the operator | "Tailscale refused the write: your account isn't its operator. Run `sudo tailscale set --operator=$USER`, then rerun the same setup command." Background setup names `tether setup --background`; foreground names `tether setup`. |
+| `403`, body `serve config denied` | Jimmy isn't the operator | "Tailscale refused the write: your account isn't its operator. Run `sudo tailscale set --operator=$USER`, then rerun the same setup command." Background setup names `muxen setup --background`; foreground names `muxen setup`. |
 | `401` | On Tailscale 1.98.9 and later, a non-root operator may write a config that serves any Unix socket or path only if tailscaled, as root, can run `sudo --other-user=<name> --list tailscale`, where `<name>` is the account's full name (GECOS, up to its first comma), not its login name (`ipn/ipnserver/actor.go`, tailscale/tailscale#21204, open). A valid sudo rule therefore fails whenever the two differ. The check covers the whole config, other apps' handlers included | "Tailscale <v> lets an operator change a Serve config that serves a Unix socket only if root can run `sudo --other-user=<your full name> --list tailscale`; it uses your account's full name, not your login name (tailscale/tailscale#21204). If they differ, run `sudo chfn -f $USER $USER`; check that `sudo -l tailscale` lists tailscale; then rerun the same setup command." |
-| `412` three times | another writer kept changing Serve | "Tailscale's Serve config kept changing while tether wrote it; rerun the same setup command." |
+| `412` three times | another writer kept changing Serve | "Tailscale's Serve config kept changing while muxen wrote it; rerun the same setup command." |
 | other | LocalAPI's own error | "Tailscale refused the Serve write: <status and body>." |
 
-The Linux daemon never writes Serve. Its refusal messages, which `tether enroll`,
-`/auth/info` and the log show, name `tether setup` as the fix. If Jimmy resets Serve,
-tether stays unpublished until he reruns setup.
+The Linux daemon never writes Serve. Its refusal messages, which `muxen enroll`,
+`/auth/info` and the log show, name `muxen setup` as the fix. If Jimmy resets Serve,
+muxen stays unpublished until he reruns setup.
 
 ### Mac: the daemon publishes
 
-`tether serve --publish` writes its own entry at each start with a new path secret
+`muxen serve --publish` writes its own entry at each start with a new path secret
 ([auth.md](auth.md#the-mac-front)). Setup restarts it, then waits.
 
 ### Verification
 
-Background setup reads `GET /auth/info` over `local.sock`, with the client `tether
-enroll` uses on a Mac, built for both platforms. Linux `tether enroll` keeps judging
+Background setup reads `GET /auth/info` over `local.sock`, with the client `muxen
+enroll` uses on a Mac, built for both platforms. Linux `muxen enroll` keeps judging
 LocalAPI itself, since it must work while the daemon is down. Foreground setup verifies
 in-process: after writing Serve it refreshes the daemon's shared tailnet-state cache and
 gets the origin through the same `Auth::browser_origin` path `/auth/info` uses. It
 prints only that reported origin.
 
 Background setup looks for `local.sock` in the service's runtime directory, not its own: on Linux
-`/run/user/<uid>/tether/`; on a Mac under `getconf DARWIN_USER_TEMP_DIR`, since an SSH
+`/run/user/<uid>/muxen/`; on a Mac under `getconf DARWIN_USER_TEMP_DIR`, since an SSH
 session may lack `TMPDIR`. It ignores answers from a socket whose inode is the one it
 read before the restart, and keeps polling through connection errors and non-2xx
 answers, for up to 30 s, until the new daemon reports `browserOrigin` (published) or a
@@ -277,22 +277,22 @@ included in the final timeout diagnostic. `browserPending` is a field `/auth/inf
 gains for this: true while a Mac publication is still waiting or retrying, when
 `browserRefused` carries its last error; that last error is included in the timeout
 diagnostic. It is always false on Linux. A final refusal is printed and setup exits
-1. At the timeout setup prints "tether didn't report a publication within
-30 s" and the last 20 lines of its log (`journalctl --user -u tether` on Linux,
-`~/Library/Logs/tether.log` on a Mac), plus, on a Mac, the last exit status from
+1. At the timeout setup prints "muxen didn't report a publication within
+30 s" and the last 20 lines of its log (`journalctl --user -u muxen` on Linux,
+`~/Library/Logs/muxen.log` on a Mac), plus, on a Mac, the last exit status from
 `launchctl print`.
 
 ## Output
 
 On success either path issues a new enrolment code (`Store::set_pending`, 10 minutes,
-replacing any earlier code, as `tether enroll` does). The report says only what Jimmy
-acts on: how tether runs, what setup changed, the link with the code in its fragment,
+replacing any earlier code, as `muxen enroll` does). The report says only what Jimmy
+acts on: how muxen runs, what setup changed, the link with the code in its fragment,
 its QR code and the code separately.
 Background setup prints, here on Linux after an upgrade:
 
 ```text
-tether 0.0.2 is running as your systemd user service and starts at boot (was 0.0.1).
-Replaced tether.service, which differed from this tether's; the old copy is <path>.
+muxen 0.0.2 is running as your systemd user service and starts at boot (was 0.0.1).
+Replaced muxen.service, which differed from this muxen's; the old copy is <path>.
 
   https://pop-os.tail852a76.ts.net/#code=7KQ4-XM2P
 
@@ -301,24 +301,24 @@ Replaced tether.service, which differed from this tether's; the old copy is <pat
   ...
 
 Enrolment code: 7KQ4-XM2P (one device, 10 minutes)
-For another device, run `tether enroll`.
+For another device, run `muxen enroll`.
 ```
 
 On a Mac the first line reads "running as your LaunchAgent and starts when you log
 in". "(was …)" appears when a daemon answered before the restart. Below that line
-setup lists what it changed ("Enabled linger", "Replaced tether.service…",
-"Removed tether's old handler…"), one per line, and nothing when it changed nothing.
+setup lists what it changed ("Enabled linger", "Replaced muxen.service…",
+"Removed muxen's old handler…"), one per line, and nothing when it changed nothing.
 Drop-in notices and "No tmux server yet…" appear separately under "Notes:". The coded
 link is on a line of its own, for copying. The QR and OSC 52 clipboard carry that same
 link; there is no plain-link alternative on screen. The browser reads the code from
 the fragment, and the separately printed code is for the iOS app's Add host. A failed
-run prints no code. How to enrol and `tether teardown` are in [running.md](../running.md),
-not the report; the line after the code names `tether enroll`, the one next step a
+run prints no code. How to enrol and `muxen teardown` are in [running.md](../running.md),
+not the report; the line after the code names `muxen enroll`, the one next step a
 reader can't guess.
 
-Foreground Linux's first line is "tether <v> is running in this terminal. Ctrl-C stops
+Foreground Linux's first line is "muxen <v> is running in this terminal. Ctrl-C stops
 it." The rest follows the same format. Its daemon logs only warnings and errors unless
-`RUST_LOG` says otherwise: the report already says tether is running.
+`RUST_LOG` says otherwise: the report already says muxen is running.
 
 **The QR code** uses the `qrcode` crate (0.14, MIT or Apache-2.0, MSRV 1.67) with
 `default-features = false`. Without its `image` feature it pulls in no other crate
@@ -336,34 +336,34 @@ doesn't mention it.
 
 ## Teardown
 
-`tether teardown` checks only that it isn't run as root. It first reads what is
+`muxen teardown` checks only that it isn't run as root. It first reads what is
 installed and running (the unit or plist, whether the service is active or the job
 loaded, the runtime lock, and on Linux whether `loginctl show-user -p Linger` says
 `Linger=yes`; on a Mac the port the plist names, 7851 when it is missing or unreadable),
 then does only the steps that state needs, so a rerun, or a teardown after turning
-tether off under Login Items, finishes what is left:
+muxen off under Login Items, finishes what is left:
 
 If no service is installed, teardown skips the stop and file-removal steps and withdraws
-only tether's matcher-recognized Serve entry. It does not require a systemd unit.
+only muxen's matcher-recognized Serve entry. It does not require a systemd unit.
 
 1. **Mac, job loaded: check Tailscale first.** Read the serve config through
-   LocalAPI. If it can't, teardown stops before touching the service, so tether keeps
+   LocalAPI. If it can't, teardown stops before touching the service, so muxen keeps
    holding its port while Serve still points at it: "Can't reach Tailscale to remove
-   tether's Serve entry; open the Tailscale app and rerun."
+   muxen's Serve entry; open the Tailscale app and rerun."
 2. **Stop and disable the service**, if it's installed: Linux `systemctl --user
-disable --now tether`; Mac `launchctl bootout gui/<uid>/com.jimmyyao.tether` when
+disable --now muxen`; Mac `launchctl bootout gui/<uid>/com.jimmyyao.muxen` when
 the job is loaded. If the Linux unit file is missing but the service is still
-active, teardown runs `systemctl --user stop tether`. If a running service fails to
+active, teardown runs `systemctl --user stop muxen`. If a running service fails to
 stop, teardown stops and prints the error: it doesn't remove a unit or plist under a
 running daemon.
-3. **Withdraw tether's handlers** from every Web entry, with tether's matcher
+3. **Withdraw muxen's handlers** from every Web entry, with muxen's matcher
    ([Publication](#linux-setup-writes-the-entry)) and, on a Mac, that port, through
    `plan_withdraw`, `If-Match` and the three-try re-plan. Entries left without
    handlers and unused `TCP` entries whose only field is `HTTPS: true` are dropped;
    every other entry, handler and field stays. A `403` says to make the account the
-   Tailscale operator and rerun `tether teardown`; a repeated `412` likewise says to
+   Tailscale operator and rerun `muxen teardown`; a repeated `412` likewise says to
    rerun teardown. A `401` gets setup's message ([Publication](#linux-setup-writes-the-entry))
-   naming `tether teardown`, followed by "Or remove every handler on port 443 as root:
+   naming `muxen teardown`, followed by "Or remove every handler on port 443 as root:
    `sudo tailscale serve --https=443 off`."
 4. **Remove the file**: the unit, then `daemon-reload`; or the plist.
 
@@ -373,21 +373,21 @@ handler removals it knows succeeded, but does not claim "Nothing to remove" when
 withdrawal failed. On a Mac it keeps the plist,
 so a rerun knows the port, and prints first "Serve still points at 127.0.0.1:<port>,
 which any process can now bind. Remove it now: `tailscale serve --https=443 off`, or
-rerun tether teardown once Tailscale answers", and exits 1. That window, from the
+rerun muxen teardown once Tailscale answers", and exits 1. That window, from the
 `bootout` until the entry is gone, is the one [auth.md's threat
 model](auth.md#threat-model) accepts for a one-account Mac.
 
 If the runtime lock is held by a terminal run while no service is active, teardown still
-removes the service/publication state it owns but prints: "A tether still runs in a
+removes the service/publication state it owns but prints: "A muxen still runs in a
 terminal; Ctrl-C it." The lock probe never creates a directory or lock file.
 
 Teardown keeps `state_dir()` (enrolled devices and `host_id`, so a later setup brings
 the phone's existing host back), `config.toml`, the binary, any drop-ins in
-`tether.service.d/`, linger and the operator grant. It prints the linger instruction only
+`muxen.service.d/`, linger and the operator grant. It prints the linger instruction only
 when `loginctl` reports `Linger=yes`; it always prints how to drop the operator grant:
 `sudo tailscale set --operator=`. The linger command is `sudo loginctl disable-linger
 $USER`, which also stops Jimmy's other user units while he is logged out. With nothing
-installed and no handler of tether's in Serve, teardown reports "Nothing to remove"
+installed and no handler of muxen's in Serve, teardown reports "Nothing to remove"
 only if the Serve read and withdrawal succeeded.
 
 ## Exit status
@@ -396,7 +396,7 @@ only if the Serve read and withdrawal succeeded.
 SIGINT or SIGTERM), or everything removed (teardown); `1` for any failed check or step;
 SIGINT or SIGTERM during foreground setup before serving uses the process's default
 signal exit and does not start the daemon; clap's `2` is for usage. Setup doesn't use
-`78`, which belongs to `tether serve`.
+`78`, which belongs to `muxen serve`.
 
 ## Code structure
 
@@ -414,7 +414,7 @@ src/setup/
   launch_agent.rs  macOS: owns its Host and TeardownHost, gathers host facts and runs
                    LaunchAgent actions; aliased as `platform` in mod.rs
   report.rs        the success text and the QR code
-src/auth/publish.rs   plan_publish and plan_withdraw over ServeTarget and tether's
+src/auth/publish.rs   plan_publish and plan_withdraw over ServeTarget and muxen's
                       matcher; the compare-and-swap loop shared by the Mac task, setup
                       and teardown
 src/auth/identity.rs  ServeTarget's proxy URL and matcher; read_auth_info on both
@@ -461,25 +461,25 @@ findings are also covered by S12 on the target host.
 
 | Gate | On | Check |
 |---|---|---|
-| S1 | pop-os | From a fresh state (no unit, linger off, no operator), `tether setup --background` over SSH asks for at most two passwords, publishes, prints a code-bearing link, QR and code. The iPhone camera opens the link; Safari enrols from its fragment; the iOS app adds the host with its name and code |
-| S2 | pop-os | A rerun with `--background`: same origin, a new code-bearing link, one restart, no change lines. `tailscale serve status --json` before and after differ only in tether's handler; another app's entry on another port survives byte for byte |
-| S3 | pop-os | Background refusals without writing: another app at `/` of `<name>:443`, Funnel on, a TCP forward on 443. Without a terminal, `tether setup --background` prints the grant commands and exits 1 |
-| S4 | pop-os and a container | Tailscale 1.94–1.98.8 and 1.98.9 or later: `tether setup --background` writes as operator; an operator who may not `sudo tailscale`, or whose full name differs from the login name, gets the `401` message on 1.98.9+ and succeeds on 1.98.8; a non-operator gets the `403` message; teardown with another app's Unix handler present, on 1.98.9+ |
-| S5 | pop-os | Upgrade from the loopback-TCP daemon and from a current one: `cargo install` a newer build, rerun `tether setup --background`; `/auth/info` reports the new version, the 7850 handler is replaced, a `MemoryMax` drop-in survives, an edited unit is backed up and replaced |
-| S6 | pop-os | Reboot: tether runs before any login, published; the phone reconnects |
-| S7 | pop-os | `tether teardown` removes the unit and tether's handler only; a second teardown says "Nothing to remove"; `tether setup --background` again brings the iOS app's host back with its existing token. With no unit installed, teardown withdraws the handler only |
+| S1 | pop-os | From a fresh state (no unit, linger off, no operator), `muxen setup --background` over SSH asks for at most two passwords, publishes, prints a code-bearing link, QR and code. The iPhone camera opens the link; Safari enrols from its fragment; the iOS app adds the host with its name and code |
+| S2 | pop-os | A rerun with `--background`: same origin, a new code-bearing link, one restart, no change lines. `tailscale serve status --json` before and after differ only in muxen's handler; another app's entry on another port survives byte for byte |
+| S3 | pop-os | Background refusals without writing: another app at `/` of `<name>:443`, Funnel on, a TCP forward on 443. Without a terminal, `muxen setup --background` prints the grant commands and exits 1 |
+| S4 | pop-os and a container | Tailscale 1.94–1.98.8 and 1.98.9 or later: `muxen setup --background` writes as operator; an operator who may not `sudo tailscale`, or whose full name differs from the login name, gets the `401` message on 1.98.9+ and succeeds on 1.98.8; a non-operator gets the `403` message; teardown with another app's Unix handler present, on 1.98.9+ |
+| S5 | pop-os | Upgrade from the loopback-TCP daemon and from a current one: `cargo install` a newer build, rerun `muxen setup --background`; `/auth/info` reports the new version, the 7850 handler is replaced, a `MemoryMax` drop-in survives, an edited unit is backed up and replaced |
+| S6 | pop-os | Reboot: muxen runs before any login, published; the phone reconnects |
+| S7 | pop-os | `muxen teardown` removes the unit and muxen's handler only; a second teardown says "Nothing to remove"; `muxen setup --background` again brings the iOS app's host back with its existing token. With no unit installed, teardown withdraws the handler only |
 | S8 | pop-os | `cargo run -- setup --background` refuses with the binary message; `XDG_STATE_HOME=/elsewhere` refuses and `XDG_STATE_HOME=$HOME/.local/state` passes; `su - jimmy` with linger on reaches the user manager |
-| S9 | the Mac | Fresh `tether setup --background`: plist written and bootstrapped, the notification shows, published, phone works. Rerun kickstarts with a new secret, and verification waits for the new process. Port 7851 held, a hand install on another port, a second macOS account and an SSH session with no screen login each refuse before installing. Turned off under Login Items, then setup: `launchctl enable` brings it back, or the message says how. A `PATH` holding `&` installs. Teardown removes the plist and the entry, and a second teardown says "Nothing to remove"; with Tailscale quit, teardown stops before the `bootout`; turned off under Login Items, then teardown, removes the entry. A LocalAPI error during publication keeps verification polling (`browserPending`) until the daemon publishes |
-| S10 | iPhone | The QR scans from a dark and a light terminal theme, in Termius and in tether's own terminal (xterm.js line height can open gaps between half blocks) |
-| S11 | a Linux container | `tether setup --background` on a distribution without systemd, a logged-out tailscaled, Tailscale 1.92, and a test tailnet with HTTPS certificates off: each gets its message and changes nothing |
-| S12 | pop-os | Plain `tether setup` in a terminal publishes and the phone enrols; Ctrl-C exits 0 and the phone shows 502, then reconnects on a rerun. With the service running, foreground setup refuses before a grant. While a terminal run holds the flock, `tether setup --background` refuses before grants or install with its Ctrl-C instruction; teardown prints its terminal-run note. A nonmatching `XDG_RUNTIME_DIR` is refused before a grant. `cargo run -- setup` works |
-| S13 | the Mac | Plain `tether setup` refuses with the `--background` message and changes nothing |
+| S9 | the Mac | Fresh `muxen setup --background`: plist written and bootstrapped, the notification shows, published, phone works. Rerun kickstarts with a new secret, and verification waits for the new process. Port 7851 held, a hand install on another port, a second macOS account and an SSH session with no screen login each refuse before installing. Turned off under Login Items, then setup: `launchctl enable` brings it back, or the message says how. A `PATH` holding `&` installs. Teardown removes the plist and the entry, and a second teardown says "Nothing to remove"; with Tailscale quit, teardown stops before the `bootout`; turned off under Login Items, then teardown, removes the entry. A LocalAPI error during publication keeps verification polling (`browserPending`) until the daemon publishes |
+| S10 | iPhone | The QR scans from a dark and a light terminal theme, in Termius and in muxen's own terminal (xterm.js line height can open gaps between half blocks) |
+| S11 | a Linux container | `muxen setup --background` on a distribution without systemd, a logged-out tailscaled, Tailscale 1.92, and a test tailnet with HTTPS certificates off: each gets its message and changes nothing |
+| S12 | pop-os | Plain `muxen setup` in a terminal publishes and the phone enrols; Ctrl-C exits 0 and the phone shows 502, then reconnects on a rerun. With the service running, foreground setup refuses before a grant. While a terminal run holds the flock, `muxen setup --background` refuses before grants or install with its Ctrl-C instruction; teardown prints its terminal-run note. A nonmatching `XDG_RUNTIME_DIR` is refused before a grant. `cargo run -- setup` works |
+| S13 | the Mac | Plain `muxen setup` refuses with the `--background` message and changes nothing |
 
 S11 needs a Tailscale auth key for a test tailnet, which is Jimmy's to give. Without
 one, the fake-LocalAPI tests cover its messages.
 
 ## Not in setup
 
-- **Other install locations.** Setup accepts only `~/.cargo/bin/tether`. A release
+- **Other install locations.** Setup accepts only `~/.cargo/bin/muxen`. A release
   binary installed elsewhere would need an `ExecStart=` drop-in on Linux and a third
   plist placeholder on a Mac.

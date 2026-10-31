@@ -11,10 +11,10 @@ declare const __PRECACHE__: readonly string[];
 // Typed as the worker scope; lib has WebWorker, whose `self` is the generic scope.
 const sw = self as unknown as ServiceWorkerGlobalScope;
 
-const PREFIX = "tether-shell-";
+const PREFIX = "muxen-shell-";
 const CACHE = `${PREFIX}${__BUILD__}`;
 /** One entry, `/active`, holds the hash of the build whose worker last activated. */
-const META = "tether-meta";
+const META = "muxen-meta";
 const ACTIVE = "/active";
 
 /** The daemon serves 4 shell files at once and queues 16 more (src/http/shell.rs). */

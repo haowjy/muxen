@@ -25,8 +25,8 @@ pub(super) async fn info(State(ctx): State<Arc<Ctx>>) -> Response {
         Ok(origin) => (Some(origin.origin), None),
         Err(refusal) => (None, Some(refusal)),
     };
-    let name = if ctx.app.host.name == "tether" {
-        ctx.app.auth.machine_name("tether").await
+    let name = if ctx.app.host.name == "muxen" {
+        ctx.app.auth.machine_name("muxen").await
     } else {
         ctx.app.host.name.clone()
     };

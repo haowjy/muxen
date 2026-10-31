@@ -71,7 +71,7 @@ function totalOf(contentRange: string | null): number | null {
 }
 
 /**
- * The file API on one host's HTTP origin: `tether-app://h-{host}` in the app, the dev
+ * The file API on one host's HTTP origin: `muxen-app://h-{host}` in the app, the dev
  * server's proxy on the desktop. Native (or the proxy) adds the Bearer token.
  */
 export function httpFsApi(origin: string, fetchFn?: typeof fetch): FsApi {

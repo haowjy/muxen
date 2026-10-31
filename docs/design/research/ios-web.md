@@ -1,4 +1,4 @@
-# iOS web-platform research for tether
+# iOS web-platform research for muxen
 
 **Research date:** 2026-10-21 (ET)  
 **Scope:** iOS 26-era Safari/Home Screen web apps, with WKWebView where relevant. The exact iPhone 17 Pro/iOS 26.x combination was not available for direct physical-device testing in this research run.
@@ -83,7 +83,7 @@ iOS can keep a page/socket alive for a while when it remains foregrounded, and t
 
 **WebAuthn/passkeys:** Platform-authenticator/passkey flows with Face ID work in Safari and are supported by iOS web authentication. Standalone web apps are the same web origin model, but exact behavior should be tested on the target build. The RP ID must be the exact stable hostname or a registrable suffix of the caller; never use a wildcard or bare `ts.net`. A full machine/tailnet hostname such as `host.tailnet.ts.net` is the appropriate candidate. Changing the Tailscale hostname or RP ID later creates a new credential namespace. In a native WKWebView, Apple’s associated-domain requirements apply; this is a separate setup burden.
 
-**Push:** Web Push is available to Home Screen web apps on iOS/iPadOS 16.4 and later, with permission requested from a direct user action. It is out of scope for tether, but availability is not a reason to choose native over PWA.
+**Push:** Web Push is available to Home Screen web apps on iOS/iPadOS 16.4 and later, with permission requested from a direct user action. It is out of scope for muxen, but availability is not a reason to choose native over PWA.
 
 ### Confidence
 

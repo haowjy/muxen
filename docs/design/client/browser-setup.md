@@ -27,7 +27,7 @@ static routes. `build.rs` runs the web production build and embeds raw and deter
 gzip assets, with build-time limits of 192 files, 8 MiB total and 1.5 MiB per file.
 Four responses may stream concurrently, 16 wait in order, and a 30 s write stall
 aborts the response. Unknown paths, including unknown API routes, are 404 rather than
-rewritten to the shell. The generated manifest is named `tether <host>`. Hashed
+rewritten to the shell. The generated manifest is named `muxen <host>`. Hashed
 assets are immutable; the shell entry, manifest and service worker revalidate.
 
 The shell, `/auth/info` and enrolment flow are reachable after the Tailscale check but

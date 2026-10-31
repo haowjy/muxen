@@ -3,7 +3,7 @@
 // defaults and a failure to write keeps the choice for this page: the control still works.
 import type { Appearance, Preferences, TextSize } from "../types";
 
-const KEY = "tether.preferences";
+const KEY = "muxen.preferences";
 const APPEARANCES: readonly Appearance[] = ["system", "light", "dark"];
 const TEXT_SIZES: readonly TextSize[] = ["small", "default", "large", "larger"];
 

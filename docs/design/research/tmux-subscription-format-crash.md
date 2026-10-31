@@ -4,7 +4,7 @@
 expands `#{client_name}` for an accepted client whose identification is incomplete.
 The client is already in tmux's global client list, but its `name` is still NULL.
 The format callback calls `xstrdup(c->name)` without checking it. This is a tmux bug,
-not a tether process failure; tmux must not be allowed to die on a state tether can
+not a muxen process failure; tmux must not be allowed to die on a state muxen can
 trigger.
 
 ## Evidence
@@ -13,8 +13,8 @@ trigger.
   `_platform_strlen ← strdup ← xstrdup ← format_find ← format_replace ←
   format_expand1 ← format_choose ← … ← format_loop_clients ← …
   control_check_subs_timer`. The `format_loop_clients` frame identifies subscription
-  expansion, not tether's `display-message -p` or `list-* -F` formats.
-- The only tether format using `L:` is the window subscription in
+  expansion, not muxen's `display-message -p` or `list-* -F` formats.
+- The only muxen format using `L:` is the window subscription in
   `src/tmux/command.rs`; the `refresh-client -B` command sends it once per watched
   window. In the old format, an unidentified client has
   `client_control_mode == 0`, so expansion enters the nested membership test and
@@ -58,8 +58,8 @@ window. Missing format values expand empty, so this guard preserves the existing
 the transient client. `tests/tmux_real.rs` holds an unidentified Unix-socket client
 across the subscription timer and checks that the private server remains responsive.
 
-Run the gated test with `TMPDIR=/tmp/tether-meridian-501 TETHER_TMUX_TESTS=1
-TETHER_TMUX=<tmux-path> cargo test --test tmux_real
+Run the gated test with `TMPDIR=/tmp/muxen-meridian-501 MUXEN_TMUX_TESTS=1
+MUXEN_TMUX=<tmux-path> cargo test --test tmux_real
 window_subscription_survives_an_unidentified_socket_client -- --exact` on each
 version. Test infrastructure uses private `-L` socket names; it never targets a
 personal tmux server.

@@ -1,5 +1,5 @@
 //! The wire protocol (daemon-core.md §5): JSON messages in text frames, pane bytes in
-//! binary frames, and the version range. A leaf: it names no other tether module.
+//! binary frames, and the version range. A leaf: it names no other muxen module.
 //! The TypeScript types in `web/proto/generated/` are rendered from these.
 
 pub mod auth;

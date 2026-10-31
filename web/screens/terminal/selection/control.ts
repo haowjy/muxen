@@ -98,7 +98,7 @@ export class SelectionControl {
     const word = row && wordAt(rowCells(row), Math.floor((x - origin.left) / cell.width));
     this.released = false;
     // Native's flag is on before the finger lifts, when WebKit builds its edit menu for the selection: told
-    // only on release, the menu sometimes beat it and iOS's AutoFill showed over tether's.
+    // only on release, the menu sometimes beat it and iOS's AutoFill showed over muxen's.
     if (!word) {
       this.menuOnly = { x, y };
       this.deps.selecting(true);

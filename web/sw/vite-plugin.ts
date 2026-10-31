@@ -31,7 +31,7 @@ export function serviceWorker(): Plugin {
   let outDir = "";
   let root = "";
   return {
-    name: "tether-service-worker",
+    name: "muxen-service-worker",
     configResolved(config) {
       outDir = resolve(config.root, config.build.outDir);
       root = config.root;
@@ -68,7 +68,7 @@ export function serviceWorker(): Plugin {
           build: {
             write: false,
             target: "es2022",
-            lib: { entry: join(root, "sw/sw.ts"), formats: ["iife"], name: "tetherSw", fileName: () => "sw.js" },
+            lib: { entry: join(root, "sw/sw.ts"), formats: ["iife"], name: "muxenSw", fileName: () => "sw.js" },
           },
         });
         const output = (Array.isArray(result) ? result[0] : result);

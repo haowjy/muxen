@@ -172,7 +172,7 @@ mod tests {
 
     use super::Front;
 
-    const SECRET: &str = "tether-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    const SECRET: &str = "muxen-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
     const AUTHORITY: &str = "devbox.ts.net:443";
 
     fn front(authority: Option<&str>) -> Front {
@@ -206,7 +206,7 @@ mod tests {
         let front = front(Some(AUTHORITY));
         for target in [
             "/not-the-secret/auth/info",
-            "http://devbox.ts.net/tether-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/auth/info",
+            "http://devbox.ts.net/muxen-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/auth/info",
         ] {
             let mut request = request(target);
             let response = front.gate(&mut request).expect("refused");

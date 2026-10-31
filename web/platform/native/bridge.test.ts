@@ -1,11 +1,11 @@
-// The bridge's one contract copy is ios/TetherKit/Tests/Fixtures/bridge/, which Swift also
+// The bridge's one contract copy is ios/MuxenKit/Tests/Fixtures/bridge/, which Swift also
 // decodes and re-encodes. Every fixture is decoded here: a native → web message through
 // `parseEvent`, a web → native request by making the call that sends it.
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { Bridge, parseEvent } from "./bridge";
 
-const DIR = new URL("../../../ios/TetherKit/Tests/Fixtures/bridge/", import.meta.url);
+const DIR = new URL("../../../ios/MuxenKit/Tests/Fixtures/bridge/", import.meta.url);
 
 interface Fixture {
   direction: "webToNative" | "nativeToWeb";

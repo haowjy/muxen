@@ -11,16 +11,16 @@ use fake_hub::{
     Got, Hub, SERVER_NAME, capture_history, kind, kinds, let_go_of_window_0, line_for, release,
     size, snapshot, take_vote, vote,
 };
-use serde_json::json;
-use tether::budget;
-use tether::hub::{
+use muxen::budget;
+use muxen::hub::{
     CAPTURE_RESERVATION, CREDIT, FromConn, Input, LINGER, OVERDRAFT, SNAPSHOT_SPACING,
     USER_IN_FLIGHT,
 };
-use tether::proto::{self, SessionRef};
-use tether::tmux::{
+use muxen::proto::{self, SessionRef};
+use muxen::tmux::{
     InputItem, MAX_IN_FLIGHT, OneShotCmd, Op, PaneId, PumpMsg, Size, WindowId, command,
 };
+use serde_json::json;
 
 #[test]
 fn a_watch_binds_after_locating_and_catches_up_by_snapshot() {
@@ -30,7 +30,7 @@ fn a_watch_binds_after_locating_and_catches_up_by_snapshot() {
     // No control client exists yet, so the first Locate is a one-shot.
     assert!(matches!(
         hub.oneshots.front(),
-        Some((_, OneShotCmd::Locate { session })) if *session == tether::tmux::SessionId(0)
+        Some((_, OneShotCmd::Locate { session })) if *session == muxen::tmux::SessionId(0)
     ));
     hub.settle();
     let client = hub.client(0);
@@ -655,7 +655,7 @@ fn a_window_binds_only_from_its_owners_own_answer() {
 
     // The owner starts and performs the binding Locate itself.
     let locate = line_for(Op::Locate {
-        session: tether::tmux::SessionId(1),
+        session: muxen::tmux::SessionId(1),
     });
     hub.settle_until(|line| line == locate);
     let owner = hub.client(1);
@@ -915,7 +915,7 @@ fn daemon_limits_end_or_refuse_what_is_over_them() {
     assert_eq!(kinds(&ended), ["watchEnded"]);
     assert_eq!(
         ended[0]["data"]["message"],
-        "tether on devbox allows 3 tmux sessions at a time; open now: session0, session1, session2"
+        "muxen on devbox allows 3 tmux sessions at a time; open now: session0, session1, session2"
     );
     assert_eq!(ended[0]["data"]["reason"], "limit");
     // Once one lingers, it makes room.
@@ -955,7 +955,7 @@ fn low_budget_limit_names_the_sessions_holding_the_slot() {
     assert_eq!(ended[0]["data"]["reason"], "limit");
     assert_eq!(
         ended[0]["data"]["message"],
-        "tether on devbox allows 1 tmux session at a time; open now: work"
+        "muxen on devbox allows 1 tmux session at a time; open now: work"
     );
 }
 

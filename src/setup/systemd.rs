@@ -15,7 +15,7 @@ pub(super) const KIND: super::report::ServiceKind = super::report::ServiceKind {
     name: "systemd user service",
     startup: "starts at boot",
 };
-pub(super) const STOPPED: &str = "Stopped the running tether service.";
+pub(super) const STOPPED: &str = "Stopped the running muxen service.";
 
 pub(super) struct Host {
     pub home: PathBuf,
@@ -99,7 +99,7 @@ pub(super) fn inspect() -> Result<Host, SetupError> {
         })
         .map(str::to_owned)
         .collect();
-    let service_file = home.join(".config/systemd/user/tether.service");
+    let service_file = home.join(".config/systemd/user/muxen.service");
     let previous_file = match std::fs::read(&service_file) {
         Ok(contents) => Some(contents),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
@@ -130,10 +130,10 @@ pub(super) fn inspect() -> Result<Host, SetupError> {
         file_state,
         expected_file: install::SYSTEMD_UNIT.as_bytes().to_vec(),
         service_state: ServiceState {
-            loaded: manager_command_for_uid(uid, "is-active", &["tether"]).is_ok(),
+            loaded: manager_command_for_uid(uid, "is-active", &["muxen"]).is_ok(),
             disabled: false,
         },
-        runtime_dir: manager_dir.join("tether"),
+        runtime_dir: manager_dir.join("muxen"),
         user,
         uid,
         systemd_present,
@@ -151,7 +151,7 @@ pub(super) fn username() -> Result<String, SetupError> {
 
 pub(super) fn service_active() -> bool {
     let uid = rustix::process::geteuid().as_raw();
-    manager_command_for_uid(uid, "is-active", &["tether"]).is_ok()
+    manager_command_for_uid(uid, "is-active", &["muxen"]).is_ok()
 }
 
 pub(super) fn facts(host: &Host, operator_user: Result<String, String>) -> PlatformFacts {
@@ -180,14 +180,14 @@ pub(super) fn teardown_notes(host: &TeardownHost) -> Vec<String> {
 pub(super) fn inspect_teardown() -> Result<TeardownHost, SetupError> {
     let home = super::config::home()?;
     let uid = rustix::process::geteuid().as_raw();
-    let service_file = home.join(".config/systemd/user/tether.service");
+    let service_file = home.join(".config/systemd/user/muxen.service");
     let manager_dir = PathBuf::from(format!("/run/user/{uid}"));
-    let loaded = manager_command_for_uid(uid, "is-active", &["tether"]).is_ok();
+    let loaded = manager_command_for_uid(uid, "is-active", &["muxen"]).is_ok();
     let user = username()?;
     let linger = command_text("loginctl", &["show-user", &user, "-p", "Linger"])
         .ok()
         .is_some_and(|value| value.trim() == "Linger=yes");
-    let runtime_dir = manager_dir.join("tether");
+    let runtime_dir = manager_dir.join("muxen");
     Ok(TeardownHost {
         service_file,
         loaded,
@@ -238,7 +238,7 @@ pub(super) fn grant_foreground(
     operator_needed: bool,
     changes: &mut Vec<String>,
 ) -> Result<(), SetupError> {
-    super::require_terminal_for_grants(false, operator_needed, user, "tether setup")?;
+    super::require_terminal_for_grants(false, operator_needed, user, "muxen setup")?;
     grant_operator_if_needed(user, operator_needed, changes)
 }
 
@@ -252,7 +252,7 @@ pub(super) fn grant_setup(
         needs_linger,
         operator_needed,
         &host.user,
-        "tether setup --background",
+        "muxen setup --background",
     )?;
     if needs_linger {
         grant_linger(host)?;
@@ -313,13 +313,13 @@ pub(super) fn apply(host: &Host) -> Result<Vec<String>, SetupError> {
                 let backup = super::backup_file(host, &contents)?;
                 super::write_file(host)?;
                 changes.push(format!(
-                    "Replaced tether.service, which differed from this tether's; the old copy is {}.",
+                    "Replaced muxen.service, which differed from this muxen's; the old copy is {}.",
                     backup.display()
                 ));
             }
             SystemdAction::DaemonReload => run_manager(host.uid, "daemon-reload", &[])?,
-            SystemdAction::Enable => run_manager(host.uid, "enable", &["tether"])?,
-            SystemdAction::Restart => run_manager(host.uid, "restart", &["tether"])
+            SystemdAction::Enable => run_manager(host.uid, "enable", &["muxen"])?,
+            SystemdAction::Restart => run_manager(host.uid, "restart", &["muxen"])
                 .map_err(|error| with_journal(error, host))?,
         }
     }
@@ -355,7 +355,7 @@ pub(super) async fn publish_background(
         })?;
     changes.extend(super::removed_handler_changes(&plan));
     if plan.changed {
-        run_manager(host.uid, "restart", &["tether"]).map_err(|error| with_journal(error, host))?;
+        run_manager(host.uid, "restart", &["muxen"]).map_err(|error| with_journal(error, host))?;
     }
     Ok(())
 }
@@ -365,9 +365,9 @@ pub(super) fn stop_teardown(host: &TeardownHost) -> Result<(), SetupError> {
         return Ok(());
     }
     if host.service_file.exists() {
-        run_manager(host.uid, "disable", &["--now", "tether"])
+        run_manager(host.uid, "disable", &["--now", "muxen"])
     } else {
-        run_manager(host.uid, "stop", &["tether"])
+        run_manager(host.uid, "stop", &["muxen"])
     }
 }
 
@@ -382,10 +382,10 @@ pub(super) fn remove_teardown(host: &TeardownHost) -> Result<(), SetupError> {
 
 pub(super) fn logs(_host: &Host) -> String {
     Command::new("journalctl")
-        .args(["--user", "-u", "tether", "-n", "20", "--no-pager"])
+        .args(["--user", "-u", "muxen", "-n", "20", "--no-pager"])
         .output()
         .map(|output| String::from_utf8_lossy(&output.stdout).into_owned())
-        .unwrap_or_else(|error| format!("Can't read tether journal: {error}"))
+        .unwrap_or_else(|error| format!("Can't read muxen journal: {error}"))
 }
 
 fn run_manager(uid: u32, verb: &str, args: &[&str]) -> Result<(), SetupError> {
@@ -424,5 +424,5 @@ fn parse_environment(text: &str) -> HashMap<String, OsString> {
 
 fn with_journal(error: SetupError, host: &Host) -> SetupError {
     let logs = logs(host);
-    SetupError::new(format!("{error}\nLast 20 tether journal lines:\n{logs}"))
+    SetupError::new(format!("{error}\nLast 20 muxen journal lines:\n{logs}"))
 }

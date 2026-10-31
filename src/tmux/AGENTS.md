@@ -18,13 +18,13 @@ targeted tests assert the important event behavior. Re-record with
 `cargo run --example record-tmux-fixtures -- --out tests/fixtures/tmux/3.4` when
 command output changes; record 3.7b with `--tmux <path> --out tests/fixtures/tmux/3.7b`.
 The checked-in fixture sets include tmux 3.4 and 3.7b;
-targeted session tests default to 3.4 and accept `TETHER_TMUX_FIXTURE_VERSION=3.7b`
+targeted session tests default to 3.4 and accept `MUXEN_TMUX_FIXTURE_VERSION=3.7b`
 to read the other version's fixtures.
 The `snapshot-*` fixtures also feed the `vt100` restore tests in `snapshot.rs`, so
 re-recording them re-checks `compose` too.
 
 `tests/tmux_real.rs` runs `Session` over the real pump, and the one-shots, against
 private tmux servers: the snapshot boundary under floods, torn snapshots, Gaps, and
-every way a control client ends. It is skipped unless `TETHER_TMUX_TESTS=1`
-(`TETHER_TMUX` picks the binary; the Gap test needs `script`); run it, under
+every way a control client ends. It is skipped unless `MUXEN_TMUX_TESTS=1`
+(`MUXEN_TMUX` picks the binary; the Gap test needs `script`); run it, under
 `nice -n 10`, after any change here.

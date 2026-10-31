@@ -1,4 +1,4 @@
-//! launchd socket activation: the one `unsafe` module in tether.
+//! launchd socket activation: the one `unsafe` module in muxen.
 #![allow(unsafe_code)]
 
 use std::ffi::CString;

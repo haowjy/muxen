@@ -7,7 +7,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { goHome, openSessionRow } from "../shared/home";
 import { startStack, type Stack, type TmuxVersion } from "../shared/stack";
 
-const VERSIONS = (process.env["TETHER_E2E_TMUX"] ?? "3.4,3.7b").split(",") as TmuxVersion[];
+const VERSIONS = (process.env["MUXEN_E2E_TMUX"] ?? "3.4,3.7b").split(",") as TmuxVersion[];
 
 test.use({ viewport: { width: 393, height: 852 }, hasTouch: true });
 
@@ -102,7 +102,7 @@ for (const version of VERSIONS) {
         ws.onMessage((frame) => {
           const msg = typeof frame === "string" ? (JSON.parse(frame) as { type: string; data: { req: number; watch: number } }) : null;
           if (msg?.type === "paste") {
-            ws.send(JSON.stringify({ type: "error", data: { req: msg.data.req, watch: msg.data.watch, code: "busy", message: "tether is busy, try again" } }));
+            ws.send(JSON.stringify({ type: "error", data: { req: msg.data.req, watch: msg.data.watch, code: "busy", message: "muxen is busy, try again" } }));
             return;
           }
           server.send(frame);
@@ -112,7 +112,7 @@ for (const version of VERSIONS) {
       await open(page, s);
       await paneIncludes(s, /\$ /);
       await sendLine(page, "echo never");
-      await expect(page.getByRole("status").filter({ hasText: "Not sent: tether is busy, try again" })).toBeVisible();
+      await expect(page.getByRole("status").filter({ hasText: "Not sent: muxen is busy, try again" })).toBeVisible();
       await expect(line(page)).toHaveValue("echo never");
       await page.waitForTimeout(500);
       expect(pane(s)).not.toContain("never");

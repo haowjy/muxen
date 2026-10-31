@@ -196,11 +196,11 @@ describe("savedWorkspaces", () => {
 describe("labelOf", () => {
   it("is the session, then its current window, with no separator", () => {
     const tabs = run([
-      { type: "opened", workspace: "ws/h1", key: key(1), session: "tether", window: "shell" },
+      { type: "opened", workspace: "ws/h1", key: key(1), session: "muxen", window: "shell" },
       { type: "opened", workspace: "ws/h1", key: key(2), session: "notes", window: "shell" },
     ]).state.workspaces.flatMap((w) => w.tabs);
     expect(tabs.map((t) => labelOf(t, null)).map((l) => [l.session, l.window, l.full])).toEqual([
-      ["tether", "shell", "tether shell"],
+      ["muxen", "shell", "muxen shell"],
       ["notes", "shell", "notes shell"],
     ]);
   });

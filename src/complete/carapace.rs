@@ -30,7 +30,7 @@ static MISSING_LOGGED: AtomicBool = AtomicBool::new(false);
 static LIST_WARNED: AtomicBool = AtomicBool::new(false);
 
 /// `cur` through its last `/ = : , @ +`; else `-` for a flag; else empty. carapace
-/// gets the stem and tether filters by `cur`, so one run serves each keystroke until
+/// gets the stem and muxen filters by `cur`, so one run serves each keystroke until
 /// the stem changes.
 pub fn stem(cur: &str) -> &str {
     match cur.rfind(['/', '=', ':', ',', '@', '+']) {

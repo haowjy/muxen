@@ -1,6 +1,6 @@
 # Terminal interaction sources
 
-Consulted 2026-10-22. These are compact source notes, not claims of on-device verification. Older platform articles explain mechanisms; current iOS behavior remains a device test. Source snapshot versions matter: tether pins xterm.js 6.0.0; local tmux is 3.4.
+Consulted 2026-10-22. These are compact source notes, not claims of on-device verification. Older platform articles explain mechanisms; current iOS behavior remains a device test. Source snapshot versions matter: muxen pins xterm.js 6.0.0; local tmux is 3.4.
 
 1. xterm Terminal API: https://xtermjs.org/docs/api/terminal/classes/terminal/ — public selection/focus methods, including getSelection/select/getSelectionPosition. Prefer renderer-owned serialization to generic DOM text extraction.
 2. xterm IBufferLine: https://xtermjs.org/docs/api/terminal/interfaces/ibufferline/ — isWrapped identifies continuation from preceding buffer row; getCell/translateToString expose cells/text. Pinned-source research covers exact API stability and behavior.

@@ -35,7 +35,7 @@ SYMBOLS = "U+E0A0-E0D7,U+E5FA-E6B8,U+E700-E7C5,U+F400-F532,U+23FB-23FE,U+2665,U+
 def build(src: Path, dst: Path, unicodes: str) -> None:
     options = subset.Options()
     options.flavor = "woff2"
-    options.layout_features = ["kern", "liga", "calt"] if dst.name.startswith("tether-mono-") else []
+    options.layout_features = ["kern", "liga", "calt"] if dst.name.startswith("muxen-mono-") else []
     options.name_IDs = [1, 2]
     options.notdef_outline = True
     options.hinting = False
@@ -50,9 +50,9 @@ def build(src: Path, dst: Path, unicodes: str) -> None:
 def main() -> None:
     src_dir, out_dir = Path(sys.argv[1]), Path(sys.argv[2])
     out_dir.mkdir(parents=True, exist_ok=True)
-    build(src_dir / "Regular.woff2", out_dir / "tether-mono-regular.woff2", CORE)
-    build(src_dir / "Bold.woff2", out_dir / "tether-mono-bold.woff2", CORE)
-    build(src_dir / "Regular.woff2", out_dir / "tether-symbols.woff2", SYMBOLS)
+    build(src_dir / "Regular.woff2", out_dir / "muxen-mono-regular.woff2", CORE)
+    build(src_dir / "Bold.woff2", out_dir / "muxen-mono-bold.woff2", CORE)
+    build(src_dir / "Regular.woff2", out_dir / "muxen-symbols.woff2", SYMBOLS)
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@ plans produce only that executor's actions. `mod.rs` shares the success-report t
 `report.rs` owns success rendering, QR output, and OSC 52.
 
 Foreground Linux setup checks that `config::runtime_dir()` is exactly
-`/run/user/<uid>/tether`, then opens the daemon before making the operator grant. The
+`/run/user/<uid>/muxen`, then opens the daemon before making the operator grant. The
 daemon open owns the budget, runtime directory, flock, binds, state store and auth. Setup
 then grants the operator, publishes Serve, refreshes the daemon's tailnet-state cache,
 issues the code and prints; `Opened::run` registers SIGINT/SIGTERM and starts serving

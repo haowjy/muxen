@@ -84,7 +84,7 @@ pub struct Tag(pub u64);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ClientId(pub u64);
 
-/// A tmux server tether talks to (§3.8): the tmux executable and the server's socket.
+/// A tmux server muxen talks to (§3.8): the tmux executable and the server's socket.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Endpoint {
     pub program: PathBuf,
@@ -300,7 +300,7 @@ pub enum Op {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OneShotCmd {
     /// The session sheet and the bell poll: answered by `Reply::Listing`. It first
-    /// installs tether's bell hook if nothing is at its index (§4.8).
+    /// installs muxen's bell hook if nothing is at its index (§4.8).
     List,
     /// Daemon start and stop (§4.8): `Reply::Ok`.
     AdoptBellHook,
@@ -442,7 +442,7 @@ pub struct ListedSession {
 
 /// A session's bell attention state (§4.8). `mark` counts the session's bells; every
 /// window line carries it. `covered` is tmux's verdict, true when every window's
-/// bells reach tether's hook.
+/// bells reach muxen's hook.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Bell {
     pub mark: u32,
@@ -460,7 +460,7 @@ pub struct ListedWindow {
     pub activity: u64,
 }
 
-/// A window tether created, alone or as a new session's first.
+/// A window muxen created, alone or as a new session's first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Created {
     pub server: ServerInstance,
@@ -511,7 +511,7 @@ pub enum TmuxError {
     /// The request can't be expressed as a safe command.
     #[error("bad request: {0}")]
     BadRequest(&'static str),
-    /// tmux answered in a shape tether doesn't understand.
+    /// tmux answered in a shape muxen doesn't understand.
     #[error("unexpected reply from tmux")]
     BadReply,
     /// No tmux server is running on the endpoint, or not the instance a one-shot was

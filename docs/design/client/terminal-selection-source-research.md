@@ -1,8 +1,8 @@
 # Terminal selection / copy / paste — source research
 
-Lane: read-only source study for tether UX design. No project edits. No other artifacts. No tmux live probe (separate lane). No port 8444.
+Lane: read-only source study for muxen UX design. No project edits. No other artifacts. No tmux live probe (separate lane). No port 8444.
 
-**Answer first:** xterm.js 6.0.0 serializes copy from the *cell buffer* (not the DOM): it joins rows only when `IBufferLine.isWrapped` is true, trims *empty cells* (not written spaces), and treats wide/combining characters as one string cell with width 2/0. It has **no iOS/touch selection path**. Public APIs that can drive a mobile overlay without private fields are `buffer.getLine` / `isWrapped` / `translateToString` / `getCell`, plus `select` / `getSelection` / `getSelectionPosition` / `onSelectionChange`, plus public `.xterm-screen` metrics. At the time of this research, tether's restore painted **one CUP per visual row with wrap off**, so `isWrapped` was false and copy inserted a newline at every wrap. L3 now reconstructs mapped active-grid wraps in daemon restore bytes; history chunks carry a separate map for the DOM history view. A DOM overlay still must join logical rows or serialize from that buffer API; one `<div>` per visual row (xterm's own accessibility tree) will put hard breaks on wraps. Native xterm mouse selection and `Terminal.paste()` are unusable in tether as configured (`disableStdin`, inert textarea, WebGL, `user-select: none`). Paste already bypasses xterm (`paste-buffer -p`).
+**Answer first:** xterm.js 6.0.0 serializes copy from the *cell buffer* (not the DOM): it joins rows only when `IBufferLine.isWrapped` is true, trims *empty cells* (not written spaces), and treats wide/combining characters as one string cell with width 2/0. It has **no iOS/touch selection path**. Public APIs that can drive a mobile overlay without private fields are `buffer.getLine` / `isWrapped` / `translateToString` / `getCell`, plus `select` / `getSelection` / `getSelectionPosition` / `onSelectionChange`, plus public `.xterm-screen` metrics. At the time of this research, muxen's restore painted **one CUP per visual row with wrap off**, so `isWrapped` was false and copy inserted a newline at every wrap. L3 now reconstructs mapped active-grid wraps in daemon restore bytes; history chunks carry a separate map for the DOM history view. A DOM overlay still must join logical rows or serialize from that buffer API; one `<div>` per visual row (xterm's own accessibility tree) will put hard breaks on wraps. Native xterm mouse selection and `Terminal.paste()` are unusable in muxen as configured (`disableStdin`, inert textarea, WebGL, `user-select: none`). Paste already bypasses xterm (`paste-buffer -p`).
 
 **Implementation update (2026-10-23):** the snapshot-wrap change keeps the map inside the
 daemon, rebuilds xterm's public `isWrapped` state through ordinary restore bytes, and
@@ -24,11 +24,11 @@ pending iPhone Safari/WKWebView checks.
 | Local sources | `web/node_modules/@xterm/xterm/{src,typings,css}` (152 TS files; **not missing**, so `~/.meridian/ref/xterm.js` was not cloned) |
 | Typings | `web/node_modules/@xterm/xterm/typings/xterm.d.ts` |
 | Headless twin | `@xterm/headless` **6.0.0** (devDependency; used for isolated POC) |
-| Unicode addon | `@xterm/addon-unicode11` **0.9.0** (tether sets `unicode.activeVersion = "11"`) |
+| Unicode addon | `@xterm/addon-unicode11` **0.9.0** (muxen sets `unicode.activeVersion = "11"`) |
 | Repo | https://github.com/xtermjs/xterm.js |
 | Tag blob base | https://github.com/xtermjs/xterm.js/blob/6.0.0/src/ |
 
-Tether at inspection: branch `main`, `66a5ef9`.
+Muxen at inspection: branch `main`, `66a5ef9`.
 
 All line numbers below are from the **npm 6.0.0 tree**, which matches tag `6.0.0`.
 
@@ -114,7 +114,7 @@ Hard LF:
       this._activeBuffer.lines.get(this._activeBuffer.ybase + this._activeBuffer.y)!.isWrapped = false;
 ```
 
-Public API: `IBufferLine.isWrapped` — “Whether the line is wrapped from the previous line.” `translateToString` “not taking isWrapped into account” (typings 1596–1632). Join is the caller’s job; `getSelection()` and tether `prompt.ts` already do that join.
+Public API: `IBufferLine.isWrapped` — “Whether the line is wrapped from the previous line.” `translateToString` “not taking isWrapped into account” (typings 1596–1632). Join is the caller’s job; `getSelection()` and muxen `prompt.ts` already do that join.
 
 `getWrappedRangeForLine` scans up while `isWrapped`, down while next `isWrapped` (`Buffer.ts` 543–555).
 
@@ -149,7 +149,7 @@ NBSP in the serialized string is rewritten to ASCII space before join (`Selectio
 
 **Checked** in `InputHandler` print loop + `BufferLine.translateToString` + POC.
 
-- Width comes from `UnicodeService.charProperties` (tether: Unicode 11 via addon; headless default without addon is version `"6"`).
+- Width comes from `UnicodeService.charProperties` (muxen: Unicode 11 via addon; headless default without addon is version `"6"`).
 - Wide char: `getWidth() === 2`, following cell `getWidth() === 0`, `getChars() === ""`.
 - Combining: `shouldJoin` stores a combined string on the base cell (`IS_COMBINED_MASK`). `getChars()` is the full cluster; `getCode()` is the **last** codepoint (typings 1638–1656; POC: `e`+U+0301 → chars `"é"`, code 769).
 - Selection mouse coords that land on width 0 bump to the next column (`SelectionService.ts` 556–561, 649–659). Word select tracks wide and “long” (emoji) cells separately (`_convertViewportColToCharacterIndex`, `_getWordAt`).
@@ -180,7 +180,7 @@ export function paste(...) {
 }
 ```
 
-**Checked blocker in tether’s config:** `triggerDataEvent` returns immediately when `disableStdin` is true (`CoreService.ts` 61–64). So `Terminal.paste()`, textarea `paste`, and `onData` never fire. Tether already pastes out-of-band: native → `{ type: "paste" }` → `load-buffer` + `paste-buffer -p -d` (`command.rs` 139–151). tmux `-p` adds 2004 brackets only if the *pane* enabled bracketed paste — independent of xterm.js mode.
+**Checked blocker in muxen’s config:** `triggerDataEvent` returns immediately when `disableStdin` is true (`CoreService.ts` 61–64). So `Terminal.paste()`, textarea `paste`, and `onData` never fire. Muxen already pastes out-of-band: native → `{ type: "paste" }` → `load-buffer` + `paste-buffer -p -d` (`command.rs` 139–151). tmux `-p` adds 2004 brackets only if the *pane* enabled bracketed paste — independent of xterm.js mode.
 
 Snapshot restore **does not** restore bracketed paste (`snapshot.rs` 73–74 lists it among unreported modes). That affects xterm’s `modes.bracketedPasteMode` only; it does not affect tmux `paste-buffer -p`.
 
@@ -204,7 +204,7 @@ Snapshot restore **does not** restore bracketed paste (`snapshot.rs` 73–74 lis
 
 `Platform.ts` has `isSafari`, `isMac`, `isIphone`, `isIpad`. Selection only special-cases Mac (alt/option force-select) and Linux (middle-click paste via textarea). Firefox right-click uses `mousedown` button 2 instead of `contextmenu`.
 
-Coords: `MouseService.getCoords` is **not public**. It uses `getBoundingClientRect` + CSS cell size + optional half-cell offset for selection (`input/Mouse.ts` 34–54). Tether already computes cell size from public `.xterm-screen` / `cols` / `rows` (`web/term/xterm.ts` 85–91) — same geometry without private fields. Replicating the half-cell bias is optional (`isSelection ? cssCellWidth / 2 : 0`).
+Coords: `MouseService.getCoords` is **not public**. It uses `getBoundingClientRect` + CSS cell size + optional half-cell offset for selection (`input/Mouse.ts` 34–54). Muxen already computes cell size from public `.xterm-screen` / `cols` / `rows` (`web/term/xterm.ts` 85–91) — same geometry without private fields. Replicating the half-cell bias is optional (`isSelection ? cssCellWidth / 2 : 0`).
 
 When tmux mouse mode is on, snapshot restore emits `?1000h` / `?1002h` / `?1003h` (`snapshot.rs` 116–127). xterm then **disables** its selection manager. Force-select (Shift, or Mac Option if `macOptionClickForcesSelection`) is a desktop modifier story, not iOS.
 
@@ -224,14 +224,14 @@ Usable without `_service` / private buffer fields:
 Not a solution:
 
 - **`screenReaderMode` / accessibility tree:** `user-select: text` on `.xterm-accessibility-tree`, one div per *visual* row, `translateToString(true)` with **no wrap join** (`AccessibilityManager.ts` 177–194, `xterm.css` 157). Native copy from that tree hard-breaks wraps. It also maps DOM selection back through `select()`, which still needs `isWrapped` for `getSelection()`.
-- **`Terminal.paste()` / helper textarea:** dead under `disableStdin`; tether sets `textarea.inert = true` and `tabIndex = -1` (`web/term/xterm.ts` 22–41).
+- **`Terminal.paste()` / helper textarea:** dead under `disableStdin`; muxen sets `textarea.inert = true` and `tabIndex = -1` (`web/term/xterm.ts` 22–41).
 - **Guessing wrap as “row is full”:** not an xterm API; fails on a hard newline after an exactly-full row.
 - **Reading WebGL/DOM glyph pixels.**
-- **Serialize addon:** not in tether’s dependencies; not required if you walk `getLine`.
+- **Serialize addon:** not in muxen’s dependencies; not required if you walk `getLine`.
 
 ---
 
-## Tether snapshot replay vs wrap metadata
+## Muxen snapshot replay vs wrap metadata
 
 ### What the daemon captures
 
@@ -264,7 +264,7 @@ Wrap is **disabled** for the whole paint (`\x1b[?7l` at `compose` start), then e
 
 Live `%output` after the snapshot *can* set wrap on new overflow. Anything restored from capture (the whole visible screen, and the saved primary) will look wrapped on screen and copy as separate lines.
 
-Tether already depends on wrap bits for the prompt: `web/term/prompt.ts` `rowsText` returns null if a continuation row is not `isWrapped`, and joins with `translateToString(false, ...)`. L3 now reconstructs that wrap state during restore. Prompt extraction can still be unavailable after a snapshot because `PromptTracker.reset` drops the OSC 133 marks; it resumes when the application emits them again, independently of the restored wrap bits.
+Muxen already depends on wrap bits for the prompt: `web/term/prompt.ts` `rowsText` returns null if a continuation row is not `isWrapped`, and joins with `translateToString(false, ...)`. L3 now reconstructs that wrap state during restore. Prompt extraction can still be unavailable after a snapshot because `PromptTracker.reset` drops the OSC 133 marks; it resumes when the application emits them again, independently of the restored wrap bits.
 
 `TerminalRenderer` (`web/term/index.ts`) exposes no selection/copy API.
 
@@ -344,11 +344,11 @@ newlines after reconnect as a permanent limitation.
 | No touch/pointer selection; `isIphone` unused | Checked (repo search) |
 | `user-select: none`; DOM rows `pointer-events: none` | Checked CSS/DomRenderer |
 | `disableStdin` swallows `paste`/`onData` | Checked `CoreService.ts` |
-| Tether paste is `paste-buffer -p`, not xterm | Checked `command.rs`, `web/tabs/input.ts` |
+| Muxen paste is `paste-buffer -p`, not xterm | Checked `command.rs`, `web/tabs/input.ts` |
 | Mouse protocol disables selection | Checked `CoreBrowserTerminal.ts` |
 | `getSelectionPosition` 0-based vs 1-based docs | Checked |
 | Accessibility tree copies per visual row | Checked `AccessibilityManager.ts` |
-| tmux `capture-pane` does not emit wrap flags | **Inferred** from tether’s flags + existing design research; tmux C source not re-read this lane |
+| tmux `capture-pane` does not emit wrap flags | **Inferred** from muxen’s flags + existing design research; tmux C source not re-read this lane |
 | WebKit overlay copy inserts `\n` between block divs | **Inferred** HTML behavior; iOS WKWebView not probed (other lane) |
 | iOS long-press vs first responder / keyboard | **Not probed** (`ios-shell.md` already flags it); other lane |
 | Unicode 11 vs tmux widths on emoji/Nerd Font | **Not measured**; addon present, headless POC used default Unicode 6 |

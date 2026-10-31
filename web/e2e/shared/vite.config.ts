@@ -7,5 +7,5 @@ import app from "../../vite.config";
 
 export default defineConfig((env: ConfigEnv) => {
   const base = app(env);
-  return { ...base, cacheDir: process.env["TETHER_E2E_VITE_CACHE"] ?? "node_modules/.vite-e2e" };
+  return { ...base, cacheDir: process.env["MUXEN_E2E_VITE_CACHE"] ?? "node_modules/.vite-e2e" };
 });

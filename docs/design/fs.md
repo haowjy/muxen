@@ -35,7 +35,7 @@ auth is [auth.md](auth.md). Decisions and the alternatives rejected are in
 
 ## The uploads folder
 
-Uploads go to `uploads_dir` in `config.toml` (default `~/tether-uploads`), absolute or
+Uploads go to `uploads_dir` in `config.toml` (default `~/muxen-uploads`), absolute or
 starting with `~/`. A missing absolute path is created by the next upload; one that is
 neither absolute nor `~/` makes every upload answer `409 not_a_directory`. There are no
 favorites and no route that writes `config.toml`: Jimmy edits it by hand
@@ -184,7 +184,7 @@ responses share one origin, so the web reads `Content-Range` and `ETag` directly
 daemon sends no CORS headers. CORP prevents another origin from embedding a raw
 response, while `no-store` prevents private file bytes being retained by an HTTP
 cache. `sandbox` and non-executable MIME types keep repository content from running
-as tether or registering as its service worker.
+as muxen or registering as its service worker.
 
 - **Range:** one range only, `bytes=a-b`, `bytes=a-` or `bytes=-n` → `206` with
   `Content-Range`. A range list, or a header that doesn't parse, is ignored → `200`
@@ -243,7 +243,7 @@ the cap against `Content-Length` up front, when sent, and against the running co
    base32 characters, and the extension of `name`, lowercased, if it is 1 to 8 ASCII
    alphanumerics, else `bin`. Nothing else of `name` is used, so it can't carry a
    path, a shell metacharacter or a hidden name into the folder.
-4. Create `.tether-upload-<random>.part` relative to the directory's descriptor with
+4. Create `.muxen-upload-<random>.part` relative to the directory's descriptor with
    `O_CREAT | O_EXCL | O_NOFOLLOW`, mode 0600 (never executable). Write each body chunk
    on the fs lane. Every 2 MiB, `fdatasync` and
    `posix_fadvise(DONTNEED)` what was written, so the upload's dirty pages stay small
@@ -272,8 +272,8 @@ deleted. A body that stalls for the idle timeout, or that breaks because the cli
 disconnected, answers `400 bad_request`: the body failed, and the client is usually
 gone to read it. At startup, after the runtime lock is held and both sockets are
 established (as for the paste directory), the daemon deletes leftover
-`.tether-upload-*.part` files in `uploads_dir`; nothing else in
-tether uses that prefix.
+`.muxen-upload-*.part` files in `uploads_dir`; nothing else in
+muxen uses that prefix.
 
 ## Errors
 
@@ -291,7 +291,7 @@ The auth middleware also uses this body for `forbidden`, `auth_required`,
 | 403 | `node_refused` | The current Tailscale node fails a node-lane rule; includes the refusal reason |
 | 404 | `not_found` | `ENOENT`, `ENOTDIR` while resolving, `ELOOP` at open |
 | 409 | `not_a_directory`, `not_a_file` | the wrong kind for the route; a FIFO, socket or device is `not_a_file`; an upload when `uploads_dir` isn't an absolute or `~/` path or isn't a directory |
-| 409 | `memory_backed` | on Linux, an upload destination directory on tmpfs or ramfs; its pages would remain charged to tether's unit while the file exists |
+| 409 | `memory_backed` | on Linux, an upload destination directory on tmpfs or ramfs; its pages would remain charged to muxen's unit while the file exists |
 | 413 | `too_large` | an upload over the cap |
 | 416 | `bad_range` | a range starting past the end |
 | 503 | `busy` | no slot within the wait, too many waiting, or the upload slot taken; `Retry-After: 1` |

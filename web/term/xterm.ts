@@ -20,7 +20,7 @@ const MAX_WEBGL_RECREATIONS = 3;
  * the Terminal and survives the renderer.
  */
 export function createXtermRenderer(container: HTMLElement, options: RendererOptions): TerminalRenderer {
-  // Stdin is off until a source is chosen: with native or tether's owned input, xterm's helper
+  // Stdin is off until a source is chosen: with native or muxen's owned input, xterm's helper
   // textarea must never take focus (ios-shell.md "Keyboard"). `setInput` turns it on for desktop.
   const term = new Terminal({
     allowProposedApi: true, // unicode11 needs it
@@ -215,7 +215,7 @@ export function createXtermRenderer(container: HTMLElement, options: RendererOpt
   };
 }
 
-/** xterm 6 draws its own scrollbar slider; tether scrolls by touch and shows none. A clear slider leaves
+/** xterm 6 draws its own scrollbar slider; muxen scrolls by touch and shows none. A clear slider leaves
  *  xterm's scrolling alone. The colour is 8-digit hex because xterm's parser rejects any colour it can't
  *  read as opaque except `#rrggbbaa` and `rgba()`: `"transparent"` falls back to the default grey. */
 const CLEAR = "#00000000";

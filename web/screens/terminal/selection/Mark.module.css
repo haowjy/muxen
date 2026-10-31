@@ -1,4 +1,4 @@
-/* The keyboard-up mark (mark.ts): tether's own highlight, which is no DOM selection, so focus and the keyboard
+/* The keyboard-up mark (mark.ts): muxen's own highlight, which is no DOM selection, so focus and the keyboard
    stay. Look: ios-simplify/selection-look.md. The colour is the one selection colour (`--term-selection`),
    and sets no text colour, so ANSI colours show through. */
 ::highlight(tsel) { background-color: var(--term-selection); }

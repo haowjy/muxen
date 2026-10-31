@@ -8,7 +8,7 @@ use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use bytes::Bytes;
-use tether::tmux::{InputItem, Op, PaneId, SessionId, Size, Tag, WindowId};
+use muxen::tmux::{InputItem, Op, PaneId, SessionId, Size, Tag, WindowId};
 
 #[derive(Debug)]
 pub struct Request {

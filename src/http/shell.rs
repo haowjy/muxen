@@ -180,15 +180,15 @@ fn manifest(host: &str) -> Vec<u8> {
         .find(|asset| asset.path == "/manifest.webmanifest")
         .and_then(|asset| serde_json::from_slice::<serde_json::Value>(asset.raw).ok())
         .filter(serde_json::Value::is_object)
-        .unwrap_or_else(|| serde_json::json!({ "short_name": "tether", "start_url": "/", "display": "standalone" }));
+        .unwrap_or_else(|| serde_json::json!({ "short_name": "muxen", "start_url": "/", "display": "standalone" }));
     let object = value.as_object_mut().expect("manifest object");
     object.insert(
         "name".to_owned(),
-        serde_json::Value::String(format!("tether {host}")),
+        serde_json::Value::String(format!("muxen {host}")),
     );
     object.insert(
         "short_name".to_owned(),
-        serde_json::Value::String("tether".to_owned()),
+        serde_json::Value::String("muxen".to_owned()),
     );
     serde_json::to_vec(&value).expect("manifest JSON")
 }

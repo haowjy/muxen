@@ -12,7 +12,7 @@ use thiserror::Error;
 use crate::tmux::{Endpoint, Socket};
 
 pub const DEFAULT_MEMORY_BUDGET_MIB: u64 = 72;
-const DEFAULT_UPLOADS: &str = "~/tether-uploads";
+const DEFAULT_UPLOADS: &str = "~/muxen-uploads";
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -40,7 +40,7 @@ pub struct Complete {
     pub carapace: Option<String>,
 }
 
-/// Which tmux server is `main`. tether never starts it.
+/// Which tmux server is `main`. muxen never starts it.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct Tmux {
@@ -102,7 +102,7 @@ pub struct ConfigFile {
 }
 
 impl ConfigFile {
-    /// `path`, or `$XDG_CONFIG_HOME/tether/config.toml`.
+    /// `path`, or `$XDG_CONFIG_HOME/muxen/config.toml`.
     pub fn resolve(path: Option<&Path>) -> Result<Self, ConfigError> {
         Ok(match path {
             Some(path) => Self {
@@ -110,7 +110,7 @@ impl ConfigFile {
                 required: true,
             },
             None => Self {
-                path: xdg("XDG_CONFIG_HOME", ".config")?.join("tether/config.toml"),
+                path: xdg("XDG_CONFIG_HOME", ".config")?.join("muxen/config.toml"),
                 required: false,
             },
         })
@@ -159,9 +159,9 @@ impl Config {
     }
 }
 
-/// `$XDG_STATE_HOME/tether`: `auth.toml`, `host_id`, `lock`.
+/// `$XDG_STATE_HOME/muxen`: `auth.toml`, `host_id`, `lock`.
 pub fn state_dir() -> Result<PathBuf, ConfigError> {
-    Ok(xdg("XDG_STATE_HOME", ".local/state")?.join("tether"))
+    Ok(xdg("XDG_STATE_HOME", ".local/state")?.join("muxen"))
 }
 
 /// `$HOME`, which `~/` in `uploads_dir` stands for.
@@ -172,7 +172,7 @@ pub fn home() -> Result<PathBuf, ConfigError> {
         .ok_or(ConfigError::NoHomeDir)
 }
 
-/// `$XDG_RUNTIME_DIR/tether`, the private directory for sockets and pastes.
+/// `$XDG_RUNTIME_DIR/muxen`, the private directory for sockets and pastes.
 /// `TMPDIR` on macOS is the per-user directory supplied by launchd.
 pub fn runtime_dir() -> Result<PathBuf, RuntimeDirError> {
     let base = if cfg!(target_os = "macos") {
@@ -186,7 +186,7 @@ pub fn runtime_dir() -> Result<PathBuf, RuntimeDirError> {
             .filter(|path| path.is_absolute())
             .ok_or(RuntimeDirError::NoRuntimeDir)?
     };
-    Ok(base.join("tether"))
+    Ok(base.join("muxen"))
 }
 
 /// Creates the runtime directory once, then refuses any path shape or ownership that

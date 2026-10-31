@@ -6,13 +6,13 @@ use std::process::ExitCode;
 use std::time::{Duration, SystemTime};
 
 use clap::{Parser, Subcommand};
-use tether::auth::identity;
+use muxen::auth::identity;
 #[cfg(not(target_os = "macos"))]
-use tether::auth::identity::ServeTarget;
-use tether::auth::localapi::LocalApi;
-use tether::auth::{DeviceKind, Store};
-use tether::config::{self, Config, ConfigError, ConfigFile};
-use tether::daemon;
+use muxen::auth::identity::ServeTarget;
+use muxen::auth::localapi::LocalApi;
+use muxen::auth::{DeviceKind, Store};
+use muxen::config::{self, Config, ConfigError, ConfigFile};
+use muxen::daemon;
 
 type Result<T, E = Box<dyn Error>> = std::result::Result<T, E>;
 
@@ -20,7 +20,7 @@ type Result<T, E = Box<dyn Error>> = std::result::Result<T, E>;
 #[derive(Parser)]
 #[command(version, about)]
 struct Cli {
-    /// Config file [default: $XDG_CONFIG_HOME/tether/config.toml]
+    /// Config file [default: $XDG_CONFIG_HOME/muxen/config.toml]
     #[arg(long, global = true, value_name = "PATH")]
     config: Option<PathBuf>,
     #[command(subcommand)]
@@ -44,13 +44,13 @@ enum Command {
         #[arg(long, default_value = "10m", value_parser = humantime::parse_duration)]
         ttl: Duration,
     },
-    /// Run tether in this terminal, or install a background service with --background.
+    /// Run muxen in this terminal, or install a background service with --background.
     Setup {
-        /// Install tether as a systemd user service or LaunchAgent.
+        /// Install muxen as a systemd user service or LaunchAgent.
         #[arg(long)]
         background: bool,
     },
-    /// Stop tether and remove its service and Serve handler.
+    /// Stop muxen and remove its service and Serve handler.
     Teardown,
     /// List, add or remove enrolled devices.
     #[command(subcommand)]
@@ -73,13 +73,13 @@ fn main() -> ExitCode {
     let (result, error_exit) = match cli.command {
         Command::Setup { background } => (
             if background {
-                tether::setup::setup(config_path)
+                muxen::setup::setup(config_path)
             } else {
-                tether::setup::setup_foreground(config_path)
+                muxen::setup::setup_foreground(config_path)
             },
             ExitCode::FAILURE,
         ),
-        Command::Teardown => (tether::setup::teardown(), ExitCode::FAILURE),
+        Command::Teardown => (muxen::setup::teardown(), ExitCode::FAILURE),
         Command::Serve {
             allow_login,
             publish,
@@ -104,7 +104,7 @@ fn main() -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(cause) => {
-            eprintln!("tether: {cause}");
+            eprintln!("muxen: {cause}");
             error_exit
         }
     }
@@ -120,16 +120,16 @@ fn serve_error_exit(cause: &(dyn Error + 'static)) -> ExitCode {
     if cause.downcast_ref::<ConfigError>().is_some()
         || cause.downcast_ref::<config::RuntimeDirError>().is_some()
         || cause
-            .downcast_ref::<tether::budget::BelowMinimum>()
+            .downcast_ref::<muxen::budget::BelowMinimum>()
             .is_some()
         || cause
-            .downcast_ref::<tether::runtime::RuntimeError>()
+            .downcast_ref::<muxen::runtime::RuntimeError>()
             .is_some_and(|error| {
                 matches!(
                     error,
-                    tether::runtime::RuntimeError::Directory(_)
-                        | tether::runtime::RuntimeError::NoLaunchdSocket
-                        | tether::runtime::RuntimeError::MacFrontNotBound
+                    muxen::runtime::RuntimeError::Directory(_)
+                        | muxen::runtime::RuntimeError::NoLaunchdSocket
+                        | muxen::runtime::RuntimeError::MacFrontNotBound
                 )
             })
     {
@@ -164,7 +164,7 @@ fn print_host_and_browser(origin: &str, code: &str) {
 #[cfg(not(target_os = "macos"))]
 fn enroll_on_linux(code: &str) -> Result<()> {
     let api = LocalApi::system();
-    let publication = tether::blocking::runtime()?.block_on(identity::tailnet_state(&api));
+    let publication = muxen::blocking::runtime()?.block_on(identity::tailnet_state(&api));
     match publication {
         Ok(state) => {
             let path = config::runtime_dir()?.join("serve.sock");
@@ -199,7 +199,7 @@ fn enroll_on_linux(code: &str) -> Result<()> {
 fn enroll_on_mac(code: &str) -> Result<()> {
     let api = LocalApi::system();
     let socket = config::runtime_dir()?.join("local.sock");
-    let info = tether::blocking::runtime()?.block_on(identity::read_auth_info(&socket, &api));
+    let info = muxen::blocking::runtime()?.block_on(identity::read_auth_info(&socket, &api));
     match info {
         Ok(info) => {
             if let Some(origin) = info["browserOrigin"].as_str() {
@@ -214,9 +214,9 @@ fn enroll_on_mac(code: &str) -> Result<()> {
                 );
             }
         }
-        Err(cause) if cause == "tether isn't running" => {
+        Err(cause) if cause == "muxen isn't running" => {
             println!("Host: unknown");
-            println!("Browser: tether isn't running");
+            println!("Browser: muxen isn't running");
         }
         Err(cause) => {
             println!("Host: unknown ({cause})");
@@ -237,7 +237,7 @@ fn device(command: DeviceCommand) -> Result<()> {
                 .collect::<Vec<_>>();
             let devices = file.devices;
             if devices.is_empty() && refused.is_empty() {
-                println!("No devices. `tether enroll` prints a code for the app's Add host.");
+                println!("No devices. `muxen enroll` prints a code for the app's Add host.");
             }
             let width = devices
                 .iter()

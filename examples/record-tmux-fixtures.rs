@@ -1,6 +1,6 @@
 //! Records `tmux::Session` fixtures against a real tmux (daemon-core.md §8).
 //!
-//! Each scenario starts a private server (`-L tether-fixture-<pid>-<n>`, `nice -n
+//! Each scenario starts a private server (`-L muxen-fixture-<pid>-<n>`, `nice -n
 //! 10`), attaches a control client exactly as the daemon does, and drives a real
 //! `Session` over its pipes. Set-up the daemon would never do (splits, hooks, moves)
 //! goes through one-shot `tmux` commands, outside the client's stream. It writes:
@@ -31,7 +31,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use bytes::Bytes;
-use tether::tmux::{
+use muxen::tmux::{
     Event, InputItem, Op, PaneId, Reply, Session, SessionId, Size, Tag, TmuxError, WindowId,
     command,
 };
@@ -93,7 +93,7 @@ fn main() -> Result<()> {
         eprintln!("recording {name}");
         let server = Server::start(
             &tmux,
-            format!("tether-fixture-{}-{index}", std::process::id()),
+            format!("muxen-fixture-{}-{index}", std::process::id()),
         )?;
         let mut recorder = Recorder::attach(&server)?;
         if let Err(error) = scenario(&mut recorder) {
@@ -348,7 +348,7 @@ fn pause_at_cap(r: &mut Recorder) -> Result<()> {
     r.stall(true);
     r.server.type_line("%0", "echo unwanted")?;
     thread::sleep(Duration::from_millis(300));
-    while r.session.in_flight() < tether::tmux::MAX_IN_FLIGHT {
+    while r.session.in_flight() < muxen::tmux::MAX_IN_FLIGHT {
         r.request(Op::Locate {
             session: SessionId(0),
         })?;
@@ -827,7 +827,7 @@ fn subscription(r: &mut Recorder) -> Result<()> {
 /// and a window a hook kills between `load-buffer` and `paste-buffer`. No paste leaves
 /// its buffer in tmux.
 fn paste(r: &mut Recorder) -> Result<()> {
-    let dir = env::temp_dir().join(format!("tether-fixture-{}", std::process::id()));
+    let dir = env::temp_dir().join(format!("muxen-fixture-{}", std::process::id()));
     fs::create_dir_all(&dir)?;
     let result = paste_from(r, &dir);
     let _ = fs::remove_dir_all(&dir);

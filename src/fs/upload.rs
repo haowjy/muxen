@@ -31,8 +31,8 @@ const CHUNK: usize = 64 * 1024;
 /// dirty pages, charged to the unit and unreclaimable until written, stay small on a
 /// disk the unit reaches at idle I/O priority.
 const FLUSH_EVERY: u64 = 2 << 20;
-/// Nothing else in tether names a file like this.
-const PART_PREFIX: &str = ".tether-upload-";
+/// Nothing else in muxen names a file like this.
+const PART_PREFIX: &str = ".muxen-upload-";
 const PART_SUFFIX: &str = ".part";
 /// Name clashes tried before giving up: four random characters clash rarely.
 const RENAME_TRIES: usize = 16;
@@ -59,7 +59,7 @@ pub fn open_dir(file: &ConfigFile, home: &Path) -> Result<Opened, FsError> {
     Ok(opened)
 }
 
-/// Upload pages would remain charged to tether while the file lives on tmpfs/ramfs.
+/// Upload pages would remain charged to muxen while the file lives on tmpfs/ramfs.
 #[cfg(target_os = "linux")]
 fn memory_backed(dir: &File) -> Result<bool, FsError> {
     const TMPFS_MAGIC: u32 = 0x0102_1994;
@@ -188,7 +188,7 @@ fn write_error(error: io::Error) -> FsError {
     }
 }
 
-/// `.tether-upload-<random>.part` in the uploads folder, deleted unless it landed. The
+/// `.muxen-upload-<random>.part` in the uploads folder, deleted unless it landed. The
 /// delete runs on the fs lane, since the folder may sit on the slow disk; one that gets
 /// no thread in time leaves the file to the startup sweep.
 struct Part {

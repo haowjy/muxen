@@ -2,8 +2,8 @@
 //! pump, and the one-shots. The snapshot boundary at full output speed, snapshots torn
 //! by a waiting hook, a Gap with a terminal client attached, and what the hub sees for
 //! each way a control client ends. Each test starts its own private server (`-L`,
-//! `nice -n 10`). They run only with `TETHER_TMUX_TESTS=1`, one at a time (floods would
-//! skew each other's timing); `TETHER_TMUX` picks the tmux binary.
+//! `nice -n 10`). They run only with `MUXEN_TMUX_TESTS=1`, one at a time (floods would
+//! skew each other's timing); `MUXEN_TMUX` picks the tmux binary.
 
 #[path = "support/terminal.rs"]
 mod terminal;
@@ -19,8 +19,8 @@ use std::time::{Duration, Instant};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use bytes::Bytes;
-use tether::hub::INBOX;
-use tether::tmux::{
+use muxen::hub::INBOX;
+use muxen::tmux::{
     ClientId, Created, Endpoint, Event, Found, Location, OneShotCmd, Op, PaneId, PumpMsg, Reply,
     ServerInstance, Session, SessionId, Size, Socket, Step, Tag, TmuxError, TmuxVersion, WindowId,
     oneshot, pump,

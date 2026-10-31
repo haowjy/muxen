@@ -4,7 +4,7 @@ import type { LinkHandlers } from "../proto/link";
 import type { SessionRef } from "../proto/generated/messages";
 import type { Link } from "../net/host";
 
-/** A tether tab's identity: the daemon's `hostId` and the tmux session it follows (never a name or an index). */
+/** A muxen tab's identity: the daemon's `hostId` and the tmux session it follows (never a name or an index). */
 export interface TabKey {
   host: string;
   session: SessionRef;
@@ -25,7 +25,7 @@ export interface Viewport {
   layout: "desktop" | "phone";
   /** `touch` (44 px targets) for a coarse primary pointer, else `compact`. */
   density: "compact" | "touch";
-  /** Which source feeds the terminal: xterm's textarea, tether's owned input, or native. */
+  /** Which source feeds the terminal: xterm's textarea, muxen's owned input, or native. */
   directInput: "xterm" | "owned" | "native";
   scheme: "light" | "dark";
   /** CSS px of the window or web view. */
@@ -270,7 +270,7 @@ export interface Platform {
   manageHosts?: () => void;
   /** Chooses when Face ID asks again. Native only. A longer interval needs a fresh Face ID there, so the answer may be the unchanged `preferences`. */
   setRelock?: (value: Relock) => void;
-  /** Hands a server's https origin, and the unspent enrolment code if the page holds one, to the tether app installed on this device. Offered only where the app can exist (iPhone, iPad) and this is not the app. */
+  /** Hands a server's https origin, and the unspent enrolment code if the page holds one, to the muxen app installed on this device. Offered only where the app can exist (iPhone, iPad) and this is not the app. */
   openInApp?: (origin: string, code: string | null) => void;
   updates?: Updates;
   install?: { installed(): boolean };

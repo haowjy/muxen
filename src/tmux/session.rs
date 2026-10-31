@@ -331,7 +331,7 @@ impl Session {
                 let Some(pane) = PaneId::parse(first) else {
                     return;
                 };
-                // On 3.4 a pause tether asked for is inside its reply block, so a
+                // On 3.4 a pause muxen asked for is inside its reply block, so a
                 // top-level one is tmux's own: pause-after dropped queued output.
                 if self.wanted.contains(&pane) {
                     Event::Gap { pane }

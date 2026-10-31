@@ -8,7 +8,7 @@ import { expect, test, type Browser, type Page } from "@playwright/test";
 import { openSessionRow } from "../shared/home";
 import { startStack, type Laptop, type Stack, type TmuxVersion } from "../shared/stack";
 
-const VERSIONS = (process.env["TETHER_E2E_TMUX"] ?? "3.4,3.7b").split(",") as TmuxVersion[];
+const VERSIONS = (process.env["MUXEN_E2E_TMUX"] ?? "3.4,3.7b").split(",") as TmuxVersion[];
 const DESKTOP = { width: 1440, height: 900 };
 
 for (const version of VERSIONS) {
@@ -179,7 +179,7 @@ for (const version of VERSIONS) {
     test("a session over the daemon's limit is refused with its message, and Retry succeeds once the other closes", async ({ page, browser }) => {
       const first = newSession();
       const second = newSession();
-      // Another tether window holds the one tmux session this tier allows.
+      // Another muxen window holds the one tmux session this tier allows.
       const other = await signedIn(browser);
       await openTerminal(other, first);
 
@@ -195,7 +195,7 @@ for (const version of VERSIONS) {
       await expect(band).toHaveCount(0);
     });
 
-    /** A second tether window: its own browser context, so its saved workspace is its own. */
+    /** A second muxen window: its own browser context, so its saved workspace is its own. */
     async function signedIn(browser: Browser): Promise<Page> {
       const context = await browser.newContext({ viewport: DESKTOP });
       return await context.newPage();

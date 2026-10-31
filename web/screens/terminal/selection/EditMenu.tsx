@@ -9,7 +9,7 @@ interface EditMenuProps {
 }
 
 /**
- * tether's own edit menu over the terminal: Copy when there is a selection, and Paste. A
+ * muxen's own edit menu over the terminal: Copy when there is a selection, and Paste. A
  * press on it must not move focus or clear the selection, so `pointerdown` is cancelled; the
  * action runs in the tap, where Safari allows the clipboard.
  */

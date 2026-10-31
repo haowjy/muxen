@@ -23,7 +23,7 @@ pub use mac_front::MacFront;
 pub use store::{AuthFile, Device, DeviceKind, Store, StoreError};
 
 /// The subprotocol that carries a native token on a WebSocket.
-pub const SUBPROTOCOL_PREFIX: &str = "tether.auth.";
+pub const SUBPROTOCOL_PREFIX: &str = "muxen.auth.";
 
 /// Whether a listener permits tokenless browser-node authentication.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -223,7 +223,7 @@ impl Auth {
                     return Ok((
                         Err(last_error
                             .as_deref()
-                            .unwrap_or("waiting for tether's Serve publication")
+                            .unwrap_or("waiting for muxen's Serve publication")
                             .to_owned()),
                         true,
                     ));

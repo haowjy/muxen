@@ -383,7 +383,7 @@ fn hex(byte: u8) -> Option<u8> {
 pub async fn read_auth_info(socket: &Path, api: &LocalApi) -> Result<serde_json::Value, String> {
     let stream = UnixStream::connect(socket)
         .await
-        .map_err(|_| "tether isn't running".to_owned())?;
+        .map_err(|_| "muxen isn't running".to_owned())?;
     let state = tailnet_state(api)
         .await
         .map_err(|error| format!("tailnet identity is unavailable ({error})"))?;
@@ -418,7 +418,7 @@ pub async fn read_auth_info(socket: &Path, api: &LocalApi) -> Result<serde_json:
         .map_err(|error| error.to_string())?
         .to_bytes();
     if !parts.status.is_success() {
-        return Err(format!("tether's /auth/info: {}", parts.status));
+        return Err(format!("muxen's /auth/info: {}", parts.status));
     }
     serde_json::from_slice(&body).map_err(|error| error.to_string())
 }
@@ -696,7 +696,7 @@ impl OriginRefusal {
     fn no_front() -> Self {
         Self {
             reason: OriginRefusalReason::NoServeFront,
-            message: "tether has no bound Serve front".to_owned(),
+            message: "muxen has no bound Serve front".to_owned(),
         }
     }
 }
@@ -720,34 +720,34 @@ pub enum OriginRefusalReason {
 impl OriginRefusalReason {
     fn message(&self, target: &ServeTarget) -> String {
         let publish = match target {
-            ServeTarget::Unix { .. } => "run `tether setup`".to_owned(),
-            ServeTarget::Loopback(_) => "restart tether to republish".to_owned(),
+            ServeTarget::Unix { .. } => "run `muxen setup`".to_owned(),
+            ServeTarget::Loopback(_) => "restart muxen to republish".to_owned(),
         };
         match self {
-            Self::NoServeFront => "tether has no bound Serve front".to_owned(),
+            Self::NoServeFront => "muxen has no bound Serve front".to_owned(),
             Self::NoReference => match target {
                 ServeTarget::Unix { .. } => {
-                    format!("no Tailscale Serve entry names tether's serve.sock; {publish}")
+                    format!("no Tailscale Serve entry names muxen's serve.sock; {publish}")
                 }
                 ServeTarget::Loopback(front) => format!(
-                    "no Tailscale Serve entry names tether's Mac front on port {}; start tether with --publish",
+                    "no Tailscale Serve entry names muxen's Mac front on port {}; start muxen with --publish",
                     front.port()
                 ),
             },
             Self::OldDefaultTarget { entry } => match target {
                 ServeTarget::Unix { path, .. } => format!(
-                    "{entry} still proxies to tether's old 127.0.0.1:7850 listener; run `tether setup` to replace it with tether's Unix target at {}.",
+                    "{entry} still proxies to muxen's old 127.0.0.1:7850 listener; run `muxen setup` to replace it with muxen's Unix target at {}.",
                     path.display(),
                 ),
                 ServeTarget::Loopback(_) => format!(
-                    "{entry} still proxies to tether's old 127.0.0.1:7850 listener; remove the stale handler and {publish}"
+                    "{entry} still proxies to muxen's old 127.0.0.1:7850 listener; remove the stale handler and {publish}"
                 ),
             },
             Self::MultipleReferences { entry } => format!(
-                "Tailscale Serve reference {entry} is a second reference to tether's front; remove the duplicate reference and {publish}"
+                "Tailscale Serve reference {entry} is a second reference to muxen's front; remove the duplicate reference and {publish}"
             ),
             Self::TcpForward { entry, port } => format!(
-                "Tailscale Serve entry {entry} forwards TCP to tether's front on port {port}; remove that TCP forward and {publish}"
+                "Tailscale Serve entry {entry} forwards TCP to muxen's front on port {port}; remove that TCP forward and {publish}"
             ),
             Self::Funnel { entry } => {
                 format!("Tailscale Funnel is enabled for {entry}; turn Funnel off, then {publish}")
@@ -759,13 +759,13 @@ impl OriginRefusalReason {
                 "Tailscale Serve entry {entry} also serves another handler at {mount}; remove that handler and {publish}"
             ),
             Self::NonRootMount { entry, mount } => format!(
-                "Tailscale Serve entry {entry} mounts tether at {mount}, not /; move tether to / and {publish}"
+                "Tailscale Serve entry {entry} mounts muxen at {mount}, not /; move muxen to / and {publish}"
             ),
             Self::NotHttps { entry } => {
                 format!("Tailscale Serve entry {entry} is not HTTPS; enable HTTPS and {publish}")
             }
             Self::WrongProxy { entry } => format!(
-                "Tailscale Serve entry {entry} does not use tether's exact Mac front; remove the stale handler and {publish}"
+                "Tailscale Serve entry {entry} does not use muxen's exact Mac front; remove the stale handler and {publish}"
             ),
             Self::InvalidHost { entry } => format!(
                 "Tailscale Serve entry {entry} has an invalid host or port; correct it and {publish}"
@@ -997,13 +997,13 @@ impl ServeTargetMatcher {
         Self::LoopbackAnyPort
     }
 
-    /// Matches only a previously installed tether handler, never every proxy that
+    /// Matches only a previously installed muxen handler, never every proxy that
     /// could point at the live socket or loopback port.
     pub fn matches(&self, proxy: &str) -> bool {
         match self {
             Self::Unix(path) => proxy == format!("unix:{}", path.display()),
-            Self::LoopbackPort(port) => MacFront::is_tether_shaped(proxy, *port),
-            Self::LoopbackAnyPort => MacFront::is_any_tether_shaped(proxy),
+            Self::LoopbackPort(port) => MacFront::is_muxen_shaped(proxy, *port),
+            Self::LoopbackAnyPort => MacFront::is_any_muxen_shaped(proxy),
         }
     }
 }
@@ -1036,7 +1036,7 @@ mod tests {
     use super::{ServeConfig, ServeTarget};
     use crate::auth::MacFront;
 
-    const SECRET: &str = "tether-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    const SECRET: &str = "muxen-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
     fn serve(proxy: &str) -> ServeConfig {
         serde_json::from_value(serde_json::json!({
@@ -1060,9 +1060,9 @@ mod tests {
         assert_eq!(origin.authority, "devbox.ts.net");
 
         for proxy in [
-            "http://0.0.0.0:7851/tether-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "http://0.0.0.0:7851/muxen-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
             "http://127.0.0.1:7851/not-the-secret",
-            "http://127.0.0.1:7852/tether-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "http://127.0.0.1:7852/muxen-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
         ] {
             assert!(serve(proxy).canonical_origin(&target).is_err(), "{proxy}");
         }

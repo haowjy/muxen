@@ -308,7 +308,7 @@ impl State {
             "sessions"
         };
         cut(format!(
-            "tether on {} allows {} tmux {noun} at a time; open now: {sessions}",
+            "muxen on {} allows {} tmux {noun} at a time; open now: {sessions}",
             self.host_name, self.max_clients
         ))
     }

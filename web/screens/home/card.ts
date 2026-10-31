@@ -15,7 +15,7 @@ export type CardBody =
   | { kind: "checking" }
   /** The listing failed and nothing older is held. */
   | { kind: "failed" }
-  /** The daemon says no tmux server is running. tether never starts one, so the only action is looking again. */
+  /** The daemon says no tmux server is running. muxen never starts one, so the only action is looking again. */
   | { kind: "noTmux" }
   | { kind: "ok" };
 

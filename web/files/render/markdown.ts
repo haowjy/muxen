@@ -19,7 +19,7 @@ export function linkTarget(href: string, docUrl: string): LinkTarget {
     return { kind: "none" };
   }
   const doc = new URL(docUrl);
-  // Not `origin`: it is "null" for a custom scheme such as tether-app:.
+  // Not `origin`: it is "null" for a custom scheme such as muxen-app:.
   if (url.protocol !== doc.protocol || url.host !== doc.host) {
     return url.protocol === "http:" || url.protocol === "https:" || url.protocol === "mailto:" ? { kind: "external", url: url.href } : { kind: "none" };
   }

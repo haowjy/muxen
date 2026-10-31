@@ -1,4 +1,4 @@
-//! Sans-IO plans and shared compare-and-swap writes for tether's Tailscale Serve handler.
+//! Sans-IO plans and shared compare-and-swap writes for muxen's Tailscale Serve handler.
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -146,7 +146,7 @@ pub async fn run(
             let authority = match publish_target(&api, &state.dns_name, &target).await {
                 Ok((authority, _)) => authority,
                 Err(PlanError::Refused(refusal)) => {
-                    warn!(message = %refusal.message, "refused to publish tether");
+                    warn!(message = %refusal.message, "refused to publish muxen");
                     publication.refuse(refusal.message);
                     return Ok(());
                 }
@@ -199,7 +199,7 @@ pub async fn publish_target(
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-'))
     {
         return Err(PublishRefusal::new(
-            "Tailscale didn't report a usable MagicDNS name; tether can't publish",
+            "Tailscale didn't report a usable MagicDNS name; muxen can't publish",
         )
         .into());
     }
@@ -293,7 +293,7 @@ fn plan_publish_detailed(
 ) -> Result<PlannedConfig, PublishRefusal> {
     let _ = ServeConfig::parse(&mut config).map_err(|_| {
         PublishRefusal::new(
-            "Tailscale's Serve config has an unsupported shape; reset Serve before starting tether",
+            "Tailscale's Serve config has an unsupported shape; reset Serve before starting muxen",
         )
     })?;
     let proxy_url = target.proxy_url();
@@ -301,7 +301,7 @@ fn plan_publish_detailed(
 
     let root = config.as_object_mut().ok_or_else(|| {
         PublishRefusal::new(
-            "Tailscale's Serve config isn't an object; reset Serve before starting tether",
+            "Tailscale's Serve config isn't an object; reset Serve before starting muxen",
         )
     })?;
     ensure_object_member(root, "Web")?;
@@ -337,7 +337,7 @@ fn plan_publish_detailed(
         .or_insert_with(|| Value::Object(Map::new()));
     let server = web_entry.as_object_mut().ok_or_else(|| {
         PublishRefusal::new(format!(
-            "Tailscale Serve entry {key} has an unsupported shape; reset it before starting tether"
+            "Tailscale Serve entry {key} has an unsupported shape; reset it before starting muxen"
         ))
     })?;
     let handlers = server
@@ -346,7 +346,7 @@ fn plan_publish_detailed(
         .as_object_mut()
         .ok_or_else(|| {
             PublishRefusal::new(format!(
-                "Tailscale Serve entry {key} has an unsupported shape; reset Serve before starting tether"
+                "Tailscale Serve entry {key} has an unsupported shape; reset Serve before starting muxen"
             ))
         })?;
     let mut mount = "/".to_owned();
@@ -375,7 +375,7 @@ fn plan_publish_detailed(
 
     let typed = ServeConfig::parse(&mut config).map_err(|_| {
         PublishRefusal::new(
-            "Tailscale's planned Serve config has an unsupported shape; reset Serve before starting tether",
+            "Tailscale's planned Serve config has an unsupported shape; reset Serve before starting muxen",
         )
     })?;
     typed
@@ -387,7 +387,7 @@ fn plan_publish_detailed(
     })
 }
 
-/// Removes tether-shaped handlers wherever they appear and drops only empty entries
+/// Removes muxen-shaped handlers wherever they appear and drops only empty entries
 /// and now-unused TCP entries whose only field is `HTTPS: true`.
 fn plan_withdraw_detailed(
     config: Value,
@@ -397,12 +397,12 @@ fn plan_withdraw_detailed(
     let mut config = config;
     let _ = ServeConfig::parse(&mut config).map_err(|_| {
         PublishRefusal::new(
-            "Tailscale's Serve config has an unsupported shape; reset Serve before withdrawing tether",
+            "Tailscale's Serve config has an unsupported shape; reset Serve before withdrawing muxen",
         )
     })?;
     let root = config.as_object_mut().ok_or_else(|| {
         PublishRefusal::new(
-            "Tailscale's Serve config isn't an object; reset Serve before withdrawing tether",
+            "Tailscale's Serve config isn't an object; reset Serve before withdrawing muxen",
         )
     })?;
     let Some(web) = root.get_mut("Web").and_then(Value::as_object_mut) else {
@@ -485,7 +485,7 @@ fn ensure_object_member(root: &mut Map<String, Value>, name: &str) -> Result<(),
     }
     if root.get(name).and_then(Value::as_object).is_none() {
         Err(PublishRefusal::new(format!(
-            "Tailscale's Serve {name} config has an unsupported shape; reset Serve before starting tether"
+            "Tailscale's Serve {name} config has an unsupported shape; reset Serve before starting muxen"
         )))
     } else {
         Ok(())
@@ -534,7 +534,7 @@ mod tests {
     use crate::auth::mac_front::MacFront;
     use serde_json::json;
 
-    const SECRET: &str = "tether-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    const SECRET: &str = "muxen-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
     fn mac_target(port: u16) -> ServeTarget {
         ServeTarget::loopback(MacFront::new(port, SECRET))
@@ -597,7 +597,7 @@ mod tests {
     #[test]
     fn unix_publish_removes_exact_target_and_old_root_proxy_but_keeps_other_handlers() {
         let socket =
-            std::env::temp_dir().join(format!("tether-publish-{}.sock", std::process::id()));
+            std::env::temp_dir().join(format!("muxen-publish-{}.sock", std::process::id()));
         let _ = std::fs::remove_file(&socket);
         let _listener = std::os::unix::net::UnixListener::bind(&socket).expect("bind test socket");
         let target = ServeTarget::unix(&socket).expect("target identity");
@@ -667,11 +667,11 @@ mod tests {
 
     #[test]
     fn withdraw_removes_exact_unix_proxy_without_a_live_socket() {
-        let path = "/run/user/1000/tether/serve.sock";
+        let path = "/run/user/1000/muxen/serve.sock";
         let config = json!({
             "Web": {
                 "old.ts.net:443": { "Handlers": { "/": { "Proxy": format!("unix:{path}") } } },
-                "other.ts.net:8443": { "Handlers": { "/": { "Proxy": "unix:/run/user/1000/tether/serve.sock.backup" } } }
+                "other.ts.net:8443": { "Handlers": { "/": { "Proxy": "unix:/run/user/1000/muxen/serve.sock.backup" } } }
             },
             "TCP": { "443": { "HTTPS": true } }
         });
@@ -689,7 +689,7 @@ mod tests {
     }
 
     #[test]
-    fn withdraw_is_noop_without_its_tether_handler() {
+    fn withdraw_is_noop_without_its_muxen_handler() {
         let config = json!({ "Web": { "devbox.ts.net:443": { "Handlers": { "/": { "Proxy": "http://127.0.0.1:3000" } } } } });
         assert!(
             plan_withdraw_detailed(config, &mac_matcher(7851), RemovalScope::AllEntries)

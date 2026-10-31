@@ -6,8 +6,8 @@ import { folderKey } from "./pathfield";
 const many = (n: number): string[] => Array.from({ length: n }, (_, i) => `/home/j/repos/d${String(i).padStart(3, "0")}`);
 const tree = (extra: string[] = []): FakeTree => ({
   home: "/home/j",
-  dirs: ["/home/j", "/home/j/repos", "/home/j/repos/tether", "/home/j/repos/tether/web", "/home/j/up", ...extra],
-  files: { "/home/j/repos/tether/README.md": "text/markdown" },
+  dirs: ["/home/j", "/home/j/repos", "/home/j/repos/muxen", "/home/j/repos/muxen/web", "/home/j/up", ...extra],
+  files: { "/home/j/repos/muxen/README.md": "text/markdown" },
 });
 
 function setup(extra: string[] = [], page = 3) {
@@ -28,14 +28,14 @@ describe("Folders", () => {
     expect(fs.calls).toEqual([]);
     await vi.advanceTimersByTimeAsync(1);
     expect(fs.calls).toEqual(["list /home/j/repos 0"]);
-    expect(held(folders, "/home/j/repos")).toMatchObject({ status: "ready", names: ["tether"] });
+    expect(held(folders, "/home/j/repos")).toMatchObject({ status: "ready", names: ["muxen"] });
   });
 
   it("lists inside a root with /fs/list and keeps folders only", async () => {
     const { fs, folders } = setup();
-    await folders.load("/home/j/repos/tether", false);
-    expect(fs.calls).toEqual(["list /home/j/repos/tether 0"]);
-    expect(held(folders, "/home/j/repos/tether")).toMatchObject({ names: ["web"] });
+    await folders.load("/home/j/repos/muxen", false);
+    expect(fs.calls).toEqual(["list /home/j/repos/muxen 0"]);
+    expect(held(folders, "/home/j/repos/muxen")).toMatchObject({ names: ["web"] });
   });
 
   it("does not ask again for a folder it holds or has under way", async () => {
@@ -71,12 +71,12 @@ describe("Folders", () => {
 
   it("caches the first page it fetched, until a refresh drops it", async () => {
     const { fs, folders } = setup();
-    await folders.load("/home/j/repos/tether", false);
-    expect(await folders.settled("/home/j/repos/tether", false)).toMatchObject({ path: "/home/j/repos/tether" });
-    expect(folders.peek("/home/j/repos/tether", false)).not.toBeNull();
-    expect(folders.peek("/home/j/repos/tether", true)).toBeNull();
-    folders.drop("/home/j/repos/tether");
-    expect(folders.peek("/home/j/repos/tether", false)).toBeNull();
+    await folders.load("/home/j/repos/muxen", false);
+    expect(await folders.settled("/home/j/repos/muxen", false)).toMatchObject({ path: "/home/j/repos/muxen" });
+    expect(folders.peek("/home/j/repos/muxen", false)).not.toBeNull();
+    expect(folders.peek("/home/j/repos/muxen", true)).toBeNull();
+    folders.drop("/home/j/repos/muxen");
+    expect(folders.peek("/home/j/repos/muxen", false)).toBeNull();
     expect(fs.calls).toHaveLength(1);
   });
 

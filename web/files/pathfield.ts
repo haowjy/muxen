@@ -68,7 +68,7 @@ export interface Completion {
   rows: CompletionRow[];
   /** The first row, once a character of the segment is typed. */
   predicted: CompletionRow | null;
-  /** The rest of the prediction, shown after the caret: `ther/` for `te` → `tether`. */
+  /** The rest of the prediction, shown after the caret: `ther/` for `te` → `muxen`. */
   ghost: string;
   capped: boolean;
 }
@@ -106,7 +106,7 @@ export function complete(text: string, ctx: CompleteContext): Completion {
   };
 }
 
-/** The field's text for the folder above `path`: `~/repos/tether` → `~/repos/`. */
+/** The field's text for the folder above `path`: `~/repos/muxen` → `~/repos/`. */
 function upText(path: string, home: string): string {
   const up = parentOf(path);
   return up === "/" ? "/" : `${shorten(up, home)}/`;

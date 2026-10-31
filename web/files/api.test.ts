@@ -18,10 +18,10 @@ const response = (status: number, body: BodyInit | null, headers: Record<string,
 describe("httpFsApi", () => {
   it("builds routes on the host's origin", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>(() => Promise.resolve(response(200, JSON.stringify({ path: "/", entries: [] }))));
-    const api = httpFsApi("tether-app://h-dev", fetch);
+    const api = httpFsApi("muxen-app://h-dev", fetch);
     await api.list("/home/j/a b", 200, true);
-    expect(fetch.mock.calls[0]?.[0]).toBe("tether-app://h-dev/fs/list/home/j/a%20b?offset=200&hidden=1");
-    expect(api.rawUrl("/x/y.png")).toBe("tether-app://h-dev/fs/raw/x/y.png");
+    expect(fetch.mock.calls[0]?.[0]).toBe("muxen-app://h-dev/fs/list/home/j/a%20b?offset=200&hidden=1");
+    expect(api.rawUrl("/x/y.png")).toBe("muxen-app://h-dev/fs/raw/x/y.png");
   });
 
   it("turns the daemon's JSON error into an HttpRefusal, and a dead network into `network`", async () => {
@@ -60,7 +60,7 @@ describe("httpFsApi", () => {
 });
 
 describe("Markdown links", () => {
-  const doc = "tether-app://h-dev/fs/raw/home/j/repo/docs/README.md";
+  const doc = "muxen-app://h-dev/fs/raw/home/j/repo/docs/README.md";
   it("resolves relative links against the document", () => {
     expect(linkTarget("../src/main.rs", doc)).toEqual({ kind: "path", path: "/home/j/repo/src/main.rs" });
     expect(linkTarget("img%20one.png", doc)).toEqual({ kind: "path", path: "/home/j/repo/docs/img one.png" });

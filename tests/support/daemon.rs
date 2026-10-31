@@ -14,18 +14,18 @@ use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{Request, Response};
 use hyper_util::rt::TokioIo;
-use tether::auth::MacFront;
-use tether::auth::identity::ServeTarget;
-use tether::auth::localapi::LocalApi;
-use tether::auth::{Auth, Store};
-use tether::blocking::Lanes;
-use tether::budget::DEFAULT_CAPS;
-use tether::complete;
-use tether::config::ConfigFile;
-use tether::http::{self, App, Front, Listener};
-use tether::hub::{self, Endpoints};
-use tether::proto::HostInfo;
-use tether::tmux::{Endpoint, Socket};
+use muxen::auth::MacFront;
+use muxen::auth::identity::ServeTarget;
+use muxen::auth::localapi::LocalApi;
+use muxen::auth::{Auth, Store};
+use muxen::blocking::Lanes;
+use muxen::budget::DEFAULT_CAPS;
+use muxen::complete;
+use muxen::config::ConfigFile;
+use muxen::http::{self, App, Front, Listener};
+use muxen::hub::{self, Endpoints};
+use muxen::proto::HostInfo;
+use muxen::tmux::{Endpoint, Socket};
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use tokio::net::{TcpListener, TcpStream, UnixListener, UnixStream};
 use tokio::sync::Notify;
@@ -33,7 +33,7 @@ use tokio::task::JoinHandle;
 
 pub const LOGIN: &str = "jimmy@github";
 pub const WAIT: Duration = Duration::from_secs(5);
-pub const LOOPBACK_SECRET: &str = "tether-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+pub const LOOPBACK_SECRET: &str = "muxen-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 const FAKE_LOCALAPI_TOKEN: &str = "fake-localapi-token";
 
 pub struct Daemon {
@@ -189,7 +189,7 @@ pub async fn start_loopback_with_serve_config(
 ) -> Daemon {
     use base64::Engine as _;
 
-    let dir = std::env::temp_dir().join(format!("tether-http-{}-{name}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("muxen-http-{}-{name}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let store = Store::open(dir.join("state")).expect("a state dir");
     let serve_socket = dir.join("serve.sock");
@@ -247,7 +247,7 @@ pub async fn start_loopback_with_serve_config(
     std::fs::write(&config, "").expect("a config");
     let endpoint = Endpoint {
         program: PathBuf::from("tmux"),
-        socket: Socket::Name(format!("tether-http-test-{}", std::process::id())),
+        socket: Socket::Name(format!("muxen-http-test-{}", std::process::id())),
     };
     let (hub, _task) = hub::spawn(
         Endpoints { main: endpoint },
@@ -326,7 +326,7 @@ async fn start_as_with_allowlist(
     whois_available: bool,
     explicit_allowlist: bool,
 ) -> Daemon {
-    let dir = std::env::temp_dir().join(format!("tether-http-{}-{name}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("muxen-http-{}-{name}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let store = Store::open(dir.join("state")).expect("a state dir");
     let serve_socket = dir.join("serve.sock");
@@ -400,7 +400,7 @@ async fn start_as_with_allowlist(
     std::fs::write(&config, "").expect("a config");
     let endpoint = Endpoint {
         program: PathBuf::from("tmux"),
-        socket: Socket::Name(format!("tether-http-test-{}", std::process::id())),
+        socket: Socket::Name(format!("muxen-http-test-{}", std::process::id())),
     };
     let (hub, _task) = hub::spawn(
         Endpoints { main: endpoint },

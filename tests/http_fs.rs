@@ -115,7 +115,7 @@ async fn uploads_land_one_at_a_time_and_leave_no_part_file() {
     let body = uploaded.json();
     let path = body["path"].as_str().expect("a path");
     assert_eq!(body["size"], jpeg.len());
-    let uploads = daemon.home("tether-uploads");
+    let uploads = daemon.home("muxen-uploads");
     assert!(
         path.starts_with(uploads.to_str().expect("UTF-8")) && path.ends_with(".jpeg"),
         "{path}"

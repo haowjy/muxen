@@ -29,7 +29,7 @@ export function failureText(error: unknown, hostName: string, doing = "create it
   if (!(error instanceof RequestError)) return `Couldn't ${doing}. Try again.`;
   switch (error.reason) {
     case "busy":
-      return "tether is busy, try again";
+      return "muxen is busy, try again";
     case "lost":
     case "timeout":
     case "background":

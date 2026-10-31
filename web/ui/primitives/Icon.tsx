@@ -3,7 +3,7 @@ import {
   KeyboardOff, List, Plus, RotateCw, Search, Server, Settings, Terminal, TriangleAlert, Upload, X, type LucideIcon,
 } from "lucide-preact";
 
-/** tether's icon names, each a Lucide icon. */
+/** muxen's icon names, each a Lucide icon. */
 const ICONS = {
   home: House,
   back: ChevronLeft,

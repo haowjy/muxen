@@ -43,7 +43,7 @@ function Body({ name, body, onRetry }: Pick<WorkspaceCardProps, "name" | "body" 
         </>
       );
     case "attention":
-      return <Note>tether can't use {name} yet.</Note>;
+      return <Note>muxen can't use {name} yet.</Note>;
     case "failed":
       return (
         <>
@@ -54,7 +54,7 @@ function Body({ name, body, onRetry }: Pick<WorkspaceCardProps, "name" | "body" 
     case "noTmux":
       return (
         <>
-          <Note>tmux isn't running on {name}. tether never starts it: start tmux there, then retry.</Note>
+          <Note>tmux isn't running on {name}. muxen never starts it: start tmux there, then retry.</Note>
           {retry}
         </>
       );

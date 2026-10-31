@@ -11,7 +11,7 @@ use std::process::{Child, Command, Stdio};
 use std::thread;
 use std::time::Duration;
 
-use tether::tmux::{Endpoint, Socket};
+use muxen::tmux::{Endpoint, Socket};
 use tokio::sync::{Mutex, MutexGuard};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
@@ -20,21 +20,21 @@ pub const SESSION: &str = "fixture";
 
 static SERIAL: Mutex<()> = Mutex::const_new(());
 
-/// The tmux the tests run: `TETHER_TMUX`, else `tmux` on the path.
+/// The tmux the tests run: `MUXEN_TMUX`, else `tmux` on the path.
 pub fn tmux() -> PathBuf {
-    env::var_os("TETHER_TMUX").map_or_else(|| PathBuf::from("tmux"), PathBuf::from)
+    env::var_os("MUXEN_TMUX").map_or_else(|| PathBuf::from("tmux"), PathBuf::from)
 }
 
 /// A socket name for this test process's server `name`.
 pub fn socket(name: &str) -> String {
-    format!("tether-test-{}-{name}", std::process::id())
+    format!("muxen-test-{}-{name}", std::process::id())
 }
 
-/// A private server for a real-tmux test, or `None` unless `TETHER_TMUX_TESTS=1`; the
+/// A private server for a real-tmux test, or `None` unless `MUXEN_TMUX_TESTS=1`; the
 /// guard runs the tests one at a time, so floods don't skew each other's timing.
 pub async fn setup(name: &str) -> Option<(MutexGuard<'static, ()>, Server)> {
-    if env::var_os("TETHER_TMUX_TESTS").is_none_or(|value| value != "1") {
-        eprintln!("skipped: set TETHER_TMUX_TESTS=1 to run against a real tmux");
+    if env::var_os("MUXEN_TMUX_TESTS").is_none_or(|value| value != "1") {
+        eprintln!("skipped: set MUXEN_TMUX_TESTS=1 to run against a real tmux");
         return None;
     }
     let serial = SERIAL.lock().await;

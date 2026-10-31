@@ -11,8 +11,8 @@ function ctxOf(held: Record<string, FolderState>, showHidden = false): CompleteC
 const at = (path: string, state: FolderState, hidden = false): Record<string, FolderState> => ({ [folderKey(path, hidden)]: state });
 
 const repos = ctxOf({
-  ...at("/home/j/repos", ready(["many", "tether", "tether-old", "test-data", "Zed"])),
-  ...at("/home/j/repos/tether", ready(["src", "web"])),
+  ...at("/home/j/repos", ready(["many", "muxen", "muxen-old", "muxer", "Zed"])),
+  ...at("/home/j/repos/muxen", ready(["src", "web"])),
   ...at("/home/j", ready(["repos", "other"])),
 });
 
@@ -34,10 +34,10 @@ describe("parseTyped", () => {
 
 describe("complete", () => {
   it("lists the parent's folders that start with the segment, case folded, and predicts the first", () => {
-    const c = complete("~/repos/te", repos);
-    expect(c.rows.map((r) => r.name)).toEqual(["tether", "tether-old", "test-data"]);
-    expect(c.predicted?.name).toBe("tether");
-    expect(c.ghost).toBe("ther/");
+    const c = complete("~/repos/mu", repos);
+    expect(c.rows.map((r) => r.name)).toEqual(["muxen", "muxen-old", "muxer"]);
+    expect(c.predicted?.name).toBe("muxen");
+    expect(c.ghost).toBe("xen/");
     expect(complete("~/repos/z", repos).rows.map((r) => r.name)).toEqual(["Zed"]);
   });
 
@@ -77,24 +77,24 @@ describe("complete", () => {
 
 describe("accept and slash", () => {
   it("accept puts the full path and a slash", () => {
-    const typed = parseTyped("~/repos/te", "/home/j");
-    expect(typed && accept(typed, "tether")).toBe("~/repos/tether/");
+    const typed = parseTyped("~/repos/mu", "/home/j");
+    expect(typed && accept(typed, "muxen")).toBe("~/repos/muxen/");
   });
 
   it("a slash after a partial name accepts the prediction", () => {
-    expect(slashAccepts("~/repos/te", repos)).toBe("~/repos/tether/");
+    expect(slashAccepts("~/repos/mu", repos)).toBe("~/repos/muxen/");
     expect(slashAccepts("~/re", repos)).toBe("~/repos/");
   });
 
   it("a slash after . or .. is just a slash, though hidden folders start with a dot", () => {
-    const hidden = ctxOf({ ...at("/home/j/repos/tether", ready([".git", "src"]), true) });
-    expect(slashAccepts("~/repos/tether/.", hidden)).toBeNull();
-    expect(slashAccepts("~/repos/tether/..", hidden)).toBeNull();
-    expect(slashAccepts("~/repos/tether/.g", hidden)).toBe("~/repos/tether/.git/");
+    const hidden = ctxOf({ ...at("/home/j/repos/muxen", ready([".git", "src"]), true) });
+    expect(slashAccepts("~/repos/muxen/.", hidden)).toBeNull();
+    expect(slashAccepts("~/repos/muxen/..", hidden)).toBeNull();
+    expect(slashAccepts("~/repos/muxen/.g", hidden)).toBe("~/repos/muxen/.git/");
   });
 
   it("a slash after an exact folder name, or with nothing predicted, is just a slash", () => {
-    expect(slashAccepts("~/repos/tether", repos)).toBeNull();
+    expect(slashAccepts("~/repos/muxen", repos)).toBeNull();
     expect(slashAccepts("~/repos/", repos)).toBeNull();
     expect(slashAccepts("~/repos/qq", repos)).toBeNull();
   });
@@ -102,18 +102,18 @@ describe("accept and slash", () => {
 
 describe("go", () => {
   it("opens the highlighted row", () => {
-    const row = complete("~/repos/te", repos).predicted;
-    expect(go("~/repos/te", row, repos)).toEqual({ open: "/home/j/repos/tether" });
+    const row = complete("~/repos/mu", repos).predicted;
+    expect(go("~/repos/mu", row, repos)).toEqual({ open: "/home/j/repos/muxen" });
   });
 
   it("with no highlight opens the folder the text names, right after an accept too", () => {
-    expect(go("~/repos/tether/", null, repos)).toEqual({ open: "/home/j/repos/tether" });
+    expect(go("~/repos/muxen/", null, repos)).toEqual({ open: "/home/j/repos/muxen" });
     expect(go("~/repos/many", null, repos)).toEqual({ open: "/home/j/repos/many" });
   });
 
   it("says when the text names nothing, and waits for a listing it has not got", () => {
-    expect(go("~/repos/tetherx", null, repos)).toEqual({ say: "No folder ~/repos/tetherx" });
-    expect(go("~/repos/tether", null, ctxOf({}))).toEqual({ wait: true });
+    expect(go("~/repos/muxenx", null, repos)).toEqual({ say: "No folder ~/repos/muxenx" });
+    expect(go("~/repos/muxen", null, ctxOf({}))).toEqual({ wait: true });
     const missing: FolderState = { status: "error", error: new HttpRefusal(404, "not_found") };
     expect(go("~/gone/", null, ctxOf(at("/home/j/gone", missing)))).toEqual({ say: "No folder ~/gone" });
   });
@@ -127,11 +127,11 @@ describe("go", () => {
   });
 
   it("opens a folder named whole without waiting for a listing, and one past the scan cap that the list lacks", () => {
-    expect(go("~/repos/tether/", null, ctxOf({}))).toEqual({ open: "/home/j/repos/tether" });
+    expect(go("~/repos/muxen/", null, ctxOf({}))).toEqual({ open: "/home/j/repos/muxen" });
     expect(go("~/repos/zzz", null, ctxOf(at("/home/j/repos", ready(["a"], true))))).toEqual({ open: "/home/j/repos/zzz" });
   });
 
   it("opens the parent for a trailing .. without checking the listing", () => {
-    expect(go("~/repos/tether/..", null, repos)).toEqual({ open: "/home/j/repos" });
+    expect(go("~/repos/muxen/..", null, repos)).toEqual({ open: "/home/j/repos" });
   });
 });

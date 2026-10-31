@@ -6,7 +6,7 @@
 use std::time::{Duration, SystemTime};
 
 use futures_util::{SinkExt as _, StreamExt as _};
-use tether::auth::localapi::{LocalApi, LocalApiError};
+use muxen::auth::localapi::{LocalApi, LocalApiError};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest as _;
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
@@ -82,7 +82,7 @@ async fn every_route_needs_the_tailscale_login() {
         assert_eq!(request(port, method, path, &stranger, body).await.0, 403);
     }
     // A WebSocket upgrade without the login is a plain 403: no socket.
-    let Err(WsError::Http(refused)) = open(port, None, "tether.v1, tether.auth.x").await else {
+    let Err(WsError::Http(refused)) = open(port, None, "muxen.v1, muxen.auth.x").await else {
         panic!("upgraded without a login");
     };
     assert_eq!(refused.status(), 403);
@@ -103,13 +103,13 @@ async fn the_default_allowlist_refreshes_tailnet_state_after_idle() {
 
     tokio::time::sleep(Duration::from_secs(31)).await;
     let shell = send(daemon.serve_port, "GET", "/", &login, &[]);
-    let protocols = format!("tether.v1, tether.auth.{token}");
+    let protocols = format!("muxen.v1, muxen.auth.{token}");
     let websocket = open(daemon.port, Some(LOGIN), &protocols);
     let fs = send_owned(daemon.port, "GET", "/fs/list/", &native, &[]);
     let (shell, websocket, fs) = tokio::join!(shell, websocket, fs);
     assert_eq!(shell.status, 200, "{}", shell.text());
     let (mut socket, protocol) = websocket.expect("native WebSocket admitted after idle");
-    assert_eq!(protocol.as_deref(), Some("tether.v1"));
+    assert_eq!(protocol.as_deref(), Some("muxen.v1"));
     socket.close(None).await.expect("close test socket");
     assert_eq!(fs.status, 200, "{}", fs.text());
 }
@@ -164,7 +164,7 @@ async fn only_the_auth_routes_skip_the_device_check() {
     // with one.
     let wrong = [
         ("Tailscale-User-Login", LOGIN),
-        ("Authorization", "Bearer tether_nope"),
+        ("Authorization", "Bearer muxen_nope"),
     ];
     for (method, path, body) in DEVICE_ROUTES {
         for headers in [&login[..], &wrong[..]] {
@@ -184,14 +184,10 @@ async fn only_the_auth_routes_skip_the_device_check() {
         );
     }
 
-    let (mut socket, protocol) = open(
-        port,
-        Some(LOGIN),
-        &format!("tether.v1, tether.auth.{token}"),
-    )
-    .await
-    .expect("upgraded");
-    assert_eq!(protocol.as_deref(), Some("tether.v1"));
+    let (mut socket, protocol) = open(port, Some(LOGIN), &format!("muxen.v1, muxen.auth.{token}"))
+        .await
+        .expect("upgraded");
+    assert_eq!(protocol.as_deref(), Some("muxen.v1"));
     let hello = r#"{"type":"hello","data":{"protocol":2,"client":{"kind":"web","build":"test"}}}"#;
     socket.send(Message::text(hello)).await.expect("sent");
     let welcome = tokio::time::timeout(WAIT, socket.next())
@@ -209,11 +205,11 @@ async fn only_the_auth_routes_skip_the_device_check() {
 #[tokio::test]
 async fn a_bad_token_gets_the_upgrade_then_4401() {
     let daemon = start("bad-token").await;
-    for protocols in ["tether.v1, tether.auth.tether_nope", "tether.v1"] {
+    for protocols in ["muxen.v1, muxen.auth.muxen_nope", "muxen.v1"] {
         let (mut socket, protocol) = open(daemon.port, Some(LOGIN), protocols)
             .await
             .expect("upgraded");
-        assert_eq!(protocol.as_deref(), Some("tether.v1"));
+        assert_eq!(protocol.as_deref(), Some("muxen.v1"));
         let closed = tokio::time::timeout(WAIT, socket.next())
             .await
             .expect("in time");
@@ -240,7 +236,7 @@ async fn an_unreadable_auth_file_is_retryable_not_a_bad_token() {
         (status, body.as_str()),
         (503, r#"{"error":"auth_unavailable"}"#)
     );
-    let protocols = format!("tether.v1, tether.auth.{}", added.token);
+    let protocols = format!("muxen.v1, muxen.auth.{}", added.token);
     let (mut socket, _) = open(daemon.port, Some(LOGIN), &protocols)
         .await
         .expect("upgraded");
@@ -402,7 +398,7 @@ async fn missing_self_stable_id_makes_tailnet_identity_unavailable() {
         "Peer": {}
     }));
     let api = LocalApi::at(daemon.dir.join("tailscaled.sock"));
-    let result = tether::auth::identity::tailnet_state(&api).await;
+    let result = muxen::auth::identity::tailnet_state(&api).await;
     assert!(matches!(result, Err(LocalApiError::Unavailable)));
 }
 
@@ -797,7 +793,7 @@ async fn a_stored_node_with_an_old_login_is_not_enrolled_and_tokens_stay_native(
     assert_eq!(accepted.status, 200, "{}", accepted.text());
 
     let mut bad_native = NODE_HEADERS.to_vec();
-    bad_native.push(("Authorization", "Bearer tether_invalid"));
+    bad_native.push(("Authorization", "Bearer muxen_invalid"));
     let refused = send(
         daemon.serve_port,
         "GET",
@@ -810,14 +806,14 @@ async fn a_stored_node_with_an_old_login_is_not_enrolled_and_tokens_stay_native(
     assert_eq!(refused.json()["error"].as_str(), Some("auth_required"));
 
     let mut ambiguous = native_headers;
-    ambiguous.push(("Sec-WebSocket-Protocol", "tether.v1, tether.auth.other"));
+    ambiguous.push(("Sec-WebSocket-Protocol", "muxen.v1, muxen.auth.other"));
     let refused = send(daemon.port, "GET", "/ws", &ambiguous, &[]).await;
     assert_eq!(refused.status, 401);
     assert_eq!(refused.json()["error"].as_str(), Some("auth_required"));
 
     let cookie = [
         ("Tailscale-User-Login", LOGIN),
-        ("Cookie", "tether=anything"),
+        ("Cookie", "muxen=anything"),
     ];
     let refused = send(daemon.port, "GET", "/fs/list/", &cookie, &[]).await;
     assert_eq!(refused.status, 401);
@@ -910,7 +906,7 @@ async fn a_node_enrols_with_the_shared_code_and_shell_paths_do_not_call_whois() 
     )
     .await;
     assert_eq!(manifest.status, 200, "{}", manifest.text());
-    assert_eq!(manifest.json()["name"].as_str(), Some("tether devbox"));
+    assert_eq!(manifest.json()["name"].as_str(), Some("muxen devbox"));
     assert_eq!(
         daemon
             .fake
@@ -980,7 +976,7 @@ async fn a_node_enrols_with_the_shared_code_and_shell_paths_do_not_call_whois() 
     let file = daemon.store.read().expect("auth file");
     assert!(file.pending.is_none());
     assert_eq!(file.devices.len(), 1);
-    assert_eq!(file.devices[0].kind, tether::auth::DeviceKind::Node);
+    assert_eq!(file.devices[0].kind, muxen::auth::DeviceKind::Node);
     assert_eq!(
         file.devices[0].node_id.as_deref(),
         Some("nLAPTOP0123456789CNTRL")
@@ -1044,7 +1040,7 @@ async fn removing_a_node_closes_its_live_socket_at_the_recheck() {
     }
     headers.insert(
         "sec-websocket-protocol",
-        "tether.v1".parse().expect("subprotocol"),
+        "muxen.v1".parse().expect("subprotocol"),
     );
     let (mut socket, _) = tokio_tungstenite::connect_async(upgrade)
         .await

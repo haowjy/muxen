@@ -109,7 +109,7 @@ pub struct Device {
     pub enrolled_by: String,
 }
 
-/// The enrolment code `tether enroll` printed.
+/// The enrolment code `muxen enroll` printed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Pending {
     /// sha256 of the normalized code, hex.
@@ -209,7 +209,7 @@ impl Store {
         }
     }
 
-    /// `tether enroll`: a new pending code, replacing any earlier one.
+    /// `muxen enroll`: a new pending code, replacing any earlier one.
     pub fn set_pending(&self, ttl: Duration, now: SystemTime) -> Result<String, StoreError> {
         let code = token::new_code()?;
         let pending = Pending {
@@ -264,7 +264,7 @@ impl Store {
         })?
     }
 
-    /// `tether device add`: a device enrolled from the server's shell.
+    /// `muxen device add`: a device enrolled from the server's shell.
     pub fn add_device(&self, name: &str, now: SystemTime) -> Result<Added, StoreError> {
         let token = token::generate()?;
         let token_hash = token::hash(&token);
@@ -311,7 +311,7 @@ impl Store {
         Ok(name.map(|name| Added { name, token }))
     }
 
-    /// `tether device remove`: `None` if no device has that name, otherwise the
+    /// `muxen device remove`: `None` if no device has that name, otherwise the
     /// number of bound native tokens removed with a node (zero for other rows).
     pub fn remove_device(&self, name: &str) -> Result<Option<usize>, StoreError> {
         self.update(|file| {
@@ -562,7 +562,7 @@ mod tests {
     fn temp_store() -> (Store, Cleanup) {
         static NEXT: AtomicU32 = AtomicU32::new(0);
         let n = NEXT.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!("tether-store-{}-{n}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("muxen-store-{}-{n}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         (Store::open(dir.clone()).expect("a state dir"), Cleanup(dir))
     }
@@ -604,7 +604,10 @@ mod tests {
         assert_eq!(file.devices[0].enrolled_by, "jimmy@github");
         let hash = token::hash(&added.token);
         assert_eq!(token::find(&file.devices, &hash), Some(&file.devices[0]));
-        assert!(added.token.starts_with(token::TOKEN_PREFIX) && added.token.len() == 50);
+        assert!(
+            added.token.starts_with(token::TOKEN_PREFIX)
+                && added.token.len() == token::TOKEN_PREFIX.len() + 43
+        );
         // Single use.
         assert!(matches!(
             store.enroll(&code, "phone", "jimmy@github", now),

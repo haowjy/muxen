@@ -1,7 +1,7 @@
 import { HostLink } from "../../proto/link";
 import type { Transport } from "../types";
 
-/** Same-origin `/ws`, offering `tether.v1` only: the browser holds no credential. */
+/** Same-origin `/ws`, offering `muxen.v1` only: the browser holds no credential. */
 export function createBrowserTransport(): Transport {
   return {
     openSocket(_handle, handlers) {

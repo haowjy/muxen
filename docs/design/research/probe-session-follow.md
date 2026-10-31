@@ -1,8 +1,8 @@
 # Probe: a tab following a tmux session's current window (tmux 3.4 and 3.7b)
 
-**Round-two summary:** On both 3.4 and 3.7b, `refresh-client -B 'c::#{window_id}'` reports the actual current window id, including prefix-n, while ordinary typing/cwd changes do not; swap-window emits no `%session-window-changed`, and every swap that changes the current window, in either direction and with `-d`, sends a `c` value 0.2–0.7 s later (§15). A same-session `switch-client -c C -t '$0'` names the control client via `display-message`, but the resize behavior differs: 3.4 needs a subsequent unchanged `refresh-client -C` to recalculate, while 3.7b resizes on switch; `switch-client ; refresh-client -C` reliably yields the tether vote size on both. Switching has observable session-change/hook/client-session-change and activity/last-attached side effects, but did not change the laptop’s `w<W>` activity entry; the laptop’s real keystroke takes latest back, restores 80×23, and updates that subscription. Clearing the vote restores the control client’s 80×23 or 100×30 client size, then detaching falls back to the laptop’s 80×23. Selection order changes notification order but every ordering ends at 200×50; with the laptop `latest` on both windows, select then switch then vote reflows the selected window once (§16), and plain `send-keys -H 78` still reaches the pane after switching.
+**Round-two summary:** On both 3.4 and 3.7b, `refresh-client -B 'c::#{window_id}'` reports the actual current window id, including prefix-n, while ordinary typing/cwd changes do not; swap-window emits no `%session-window-changed`, and every swap that changes the current window, in either direction and with `-d`, sends a `c` value 0.2–0.7 s later (§15). A same-session `switch-client -c C -t '$0'` names the control client via `display-message`, but the resize behavior differs: 3.4 needs a subsequent unchanged `refresh-client -C` to recalculate, while 3.7b resizes on switch; `switch-client ; refresh-client -C` reliably yields the muxen vote size on both. Switching has observable session-change/hook/client-session-change and activity/last-attached side effects, but did not change the laptop’s `w<W>` activity entry; the laptop’s real keystroke takes latest back, restores 80×23, and updates that subscription. Clearing the vote restores the control client’s 80×23 or 100×30 client size, then detaching falls back to the laptop’s 80×23. Selection order changes notification order but every ordering ends at 200×50; with the laptop `latest` on both windows, select then switch then vote reflows the selected window once (§16), and plain `send-keys -H 78` still reaches the pane after switching.
 
-**Result: both tmux 3.4 and 3.7b support a session-following tether tab: `select-window -t '$S:@W'` selects the window in the named session, and `%session-window-changed` is broadcast to every control client on the server, not just the one attached to that session. Tether must filter the notification's session id. The event precedes `window-add` for a foreground `new-window`, precedes `layout-change` on a switch, and precedes `window-pane-changed`'s following layout report. The startup display format can return the session's current window and active pane, including session/window ids. A control-client selection does not make that control client or a co-session laptop the window's latest actor; a size vote still caps the existing latest size. When the laptop prefix-switches onto W1, clearing W1's vote restores W1 to the laptop's 120×39 size. With `detach-on-destroy on`, destroying S ends its attached control client; with `off`, the client changes to surviving session T and keeps running.**
+**Result: both tmux 3.4 and 3.7b support a session-following muxen tab: `select-window -t '$S:@W'` selects the window in the named session, and `%session-window-changed` is broadcast to every control client on the server, not just the one attached to that session. Muxen must filter the notification's session id. The event precedes `window-add` for a foreground `new-window`, precedes `layout-change` on a switch, and precedes `window-pane-changed`'s following layout report. The startup display format can return the session's current window and active pane, including session/window ids. A control-client selection does not make that control client or a co-session laptop the window's latest actor; a size vote still caps the existing latest size. When the laptop prefix-switches onto W1, clearing W1's vote restores W1 to the laptop's 120×39 size. With `detach-on-destroy on`, destroying S ends its attached control client; with `off`, the client changes to surviving session T and keeps running.**
 
 ## Setup
 
@@ -55,7 +55,7 @@ The move-window excerpt on 3.4 included this exact ordering at the S control:
 ```text
 %session-window-changed $0 @0
 %layout-change @0 ccfd,120x39,0,0,0 ccfd,120x39,0,0,0 *
-%subscription-changed w2 $0 @1 1 - : |/Users/jimmyyao/repos/tether
+%subscription-changed w2 $0 @1 1 - : |/Users/jimmyyao/repos/muxen
 ```
 3.7b produced the same sequence. Thus the session change precedes layout and subscription updates. Creating an immediately exiting window also demonstrated that the intermediate foreground selection is observable before the window closes.
 
@@ -93,19 +93,19 @@ refresh-client -B 'w2:@1:#{L:#{?client_height,#{?client_control_mode,,#{?#{m:*#,
 ```
 Raw baseline and subsequent actual laptop act on 3.4:
 ```text
-%subscription-changed w2 $0 @1 1 - : /dev/ttys047.1792944488.120x40.attached,focused,UTF-8;|/Users/jimmyyao/repos/tether
-%subscription-changed w2 $0 @1 1 - : |/Users/jimmyyao/repos/tether
+%subscription-changed w2 $0 @1 1 - : /dev/ttys047.1792944488.120x40.attached,focused,UTF-8;|/Users/jimmyyao/repos/muxen
+%subscription-changed w2 $0 @1 1 - : |/Users/jimmyyao/repos/muxen
 ```
 On 3.7b:
 ```text
-%subscription-changed w2 $0 @1 1 - : /dev/ttys045.1792944504.120x40.attached,focused,UTF-8;|/Users/jimmyyao/repos/tether
-%subscription-changed w2 $0 @1 1 - : |/Users/jimmyyao/repos/tether
+%subscription-changed w2 $0 @1 1 - : /dev/ttys045.1792944504.120x40.attached,focused,UTF-8;|/Users/jimmyyao/repos/muxen
+%subscription-changed w2 $0 @1 1 - : |/Users/jimmyyao/repos/muxen
 ```
 The second line is after laptop prefix-n moved the shared session to W1; it is not a report that the control selection made the laptop act.
 
 ## 4. Laptop prefix-n, vote clear
 
-With the laptop on W2 at 120×40, a 60×30 vote on W1 (`@0`) changed W1 from 80×24 to 60×30. The laptop's real prefix-n key moved S to W1; the control client received `%session-window-changed $0 @0`. Clearing W1's vote (`refresh-client -C '@0:'`), as tether should when this act is observed, restored W1 to the laptop's 120×39. W2 had no vote and remained 120×39. The same sequence and dimensions were observed on 3.4 and 3.7b.
+With the laptop on W2 at 120×40, a 60×30 vote on W1 (`@0`) changed W1 from 80×24 to 60×30. The laptop's real prefix-n key moved S to W1; the control client received `%session-window-changed $0 @0`. Clearing W1's vote (`refresh-client -C '@0:'`), as muxen should when this act is observed, restored W1 to the laptop's 120×39. W2 had no vote and remained 120×39. The same sequence and dimensions were observed on 3.4 and 3.7b.
 
 3.4 raw clear-vote result (3.7b gave the same layout lines):
 ```text
@@ -163,7 +163,7 @@ Representative raw `on` case, both versions:
 %sessions-changed
 %exit
 ```
-So the default makes the daemon's control client terminate when its session disappears. With `off`, tmux retargets it to the surviving session rather than exiting; tether would need to account for that if it uses this option.
+So the default makes the daemon's control client terminate when its session disappears. With `off`, tmux retargets it to the surviving session rather than exiting; muxen would need to account for that if it uses this option.
 
 ## 7. Cost / notification rate
 
@@ -307,7 +307,7 @@ The group produced the layout line in the same collected control reply batch. Th
 
 ## 11. Laptop takes latest back (question 9)
 
-**Result:** After tether is made latest at 200×50 (using the reliable group above), a real laptop key returns W1 to 80×23 on both versions. The `w0` subscription reports the laptop’s new `client_activity` timestamp within the next 0.5 s polling interval (the PTY act itself was sent after a 1.1 s wait to ensure a different second-resolution timestamp).
+**Result:** After muxen is made latest at 200×50 (using the reliable group above), a real laptop key returns W1 to 80×23 on both versions. The `w0` subscription reports the laptop’s new `client_activity` timestamp within the next 0.5 s polling interval (the PTY act itself was sent after a 1.1 s wait to ensure a different second-resolution timestamp).
 
 **Setup deltas:** Kept the real laptop attached at 80×24 and subscribed to the laptop entry using the §3.7 format. Sent a real PTY byte `b` after the control group and captured the subscription stream.
 
@@ -331,7 +331,7 @@ The group produced the layout line in the same collected control reply batch. Th
 ```
 The reported post-act `client_activity` values differ by five seconds from the preceding laptop act; tmux’s formatted timestamp has one-second granularity.
 
-## 12. Clearing tether’s vote and detaching (question 10)
+## 12. Clearing muxen’s vote and detaching (question 10)
 
 **Result:** With control client size 80×23, clearing the window vote after control became latest restores 80×23. With a distinctive control-client size of 100×30, clearing the vote restores 100×30 on both versions, without laptop input between clearing and measurement. Detaching the control client then restores the laptop-driven 80×23. The 3.4 switch-alone step did not resize immediately; after `refresh-client -C '@0:'`, recalculation selected the 100×30 control-client size. 3.7b switched directly to 200×50, and clear restored 100×30.
 

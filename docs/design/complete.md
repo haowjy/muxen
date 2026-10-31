@@ -8,7 +8,7 @@ memory budget of 53 MiB, completion is not constructed, `welcome.daemon.completi
 false, and an unexpected `/complete` request returns `200 {"chips":[]}`. Otherwise,
 everything is built on first use, revalidated with a cheap `stat` per request, and
 dropped after five idle minutes. carapace runs in its own transient systemd scope,
-outside tether's memory limit. `/complete` never touches tmux or the hub.
+outside muxen's memory limit. `/complete` never touches tmux or the hub.
 
 The product side (what the strip shows, how the client reads the command line) is in
 [plan.md](plan.md#suggestion-strip); the scheme handler that carries the request is in
@@ -248,21 +248,21 @@ await a shared result.
 Under systemd (the unit sets `INVOCATION_ID`), each run is wrapped:
 
 ```text
-systemd-run --user --scope --quiet --collect --description="tether completion" \
+systemd-run --user --scope --quiet --collect --description="muxen completion" \
   -p MemoryMax=128M -p TasksMax=64 -p CPUWeight=20 -p IOWeight=10 \
   -p RuntimeMaxSec=2 -- <carapace argv>
 ```
 
 `systemd-run` asks the user manager for a transient scope, moves itself into it and
 execs carapace, keeping its PID and process group, so carapace and its helpers are
-charged to that scope, not to tether's unit. Nice level, I/O class and
-`OOMScoreAdjust` are inherited from tether's process.
+charged to that scope, not to muxen's unit. Nice level, I/O class and
+`OOMScoreAdjust` are inherited from muxen's process.
 
 - **`--description`** replaces the default, which is the command line: without it,
   the user journal records every run's arguments, the words Jimmy typed.
 - **`RuntimeMaxSec`** ends a scope that outlives its run. A kill that lands before
   `systemd-run` has exec'd (5–20 ms after spawn) leaves an empty scope that would
-  otherwise stay active forever, and helpers that outlive a crashed tether are bounded
+  otherwise stay active forever, and helpers that outlive a crashed muxen are bounded
   by it too.
 - Started outside systemd (a dev run), carapace is spawned directly. A `systemd-run`
   that fails (no user bus) counts as a carapace failure.
@@ -279,11 +279,11 @@ binary was evicted from the page cache first:
 | `docker ''`, `docker run --` | 59–103 | 43–44 MB | 38–49 MB | 41–74 MB | 44–92 ms |
 | `systemctl status ''` | 473 | 26 MB | 12 MB | 22 MB | 560 ms |
 
-Run inside tether's unit, one `docker` completion would add 43 MB of RSS, and up to
+Run inside muxen's unit, one `docker` completion would add 43 MB of RSS, and up to
 74 MB on a cold cache. The unit's 64.8 MiB ceiling leaves 7.2 MiB below its 72 MB
 `MemoryMax`
 ([daemon-core.md §6](daemon-core.md#6-limits-and-the-memory-ceiling)).
-Scoped, the cost to tether's unit is `systemd-run` before its exec: the unit's peak
+Scoped, the cost to muxen's unit is `systemd-run` before its exec: the unit's peak
 rose 1.1 MB for a `docker run --` completion. The scope adds about 27 ms (34 ms scoped
 against 7 ms direct for `tmux ''`), which the 300 ms timeout covers.
 `systemctl status ''` times out (it lists every unit) and offers no values; that is
@@ -373,7 +373,7 @@ unit's limits, after an idle drop: anon RSS 1.51 MB with the tunable (0.33 MB ab
 its baseline), 1.80 MB without it (1.39 MB above), about 1 MB less resident.
 
 **The tunable reaches only the glibc build.** Only glibc's allocator reads
-`GLIBC_TUNABLES`. The unit's `ExecStart` is `~/.cargo/bin/tether`, the binary
+`GLIBC_TUNABLES`. The unit's `ExecStart` is `~/.cargo/bin/muxen`, the binary
 `cargo install` builds on the server, which links glibc. The Linux release binaries are
 static musl builds (`.github/workflows/release.yml`) and ignore the variable. Run under
 the unit, a release binary gets none of the effect measured above; how musl's allocator
@@ -388,12 +388,12 @@ its lane rather than permitting more work to accumulate. File API work uses its 
 four-thread fs lane; auth has two threads. The eight threads sum to
 `BLOCKING_THREADS` in `src/blocking.rs`. carapace is awaited asynchronously and takes
 no blocking thread. All blocking work uses these lanes; Tokio filesystem APIs are
-disabled. In tether's `TasksMax`, a run counts only `systemd-run` until it
+disabled. In muxen's `TasksMax`, a run counts only `systemd-run` until it
 moves into its scope.
 
 **CPU.** Every lookup is a scan of an in-memory index (10,000 lines at most); the
 work that costs anything (re-parsing, rebuilding, a carapace run) happens once per
-change, per new stem, or per 30 s. carapace's scope has tether's `CPUWeight` and
+change, per new stem, or per 30 s. carapace's scope has muxen's `CPUWeight` and
 inherits its nice level 10.
 
 ## What the client does
@@ -418,8 +418,8 @@ inherits its nice level 10.
 
 ## The shell snippet
 
-[`contrib/shell/tether.bash`](../../contrib/shell/tether.bash) (bash 4.4+) and
-[`contrib/shell/tether.zsh`](../../contrib/shell/tether.zsh) (zsh 5.1+) emit these
+[`contrib/shell/muxen.bash`](../../contrib/shell/muxen.bash) (bash 4.4+) and
+[`contrib/shell/muxen.zsh`](../../contrib/shell/muxen.zsh) (zsh 5.1+) emit these
 marks, raw: tmux passes them through control mode with `allow-passthrough` off
 ([probe-tmux.md §1](research/probe-tmux.md)).
 
@@ -439,23 +439,23 @@ array on bash 5.1+ and newline-joined before that, so an existing command ending
 Both files return at once in a non-interactive shell or when already sourced.
 
 Both also make history current for the strip: bash runs `history -a` before each
-prompt; zsh sets `INC_APPEND_HISTORY`. `TETHER_NO_HISTORY_APPEND=1`, set before
+prompt; zsh sets `INC_APPEND_HISTORY`. `MUXEN_NO_HISTORY_APPEND=1`, set before
 sourcing, turns that off.
 
 ### Installing
 
 1. **The snippet.** Add one line at the **end** of `~/.bashrc` (or `~/.zshrc`, with
-   `tether.zsh`), after anything that sets the prompt, and open a new shell. Dotfiles
+   `muxen.zsh`), after anything that sets the prompt, and open a new shell. Dotfiles
    that must not depend on the checkout copy the file instead.
 
    ```bash
-   [ -r ~/gitrepos/tether/contrib/shell/tether.bash ] && . ~/gitrepos/tether/contrib/shell/tether.bash
+   [ -r ~/gitrepos/muxen/contrib/shell/muxen.bash ] && . ~/gitrepos/muxen/contrib/shell/muxen.bash
    ```
 
    zsh saves history only with `HISTFILE` and `SAVEHIST` set; with no `HISTFILE` the
    strip has no history.
 2. **`PATH`.** From an interactive shell, write its `PATH` into `config.toml`, then
-   restart tether: `path = "<the output of echo $PATH>"` under `[complete]`.
+   restart muxen: `path = "<the output of echo $PATH>"` under `[complete]`.
 3. **carapace**, as Jimmy, never system-wide: the
    [v1.8.0 release](https://github.com/carapace-sh/carapace-bin/releases/tag/v1.8.0)'s
    `carapace-bin_1.8.0_linux_amd64.tar.gz`, checked against its `checksums.txt`, with

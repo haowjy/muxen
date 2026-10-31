@@ -2,7 +2,7 @@
 //! against each other and against tmux.
 #![allow(dead_code)]
 
-use tether::tmux::Size;
+use muxen::tmux::Size;
 
 pub fn terminal(size: Size) -> vt100::Parser {
     let nonzero = |n| std::num::NonZeroU16::new(n).expect("a pane has size");

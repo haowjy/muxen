@@ -17,7 +17,7 @@ use tokio::net::UnixListener;
 pub enum RuntimeError {
     #[error(transparent)]
     Directory(#[from] crate::config::RuntimeDirError),
-    #[error("tether is already running")]
+    #[error("muxen is already running")]
     AlreadyRunning,
     #[error("no launchd socket `Listener`")]
     NoLaunchdSocket,

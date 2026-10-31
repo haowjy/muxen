@@ -5,7 +5,7 @@ import { startStack, type Stack, type TmuxVersion } from "../shared/stack";
 // Home, the overview, Open session and creation against a real daemon and a real tmux (3.4 and 3.7b), in both
 // browsers. Each version starts its own isolated stack (e2e/shared/stack.ts); the tests share
 // it and run in order, since they share its tmux server.
-const VERSIONS = (process.env["TETHER_E2E_TMUX"] ?? "3.4,3.7b").split(",") as TmuxVersion[];
+const VERSIONS = (process.env["MUXEN_E2E_TMUX"] ?? "3.4,3.7b").split(",") as TmuxVersion[];
 test.use({ viewport: { width: 1440, height: 900 } });
 
 for (const version of VERSIONS) {

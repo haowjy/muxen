@@ -6,7 +6,7 @@ export interface CellSize {
   height: number;
 }
 
-/** The tether chrome in flow around the terminal in the keyboard-hidden layout, in CSS pixels. */
+/** The muxen chrome in flow around the terminal in the keyboard-hidden layout, in CSS pixels. */
 export interface Chrome {
   x: number;
   y: number;
@@ -42,7 +42,7 @@ export function terminalBottomPan(cursorRow: number, rows: number, cellHeight: n
 
 /**
  * The one sizing formula, in every environment (client-architecture.md §5.4): the window
- * less its safe-area insets and the tether chrome around the terminal, from `stableHeight`,
+ * less its safe-area insets and the muxen chrome around the terminal, from `stableHeight`,
  * which no software keyboard shortens. Nothing that only shows or hides changes an input.
  */
 export function terminalSize(viewport: Viewport, chrome: Chrome, cell: CellSize): Size {

@@ -69,7 +69,7 @@ describe("tab connection", () => {
   });
 
   it("a refused watch (limit) climbs the backoff: each refusal waits longer, and Retry keeps the count", () => {
-    const refused = { type: "watchEnded", reason: "limit", message: "tether on pop-os allows 3 tmux sessions at a time", jitter: 0.5 } as const;
+    const refused = { type: "watchEnded", reason: "limit", message: "muxen on pop-os allows 3 tmux sessions at a time", jitter: 0.5 } as const;
     let s = run([refused]);
     expect(s).toEqual({ kind: "limited", attempt: 1, retryInMs: 500, message: refused.message });
     s = run([{ type: "retry" }, refused], s);

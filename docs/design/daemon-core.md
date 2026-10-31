@@ -1,7 +1,7 @@
 # Daemon core: tmux bridge, hub, wire protocol
 
 The spec for `src/tmux/`, `src/hub/` and `src/proto/`. Settled ground: tmux is the
-source of truth and tether never starts Jimmy's tmux server; xterm.js on the phone is
+source of truth and muxen never starts Jimmy's tmux server; xterm.js on the phone is
 the only terminal emulator; 1 tab = 1 tmux session, showing its current window's active
 pane and following it as `tmux attach` does; the
 [resource budget](plan.md#resource-budget) comes first. Reasons and rejected
@@ -25,7 +25,7 @@ and catches up by snapshot once the socket has drained.
 ```mermaid
 flowchart LR
   tmux["tmux server"]
-  subgraph daemon["tether daemon"]
+  subgraph daemon["muxen daemon"]
     pump["pump task<br/>one per control client"]
     hub["hub task<br/>hub::State + tmux::Session"]
     conn["connection task<br/>one per WebSocket, hub::Outbox"]
@@ -228,7 +228,7 @@ Its rules:
   server-wide counter. A **flag-1** block is the next reply for the oldest pending
   group; the group completes after one `%end` per command. `%error` completes it at
   once as failed: tmux skips the rest of a list after an error. A **flag-0** block
-  (the attach reply, a hook) isn't tether's: it is dropped and never held in memory.
+  (the attach reply, a hook) isn't muxen's: it is dropped and never held in memory.
   A flag-1 block with nothing pending is `Event::Fatal`.
 - **Reply cap.** The bodies of one group's replies are held up to 1 MiB together
   (§6). Past it the held bodies are dropped, later replies of the group are still
@@ -254,8 +254,8 @@ Its rules:
   a pause of it (the session's own or a Release) is in flight or waiting for a slot;
   tmux 3.4 sends nothing from a pane after its pause reply. Output that arrives later
   means something resumed the pane, and it is paused again.
-- **Loss.** `pause-after=3` bounds what tmux queues for a stalled tether. A `%pause`
-  tether didn't request, for a wanted pane, means tmux dropped bytes: `Gap { pane }`.
+- **Loss.** `pause-after=3` bounds what tmux queues for a stalled muxen. A `%pause`
+  muxen didn't request, for a wanted pane, means tmux dropped bytes: `Gap { pane }`.
   The next snapshot's `continue` resumes it. With pause-after on, output arrives as
   `%extended-output`. tmux sees a stall only once the pump has stopped reading, which
   is when the hub's inbox (2 MiB, §6) is full. With a non-control client (the laptop)
@@ -321,7 +321,7 @@ Typed builders only. *Maintenance* ops come from desired state and are never ref
 | `WatchCurrent` / `UnwatchCurrent` | `refresh-client -B 'c::#{window_id}'` (§3.7) / `refresh-client -B 'c'` | maint. |
 | `History { pane, start, end }` | §3.4 history capture group | user |
 | `Input { window, items }` | text and bytes: `send-keys -t @W -H 68 69 …`, ≤ 512 bytes per command; a key: `send-keys -t @W <name>` | user |
-| `Paste { window, path, enter }` | `load-buffer -b tether-<tag> '<path>' ; paste-buffer -p -d -b tether-<tag> -t @W`; with `enter`, prepend `copy-mode -q -t @W` and append `; send-keys -t @W Enter` | user |
+| `Paste { window, path, enter }` | `load-buffer -b muxen-<tag> '<path>' ; paste-buffer -p -d -b muxen-<tag> -t @W`; with `enter`, prepend `copy-mode -q -t @W` and append `; send-keys -t @W Enter` | user |
 | `SelectWindow { session, window, vote }` | `select-window -t '$S:@W' ; switch-client -c '<client>' -t '$S' ; refresh-client -C '@W:CxR'`: the select, then a take with the watch's size | user |
 
 - **Locate never errors.** On 3.4 and 3.7b, `display-message -t` a missing session
@@ -364,15 +364,15 @@ Typed builders only. *Maintenance* ops come from desired state and are never ref
   ([probe-tmux.md §6](research/probe-tmux.md)), so Shift+Enter goes as CSI-u bytes.
   `tests/fixtures/proto/keys.json` lists every name the clients send; the Rust tests
   check each against the regex.
-- **Paste buffers.** The buffer is named `tether-<tag>` after the request's `Tag`.
+- **Paste buffers.** The buffer is named `muxen-<tag>` after the request's `Tag`.
   tmux buffer names are server-wide, so tags are unique across all control clients
   (the hub draws them from one counter). `paste-buffer -d` deletes the buffer only on
   success, and tmux skips the rest of a failed list, so every failed paste group is
-  followed by a separate `delete-buffer -b tether-<tag>` group whose own error is
+  followed by a separate `delete-buffer -b muxen-<tag>` group whose own error is
   ignored. That covers every failure point (missing window, a hook killing the window
   between load and paste, a missing file). On 3.4 `load-buffer` of a missing file succeeds: its read error is printed
   outside any block (dropped, §3.2) and the group then fails at `paste-buffer` with
-  `no buffer tether-<tag>`.
+  `no buffer muxen-<tag>`.
 - **Paste then Enter is one group.** With `enter`, the list first runs
   `copy-mode -q -t @W`, which quietly quits any pane mode (a no-op outside a mode), then
   pastes and sends `Enter`. The phone's latest action therefore leaves a laptop's copy
@@ -384,8 +384,8 @@ Typed builders only. *Maintenance* ops come from desired state and are never ref
   so this needs the window to vanish between them).
 - **Paste files.** The connection task takes one of a few daemon-wide paste slots
   (§6), or answers `busy` itself, then writes the text to a 0600 file in
-  `$XDG_RUNTIME_DIR/tether/`, so the hub only holds a `PasteFile`: the path plus its
-  slot. That directory is tmpfs, charged to tether's memory, which is why the slots are
+  `$XDG_RUNTIME_DIR/muxen/`, so the hub only holds a `PasteFile`: the path plus its
+  slot. That directory is tmpfs, charged to muxen's memory, which is why the slots are
   counted. tmux has read the file when the group completes; the hub hands the
   `PasteFile` back in a `RemoveFile` effect on `Done` and on every path that drops the
   request (§4.4), and deleting it frees the slot. The daemon empties the directory at
@@ -545,12 +545,12 @@ already attached to does. A size vote replaces the client size for that window a
 window takes the vote's size exactly.
 
 **Policy: a window takes the size of the client that acted on it last.** That is
-tmux's `latest`, which tether joins. While a watch has the claim, the owner votes the
+tmux's `latest`, which muxen joins. While a watch has the claim, the owner votes the
 watch's size for the window; when it starts voting a window, it first **takes**
 `latest` there, so tmux sizes the window to the watch exactly, larger or smaller than
 the laptop. When another client acts there, tmux makes that client `latest`, and the
 hub clears the vote, which would otherwise still cap it. A view shows its session's
-current window, so the claim is on that window and moves only by tether's own act.
+current window, so the claim is on that window and moves only by muxen's own act.
 
 - **A take** is `switch-client -c '<client>' -t '$S' ; refresh-client -C '@W:CxR'`, the
   owner's own name and session, then the vote. The switch makes the owner `latest` for
@@ -648,7 +648,7 @@ current window, so the claim is on that window and moves only by tether's own ac
   - the laptop's prefix-n: the laptop's size, since its prefix key is an act on the
     window being left (tmux's key handling; the real-tmux following test checks it
     with a take in place);
-  - a change no terminal made (a window exiting, a script, tether's own `selectWindow`
+  - a change no terminal made (a window exiting, a script, muxen's own `selectWindow`
     leaving it): the owner is still `latest` where it took, so it takes the owner's
     client size until a terminal acts there.
 
@@ -672,11 +672,11 @@ current window, so the claim is on that window and moves only by tether's own ac
     `client-session-changed` hook in Jimmy's config runs, once per take, not per key;
     the session's activity and last-attached times advance, so anything ordering
     sessions by them counts the take as use of the session; the control client's key
-    table resets, which tether never uses. The laptop's window-subscription entry
+    table resets, which muxen never uses. The laptop's window-subscription entry
     doesn't change, so a take never reads as another client's act. No focus event
     reached the pane, and bell flags stayed.
   - **The owner stays `latest` where it took** once its vote clears without another
-    terminal acting there (the tab left the screen, the connection dropped, tether's
+    terminal acting there (the tab left the screen, the connection dropped, muxen's
     claim moved): the window takes the owner's client size, the session's window size
     when the owner attached (§3.1), until a terminal acts there, or until the owner
     detaches at the end of its linger and tmux sizes the window by the clients left
@@ -807,13 +807,13 @@ child dropped at the timeout is killed.
 
 - `List` (session sheet, and the bell poll, §4.8) answers `Reply::Listing { server, version, sessions }`:
   `<install> ; display-message -p '#{version}\t#{pid}\t#{start_time}' ; list-windows -a -F
-  '#{session_id}\t#{window_id}\t#{window_index}\t#{window_active}\t#{window_activity}\t#{e|+:#{@tether-bell},0}\t<covered>\t#{session_name}\t#{s/<LF>/\\n/:window_name}'`.
-  The server line comes first, then windows in session order. No field can hold a raw line break, so each line after the server line is exactly one window record. Every field is generated by tmux or numeric by construction, with two exceptions. The session name is stored escaped by 3.4 and refused by 3.8. The window name, which 3.4 lets `-n` store with raw tabs and line breaks, passes through `#{s/<LF>/\\n/:…}` (a literal line feed in the argv), so a line break prints as `\n` the way 3.4 prints it in session names. The window name is last and split with `splitn`, so a raw tab in it stays in the name. `#{e|+:#{@tether-bell},0}` makes the user-writable counter a number (0 when unset, empty when someone set it to non-numeric text, which reads as 0). A line that doesn't parse is `BadReply`, not skipped. `#{n:…}` can't frame the name: it counts stored bytes, and 3.4 escapes control characters only on output. Verified on 3.4 and 3.8. `@tether-bell` is the session's counter. `<covered>` is tmux's own verdict for that window (§4.8):
+  '#{session_id}\t#{window_id}\t#{window_index}\t#{window_active}\t#{window_activity}\t#{e|+:#{@muxen-bell},0}\t<covered>\t#{session_name}\t#{s/<LF>/\\n/:window_name}'`.
+  The server line comes first, then windows in session order. No field can hold a raw line break, so each line after the server line is exactly one window record. Every field is generated by tmux or numeric by construction, with two exceptions. The session name is stored escaped by 3.4 and refused by 3.8. The window name, which 3.4 lets `-n` store with raw tabs and line breaks, passes through `#{s/<LF>/\\n/:…}` (a literal line feed in the argv), so a line break prints as `\n` the way 3.4 prints it in session names. The window name is last and split with `splitn`, so a raw tab in it stays in the name. `#{e|+:#{@muxen-bell},0}` makes the user-writable counter a number (0 when unset, empty when someone set it to non-numeric text, which reads as 0). A line that doesn't parse is `BadReply`, not skipped. `#{n:…}` can't frame the name: it counts stored bytes, and 3.4 escapes control characters only on output. Verified on 3.4 and 3.8. `@muxen-bell` is the session's counter. `<covered>` is tmux's own verdict for that window (§4.8):
   `#{&&:#{&&:<ours>,#{monitor-bell}},#{==:#{bell-action},any}}`, with `<ours>`
-  `#{m:set-option -F @tether-bell*,#{alert-bell[9100]}}` (the session resolves tether's
+  `#{m:set-option -F @muxen-bell*,#{alert-bell[9100]}}` (the session resolves muxen's
   hook entry, which a session-level hook breaks). `<install>` is
   `set-option -goq 'alert-bell[9100]' '<hook>'` (as separate argv words, no quoting), `<hook>` being
-  `set-option -F @tether-bell "#{e|+:#{?#{@tether-bell},#{@tether-bell},0},1}"` (the
+  `set-option -F @muxen-bell "#{e|+:#{?#{@muxen-bell},#{@muxen-bell},0},1}"` (the
   double quotes are part of the text, escaped inside the outer double quotes: unquoted,
   tmux reads `#` as a comment and stores a truncated hook). `-o` writes the global
   array only while the index is empty, `-q` and `-o` together make an occupied index a
@@ -837,7 +837,7 @@ child dropped at the timeout is killed.
 - `Locate`: the op's command (§3.4), when the session has no `Ready` control client to
   ask (a view's first check, a session check after an exit). It answers
   `Reply::Location`.
-- `NewWindow`: `if-shell -F '#{!=:#{pid}-#{start_time},<server>}' tether-server-changed ;
+- `NewWindow`: `if-shell -F '#{!=:#{pid}-#{start_time},<server>}' muxen-server-changed ;
   new-window -t '$S' [-n <name>] [-c <dir>] -P -F <created>`, without `-d`, so the new
   window becomes the session's current window, as prefix-c makes it, and its tabs follow;
   `NewSession`: `new-session -d [-s <name>] [-c <dir>] -P -F <created>`. Both answer
@@ -849,16 +849,16 @@ child dropped at the timeout is killed.
   (`OneShotCmd::NewWindow { server, … }`, from the `SessionRef`), and tmux checks it:
   session ids restart at `$0` with every server, so on another instance `-t '$S'` would
   name some other session. The leading `if-shell -F` (a format test; it runs no shell
-  and waits for nothing) takes `tether-server-changed` as its command on a different
+  and waits for nothing) takes `muxen-server-changed` as its command on a different
   instance. That isn't a tmux command, so `if-shell` fails and tmux skips the rest of
-  the list: nothing is created. The one-shot reads `tether-server-changed` in stderr as
+  the list: nothing is created. The one-shot reads `muxen-server-changed` in stderr as
   `NoServer`. The hub keeps no check of its own, because the instance it last saw can be
   stale or unknown, and tmux's check can't be.
 
 **Arguments, not command lines.** A one-shot is an argv vector with no shell and no
 quoting layer: tmux takes each argument literally, except that an argument ending in
 `;` ends the command (`-n 'x;'` fails with `unknown command: -c`), and an argument that
-is just `;` separates commands, which `List` uses. tether's own arguments are ids and
+is just `;` separates commands, which `List` uses. muxen's own arguments are ids and
 fixed formats. A user's `name` or `dir` gets every `#` doubled (tmux format-expands
 both), a trailing `;` sent as `\;`, and control characters or a non-UTF-8 path refused
 as `BadRequest` before any process starts.
@@ -867,7 +867,7 @@ as `BadRequest` before any process starts.
 
 | Cause | `TmuxError` |
 |---|---|
-| tmux says `no server running on …` (stale socket) or `error connecting to … (No such file or directory)` (socket file missing); or stderr names `tether-server-changed`, the `NewWindow` guard | `NoServer` |
+| tmux says `no server running on …` (stale socket) or `error connecting to … (No such file or directory)` (socket file missing); or stderr names `muxen-server-changed`, the `NewWindow` guard | `NoServer` |
 | any other non-zero exit | `Command(stderr)`, or the exit status when stderr is empty |
 | still running after 2 s; the process is killed | `Timeout` |
 | tmux couldn't be run | `Spawn(message)` |
@@ -877,22 +877,22 @@ as `BadRequest` before any process starts.
 `NoServer` starts no server. It means no server is running, or the one running isn't the
 instance this one-shot was for (`NewWindow`'s guard), and the hub treats the two alike
 (§5.3). tmux rewrites `$NAME` in a window or session name to
-`\$NAME`, in control mode too; that is tmux's behaviour, not tether's escaping, and
+`\$NAME`, in control mode too; that is tmux's behaviour, not muxen's escaping, and
 names pass through as tmux returns them.
 
 One at a time, 2 s timeout. The hub emits an effect, `run.rs` runs it in a task, and
 the result returns as an `Input`. While the slot is taken, user one-shots get `busy`
 and Locates wait; a `List` request joins a `List` in flight, and the bell poll waits (§4.8).
 
-**Endpoints.** Each tmux server tether talks to is an endpoint: `main`, from config,
+**Endpoints.** Each tmux server muxen talks to is an endpoint: `main`, from config,
 and `scratch`. Server instances are written `"<endpoint>:<pid>-<start_time>"`, so a
 window id routes to its endpoint by itself.
 
 **Scratch shells (after the core MVP)** are sessions on a private server: the daemon
-runs `systemd-run --user --scope --collect tmux -u -L tether-scratch new-session -d -P
+runs `systemd-run --user --scope --collect tmux -u -L muxen-scratch new-session -d -P
 -F '#{pid}\t#{start_time}\t#{session_id}\t#{window_id}'` (the creation format above;
 no `-N`, since this one starts the server). Its own transient scope keeps the server out of
-tether's cgroup, which is what the never-start-tmux rule protects. Scratch windows
+muxen's cgroup, which is what the never-start-tmux rule protects. Scratch windows
 are ordinary tabs on the same stream path. Closing a scratch tab kills its session;
 the server exits with its last one.
 
@@ -1179,7 +1179,7 @@ stateDiagram-v2
    destroyed under `detach-on-destroy off`, [probe](research/probe-session-follow.md)).
    The hub closes that client, which belongs to one session for life, and checks the
    session as after an exit (§4.5). The close ends the client with `%exit`, so if the
-   session is still alive (another client ran `switch-client -c` on tether's client),
+   session is still alive (another client ran `switch-client -c` on muxen's client),
    the exit reads as a detach: `watchEnded { detached }`, as for `detach-client`.
 
 A view keeps its claim when its owner is respawned after a crash, and the new owner
@@ -1330,7 +1330,7 @@ nothing.
     that server's tmux. Matching versions keep the generic repeated-failure message.
     (A `systemctl stop` must not look like a detach: under the default kill mode systemd
     signals the `tmux -C` clients itself while sockets close. The unit's `KillMode=mixed`
-    signals tether alone, [plan.md](plan.md#resource-budget).)
+    signals muxen alone, [plan.md](plan.md#resource-budget).)
 - **One reporter per endpoint.** Every control client receives `%sessions-changed` and
   the window add and close notifications, so the hub turns them into `sessionsChanged`
   only from the endpoint's lowest-id `Ready` client; otherwise each would be broadcast
@@ -1516,13 +1516,13 @@ and a bell anywhere else is the hook's.
 **The hook.** One server-global `alert-bell` entry at the fixed index **9100**:
 
 ```text
-set-hook -g 'alert-bell[9100]' 'set-option -F @tether-bell "#{e|+:#{?#{@tether-bell},#{@tether-bell},0},1}"'
+set-hook -g 'alert-bell[9100]' 'set-option -F @muxen-bell "#{e|+:#{?#{@muxen-bell},#{@muxen-bell},0},1}"'
 ```
 
 tmux runs it in the ringing session's context, so each session gets its own user option
-`@tether-bell`, a counter: `#{e|+:…}` adds one, an unset option counts as 0. A counter
+`@muxen-bell`, a counter: `#{e|+:…}` adds one, an unset option counts as 0. A counter
 says "changed" exactly, even for two bells within a second, which a timestamp does not.
-Verified on tmux 3.4 and 3.8: three bells in `alpha` left `@tether-bell` at 3, one in
+Verified on tmux 3.4 and 3.8: three bells in `alpha` left `@muxen-bell` at 3, one in
 `beta` left 1; sessions created after the hook inherit it; it fires for a session with a
 control client attached, one with none, and a detached current window. tmux coalesces
 bells that arrive together (200,000 BEL bytes ran the hook 197 times, the same on both
@@ -1531,7 +1531,7 @@ during the storm saw no notification from the hook's `set-option`. A window link
 two sessions rings the hook in both (`a:0` linked into `b`: both read 1 on both versions).
 
 - **Why a fixed index, not `set-hook -ga`.** `-a` takes the first free index (it chose 0
-  below an existing 3), so tether would have to search `show-hooks` for its own entry to
+  below an existing 3), so muxen would have to search `show-hooks` for its own entry to
   update or remove it, and could not tell it from a user's identical-looking one. A fixed
   index makes install idempotent, makes "ours" a read of one element, and leaves every
   other index, the user's included, alone. 9100 is far above any index a person writes by
@@ -1541,15 +1541,15 @@ two sessions rings the hook in both (`a:0` linked into `b`: both read 1 on both 
   overwritten, and a missing entry (tmux restart, `set-hook -gu`, the other of two
   daemons stopping) is back within one poll. **Adopt** runs once at hub start
   (`AdoptBellHook`): an older build's entry is rewritten to the current text, and an
-  empty index is installed. A foreign entry at 9100 is read only: tether neither writes nor removes
+  empty index is installed. A foreign entry at 9100 is read only: muxen neither writes nor removes
   it, and every window reads uncovered (below).
 - **Remove** at shutdown (`HubHandle::stop`, §4.7), once, `RemoveBellHook` (§3.8): unset
-  only while the entry still starts with tether's text. The hub closes the control
+  only while the entry still starts with muxen's text. The hub closes the control
   clients' stdin first, then runs it beside the pump drain once the one-shot in flight
   has finished (a `List`'s install could land after the unset otherwise), all inside a
   1.5 s wait that keeps the hub within the daemon's 2 s; past it the entry stays.
   SIGKILL, a panic or a power cut leave the entry in place; it is harmless (a `set-option`
-  on a bell, no dependence on the daemon: tmux never waits for tether) and the next start
+  on a bell, no dependence on the daemon: tmux never waits for muxen) and the next start
   adopts it.
 - **Two daemons on one server** write the same text to the same index and double nothing.
   The first to stop removes the shared entry; the survivor reinstalls it at its next `List`
@@ -1561,13 +1561,13 @@ two sessions rings the hook in both (`a:0` linked into `b`: both read 1 on both 
 
 **Coverage** (`covered`) is tmux's verdict, in the `List` format (§3.8), **per window**;
 a session is covered when all its windows are. A window is covered when its session
-resolves tether's entry at 9100, `monitor-bell` is on and `bell-action` is `any`. Each
+resolves muxen's entry at 9100, `monitor-bell` is on and `bell-action` is `any`. Each
 condition is a real gap measured on both versions: a session-level `alert-bell` hook gives
 the session its own array and the global entry is not run for it; `monitor-bell off`
 raises no alert and no hook, and a window other than the current one with it off is
 caught because every window is read; `bell-action current` or `other` runs the hook for
 one window class only, so it is reported uncovered rather than partly covered; a foreign
-entry at 9100 fails the `m:` test. tether never edits the user's hooks or options to
+entry at 9100 fails the `m:` test. muxen never edits the user's hooks or options to
 widen coverage. `covered` is configuration only; a failed read is a different fact
 (below).
 
@@ -1600,7 +1600,7 @@ It starts from reconcile when it is due and the slot is free, after views' Locat
   (a timeout, a spawn failure, a bad reply) sets the baseline's `available` false and sends
   one `bell` with `available: false` and no sessions; the baseline's marks stay. The next
   success sends `available: true` with the sessions that changed. No per-session
-  `covered` changes with a failed poll: tether can't read tmux then, which differs from
+  `covered` changes with a failed poll: muxen can't read tmux then, which differs from
   tmux's settings excluding a session, and the client shows the two with different words
   ([browser-behaviors.md](client/browser-behaviors.md)). A listing a user's request alone
   fails is answered with its error as today and counts the same.
@@ -1614,7 +1614,7 @@ core at 5 s; process spawn dominates (an earlier 7 ms client-CPU upper bound for
 harness, about 0.15% of a core at 5 s, 720 spawns an hour, only while a device is
 connected). Per bell: one `bell` message of about 110 bytes per connection, nothing while
 quiet. The interval is the worst-case latency of a bell (average 2.5 s); 5 s is where a
-phone alert still feels prompt and the host cost is below anything else tether does while
+phone alert still feels prompt and the host cost is below anything else muxen does while
 connected. A faster poll costs linearly (2 s is 0.4%).
 
 **Lifecycle.**
@@ -1622,14 +1622,14 @@ connected. A faster poll costs linearly (2 s is 0.4%).
 | Event | Result |
 |---|---|
 | daemon starts, server up | adopts the hook once; counts accumulate with no device connected, and the first device's listing shows them |
-| daemon starts, no server, or the server (re)starts later | nothing: **bells before the first device connects after a tmux start are lost**, because tether has no contact with tmux while no device is connected. The first `List` installs the hook; an empty mark then reads 0 and `covered` true |
+| daemon starts, no server, or the server (re)starts later | nothing: **bells before the first device connects after a tmux start are lost**, because muxen has no contact with tmux while no device is connected. The first `List` installs the hook; an empty mark then reads 0 and `covered` true |
 | daemon stops cleanly | removes its entry (guarded); markers stay as session options and vanish with the server |
 | daemon crashes or is killed | the entry stays, harmless; tmux keeps counting; the next daemon adopts it and reads the counts |
 | two daemons on one server, one stops | the entry is removed for both; the survivor reinstalls at its next `List` (a device connected to it); bells in between are lost |
 | tmux server exits | hook, markers and flags are gone with it; `serverExited` (§4.5); polls answer `NoServer` until a server returns, then install |
 | tmux restarts | a new instance: marks restart at 0 under a new `SessionRef`, so old tabs close (§5.3) and cannot match |
 | session killed or created | the answer simply lacks or gains it; created sessions inherit the global hook |
-| user's own `alert-bell[…]` entries | untouched; they run beside tether's |
+| user's own `alert-bell[…]` entries | untouched; they run beside muxen's |
 | session-level hook, `monitor-bell off`, `bell-action` not `any`, foreign entry at 9100 | `covered: false` for that session, never a silence that reads as no bells |
 | poll failed or timed out | one `bell` with `available: false` for the server; sessions keep their marks and `covered` |
 
@@ -1644,9 +1644,9 @@ a timestamp mark; a separate marker one-shot.
 
 One WebSocket per app per host at `GET /ws`. Each daemon is one host and the app
 connects to each directly, so the socket identifies the host and no message names
-one. The daemon negotiates only `tether.v1`. Native clients send the credential beside
-it as `tether.auth.<token>` in `Sec-WebSocket-Protocol`; browsers send only
-`tether.v1` ([auth.md](auth.md#carrying-the-token)). Text frames carry JSON; binary
+one. The daemon negotiates only `muxen.v1`. Native clients send the credential beside
+it as `muxen.auth.<token>` in `Sec-WebSocket-Protocol`; browsers send only
+`muxen.v1` ([auth.md](auth.md#carrying-the-token)). Text frames carry JSON; binary
 frames carry pane bytes; the protocol relies on WebSocket keeping them in order.
 
 Configuration, runtime-directory and below-minimum-budget startup errors exit with
@@ -1660,7 +1660,7 @@ stateDiagram-v2
   [*] --> Upgrade: GET /ws
   Upgrade --> Rejected: Tailscale check fails, HTTP 403
   Upgrade --> Closed: bad token, auth file unreadable, or over the cap
-  Upgrade --> AwaitHello: subprotocol tether.v1
+  Upgrade --> AwaitHello: subprotocol muxen.v1
   AwaitHello --> Closed: no hello in time, or version out of range
   AwaitHello --> Ready: hello, welcome
   Ready --> Closed: any close code below
@@ -1685,7 +1685,7 @@ credential and retries with the usual backoff
   "ios" | "web", build } }`. In range: `welcome { protocol, daemon: { version }, host:
   { id, name } }`; `daemon.completion` says whether this tier offers suggestions. Out
   of range: `incompatible { min, max, daemonVersion }`, close
-  4001; the app marks that host "update the app" (below `min`) or "update tether on
+  4001; the app marks that host "update the app" (below `min`) or "update muxen on
   <host>" (above `max`). `GET /auth/info` reports the same range.
 - **Bump** when an older peer would act wrongly on the new shape. A removed or renamed
   field or message, or changed meaning, needs a bump if an older peer would misread it;
@@ -1808,7 +1808,7 @@ budget, and those come from the tier table below. Every memory figure is in MiB.
 ### 6.1 The memory budget
 
 `memory_budget_mib` in `config.toml` ([plan.md](plan.md#config)), default 72, is the
-most memory tether's unit may hold that the kernel can't reclaim. At startup `main`
+most memory muxen's unit may hold that the kernel can't reclaim. At startup `main`
 reads it, then the cgroup limit:
 
 1. Find the cgroup2 mount in `/proc/self/mountinfo` (filesystem type `cgroup2`):
@@ -1838,7 +1838,7 @@ The **effective budget** is the lower of the configured budget and that limit.
   user manager. Outside systemd (a dev run, macOS) no limit is expected and nothing
   is logged.
 - **A `memory.high` below the effective budget less 4 MiB:** a warning, "MemoryHigh
-  <h> is below what tether may hold at its caps; remove it", since the unit would
+  <h> is below what muxen may hold at its caps; remove it", since the unit would
   stall at caps (`MemoryHigh` in [plan.md](plan.md#resource-budget)). It changes no
   cap.
 - The startup log line names the effective budget, the tier, and its caps.
@@ -1897,7 +1897,7 @@ at construction.
 | hyper buffer per connection | 16 KiB, read and write each | a larger request head: 431 |
 | header-read and idle timeout | 100 s | connection closed |
 | watches per connection | 2 | `watchEnded { error }` |
-| control clients | tier table: 3 by default, for every tmux server tether attaches to (a scratch server's included, when scratch shells land); lingering ones closed first | `watchEnded { limit }` naming the sessions that hold the slots |
+| control clients | tier table: 3 by default, for every tmux server muxen attaches to (a scratch server's included, when scratch shells land); lingering ones closed first | `watchEnded { limit }` naming the sessions that hold the slots |
 | control-client linger | 15 s | |
 | groups in flight per control client | 32; user requests below 24 | user: `busy`; maintenance waits |
 | capture slots (snapshot, history) | 2 daemon-wide | history: `busy`; snapshot waits |
@@ -1939,7 +1939,7 @@ at construction.
 **A cap refusal says which kind it is.** `busy` clears within a second or so, and the
 client retries soon. `watchEnded { reason: "limit", message }` is the control-client
 cap, which clears only when another session's tabs close or the budget is raised.
-Its message names the cap and the sessions holding it: "tether on devbox allows 1
+Its message names the cap and the sessions holding it: "muxen on devbox allows 1
 tmux session at a time; open now: work". A lingering client doesn't hold a slot,
 since the next watch closes it, so once the user closes the named session's tabs on
 any device, the next attempt succeeds. The socket cap keeps its own close code, 4005.
@@ -1998,7 +1998,7 @@ If a measurement exceeds a row, the row's cost is raised in `src/budget.rs`, and
 test moves the tier boundary. The `kernel` key needs Linux 5.18 or later; on older
 kernels replace `kernel − slab_reclaimable` with `kernel_stack + pagetables +
 percpu + slab_unreclaimable`. The tiers are claimed for the glibc build the unit runs
-(`%h/.cargo/bin/tether`); the musl release binaries are unmeasured.
+(`%h/.cargo/bin/muxen`); the musl release binaries are unmeasured.
 
 The normal case, one control client and one watch, is about 11 MiB, plus up to
 14 MiB of completion state while Jimmy types and for five minutes after (the slab is
@@ -2034,8 +2034,8 @@ bound needs hyper's buffer size, and axum 0.8.9 builds each connection with
 hyper's defaults and no hook (`serve/mod.rs`). At the default (8 KiB + 400 KiB per
 buffer), 61 connections could hold about 25 MiB. The loop:
 
-- accepts on both daemon Unix sockets, `$XDG_RUNTIME_DIR/tether/serve.sock` and
-  `$XDG_RUNTIME_DIR/tether/local.sock`, sharing the same 64 permits. The front gate
+- accepts on both daemon Unix sockets, `$XDG_RUNTIME_DIR/muxen/serve.sock` and
+  `$XDG_RUNTIME_DIR/muxen/local.sock`, sharing the same 64 permits. The front gate
   runs before routing; only requests that pass receive its copyable `NodeLane` view
   in their extensions ([auth.md](auth.md#sockets-and-the-tailscale-check));
 - takes one of the **64 connection permits** before each `accept`. With none free it
@@ -2091,7 +2091,7 @@ file; every build refuses a larger bundle. Four responses may stream at once and
 wait, in arrival order. A 30 s no-progress write deadline aborts a stalled client and
 releases its slot. Static files use content hashes for immutable caching; the root,
 manifest and service worker use `no-cache` and ETags. The generated manifest's name
-is `tether <host>`.
+is `muxen <host>`.
 
 ## 7. Failure handling
 
@@ -2116,7 +2116,7 @@ How each failure ends; §4.5 has the control-client details.
 | socket cap full | the upgrade-time socket permit | close 4005; client reconnects with its host backoff |
 | a take fails (the session went between the hub's view and tmux's) | the vote group's `Done { Err }` | nothing more: the window keeps its size, and the session's end reaches the hub as its own failure |
 | another client acts on a claimed window | `Acted` from the owner's window subscription (§3.7) | the claim yields and the vote clears; the watch stays; tmux sizes the window by `latest` (§3.6) |
-| the session's current window changes without a tether act | `CurrentWindow` | the claim drops and the old window's vote clears; the new window keeps its size until the tab acts (§3.6) |
+| the session's current window changes without a muxen act | `CurrentWindow` | the claim drops and the old window's vote clears; the new window keeps its size until the tab acts (§3.6) |
 | connection socket dies | `FromConn::Closed` | `DropConn`; its watches and their claims end, so those votes clear; subscriptions clear if no watch remains |
 | connection wedged | control JSON past the overdraft, or its channel full | close 4002; the client reconnects |
 | hub panics | `main` awaits it | exit 1; systemd restarts; clients reconnect and resync |
@@ -2137,7 +2137,7 @@ Every failure ends as a message the phone can show. Logs carry framing metadata 
 
 **Recorded fixtures.** `cargo run --example record-tmux-fixtures -- [--tmux <path>]
 --out tests/fixtures/tmux/<version>/ [scenario…]` starts a private server per scenario
-(`-L tether-fixture-<pid>-<n>`, `nice -n 10`), attaches a control client as the daemon
+(`-L muxen-fixture-<pid>-<n>`, `nice -n 10`), attaches a control client as the daemon
 does and drives a real `Session` over its pipes; set-up the daemon never does (splits,
 hooks, moves) goes through one-shot `tmux` commands. Each scenario writes the raw
 stdout (`.out`), every request with the stdout offset it was made at (`.script`) and
@@ -2238,7 +2238,7 @@ box, 3.7b on the Mac, both committed (3.7b: `src/tmux/.context/TODO`).
   `web/proto/frames.test.ts`), unknown message types against bad known ones, and the
   generated-TypeScript staleness test (§5.5).
 
-**Real tmux** (`TETHER_TMUX_TESTS=1`, `tests/tmux_real.rs`, before each daemon-core
+**Real tmux** (`MUXEN_TMUX_TESTS=1`, `tests/tmux_real.rs`, before each daemon-core
 commit, on the dev box and the Mac; the private-server and terminal helpers are shared
 with the replay tests and the recorder in `tests/support/`):
 
@@ -2313,27 +2313,27 @@ with the replay tests and the recorder in `tests/support/`):
    2026-10-24). Taking rests on `server_client_set_session` setting `latest` on a
    same-session `switch-client`, and on 3.4 on the vote after it recalculating; a tmux
    that skips a switch to the session already attached, or stops setting `latest`
-   there, leaves tether's size a cap again (the cost before 2026-10-25). The real-tmux
+   there, leaves muxen's size a cap again (the cost before 2026-10-25). The real-tmux
    sizing test, with a watch larger than the pty, catches both.
 3. **Unicode width drift** between tmux and xterm.js can misplace cells; `resync`
    repaints.
-4. **A tmux crash path tether's control clients can reach on 3.4 and 3.7b.**
+4. **A tmux crash path muxen's control clients can reach on 3.4 and 3.7b.**
    `control_notify_session_window_changed` dereferences the session's current window
    without a NULL check (`control-notify.c`, 3.4); tmux 3.8 fixed a deferred
    notification firing after its session was destroyed (upstream `035447b0`, issue
-   5244). The path runs only with a control client attached, which tether always has,
+   5244). The path runs only with a control client attached, which muxen always has,
    and the session-follow design does not change that. Reproduced on both versions:
    `select-window` followed by `kill-session` in one command list crashes the whole
    server while any control client is attached, even to another session. Separate
    commands survived the observed trials, but this is not a general safety guarantee.
-   Tether must not combine selection and destruction; only a tmux version containing
+   Muxen must not combine selection and destruction; only a tmux version containing
    the upstream fix protects against arbitrary other-client command lists. Resolve
    that host-version decision before daily use; session-follow cannot fix it locally.
    A separate pre-3.7 bug sends notifications to a control client before its identify
    handshake has allocated `control_state` (upstream `e5a2a25f`, #4980); early client
    exit also crashes `control_stop` (`31c93c48`, #5004). Ordinary attach/detach races
    reproduced the entire-server crash on 3.4, including an integration-test crash;
-   3.7b survived those probes. Serializing tether's own actions cannot protect against
+   3.7b survived those probes. Serializing muxen's own actions cannot protect against
    other terminals or an early client death. These are distinct from the destroyed-
    session bug above: 3.7 fixes the handshake bugs but not that 3.7b reproduction.
    Track the combined baseline/backport decision in GitHub issue #2; do not deploy on
@@ -2341,7 +2341,7 @@ with the replay tests and the recorder in `tests/support/`):
 5. **Every tab switch repaints from a snapshot.** Whether reset-and-write flashes in
    xterm.js 6 on iOS is measured in spike 3.
 6. **User hooks:** a waiting hook makes snapshots torn (retried, then `Torn`);
-   `destroy-unattached on` destroys a session when tether's lingering client closes, as
+   `destroy-unattached on` destroys a session when muxen's lingering client closes, as
    the option says.
 7. **Restore gaps:** one tmux scroll region and tab-stop set versus one per xterm.js
    screen, and no pending-wrap state (§3.5). The application's next redraw fixes both.
@@ -2350,7 +2350,7 @@ with the replay tests and the recorder in `tests/support/`):
    the first snapshot and break the stream, and so can a claim or yield later (§3.6).
    Correct but wasteful; measure first.
 10. **tmux master (after 3.7c, commit 19ec0de) delays notifications until a reply block
-   closes.** A `%pause` that tether requested then lands outside its block, and
+   closes.** A `%pause` that muxen requested then lands outside its block, and
    `Session` reads it as tmux's own: a Gap. A `Release` quickly followed by a
    `Snapshot` of the same pane would cost one spurious extra snapshot. Not seen on 3.4
    or 3.7b; unverified on master.
@@ -2370,7 +2370,7 @@ Kill session, Kill window and Rename session; New window exists (`NewWindow`). T
 replies and refusals are not specified yet, and they must settle these before the menu ships:
 
 - **tmux 3.4's crash.** A window change and a kill of the same session in one command list kill the
-  whole server whenever a control client is attached (risk 4); tether's own control client is always
+  whole server whenever a control client is attached (risk 4); muxen's own control client is always
   attached to the session it kills. Separate lists survived every trial, which is not proof. Decide
   whether a kill goes through a one-shot or the control client, prove that session-follow (a
   `switch-client` or a claim) never lands in the same list as a kill, and gate on the real-tmux suite

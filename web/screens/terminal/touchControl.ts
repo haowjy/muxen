@@ -7,7 +7,7 @@
 // never a click or a blur), and `touchcancel` is what a long press that WebKit took over looks like.
 // A touch on a live selection is WebKit's and never reaches the recognizer. After a touch, mouse events
 // on the surface stop for a while: iOS's imitation mouse-move over a link would redraw rows and end a selection.
-// With the keyboard up in the app the hold is tether's instead (`Mark`): WebKit's selection would take the
+// With the keyboard up in the app the hold is muxen's instead (`Mark`): WebKit's selection would take the
 // keyboard down. The recognizer's hold marks the word, the finger extends it, a tap inside toggles the menu and a
 // tap elsewhere clears it; the handles' touches are the mark's own and never get here.
 //

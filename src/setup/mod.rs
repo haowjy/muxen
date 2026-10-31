@@ -1,4 +1,4 @@
-//! Run tether in the terminal or install its per-user service, and tear it down.
+//! Run muxen in the terminal or install its per-user service, and tear it down.
 
 mod checks;
 mod install;
@@ -63,7 +63,7 @@ pub fn setup(config_path: Option<PathBuf>) -> Result<(), Box<dyn std::error::Err
     crate::blocking::runtime()?.block_on(setup_async(config_path))
 }
 
-/// Runs tether in this terminal on Linux; macOS requires its LaunchAgent front.
+/// Runs muxen in this terminal on Linux; macOS requires its LaunchAgent front.
 pub fn setup_foreground(config_path: Option<PathBuf>) -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(target_os = "linux")]
     {
@@ -73,7 +73,7 @@ pub fn setup_foreground(config_path: Option<PathBuf>) -> Result<(), Box<dyn std:
     {
         let _ = config_path;
         Err(Box::new(SetupError::new(
-            "On a Mac, phones reach tether only through its LaunchAgent, which holds its port; run `tether setup --background`.",
+            "On a Mac, phones reach muxen only through its LaunchAgent, which holds its port; run `muxen setup --background`.",
         )))
     }
 }
@@ -87,7 +87,7 @@ async fn setup_async(config_path: Option<PathBuf>) -> Result<(), Box<dyn std::er
     let host = platform::inspect()?;
     if terminal_run(host.service_state.loaded, &host.runtime_dir)? {
         return Err(Box::new(SetupError::new(
-            "tether is running in a terminal; Ctrl-C it, then rerun `tether setup --background`.",
+            "muxen is running in a terminal; Ctrl-C it, then rerun `muxen setup --background`.",
         )));
     }
     let api = LocalApi::system();
@@ -163,7 +163,7 @@ fn removed_handler_changes(plan: &publish::PlanResult) -> Vec<String> {
         .iter()
         .map(|handler| {
             format!(
-                "Removed tether's old handler at {} {}",
+                "Removed muxen's old handler at {} {}",
                 handler.entry, handler.mount
             )
         })
@@ -183,7 +183,7 @@ fn no_tmux_server_note(config: &Config) -> Option<String> {
 async fn setup_foreground_async(
     config_path: Option<PathBuf>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // The report says tether is running, so a terminal run logs only problems; set up
+    // The report says muxen is running, so a terminal run logs only problems; set up
     // before `daemon::open`, whose budget warnings would otherwise be dropped.
     daemon::init_tracing(tracing_subscriber::filter::LevelFilter::WARN);
     let file = ConfigFile::resolve(config_path.as_deref())?;
@@ -219,9 +219,9 @@ async fn setup_foreground_async(
         Ok(opened) => opened,
         Err(daemon::OpenError::AlreadyRunning) => {
             let message = if systemd::service_active() {
-                "tether is already running as your service. `tether setup --background` restarts it and prints a new code; `systemctl --user stop tether` frees this terminal's run."
+                "muxen is already running as your service. `muxen setup --background` restarts it and prints a new code; `systemctl --user stop muxen` frees this terminal's run."
             } else {
-                "Another tether is already running; stop it first."
+                "Another muxen is already running; stop it first."
             };
             return Err(Box::new(SetupError::new(message)));
         }
@@ -266,7 +266,7 @@ fn checked_tailnet(
     })
 }
 
-/// Stops and removes tether's service and only its own Serve handlers.
+/// Stops and removes muxen's service and only its own Serve handlers.
 pub fn teardown() -> Result<(), Box<dyn std::error::Error>> {
     crate::blocking::runtime()?.block_on(teardown_async())
 }
@@ -274,7 +274,7 @@ pub fn teardown() -> Result<(), Box<dyn std::error::Error>> {
 async fn teardown_async() -> Result<(), Box<dyn std::error::Error>> {
     if effective_uid() == 0 {
         return Err(Box::new(SetupError::new(
-            "Run tether teardown as the user whose service tether installed, not as root.",
+            "Run muxen teardown as the user whose service muxen installed, not as root.",
         )));
     }
     let host = platform::inspect_teardown()?;
@@ -302,7 +302,7 @@ async fn teardown_async() -> Result<(), Box<dyn std::error::Error>> {
         println!("Nothing to remove.");
     } else {
         if removed {
-            println!("Removed tether's Serve handler.");
+            println!("Removed muxen's Serve handler.");
         }
         if installed {
             println!("Removed {}.", display_name(&host.service_file));
@@ -312,7 +312,7 @@ async fn teardown_async() -> Result<(), Box<dyn std::error::Error>> {
     }
     let mut notes = Vec::new();
     if terminal_running {
-        notes.push("A tether still runs in a terminal; Ctrl-C it.".to_owned());
+        notes.push("A muxen still runs in a terminal; Ctrl-C it.".to_owned());
     }
     #[cfg(target_os = "linux")]
     notes.extend(systemd::teardown_notes(&host));
@@ -346,7 +346,7 @@ fn make_facts(
                 "can't resolve current executable: {error}"
             ))) as Box<dyn std::error::Error>
         })?;
-    let installed_path = host.home.join(".cargo/bin/tether");
+    let installed_path = host.home.join(".cargo/bin/muxen");
     let installed_canonical = installed_path.canonicalize().ok();
     let cargo_home_other = std::env::var_os("CARGO_HOME")
         .map(PathBuf::from)
@@ -457,7 +457,7 @@ async fn verify_new_daemon(
 ) -> Result<(), SetupError> {
     let socket = host.runtime_dir.join("local.sock");
     let deadline = tokio::time::Instant::now() + VERIFY_TIMEOUT;
-    let mut last = "tether isn't running".to_owned();
+    let mut last = "muxen isn't running".to_owned();
     while tokio::time::Instant::now() < deadline {
         if socket_inode(&socket).is_some_and(|inode| Some(inode) == previous_inode) {
             tokio::time::sleep(POLL_INTERVAL).await;
@@ -511,7 +511,7 @@ async fn verify_new_daemon(
         format!("{logs}\n{exit}")
     };
     Err(SetupError::new(format!(
-        "tether didn't report a publication within 30 s. Last answer: {last}.\nLast 20 tether log lines:\n{logs}"
+        "muxen didn't report a publication within 30 s. Last answer: {last}.\nLast 20 muxen log lines:\n{logs}"
     )))
 }
 
@@ -528,10 +528,10 @@ impl WriteOperation {
     fn command(self) -> &'static str {
         match self {
             #[cfg(any(target_os = "linux", test))]
-            Self::BackgroundSetup => "tether setup --background",
+            Self::BackgroundSetup => "muxen setup --background",
             #[cfg(target_os = "linux")]
-            Self::ForegroundSetup => "tether setup",
-            Self::Teardown => "tether teardown",
+            Self::ForegroundSetup => "muxen setup",
+            Self::Teardown => "muxen teardown",
         }
     }
 
@@ -564,7 +564,7 @@ fn write_error(error: &PlanError, version: &str, operation: WriteOperation) -> S
             }
         }
         PlanError::ConflictsExhausted => {
-            format!("Tailscale's Serve config kept changing while tether wrote it; rerun {rerun}.")
+            format!("Tailscale's Serve config kept changing while muxen wrote it; rerun {rerun}.")
         }
         PlanError::Refused(refusal) => refusal.to_string(),
         PlanError::Rejected { status, body } => {
@@ -574,7 +574,7 @@ fn write_error(error: &PlanError, version: &str, operation: WriteOperation) -> S
             if operation.is_setup() {
                 format!("Can't reach Tailscale's LocalAPI: {error}")
             } else {
-                format!("Can't reach Tailscale to remove tether's Serve entry: {error}")
+                format!("Can't reach Tailscale to remove muxen's Serve entry: {error}")
             }
         }
     };
@@ -803,20 +803,20 @@ mod tests {
         let cases = [
             (
                 403,
-                "Tailscale refused the write: your account isn't its operator. Run `sudo tailscale set --operator=$USER`, then rerun tether setup --background.",
+                "Tailscale refused the write: your account isn't its operator. Run `sudo tailscale set --operator=$USER`, then rerun muxen setup --background.",
             ),
             (
                 401,
-                "Tailscale 1.104 lets an operator change a Serve config that serves a Unix socket only if root can run `sudo --other-user=<your full name> --list tailscale`; it uses your account's full name, not your login name (tailscale/tailscale#21204). If they differ, run `sudo chfn -f $USER $USER`; check that `sudo -l tailscale` lists tailscale; then rerun tether setup --background.",
+                "Tailscale 1.104 lets an operator change a Serve config that serves a Unix socket only if root can run `sudo --other-user=<your full name> --list tailscale`; it uses your account's full name, not your login name (tailscale/tailscale#21204). If they differ, run `sudo chfn -f $USER $USER`; check that `sudo -l tailscale` lists tailscale; then rerun muxen setup --background.",
             ),
             (
                 412,
-                "Tailscale's Serve config kept changing while tether wrote it; rerun tether setup --background.",
+                "Tailscale's Serve config kept changing while muxen wrote it; rerun muxen setup --background.",
             ),
         ];
         for (index, (status, expected)) in cases.into_iter().enumerate() {
             let directory = std::env::temp_dir().join(format!(
-                "tether-setup-localapi-{}-{index}",
+                "muxen-setup-localapi-{}-{index}",
                 std::process::id()
             ));
             let _ = std::fs::remove_dir_all(&directory);
@@ -831,7 +831,7 @@ mod tests {
                     tokio::spawn(fake_write_connection(stream, status));
                 }
             });
-            let target_path = directory.join("tether-target.sock");
+            let target_path = directory.join("muxen-target.sock");
             let _target = UnixListener::bind(&target_path).expect("target socket");
             let target = ServeTarget::unix(target_path.clone()).expect("target identity");
             let api = LocalApi::at(api_socket);

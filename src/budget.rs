@@ -145,7 +145,7 @@ pub fn resolve(configured_mib: u64) -> Result<&'static Tier, BelowMinimum> {
         if high < warning_line {
             warn!(
                 memory_high_mib = high / MIB,
-                effective_mib, "MemoryHigh is below what tether may hold at its caps; remove it"
+                effective_mib, "MemoryHigh is below what muxen may hold at its caps; remove it"
             );
         }
     }

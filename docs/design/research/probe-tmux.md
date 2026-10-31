@@ -356,6 +356,6 @@ the control protocol text plus `script` capture overhead.
 
 All probe sockets and transient `probe-p8843.service` units were stopped or
 killed. Temporary transcripts and FIFOs were kept only under
-`/tmp/tether-tmux-probe-p8843-*` during the run and removed after the report
+`/tmp/muxen-tmux-probe-p8843-*` during the run and removed after the report
 was written. No source files, `~/.tmux.conf`, or real tmux sessions were
 modified.

@@ -95,7 +95,7 @@ pub(crate) enum PlatformFacts {
     },
 }
 
-const BACKGROUND_SETUP: &str = "tether setup --background";
+const BACKGROUND_SETUP: &str = "muxen setup --background";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Tailnet {
@@ -154,14 +154,14 @@ pub(crate) fn directory_mismatches(
             setup.home.as_deref(),
             fallback,
         )?
-        .join("tether");
+        .join("muxen");
         let service_directory = config::xdg_from(
             variable,
             service_value.map(OsString::as_os_str),
             service_home.map(OsString::as_os_str),
             fallback,
         )?
-        .join("tether");
+        .join("muxen");
         if setup_directory != service_directory {
             mismatches.push(DirectoryMismatch {
                 variable: variable.to_owned(),
@@ -182,26 +182,26 @@ pub(crate) fn evaluate(
     if facts.is_root {
         error(
             &mut findings,
-            "Run tether setup as the user whose tmux tether serves, not as root.",
+            "Run muxen setup as the user whose tmux muxen serves, not as root.",
         );
     }
     if !facts.default_config {
         error(
             &mut findings,
-            "tether setup --background installs a service that reads the default config path; drop --config.",
+            "muxen setup --background installs a service that reads the default config path; drop --config.",
         );
     }
     if facts.binary.installed_canonical.as_ref() != Some(&facts.binary.current_canonical) {
         let message = if facts.binary.installed_canonical.is_none() {
-            "~/.cargo/bin/tether doesn't exist.".to_owned()
+            "~/.cargo/bin/muxen doesn't exist.".to_owned()
         } else {
             format!(
-                "The service runs ~/.cargo/bin/tether, but this is {}.",
+                "The service runs ~/.cargo/bin/muxen, but this is {}.",
                 facts.binary.current_canonical.display()
             )
         };
         let mut message = format!(
-            "{message} Install it with `cargo install --path .`, then run `~/.cargo/bin/tether setup --background`."
+            "{message} Install it with `cargo install --path .`, then run `~/.cargo/bin/muxen setup --background`."
         );
         if facts.binary.cargo_home_other {
             message.push_str(
@@ -228,13 +228,13 @@ pub(crate) fn evaluate(
             ),
             #[cfg(any(target_os = "macos", test))]
             (PlatformFacts::Mac { .. }, _) => {
-                "Unset it before running tether setup --background.".to_owned()
+                "Unset it before running muxen setup --background.".to_owned()
             }
         };
         error(
             &mut findings,
             format!(
-                "{context} tether setup would use {} while the service uses {}: it would read another config and another device list. {fix}",
+                "{context} muxen setup would use {} while the service uses {}: it would read another config and another device list. {fix}",
                 mismatch.setup_directory.display(),
                 mismatch.service_directory.display()
             ),
@@ -281,7 +281,7 @@ pub(crate) fn evaluate(
             if !systemd_present {
                 error(
                     &mut findings,
-                    "This Linux doesn't run systemd; tether setup supports systemd only. Follow Manual setup in docs/running.md.",
+                    "This Linux doesn't run systemd; muxen setup supports systemd only. Follow Manual setup in docs/running.md.",
                 );
             }
             if !user_manager_present {
@@ -297,7 +297,7 @@ pub(crate) fn evaluate(
                     Some(Ok(version)) if *version < 254 => warning(
                         &mut findings,
                         format!(
-                            "systemd {version} ignores the unit's restart backoff; tether restarts every 2 s instead, which still works."
+                            "systemd {version} ignores the unit's restart backoff; muxen restarts every 2 s instead, which still works."
                         ),
                     ),
                     Some(Err(cause)) => error(
@@ -334,21 +334,21 @@ pub(crate) fn evaluate(
                 error(
                     &mut findings,
                     format!(
-                        "This Mac has another login account ({name}). tether's Mac defences assume yours is the only one, so setup won't install it here."
+                        "This Mac has another login account ({name}). muxen's Mac defences assume yours is the only one, so setup won't install it here."
                     ),
                 );
             }
             if !gui_session {
                 error(
                     &mut findings,
-                    "You aren't logged in at this Mac's screen. Log in there first: tether runs only while you're logged in.",
+                    "You aren't logged in at this Mac's screen. Log in there first: muxen runs only while you're logged in.",
                 );
             }
             match installed_port {
                 Ok(Some(port)) if *port != 7851 => error(
                     &mut findings,
                     format!(
-                        "tether was installed by hand on port {port}. Keep that install (Manual setup), or run `tether teardown` and then `tether setup --background`, which uses 7851."
+                        "muxen was installed by hand on port {port}. Keep that install (Manual setup), or run `muxen teardown` and then `muxen setup --background`, which uses 7851."
                     ),
                 ),
                 Err(cause) => error(
@@ -443,11 +443,11 @@ pub(crate) fn evaluate_foreground(
     warnings: &mut Vec<Finding>,
 ) -> Result<Tailnet, Vec<Finding>> {
     let mut findings = Vec::new();
-    let expected_runtime_dir = PathBuf::from(format!("/run/user/{}/tether", facts.uid));
+    let expected_runtime_dir = PathBuf::from(format!("/run/user/{}/muxen", facts.uid));
     if facts.is_root {
         error(
             &mut findings,
-            "Run tether setup as the user whose tmux tether serves, not as root.",
+            "Run muxen setup as the user whose tmux muxen serves, not as root.",
         );
     }
     if facts.runtime_dir.map(Path::as_os_str) != Some(expected_runtime_dir.as_os_str()) {
@@ -459,7 +459,7 @@ pub(crate) fn evaluate_foreground(
         error(
             &mut findings,
             format!(
-                "Plain tether setup requires config::runtime_dir()={expected}/tether (XDG_RUNTIME_DIR={expected}); got config::runtime_dir()={actual}."
+                "Plain muxen setup requires config::runtime_dir()={expected}/muxen (XDG_RUNTIME_DIR={expected}); got config::runtime_dir()={actual}."
             ),
         );
     }
@@ -472,12 +472,12 @@ pub(crate) fn evaluate_foreground(
             ),
         );
     }
-    check_tailscale(false, facts.tailscale, "tether setup", &mut findings);
+    check_tailscale(false, facts.tailscale, "muxen setup", &mut findings);
     if matches!(facts.tailscale, TailnetFacts::Status { .. }) {
         check_operator(
             facts.operator_user,
             facts.username,
-            "tether setup",
+            "muxen setup",
             &mut findings,
         );
     }
@@ -499,7 +499,7 @@ fn check_tailscale(
             match failure {
                 LocalApiFailure::MacAdmin => error(
                     findings,
-                    "Your account must be an admin: tether reads Tailscale's LocalAPI token from /Library/Tailscale.",
+                    "Your account must be an admin: muxen reads Tailscale's LocalAPI token from /Library/Tailscale.",
                 ),
                 _ => error(
                     findings,
@@ -568,7 +568,7 @@ fn check_status(
                 error(
                     findings,
                     format!(
-                        "The Tailscale app {version_string} is older than 1.104, the oldest tether is tested with; update it."
+                        "The Tailscale app {version_string} is older than 1.104, the oldest muxen is tested with; update it."
                     ),
                 );
             } else if !is_mac && (major, minor) < (1, 94) {
@@ -621,7 +621,7 @@ fn check_operator(
         Ok(operator) => error(
             findings,
             format!(
-                "Tailscale's operator is {operator}. tether setup won't replace it; run `sudo tailscale set --operator=$USER` if you mean to, then rerun `{setup_command}`."
+                "Tailscale's operator is {operator}. muxen setup won't replace it; run `sudo tailscale set --operator=$USER` if you mean to, then rerun `{setup_command}`."
             ),
         ),
         Err(cause) => error(
@@ -664,9 +664,9 @@ mod tests {
 
     #[test]
     fn foreground_runtime_directory_requires_exact_path() {
-        let expected = PathBuf::from("/run/user/1000/tether");
-        let alternate = PathBuf::from("/tmp/tether");
-        let noncanonical = PathBuf::from("/run/user/1000/./tether");
+        let expected = PathBuf::from("/run/user/1000/muxen");
+        let alternate = PathBuf::from("/tmp/muxen");
+        let noncanonical = PathBuf::from("/run/user/1000/./muxen");
         let tailscale = TailnetFacts::Status {
             version: "1.104.2-tc123".to_owned(),
             backend_state: "Running".to_owned(),
@@ -710,8 +710,8 @@ mod tests {
             is_root: false,
             default_config: true,
             binary: BinaryFacts {
-                current_canonical: PathBuf::from("/home/jimmy/.cargo/bin/tether"),
-                installed_canonical: Some(PathBuf::from("/home/jimmy/.cargo/bin/tether")),
+                current_canonical: PathBuf::from("/home/jimmy/.cargo/bin/muxen"),
+                installed_canonical: Some(PathBuf::from("/home/jimmy/.cargo/bin/muxen")),
                 cargo_home_other: false,
             },
             directories: Vec::new(),
@@ -758,8 +758,8 @@ mod tests {
                 vec![DirectoryMismatch {
                     variable: "XDG_CONFIG_HOME".to_owned(),
                     value: None,
-                    setup_directory: "/home/jimmy/.config/tether".into(),
-                    service_directory: "/service/config/tether".into(),
+                    setup_directory: "/home/jimmy/.config/muxen".into(),
+                    service_directory: "/service/config/muxen".into(),
                 }],
             ),
             (
@@ -769,14 +769,14 @@ mod tests {
                     DirectoryMismatch {
                         variable: "XDG_CONFIG_HOME".to_owned(),
                         value: None,
-                        setup_directory: "/home/jimmy/.config/tether".into(),
-                        service_directory: "/other/home/.config/tether".into(),
+                        setup_directory: "/home/jimmy/.config/muxen".into(),
+                        service_directory: "/other/home/.config/muxen".into(),
                     },
                     DirectoryMismatch {
                         variable: "XDG_STATE_HOME".to_owned(),
                         value: None,
-                        setup_directory: "/home/jimmy/.local/state/tether".into(),
-                        service_directory: "/other/home/.local/state/tether".into(),
+                        setup_directory: "/home/jimmy/.local/state/muxen".into(),
+                        service_directory: "/other/home/.local/state/muxen".into(),
                     },
                 ],
             ),
@@ -812,42 +812,42 @@ mod tests {
         facts.is_root = true;
         cases.push((
             facts,
-            "Run tether setup as the user whose tmux tether serves, not as root.",
+            "Run muxen setup as the user whose tmux muxen serves, not as root.",
         ));
         let mut facts = valid_facts(linux());
         facts.default_config = false;
         cases.push((
             facts,
-            "tether setup --background installs a service that reads the default config path; drop --config.",
+            "muxen setup --background installs a service that reads the default config path; drop --config.",
         ));
         let mut facts = valid_facts(linux());
         facts.binary.installed_canonical = None;
         facts.binary.cargo_home_other = true;
         cases.push((
             facts,
-            "~/.cargo/bin/tether doesn't exist. Install it with `cargo install --path .`, then run `~/.cargo/bin/tether setup --background`. cargo installs into $CARGO_HOME/bin; use [Manual setup](../running.md#manual-setup).",
+            "~/.cargo/bin/muxen doesn't exist. Install it with `cargo install --path .`, then run `~/.cargo/bin/muxen setup --background`. cargo installs into $CARGO_HOME/bin; use [Manual setup](../running.md#manual-setup).",
         ));
         let mut facts = valid_facts(linux());
         facts.directories.push(DirectoryMismatch {
             variable: "XDG_STATE_HOME".to_owned(),
             value: Some("/elsewhere".to_owned()),
-            setup_directory: PathBuf::from("/elsewhere/tether"),
-            service_directory: PathBuf::from("/home/jimmy/.local/state/tether"),
+            setup_directory: PathBuf::from("/elsewhere/muxen"),
+            service_directory: PathBuf::from("/home/jimmy/.local/state/muxen"),
         });
         cases.push((
             facts,
-            "Your shell sets XDG_STATE_HOME=/elsewhere, so tether setup would use /elsewhere/tether while the service uses /home/jimmy/.local/state/tether: it would read another config and another device list. Unset it, or give the user manager the same value with `systemctl --user set-environment XDG_STATE_HOME=/elsewhere`.",
+            "Your shell sets XDG_STATE_HOME=/elsewhere, so muxen setup would use /elsewhere/muxen while the service uses /home/jimmy/.local/state/muxen: it would read another config and another device list. Unset it, or give the user manager the same value with `systemctl --user set-environment XDG_STATE_HOME=/elsewhere`.",
         ));
         let mut facts = valid_facts(mac());
         facts.directories.push(DirectoryMismatch {
             variable: "XDG_CONFIG_HOME".to_owned(),
             value: Some("/tmp/config".to_owned()),
-            setup_directory: PathBuf::from("/tmp/config/tether"),
-            service_directory: PathBuf::from("/home/jimmy/.config/tether"),
+            setup_directory: PathBuf::from("/tmp/config/muxen"),
+            service_directory: PathBuf::from("/home/jimmy/.config/muxen"),
         });
         cases.push((
             facts,
-            "Your shell sets XDG_CONFIG_HOME=/tmp/config, so tether setup would use /tmp/config/tether while the service uses /home/jimmy/.config/tether: it would read another config and another device list. Unset it before running tether setup --background.",
+            "Your shell sets XDG_CONFIG_HOME=/tmp/config, so muxen setup would use /tmp/config/muxen while the service uses /home/jimmy/.config/muxen: it would read another config and another device list. Unset it before running muxen setup --background.",
         ));
         let mut facts = valid_facts(linux());
         facts.tmux_tmpdir_without_socket = true;
@@ -907,7 +907,7 @@ mod tests {
         }
         cases.push((
             facts,
-            "Tailscale's operator is someone. tether setup won't replace it; run `sudo tailscale set --operator=$USER` if you mean to, then rerun `tether setup --background`.",
+            "Tailscale's operator is someone. muxen setup won't replace it; run `sudo tailscale set --operator=$USER` if you mean to, then rerun `muxen setup --background`.",
         ));
         let mut facts = valid_facts(linux());
         if let PlatformFacts::Linux {
@@ -930,7 +930,7 @@ mod tests {
         }));
         cases.push((
             facts,
-            "This Linux doesn't run systemd; tether setup supports systemd only. Follow Manual setup in docs/running.md.",
+            "This Linux doesn't run systemd; muxen setup supports systemd only. Follow Manual setup in docs/running.md.",
         ));
         let mut facts = valid_facts(mac());
         facts.tailscale = TailnetFacts::Status {
@@ -953,7 +953,7 @@ mod tests {
         }
         cases.push((
             facts,
-            "The Tailscale app 1.103 is older than 1.104, the oldest tether is tested with; update it.",
+            "The Tailscale app 1.103 is older than 1.104, the oldest muxen is tested with; update it.",
         ));
         let mut facts = valid_facts(mac());
         facts.tailscale = TailnetFacts::Status {
@@ -964,14 +964,14 @@ mod tests {
         };
         cases.push((
             facts,
-            "HTTPS certificates are off for your tailnet. Turn them on under HTTPS Certificates at https://login.tailscale.com/admin/dns, then rerun `tether setup --background`.",
+            "HTTPS certificates are off for your tailnet. Turn them on under HTTPS Certificates at https://login.tailscale.com/admin/dns, then rerun `muxen setup --background`.",
         ));
 
         let mut facts = valid_facts(linux());
-        facts.binary.current_canonical = PathBuf::from("/tmp/tether");
+        facts.binary.current_canonical = PathBuf::from("/tmp/muxen");
         cases.push((
             facts,
-            "The service runs ~/.cargo/bin/tether, but this is /tmp/tether. Install it with `cargo install --path .`, then run `~/.cargo/bin/tether setup --background`.",
+            "The service runs ~/.cargo/bin/muxen, but this is /tmp/muxen. Install it with `cargo install --path .`, then run `~/.cargo/bin/muxen setup --background`.",
         ));
         let mut facts = valid_facts(linux());
         facts.tmux_on_service_path = None;
@@ -1002,7 +1002,7 @@ mod tests {
         };
         cases.push((
             facts,
-            "Your account must be an admin: tether reads Tailscale's LocalAPI token from /Library/Tailscale.",
+            "Your account must be an admin: muxen reads Tailscale's LocalAPI token from /Library/Tailscale.",
         ));
         let mut facts = valid_facts(linux());
         facts.tailscale = TailnetFacts::Status {
@@ -1081,7 +1081,7 @@ mod tests {
         }
         cases.push((
             facts,
-            "No systemd user manager is running for jimmy. Log in as jimmy directly (SSH or a console, not su or sudo), then rerun `tether setup --background`.",
+            "No systemd user manager is running for jimmy. Log in as jimmy directly (SSH or a console, not su or sudo), then rerun `muxen setup --background`.",
         ));
         let mut facts = valid_facts(linux());
         if let PlatformFacts::Linux {
@@ -1092,7 +1092,7 @@ mod tests {
         }
         cases.push((
             facts,
-            "systemd 253 ignores the unit's restart backoff; tether restarts every 2 s instead, which still works.",
+            "systemd 253 ignores the unit's restart backoff; muxen restarts every 2 s instead, which still works.",
         ));
         let mut facts = valid_facts(linux());
         if let PlatformFacts::Linux {
@@ -1124,7 +1124,7 @@ mod tests {
         }
         cases.push((
             facts,
-            "This Mac has another login account (other). tether's Mac defences assume yours is the only one, so setup won't install it here.",
+            "This Mac has another login account (other). muxen's Mac defences assume yours is the only one, so setup won't install it here.",
         ));
         let mut facts = valid_facts(mac());
         if let PlatformFacts::Mac { gui_session, .. } = &mut facts.platform {
@@ -1132,7 +1132,7 @@ mod tests {
         }
         cases.push((
             facts,
-            "You aren't logged in at this Mac's screen. Log in there first: tether runs only while you're logged in.",
+            "You aren't logged in at this Mac's screen. Log in there first: muxen runs only while you're logged in.",
         ));
         let mut facts = valid_facts(mac());
         if let PlatformFacts::Mac { installed_port, .. } = &mut facts.platform {
@@ -1140,7 +1140,7 @@ mod tests {
         }
         cases.push((
             facts,
-            "tether was installed by hand on port 9000. Keep that install (Manual setup), or run `tether teardown` and then `tether setup --background`, which uses 7851.",
+            "muxen was installed by hand on port 9000. Keep that install (Manual setup), or run `muxen teardown` and then `muxen setup --background`, which uses 7851.",
         ));
         let mut facts = valid_facts(mac());
         if let PlatformFacts::Mac { port_available, .. } = &mut facts.platform {

@@ -38,12 +38,12 @@ if [[ -n "$COMMIT" ]]; then
   SHA="$(git -C "$ROOT_DIR" rev-parse --verify "${COMMIT}^{commit}")"
   # One fixed export path with its own Cargo target directory. Tests read fixtures through
   # env!("CARGO_MANIFEST_DIR"), baked in at compile time, so a stable path keeps the build
-  # incremental (dependencies build once, only the tether crate rebuilds for a new export)
+  # incremental (dependencies build once, only the muxen crate rebuilds for a new export)
   # without cleaning or disturbing the checkout's own target directory. Cargo judges
   # freshness by mtime, so the export is extracted with fresh mtimes (tar -m): archive
   # mtimes are commit times, older than the last build, and would pass off the previous
   # export's build (and build.rs output) as this commit's.
-  PREFLIGHT_DIR="${TETHER_PREFLIGHT_DIR:-$ROOT_DIR/target/preflight}"
+  PREFLIGHT_DIR="${MUXEN_PREFLIGHT_DIR:-$ROOT_DIR/target/preflight}"
   EXPORT_DIR="$PREFLIGHT_DIR/export"
   LOCK_DIR="$PREFLIGHT_DIR/lock"
   mkdir -p "$PREFLIGHT_DIR"
@@ -64,7 +64,7 @@ if [[ -n "$COMMIT" ]]; then
   printf 'preflight: exporting %s to %s\n' "$SHA" "$EXPORT_DIR" >&2
   git -C "$ROOT_DIR" archive "$SHA" | tar -x -m -C "$EXPORT_DIR"
   export CARGO_TARGET_DIR="$PREFLIGHT_DIR/target"
-  TETHER_PREFLIGHT_EXPORT=1 "$EXPORT_DIR/scripts/preflight.sh" "$MODE"
+  MUXEN_PREFLIGHT_EXPORT=1 "$EXPORT_DIR/scripts/preflight.sh" "$MODE"
   exit $?
 fi
 
@@ -75,7 +75,7 @@ case "$MODE" in
     ;;
   full)
     # build.rs builds the web shell during cargo checks and builds.
-    if [[ -n "${TETHER_PREFLIGHT_EXPORT:-}" ]]; then
+    if [[ -n "${MUXEN_PREFLIGHT_EXPORT:-}" ]]; then
       if ! run_step pnpm --dir web install --frozen-lockfile --offline; then
         run_step pnpm --dir web install --frozen-lockfile
       fi

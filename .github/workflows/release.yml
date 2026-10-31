@@ -73,13 +73,13 @@ jobs:
           # test below runs the binary that ships.
           - target: x86_64-unknown-linux-musl
             runner: ubuntu-latest
-            artifact: tether-linux-x64
+            artifact: muxen-linux-x64
           - target: aarch64-unknown-linux-musl
             runner: ubuntu-24.04-arm
-            artifact: tether-linux-arm64
+            artifact: muxen-linux-arm64
           - target: aarch64-apple-darwin
             runner: macos-latest
-            artifact: tether-darwin-arm64
+            artifact: muxen-darwin-arm64
     steps:
       - uses: actions/checkout@v7
         with:
@@ -107,10 +107,10 @@ jobs:
 
       - name: Smoke test
         run: |
-          bin=target/${{ matrix.target }}/release/tether
+          bin=target/${{ matrix.target }}/release/muxen
           out="$("$bin" --version)"
           echo "$out"
-          [[ "$out" == "tether ${RELEASE_TAG#v}" ]] || { echo "::error::unexpected --version output: $out"; exit 1; }
+          [[ "$out" == "muxen ${RELEASE_TAG#v}" ]] || { echo "::error::unexpected --version output: $out"; exit 1; }
           if [[ "${{ matrix.target }}" == *musl ]]; then
             file "$bin"
             file "$bin" | grep -Eq 'static(ally|-pie) linked' || { echo "::error::binary is not statically linked"; exit 1; }
@@ -132,12 +132,12 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           path: artifacts/
-          pattern: tether-*
+          pattern: muxen-*
           merge-multiple: true
 
       - name: Checksums
         working-directory: artifacts
-        run: sha256sum tether-* > SHA256SUMS && cat SHA256SUMS
+        run: sha256sum muxen-* > SHA256SUMS && cat SHA256SUMS
 
       - name: Create release
         uses: softprops/action-gh-release@v3
@@ -146,5 +146,5 @@ jobs:
           prerelease: ${{ contains(env.RELEASE_TAG, '-rc.') }}
           generate_release_notes: true
           files: |
-            artifacts/tether-*
+            artifacts/muxen-*
             artifacts/SHA256SUMS

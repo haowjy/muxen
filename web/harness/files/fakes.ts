@@ -4,7 +4,7 @@ import { HttpRefusal } from "../../net/http";
 import type { FakeDaemon } from "../../platform/test";
 import { FakeFs, serveFs, type FakeTree } from "../../platform/test/fs";
 
-const README = `# tether
+const README = `# muxen
 
 Your tmux sessions, wherever you are.
 
@@ -29,15 +29,15 @@ const MAIN_RS = `use std::io;
 
 /// Starts the daemon.
 fn main() -> io::Result<()> {
-    let name = "tether";
+    let name = "muxen";
     println!("starting {name}");
     Ok(())
 }
 `;
 
 export const HOME = "/home/jimmy";
-export const REPO = `${HOME}/tether`;
-export const UPLOADS = `${HOME}/tether-uploads`;
+export const REPO = `${HOME}/muxen`;
+export const UPLOADS = `${HOME}/muxen-uploads`;
 /** A folder outside $HOME, with a file in it. */
 export const ETC = "/etc";
 
@@ -57,7 +57,7 @@ export function filesTree(): FakeTree {
       [`${REPO}/docs/fs.md`]: MD,
       [`${REPO}/shot.png`]: "image/png",
       [`${REPO}/demo.mp4`]: "video/mp4",
-      [`${REPO}/tether.bin`]: "application/octet-stream",
+      [`${REPO}/muxen.bin`]: "application/octet-stream",
       [`${REPO}/.env`]: TEXT,
       [`${ETC}/hosts`]: TEXT,
       [`${UPLOADS}/20261022-101010Z-abcd.jpg`]: "image/jpeg",
@@ -67,17 +67,17 @@ export function filesTree(): FakeTree {
 }
 
 /**
- * A home folder for finding folders by path: a project folder (`~/repos/tether`) inside a `~/repos` that
+ * A home folder for finding folders by path: a project folder (`~/repos/muxen`) inside a `~/repos` that
  * holds more, a folder of twenty subfolders (three pages), and ones to refuse, hang on and cap.
  */
-export const FIND_ROOT = `${HOME}/repos/tether`;
+export const FIND_ROOT = `${HOME}/repos/muxen`;
 export function findTree(): FakeTree {
   const many = Array.from({ length: 20 }, (_, i) => `${HOME}/repos/many/folder-${String(i + 1).padStart(2, "0")}`);
   return {
     home: HOME,
     dirs: [
       "/", "/home", HOME, `${HOME}/repos`, FIND_ROOT, `${FIND_ROOT}/src`, `${FIND_ROOT}/web`, `${FIND_ROOT}/docs`, `${FIND_ROOT}/empty`, `${FIND_ROOT}/.git`, `${FIND_ROOT}/web/src`,
-      `${HOME}/repos/tether-old`, `${HOME}/repos/test-data`, `${HOME}/repos/zebra`, `${HOME}/repos/many`, ...many,
+      `${HOME}/repos/muxen-old`, `${HOME}/repos/test-data`, `${HOME}/repos/zebra`, `${HOME}/repos/many`, ...many,
       UPLOADS, `${HOME}/other`, `${HOME}/other/deep`, `${HOME}/.config`,
     ],
     files: {
@@ -91,7 +91,7 @@ export function findTree(): FakeTree {
 
 const CONTENT: Record<string, string> = {
   [`${REPO}/README.md`]: README,
-  [`${REPO}/Cargo.toml`]: '[package]\nname = "tether"\nversion = "0.1.0"\n',
+  [`${REPO}/Cargo.toml`]: '[package]\nname = "muxen"\nversion = "0.1.0"\n',
   [`${REPO}/src/main.rs`]: MAIN_RS,
   [`${REPO}/docs/plan.md`]: "# Plan\n\nThe product and UX spec.\n",
   [`${REPO}/docs/fs.md`]: "# File API\n\nListing, raw reads.\n",

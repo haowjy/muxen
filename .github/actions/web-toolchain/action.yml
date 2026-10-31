@@ -1,7 +1,7 @@
 name: Web toolchain
 description: >-
   Node, pnpm and an installed web/node_modules. build.rs builds the embedded browser
-  shell with pnpm, so every job that compiles tether needs this before cargo runs.
+  shell with pnpm, so every job that compiles muxen needs this before cargo runs.
 runs:
   using: composite
   steps:

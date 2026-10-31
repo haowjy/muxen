@@ -25,7 +25,7 @@ adding a file. [README.md](README.md) has the commands.
 - **Every state, not the one in the mockup.** A new screen ships its loading, empty, error and
   offline states, and a harness fixture (`harness/<lane>/`) to look at it in both layouts.
 - The iOS shell's bridge is `platform/native/bridge.ts` (its version is `BRIDGE_VERSION`, equal to native's `BridgeContract.version`); `bridge.test.ts` decodes
-  every fixture in `ios/TetherKit/Tests/Fixtures/bridge/`, the contract's one copy.
+  every fixture in `ios/MuxenKit/Tests/Fixtures/bridge/`, the contract's one copy.
 
 Changes to W0-owned files (`ui/`, `workspace/`, `app/`, `net/`, `platform/types.ts`,
 `harness/index.ts`, repo config) go through the hand-off protocol in §11, not a direct edit.

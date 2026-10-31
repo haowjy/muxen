@@ -1,6 +1,6 @@
 // Mouse reports as the application asked for them (xterm's encodings), for the touch
 // gestures that become a click or a wheel. xterm.js encodes desktop mouse events itself, but
-// with stdin off (tether's own input) it sends none, and a touch has no mouse event to encode.
+// with stdin off (muxen's own input) it sends none, and a touch has no mouse event to encode.
 
 /** xterm's mouse tracking mode: `none` until the application asks for reports (seeded by the snapshot). */
 export type MouseMode = "none" | "x10" | "vt200" | "drag" | "any";

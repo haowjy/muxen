@@ -76,8 +76,8 @@ export function limitedStatus(message: string | undefined, host: string): Status
   return {
     tone: "limited",
    
-    detail: message ?? `tether on ${host} is at its session limit`,
-    hint: "Close tabs from other sessions, in this or another tether window or the app, to open this one.",
+    detail: message ?? `muxen on ${host} is at its session limit`,
+    hint: "Close tabs from other sessions, in this or another muxen window or the app, to open this one.",
     action: "Retry",
   };
 }

@@ -9,14 +9,14 @@ use subtle::{ConditionallySelectable, ConstantTimeEq};
 use super::store::{Device, DeviceKind};
 
 /// Makes a leaked token recognisable in logs, pastes and secret scanners.
-pub const TOKEN_PREFIX: &str = "tether_";
+pub const TOKEN_PREFIX: &str = "muxen_";
 
 pub type Hash = [u8; 32];
 
 const CROCKFORD: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 const BASE32_LOWER: &[u8; 32] = b"abcdefghijklmnopqrstuvwxyz234567";
 
-/// `tether_` and base64url, unpadded, of 32 random bytes.
+/// `muxen_` and base64url, unpadded, of 32 random bytes.
 pub fn generate() -> Result<String, getrandom::Error> {
     let bytes: [u8; 32] = random()?;
     Ok(format!("{TOKEN_PREFIX}{}", URL_SAFE_NO_PAD.encode(bytes)))

@@ -1,6 +1,6 @@
 > Folded into [plan.md](plan.md) on 2026-10-21; kept as the review record. plan.md is the current design.
 
-# Tether plan review
+# Muxen plan review
 
 Review of [plan.md](plan.md) (revised 2026-10-21), written 2026-10-21.
 Evidence is in [research/](research/): `probe-tmux.md` (runtime tests on the dev
@@ -14,11 +14,11 @@ The plan holds up: control mode, tmux as the source of truth, a Rust daemon, the
 reconnect-by-snapshot approach and the spike-first order are all sound. Six changes
 come before any code:
 
-1. **Never let tether start the tmux server.** Tested: a tmux server first started
+1. **Never let muxen start the tmux server.** Tested: a tmux server first started
    from inside a systemd user unit lives in that unit's cgroup and dies on
-   `systemctl --user stop`. With tether's unit, `MemoryMax=64M` would also cover tmux
+   `systemctl --user stop`. With muxen's unit, `MemoryMax=64M` would also cover tmux
    and every agent. Start tmux outside the unit (its own user unit, or
-   `systemd-run --user --scope`), and have tether only attach.
+   `systemd-run --user --scope`), and have muxen only attach.
 2. **Drop the server-side terminal emulator from the MVP.** tmux already holds the
    screen. A snapshot is `capture-pane` for both screens, plus pane state from
    `list-panes -F`, plus a marker that separates captured output from live output.
@@ -47,7 +47,7 @@ come before any code:
 | Snapshot = one `capture-pane -e -p` (§4.1, §4.5) | Loses cursor, alternate screen, mouse/keypad modes, scroll region, bracketed paste and any half-received escape sequence | Capture primary and alternate screens, read state with `list-panes -F` (`alternate_on`, `cursor_x/y`, `keypad_*`, `mouse_*` exist in 3.4; bracketed paste does not), use `-P` for pending bytes |
 | Unviewed panes switch to no-output/pause-after (§4.5) | `refresh-client -A '%pane:off'` crashes tmux 3.4 with queued output (libtmux-rs findings); pause-after discards output | Use the client-wide `no-output` flag or pause-after, never `:off`; every continue triggers a fresh snapshot |
 | `refresh-client -A %0:pause` | Probe: parse error unless quoted | `refresh-client -A '%0:pause'` |
-| Idle RSS under ~5 MB (§4.5) | Probe: each `tmux -C` client is its own ~5.3 MB process, and it runs in tether's cgroup | Budget the daemon plus 5.3 MB per attached session; consider one control client that switches sessions (*guess*: works because only one tab is visible at a time) |
+| Idle RSS under ~5 MB (§4.5) | Probe: each `tmux -C` client is its own ~5.3 MB process, and it runs in muxen's cgroup | Budget the daemon plus 5.3 MB per attached session; consider one control client that switches sessions (*guess*: works because only one tab is visible at a time) |
 | Keyboard detection from `innerHeight - visualViewport.height` (§5, §6.1) | iOS 26 standalone apps can report both as the visible height (WebKit 301994) | Combine several signals, tolerate stale values, and keep the ⌨ toggle as the recovery |
 | WebSocket reconnect on visibilitychange/pageshow (§4.1) | iOS 26 can leave a new socket stuck in CONNECTING until reload (WebKit 308073); lifecycle events can be missing | Add a connect timeout; on a stuck socket, reload the page (state is on the server) |
 | xterm.js WebGL with canvas fallback (§4.4) | xterm.js 6 removed the canvas renderer; WebGL loses context after backgrounding | WebGL with DOM fallback, and recreate on context loss |
@@ -90,7 +90,7 @@ come before any code:
   already run as you and can drive tmux directly. The real gaps are remote:
   - **Enrolment:** if passkey registration trusts headers, a local agent (or anyone
     who reaches the port before you enrol) can register its own passkey. Make
-    `tether passkey enroll` print a one-time code or link that registration requires.
+    `muxen passkey enroll` print a one-time code or link that registration requires.
   - **Whois:** the X-Forwarded-For whois cross-check is also derived from headers.
     Drop it or treat it as advisory.
 - **One check on every route.** The passkey session must protect the WebSocket, every
@@ -118,7 +118,7 @@ come before any code:
 - **repo-viewer parity.** Before archiving repo-viewer: Mermaid, the folder image
   gallery, the always-hidden/show-hidden rules, and gitignore handling. Decide whether
   file write operations stay in scope, given repo-viewer was read-only on purpose.
-- **Meridian.** The only link is a CLI command (`tether notify`). Keep it that way.
+- **Meridian.** The only link is a CLI command (`muxen notify`). Keep it that way.
 
 ## 5. Code structure
 

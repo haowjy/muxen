@@ -1,6 +1,6 @@
 # Decision log
 
-The decisions in force behind tether's specs: who decided, when, what was decided,
+The decisions in force behind muxen's specs: who decided, when, what was decided,
 why, and which alternatives were rejected. The specs ([plan.md](plan.md),
 [daemon-core.md](daemon-core.md), [ios-shell.md](ios-shell.md), [auth.md](auth.md),
 [fs.md](fs.md), [complete.md](complete.md), [setup.md](setup.md)) state the current
@@ -49,7 +49,7 @@ Decided by Jimmy, 2026-10-21 unless an entry gives another date.
   files opens a Files tab at `~/`; its path field works like a browser's address bar.
 - **Why:** Jimmy: tmux "should use the 'new or attach' command"; Files "should just always start at
   ~/"; the search he meant was "search by path picker".
-- **The path field's tap** keeps tether's behaviour, the caret at the end after a trailing `/`, so
+- **The path field's tap** keeps muxen's behaviour, the caret at the end after a trailing `/`, so
   typing narrows the folder you are in (Jimmy: "maybe the 2nd one?"), not Safari's select-all.
 - **Rejected:** separate Attach session and New session actions; the New session form with a start
   directory; Files remembering the workspace's last folder; search by file name (a tree walk on the
@@ -80,8 +80,8 @@ Decided by Jimmy, 2026-10-21 unless an entry gives another date.
   kills tmux": "yeah I think so... just they have to confirm it".
 - **Replaces** "Closing a tab never kills tmux" (2026-10-29), whose rule that no path from the tab
   list runs `kill-session` it reverses; its rule that closing only detaches stands. **Amends the
-  invariant** "tmux is the source of truth" (plan.md), which said tether has no control that kills a
-  session or window; it now says tether never kills tmux on its own or without a confirmation that
+  invariant** "tmux is the source of truth" (plan.md), which said muxen has no control that kills a
+  session or window; it now says muxen never kills tmux on its own or without a confirmation that
   names what ends (Jimmy: "change the invariant").
 - **Open:** the daemon side, with the tmux 3.4 crash risk
   ([daemon-core.md](daemon-core.md#the-tabs-tmux-commands-open)).
@@ -114,7 +114,7 @@ Decided by Jimmy, 2026-10-21 unless an entry gives another date.
 
 - **What:** Files has no roots or scope; any readable path opens
   ([fs.md](fs.md)). Uploads still never replace a file and downloads are served sandboxed.
-- **Why:** a device that can use tether already has the user's terminal, which reads the same
+- **Why:** a device that can use muxen already has the user's terminal, which reads the same
   files; a scope would add rules without removing any reach.
 - **Rejected:** keeping roots below `$HOME`.
 
@@ -170,7 +170,7 @@ Decided by Jimmy, 2026-10-21 unless an entry gives another date.
 
 - **Decided:** 2026-10-21, Jimmy.
 - **What:** a scratch shell outside Jimmy's tmux sessions uses a private tmux server
-  (`tmux -L tether-scratch`) started in a transient systemd scope outside tether's
+  (`tmux -L muxen-scratch`) started in a transient systemd scope outside muxen's
   cgroup. It reuses the stream path and lands after the core MVP.
 - **Rejected:** a raw pty per scratch shell: it has no snapshot for repainting after a
   reconnect without a server-side emulator, and its tab could not use the protocol;
@@ -179,13 +179,13 @@ Decided by Jimmy, 2026-10-21 unless an entry gives another date.
 ### Scope: no agent dashboards; notifications come from outside
 
 - **What:** tmux tabs, a session list, cheap reconnect, a Termius-grade keyboard with
-  tool completion, a file manager. tether runs no notification service of its own:
+  tool completion, a file manager. muxen runs no notification service of its own:
   anything (an agent harness, a script, CI) can notify the app about a tmux pane, and
   the app opens that pane's tab (2026-10-31, "The name: muxen").
-- **Why:** Jimmy's agent harness already decides when to notify; tether owns the last
+- **Why:** Jimmy's agent harness already decides when to notify; muxen owns the last
   step, getting him to the right tab.
 - **Rejected:** agent dashboards and agent-wrapping apps (studied in
-  [research/prior-art.md](research/prior-art.md)); tether deciding on its own when
+  [research/prior-art.md](research/prior-art.md)); muxen deciding on its own when
   something deserves a notification.
 
 ### Keyboard: native Swift shell first
@@ -210,11 +210,11 @@ Decided by Jimmy, 2026-10-21 unless an entry gives another date.
   client was a web app, where each `*.ts.net` origin needed its own install, cookies
   and passkey); one app per host.
 
-### A Mac can host tether, behind a path secret
+### A Mac can host muxen, behind a path secret
 
 - **Decided:** 2026-10-24, Jimmy.
-- **What:** on a Mac with the standalone Tailscale app, Serve reaches tether on a
-  loopback TCP port, and tether publishes itself at a random **path secret** that
+- **What:** on a Mac with the standalone Tailscale app, Serve reaches muxen on a
+  loopback TCP port, and muxen publishes itself at a random **path secret** that
   Serve adds to every request. A request without it is dropped before anything else
   runs; then the `Host` rule, the Tailscale check and the existing lanes apply
   unchanged ([auth.md](auth.md#the-mac-front)). This is documented as a weaker local
@@ -222,7 +222,7 @@ Decided by Jimmy, 2026-10-21 unless an entry gives another date.
   (below).
 - **What the Mac trusts that Linux doesn't:** that copies of the path secret leaving
   the Mac (Tailscale's log upload, a sysdiagnose, backups) are harmless; that
-  nothing binds tether's port in the moments after a deliberate stop; that nothing
+  nothing binds muxen's port in the moments after a deliberate stop; that nothing
   binds LocalAPI's port while Tailscale is stopped; and that no local process fills the
   64 connection permits ([auth.md](auth.md#threat-model)).
 - **Why:** the Tailscale app's extension can't connect to a Unix socket (it logs
@@ -255,13 +255,13 @@ Decided by Jimmy, 2026-10-21 unless an entry gives another date.
 ### A Mac host has one user account, Jimmy's
 
 - **Decided:** 2026-10-24, Jimmy.
-- **What:** tether supports a Mac host only when Jimmy's is its one user account,
+- **What:** muxen supports a Mac host only when Jimmy's is its one user account,
   now and as planned. It is the Mac host's stated precondition
   ([auth.md](auth.md#threat-model)), and the Mac design defends against no other login
   account. Background setup refuses to install when another login account exists.
 - **Why:** other accounts were the reason for the proposed Mac machinery: a
   LaunchDaemon so the port stays held while Jimmy is logged out or switched away,
-  `tether unpublish` and an unpublish on every stop, pinning LocalAPI's endpoint
+  `muxen unpublish` and an unpublish on every stop, pinning LocalAPI's endpoint
   against an account squatting its port, and a gate that needed a second account.
   With one account, the secret's only readers are root and Jimmy, and the processes
   left to keep out are sandboxed apps and macOS's role accounts.
@@ -269,13 +269,13 @@ Decided by Jimmy, 2026-10-21 unless an entry gives another date.
   - Supporting a Mac with other accounts: the machinery above, plus trusting every
     other admin, for a Mac that has none.
   - Defending against role accounts too: they run Apple's services, and a compromise
-    of one is a compromise of macOS, which tether trusts like root.
+    of one is a compromise of macOS, which muxen trusts like root.
 
-### tether runs from a LaunchAgent on a Mac
+### muxen runs from a LaunchAgent on a Mac
 
 - **Decided:** 2026-10-24, Jimmy.
 - **What:** a LaunchAgent in Jimmy's login session, installed without sudo. launchd
-  binds `127.0.0.1:7851` at login and holds it across crashes; tether stops at logout,
+  binds `127.0.0.1:7851` at login and holds it across crashes; muxen stops at logout,
   and while Jimmy is logged out the phone can't reach it on that Mac.
 - **Why:** socket activation works the same in a LaunchAgent (probed: after `kill -9`
   the port can't be rebound, and the next connection relaunches the job). What the
@@ -292,13 +292,13 @@ Decided by Jimmy, 2026-10-21 unless an entry gives another date.
 - **Decided:** 2026-10-24, Jimmy.
 - **What:** the Mac setup leaves Tailscale's log upload on. The extension uploads the
   Serve handler line, path secret included (`ipn/ipnlocal/serve.go:1450` at v1.104.2,
-  through the logtail-backed `b.logf`), and tether accepts that.
+  through the logtail-backed `b.logf`), and muxen accepts that.
 - **Why:** the app can't turn upload off. Tailscale documents the opt-out only for the
   open-source `tailscaled` on macOS, not the Standalone or App Store app
   (https://tailscale.com/docs/features/logging.md, tailscale/tailscale#5114). On this
   Mac, `tailscale bugreport` still returned a normal report ID with the variable set. An
   uploaded secret is useless without a tailnet node reaching Serve, and goes stale at
-  tether's next start. Gate M7 checks the rotation.
+  muxen's next start. Gate M7 checks the rotation.
 - **Rejected:**
   - Turning upload off with `TS_NO_LOGS_NO_SUPPORT=true` in the extension's
     `tailscaled-env.txt`: the app did not honor the opt-out.
@@ -318,7 +318,7 @@ Decided by Jimmy, 2026-10-21 unless an entry gives another date.
   the module's `allow` can override it, and `main.rs` keeps `forbid`. `libc` becomes a
   macOS-only direct dependency; it is already in the lockfile.
 - **Why:** raunch 1.0.1 returns `Vec<RawFd>`, so turning its fds into an `OwnedFd` or
-  a listener needs `unsafe { from_raw_fd }` in tether anyway (a compile under
+  a listener needs `unsafe { from_raw_fd }` in muxen anyway (a compile under
   `forbid` was rejected). The crate doesn't save the lint exception, and it is
   dormant since 2024. The local module owns its fds, returns an empty list for a null
   array instead of raunch's undefined-behaviour edge, and passes errno through.
@@ -433,7 +433,7 @@ Decided by Jimmy, 2026-10-21 unless an entry gives another date.
   and the crash rule applies; before, the view re-ran its own Locate and spawned a fresh
   client with no crash history, forever ("Connecting..." on the phone).
 - **Rejected:** auto-selecting the server's binary: that binary can have been deleted by
-  a package upgrade, and tether must not assume another executable's ownership. Waiting
+  a package upgrade, and muxen must not assume another executable's ownership. Waiting
   for the reply timeout after receiving `%exit`: the event is terminal and should close
   immediately; the normal timeout remains for a silent client. Refusing to attach on a
   mismatch: a newer client can work with an older server. A mismatch-only short startup
@@ -593,7 +593,7 @@ Decided by Jimmy, 2026-10-21 unless an entry gives another date.
 ### `tmux -N` on every invocation
 
 - **Decided:** 2026-10-21, tech lead. Evidence: [probe-locate-subscriptions.md](research/probe-locate-subscriptions.md).
-- **What:** every tmux command tether runs fails instead of starting a server. New
+- **What:** every tmux command muxen runs fails instead of starting a server. New
   windows and sessions are one-shots.
 - **Rejected:** `-f /dev/null` so a started server exits at once, attaching only to
   sessions just seen in a listing, and spawning a control client on the first listed
@@ -602,7 +602,7 @@ Decided by Jimmy, 2026-10-21 unless an entry gives another date.
 ### `-u` on every invocation
 
 - **Decided:** 2026-10-22, tech lead.
-- **What:** every tmux process tether runs, control client and one-shot, is
+- **What:** every tmux process muxen runs, control client and one-shot, is
   `tmux -u -N …`, built in `Endpoint::command`.
 - **Why:** when the client's locale isn't UTF-8, tmux 3.4 replaces non-ASCII characters
   and line breaks in format output (window names, `display-message`, listings) with `_`.
@@ -724,10 +724,10 @@ Decided by Jimmy, 2026-10-21 unless an entry gives another date.
 ### No automatic reattach after a detach
 
 - **Decided:** 2026-10-21, design (daemon core).
-- **What:** when another client detaches tether's control client (`attach -d`,
+- **What:** when another client detaches muxen's control client (`attach -d`,
   `detach-client`), its watches end with `watchEnded { detached }`; a tap reattaches.
-- **Why:** the user who detached tether meant it.
-- **Rejected:** auto-reattach: fights `attach -d`, and reattaching makes tether
+- **Why:** the user who detached muxen meant it.
+- **Rejected:** auto-reattach: fights `attach -d`, and reattaching makes muxen
   `latest`, shrinking the laptop's window right after the user took it.
 
 ### Input: hex for text, names for keys
@@ -814,7 +814,7 @@ Decided by Jimmy, 2026-10-21 unless an entry gives another date.
 - **Decided:** 2026-10-21, design.
 - **What:** at most 4 paste files exist at once daemon-wide; without a free slot the
   connection answers `busy` before writing anything. Deleting the file frees its slot.
-- **Why:** `$XDG_RUNTIME_DIR` is tmpfs, charged to tether's cgroup; with only the
+- **Why:** `$XDG_RUNTIME_DIR` is tmpfs, charged to muxen's cgroup; with only the
   queue bounds, about 150 pastes could wait as files, close to 38 MiB.
 - **Rejected:** counting only in-memory payloads.
 
@@ -830,8 +830,8 @@ Decided by Jimmy, 2026-10-21 unless an entry gives another date.
 
 - **Decided:** 2026-10-22, design.
 - **What:** the paste group is `load-buffer ; paste-buffer -p -d`, the buffer is
-  `tether-<tag>`, and a failed group is followed by a separate `delete-buffer -b
-  tether-<tag>` group whose error is ignored. Tags are unique across control clients.
+  `muxen-<tag>`, and a failed group is followed by a separate `delete-buffer -b
+  muxen-<tag>` group whose error is ignored. Tags are unique across control clients.
 - **Why:** `paste-buffer -d` deletes only on success, so a failure after `load-buffer`
   would leave the pasted text in tmux's buffer list. A leading `send-keys -t @W` guard
   was tried and dropped: it covered only a missing window, and the cleanup covers every
@@ -975,9 +975,9 @@ Decided by Jimmy, 2026-10-21 unless an entry gives another date.
 - **Decided:** 2026-10-22, tech lead. Evidence: [daemon-core.md §3.8](daemon-core.md#38-one-shots-and-endpoints-oneshotrs).
 - **What:** `OneShotCmd::NewWindow` carries the instance named by the request's
   `SessionRef`, and the one-shot starts with `if-shell -F
-  '#{!=:#{pid}-#{start_time},<server>}' tether-server-changed ;` before `new-window`. On
+  '#{!=:#{pid}-#{start_time},<server>}' muxen-server-changed ;` before `new-window`. On
   another instance tmux can't parse the branch, `if-shell` fails, and tmux skips the rest
-  of the list. The one-shot reads `tether-server-changed` in stderr as `NoServer`, so
+  of the list. The one-shot reads `muxen-server-changed` in stderr as `NoServer`, so
   `NoServer` also means "not the instance this one-shot was for", and the hub answers
   as for a dead server: `serverExited` for that instance and `error { noServer }`. The
   hub's cached comparison with the live instance is removed.
@@ -1087,7 +1087,7 @@ Decided 2026-10-22 by the tech lead.
 
 ### The unit uses `KillMode=mixed` and a restart backoff
 
-- **What:** `contrib/tether.service` sets `KillMode=mixed`, `RestartSec=2`,
+- **What:** `contrib/muxen.service` sets `KillMode=mixed`, `RestartSec=2`,
   `RestartSteps=5`, `RestartMaxDelaySec=60` and `StartLimitIntervalSec=0`
   ([plan.md](plan.md#resource-budget)). Changes plan.md's earlier unit sketch, which had
   neither.
@@ -1097,12 +1097,12 @@ Decided 2026-10-22 by the tech lead.
     4004, and the phone could get `watchEnded { detached }` instead of reconnecting.
     Verified with a transient unit.
   - tailscaled is a system unit that a user unit can't order itself after, so at boot
-    tether may start before it. The earlier daemon exited when LocalAPI was absent;
+    muxen may start before it. The earlier daemon exited when LocalAPI was absent;
     the browser-auth daemon instead starts and retries its tailnet-state cell in the
     background.
 - **Rejected:** the default `KillMode=control-group` (the false "detached" above);
   ordering after `tailscaled.service` (a user unit can't); a fixed `RestartSec=2` with
-  the default start limit (a slow boot would exhaust it and leave tether down).
+  the default start limit (a slow boot would exhaust it and leave muxen down).
 
 ### No sd-notify watchdog, no tracing-journald
 
@@ -1150,9 +1150,9 @@ Decided 2026-10-22 by the tech lead.
 ### Host content on its own origin
 
 - **Decided:** 2026-10-21, tech lead and design.
-- **What:** proxied host content comes from `tether-app://h-{host}/…`, the UI from
-  `tether-app://ui/`, so the UI's `script-src 'self'` never covers a daemon response.
-  The scheme handler adds `Access-Control-Allow-Origin: tether-app://ui`. Native
+- **What:** proxied host content comes from `muxen-app://h-{host}/…`, the UI from
+  `muxen-app://ui/`, so the UI's `script-src 'self'` never covers a daemon response.
+  The scheme handler adds `Access-Control-Allow-Origin: muxen-app://ui`. Native
   proxies a host's requests only after its `/auth/info` reported a compatible protocol
   range in this app session. Native asks `/auth/info` itself on the host's first
   proxied request (2026-10-27).
@@ -1160,7 +1160,7 @@ Decided 2026-10-22 by the tech lead.
   `/auth/info` reports the same range. Native otherwise calls it only at enrolment, so
   the gate remained shut for the app's token lane. Rejected: checking every host at
   launch (a round trip per host before anything is used).
-- **Rejected:** host content under `tether-app://ui/h/{host}/…` (same origin as the
+- **Rejected:** host content under `muxen-app://ui/h/{host}/…` (same origin as the
   UI, so a proxied script could run as the app); the web reporting `welcome` results
   over the bridge (native's gate would trust web state).
 
@@ -1232,7 +1232,7 @@ Decided 2026-10-22 by the tech lead.
 - **Decided:** 2026-10-21, design (auth).
 - **Rejected:** a slow password hash (argon2, bcrypt: protects low-entropy secrets, and
   costs CPU per request); the phone generating the token (equally secure, but the
-  daemon keeps format and entropy in one place shared with `tether device add`);
+  daemon keeps format and entropy in one place shared with `muxen device add`);
   expiring tokens (a trip to the server shell every few weeks for protection Face ID
   already gives); a session token derived from the device token (would bring back
   minting, expiry and refresh for no protection the transport doesn't give).
@@ -1240,7 +1240,7 @@ Decided 2026-10-22 by the tech lead.
 ### Keychain: one item for all hosts
 
 - **Decided:** 2026-10-21, design; lifecycle policy by tech lead, 2026-10-24.
-- **What:** one `tether.tokens` Keychain item stores the host-token map with
+- **What:** one `muxen.tokens` Keychain item stores the host-token map with
   `WhenPasscodeSetThisDeviceOnly` and `.biometryCurrentSet`. One background Keychain
   read unlocks all hosts, and tokens stay in memory until lock. On background, a short
   task lets the web close sockets; the user selects the relock interval.
@@ -1351,18 +1351,18 @@ are Jimmy's ([Files](#files-view-and-upload-now-three-write-operations-in-v2)).
 
 ### Config writes: `toml_edit`, auth's lock, temp file and rename, re-stat before rename
 
-- **What:** writes take the `flock` on `$XDG_STATE_HOME/tether/lock`, `canonicalize`
+- **What:** writes take the `flock` on `$XDG_STATE_HOME/muxen/lock`, `canonicalize`
   the config path to write a symlink's target, edit only `roots` or `uploads_dir` with
   `toml_edit`, write `<name>.tmp` in the same directory, re-stat the original, and
   rename (retrying up to 3 times if it changed). A file that doesn't parse is never
   written; an unwritable target is `409 config_read_only`.
 - **Why:** `toml_edit` keeps Jimmy's comments and any keys a newer daemon wrote;
   following the symlink keeps a dotfiles link intact; the re-stat catches most editor
-  saves that land mid-write; one lock for every tether writer is simpler than two.
+  saves that land mid-write; one lock for every muxen writer is simpler than two.
   Editors that rewrite in place can still race it in a microsecond window; accepted.
 - **Rejected:** serializing `Config` with serde (drops comments and unknown keys,
   breaking "an older daemon reads a newer config"); a separate `config.lock` in
-  `~/.config/tether` (clutter in a dotfiles directory); renaming over the symlink
+  `~/.config/muxen` (clutter in a dotfiles directory); renaming over the symlink
   (silently replaces the dotfiles link with a copy).
 - **Added 2026-10-22 (tech lead, from the security review): a link to
   nothing is refused, not written through.** A `config.toml` that is a dangling
@@ -1448,7 +1448,7 @@ are Jimmy's ([Files](#files-view-and-upload-now-three-write-operations-in-v2)).
 - **Rejected:** multipart ranges (no client sends them); a content-hash ETag (reads the
   whole file); `If-None-Match` and `304` (WebKit doesn't cache custom-scheme
   responses, so nothing would send it); tower-http's `ServeFile` (plan.md keeps
-  `/fs/raw` custom so the root check and the limits are tether's).
+  `/fs/raw` custom so the root check and the limits are muxen's).
 - **Evidence:** on Linux with `MemoryHigh=48M`, dropping each 64 KiB chunk kept large
   readahead folios resident (a 1 GiB download left 44.6 MB cached); dropping from the
   response start kept streaming cache at or below 260 KB. Dropping through the end of
@@ -1458,7 +1458,7 @@ are Jimmy's ([Files](#files-view-and-upload-now-three-write-operations-in-v2)).
 
 - **What:** `POST /fs/upload?name=…` with the bytes as the body, 128 MiB cap, one at a
   time, a 30 s idle timeout. The file is `YYYYMMDD-HHMMSSZ-xxxx.<ext>` in
-  `uploads_dir`, written as a 0600 `.tether-upload-*.part` file, flushed with
+  `uploads_dir`, written as a 0600 `.muxen-upload-*.part` file, flushed with
   `fdatasync` and `DONTNEED` every 2 MiB, and renamed without replacing; no final
   `fsync`. `uploads_dir` is created before the roots are read. The response is
   `201 { path, size }`. A filesystem without a no-replace rename fails the upload
@@ -1512,10 +1512,10 @@ are Jimmy's ([Files](#files-view-and-upload-now-three-write-operations-in-v2)).
 ### The scheme handler forwards methods and bodies, and answers preflights itself
 
 - **What:** ios-shell.md's proxy forwards `GET`, `POST` (and v2's `PUT`) with their
-  bodies and `Content-Type`, and answers CORS preflights for `tether-app://ui`
+  bodies and `Content-Type`, and answers CORS preflights for `muxen-app://ui`
   without contacting the daemon. It no longer lists `If-None-Match`.
-- **Why:** the Settings routes are JSON `POST`s from `tether-app://ui` to
-  `tether-app://h-{host}`, which need a preflight, and the daemon answers none
+- **Why:** the Settings routes are JSON `POST`s from `muxen-app://ui` to
+  `muxen-app://h-{host}`, which need a preflight, and the daemon answers none
   ([auth.md](auth.md#carrying-the-token)).
 - **Rejected:** answering `OPTIONS` in the daemon (it would open a CORS path that
   auth.md keeps shut for browsers on the tailnet).
@@ -1575,7 +1575,7 @@ behind it are Jimmy's ([Shell integration](#shell-integration)); see the
   entry age ranks without timestamps, which bash doesn't write by default; one large
   buffer goes back to the kernel when the idle drop frees it.
 - **Rejected:** reading the file on every request (a 1 MiB parse per keystroke); an
-  inotify watcher (tether has no watchers); merging every shell's file (Jimmy uses
+  inotify watcher (muxen has no watchers); merging every shell's file (Jimmy uses
   one shell); time-based recency (no timestamps in bash's default format); detecting
   the format from content (plain zsh and bash lines look the same, and only zsh's
   needs unmetafying).
@@ -1588,8 +1588,8 @@ behind it are Jimmy's ([Shell integration](#shell-integration)); see the
 
 ### The snippet appends history after each command
 
-- **What:** `contrib/shell/tether.bash` runs `history -a` before each prompt;
-  `tether.zsh` sets `INC_APPEND_HISTORY`. `TETHER_NO_HISTORY_APPEND=1` opts out.
+- **What:** `contrib/shell/muxen.bash` runs `history -a` before each prompt;
+  `muxen.zsh` sets `INC_APPEND_HISTORY`. `MUXEN_NO_HISTORY_APPEND=1` opts out.
 - **Why:** bash writes history only on exit, so the commands Jimmy ran in open shells,
   the ones he most likely wants again, were missing from the strip.
 - **Rejected:** leaving the default (stale suggestions); reading a shell's in-memory
@@ -1611,7 +1611,7 @@ behind it are Jimmy's ([Shell integration](#shell-integration)); see the
 ### carapace runs in its own transient scope
 
 - **What:** under systemd, each run is `systemd-run --user --scope --collect
-  --description="tether completion" -p MemoryMax=128M -p TasksMax=64 -p CPUWeight=20
+  --description="muxen completion" -p MemoryMax=128M -p TasksMax=64 -p CPUWeight=20
   -p IOWeight=10 -p RuntimeMaxSec=2 -- carapace …`; outside systemd it is spawned
   directly.
 - **Why:** measured on the dev box, carapace 1.8.0's RSS is 17–44 MB per run and a
@@ -1624,10 +1624,10 @@ behind it are Jimmy's ([Shell integration](#shell-integration)); see the
   every run's arguments, the words Jimmy typed, reached the user journal; and a kill
   landing before `systemd-run` execs (5–20 ms after spawn) leaked an empty scope that
   stayed active, which `RuntimeMaxSec=2` reaps and which also bounds helpers that
-  outlive a crashed tether.
+  outlive a crashed muxen.
 - **Rejected:** running it in the unit (it alone can exceed `MemoryMax`); raising
   `MemoryMax` (the limit protects the overloaded box, and a 74 MB peak would need it
-  doubled); a sub-cgroup with `Delegate=yes` (tether would manage cgroups itself);
+  doubled); a sub-cgroup with `Delegate=yes` (muxen would manage cgroups itself);
   a long-lived carapace process (carapace has no server mode, and one would hold its
   20–40 MB while idle).
 
@@ -1648,7 +1648,7 @@ behind it are Jimmy's ([Shell integration](#shell-integration)); see the
 ### carapace: run per stem, latest wins, 30-second cache
 
 - **What:** carapace gets the current word cut back to its **stem** (through its last
-  `/ = : , @ +`, else `-` for a flag, else empty) and tether filters its values by the
+  `/ = : , @ +`, else `-` for a flag, else empty) and muxen filters its values by the
   whole word; the key is `(cwd, cmd, args before the current word, stem)`. Only
   commands in `carapace --list` are run. One runner task owns the child: one run at a
   time, a request for another key kills the run in flight, one for the same key
@@ -1778,7 +1778,7 @@ behind it are Jimmy's ([Shell integration](#shell-integration)); see the
 ## Never send `respawn-pane` over control mode
 
 - **Decided:** 2026-10-22, tech lead.
-- **What:** tether never sends `respawn-pane` on a control client.
+- **What:** muxen never sends `respawn-pane` on a control client.
 - **Why:** with a control client attached and the pane flooding, `respawn-pane -k`
   sent over control mode kills the whole tmux server (4 of 4 runs), taking every
   session with it. The one-shot form, `kill-pane` and `kill-window` did not crash.
@@ -1882,7 +1882,7 @@ behind it are Jimmy's ([Shell integration](#shell-integration)); see the
   address with LocalAPI whois on each node-lane request, refuses tagged, shared,
   subnet-routing and self nodes, then matches stable ID and owner login against a
   `node` row in `auth.toml`. The iOS app's device-token lane remains unchanged.
-  Both kinds share `tether enroll`'s one-time code and `tether device remove`; live
+  Both kinds share `muxen enroll`'s one-time code and `muxen device remove`; live
   node sockets re-check the device, node and origin every 10 seconds.
 - **Why:** a cookie can be replayed by any HTTPS service on the same hostname and
   node-wide Tailscale access alone cannot be revoked per device. Serve's identity
@@ -1959,11 +1959,11 @@ behind it are Jimmy's ([Shell integration](#shell-integration)); see the
   `RestartPreventExitStatus=78`. Read the cgroup and select caps at startup only. On
   macOS, where there is no cgroup, the budget only sizes counts.
 - **Why:** the shared dev box is overloaded, and one setting is all a user should have
-  to choose; tether knows its own costs. Reading the unit's cgroup makes a lower
+  to choose; muxen knows its own costs. Reading the unit's cgroup makes a lower
   `MemoryMax` safe after a restart, so the config and unit cannot drift into an OOM kill.
   Tiers keep each configuration measurable; scaling only session, socket and completion
   counts makes refusals explainable. The default preserves three sessions because the
-  unit bounds tether, not tmux and its processes. A memory-backed upload could leave
+  unit bounds muxen, not tmux and its processes. A memory-backed upload could leave
   unreclaimable shmem after the request, outside the ceiling. The HTTP accept bound is
   required because otherwise unupgraded connections and hyper buffers are unbounded.
   `MemoryHigh` below the unreclaimable ceiling stalls allocations instead
@@ -2086,14 +2086,14 @@ behind it are Jimmy's ([Shell integration](#shell-integration)); see the
 
 - **Decided:** 2026-10-23, tech lead.
 - **What:** the service worker is built by the plugin's `closeBundle` with a nested
-  `vite build`. The cache name is `tether-shell-<12 hex of sha256 over every precached
+  `vite build`. The cache name is `muxen-shell-<12 hex of sha256 over every precached
   file's path and bytes>`, which also makes `sw.js` byte-different per build, so the
   browser's own update check needs no version endpoint. The build fails if `dist/` holds
   a file the daemon does not route (`SERVED` in `sw/vite-plugin.ts` mirrors `routes()` in
   `src/http/shell.rs`). `updates.apply()` checks for a new worker first and reloads when
   there is none, so the protocol-mismatch screen's Update button needs no extra wiring. A
   cache miss for a shell path falls back to the network. The worker looks in its own
-  cache first, then in every `tether-shell-*`. A failed install deletes its half-filled
+  cache first, then in every `muxen-shell-*`. A failed install deletes its half-filled
   cache. `createPwa(emit)` repeats the current state on every `check()`. A third update
   state, `reload`, means another page applied an update while this one keeps the previous
   build; its banner reads "Reload to finish updating" and is separate from the schema
@@ -2120,7 +2120,7 @@ behind it are Jimmy's ([Shell integration](#shell-integration)); see the
   caller's `Tailscale-User-Login`, which the daemon's Tailscale check requires.
 - **Why:** a browser cannot add `Tailscale-User-Login` to a WebSocket upgrade, so
   something must stand in for Serve, and one stack serves every lane.
-- **Rejected:** a `TETHER_LOCALAPI_SOCKET` override in the daemon with a fake LocalAPI
+- **Rejected:** a `MUXEN_LOCALAPI_SOCKET` override in the daemon with a fake LocalAPI
   (a test hook in the production identity path); a patched daemon copy; a separate
   stack per lane; running the real specs in a default test run (they fail on a
   machine without the tmux builds); a shared `test-results/` that one run empties under
@@ -2175,7 +2175,7 @@ design and the tech lead settled the structure around them.
 ### The app handoff prefills the form and waits
 
 - **Decided:** 2026-10-26, Jimmy, after using the flow.
-- **What:** `tether://add?host=<origin>&code=<code>` opens Add server at step 1 with
+- **What:** `muxen://add?host=<origin>&code=<code>` opens Add server at step 1 with
   the HTTPS host and optional code filled in. It sends no request until the user taps
   Next and then Add. With a code, the app enrolls the node through `POST /auth/node/enroll {code}` and
   then mints its token with an empty code. Without a code it uses the already-enrolled
@@ -2197,11 +2197,11 @@ design and the tech lead settled the structure around them.
 ### A setup link belongs to the app, so Safari never enrols
 
 - **Decided:** 2026-10-26, Jimmy, on the phone: "when u open in browser, try to open
-  tether first", "with that code", "so we don't login via safari".
+  muxen first", "with that code", "so we don't login via safari".
 - **What:** a page that arrives with a `#code=` fires
-  `tether://add?host=<origin>&code=<code>` as soon as it knows the host's origin, on a
+  `muxen://add?host=<origin>&code=<code>` as soon as it knows the host's origin, on a
   platform where the app can exist and never inside the native shell. Safari shows the
-  page only long enough to hand over; the prefilled screen and its "Open in the tether
+  page only long enough to hand over; the prefilled screen and its "Open in the muxen
   app" action remain the fallback when nothing handles the scheme. The app's Add with a
   code posts `POST /auth/node/enroll {code}` — which enrols the phone's **node** — then
   mints its own token with an empty code. One code therefore admits the phone: Safari
@@ -2209,7 +2209,7 @@ design and the tech lead settled the structure around them.
 - **Why:** Jimmy does not want to enrol the browser. Making the app spend the code
   removes the Safari login entirely while keeping the design's one-code-per-phone
   property, because the code is redeemed on the node rather than on a device. The
-  app needs its own token because its web socket origin is `tether-app://ui`, which
+  app needs its own token because its web socket origin is `muxen-app://ui`, which
   the node lane refuses. An empty-code mint replaces that node's earlier app token;
   removing the node revokes its bound token. Browser fetch metadata is refused for
   minting, so a page cannot obtain a portable credential.
@@ -2217,7 +2217,7 @@ design and the tech lead settled the structure around them.
   - Universal Links: Apple's CDN cannot fetch an association file from a tailnet-only
     host, and a wildcard development profile cannot carry associated domains without
     an explicit App ID.
-  - Allowlisting `tether-app://ui` for the node lane: it widens the auth surface and
+  - Allowlisting `muxen-app://ui` for the node lane: it widens the auth surface and
     the app still needs a token for its lock and uploads.
   - The browser enrols the node and the app only mints (the previous shape). It works,
     but it requires completing an enrolment in Safari first, which is the thing he does
@@ -2236,7 +2236,7 @@ design and the tech lead settled the structure around them.
   platform's own menu; in the app mirror, the long-press menu has Paste / Select all /
   Clear. One line is inserted for editing, text with a line break goes to the terminal
   as one paste without Enter, and an image takes the image paste route. On the
-  terminal, tether's edit menu, opened by a released long-press, has Paste (alone over
+  terminal, muxen's edit menu, opened by a released long-press, has Paste (alone over
   a blank cell), which sends the clipboard to the terminal as one paste without Enter
   (`readPasteboard` in the app).
 - **Why:** the resting row Jimmy chose has room for the tab chip, the field and the
@@ -2379,7 +2379,7 @@ and 3.7b ([probe-latest-activity.md](research/probe-latest-activity.md)).
 
 - **Decided:** 2026-10-24, Jimmy ("just whoever has the last focus gets the focus and
   the size of the screen").
-- **What:** tmux's `window-size latest`, extended to tether. A watch **claims** its
+- **What:** tmux's `window-size latest`, extended to muxen. A watch **claims** its
   window with `watch`, `resize`, `input` and `paste`, and its owner takes `latest`
   and votes that watch's size; when another tmux client acts there, the window **yields**: the vote clears,
   the watch stays, and tmux sizes the window by `latest`
@@ -2460,7 +2460,7 @@ and 3.7b ([probe-latest-activity.md](research/probe-latest-activity.md)).
 - **Rejected:** a native `overflow: auto` scroller (it owns the touch, so long-press and
   taps cannot be arbitrated, and it cannot reach rows xterm does not hold); tmux copy-mode
   (the plan's fallback: every scroll would change the pane's state, and tmux's own state is
-  what tether must not disturb); CSS-wrapped logical lines in the snapshot (wide characters
+  what muxen must not disturb); CSS-wrapped logical lines in the snapshot (wide characters
   and fractional cell widths misalign it); custom selection handles (the spec chose the system's;
   the device check decides whether they appear on a programmatic selection).
 
@@ -2476,7 +2476,7 @@ and 3.7b ([probe-latest-activity.md](research/probe-latest-activity.md)).
   the native host registry or a second credential store.
 - **Rejected:** putting `baseURL` on `PlatformHost` (host routing leaks into ordinary
   page state); deriving a URL from the host name (a user-visible label need not be
-  its MagicDNS name); WebSocket over `tether-app://` (a scheme handler cannot carry it); native
+  its MagicDNS name); WebSocket over `muxen-app://` (a scheme handler cannot carry it); native
   `URLSessionWebSocketTask` (keep as fallback only if spike 3 finds stuck sockets).
 
 ### Native caches the web's active tab for keyboard batches
@@ -2590,7 +2590,7 @@ and 3.7b ([probe-latest-activity.md](research/probe-latest-activity.md)).
   that holds an unidentified Unix-socket client through the subscription timer.
 - **Why:** the exact subscription crashed an isolated tmux 3.4 server with the same
   `format_find → xstrdup(NULL)` stack as the reports. The raw-socket repro also passes
-  on 3.7b and 3.8, but tether cannot rely on a tmux version's incidental client-list
+  on 3.7b and 3.8, but muxen cannot rely on a tmux version's incidental client-list
   filtering to keep the server alive. Evidence and the minimal repro are in
   [tmux-subscription-format-crash.md](research/tmux-subscription-format-crash.md).
 - **Rejected:** changing only `client_control_mode` or the membership match (the crash
@@ -2627,7 +2627,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 ### Publication and admission use one canonical-origin rule
 
 - **What:** one `MacFront { port, secret }` owns target formatting, recognition of
-  earlier tether-shaped handlers, and assembly of the Serve target, publication and
+  earlier muxen-shaped handlers, and assembly of the Serve target, publication and
   request gate. Publication first plans edits to the raw Serve JSON, preserving
   unrelated fields and handlers, then deserializes the planned config and judges it
   with `ServeConfig::canonical_origin(&target)` before any POST. A plan refused by
@@ -2635,7 +2635,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   config.
 - **Why :** the previous publication-specific checks accepted configs
   the canonical-origin rule later rejected (including a TCP forward and a handler at
-  another port), so tether could publish a front that then refused every browser. One
+  another port), so muxen could publish a front that then refused every browser. One
   policy boundary prevents those checks from drifting apart.
 - **Rejected:** separately re-implementing Funnel, TCP/443 and handler checks in the
   publication plan; validating the daemon-generated proxy URL by parsing it back into
@@ -2649,20 +2649,20 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   at its real mount path. Never include proxy URLs in messages: a Mac proxy contains
   the path secret.
 - **Why :** returning only the offending target reference made a plan
-  report tether's newly invented `/_` handler instead of the app's real `/` handler,
+  report muxen's newly invented `/_` handler instead of the app's real `/` handler,
   and hid the Funnel or TCP-forward condition that caused rejection.
 - **Rejected:** reconstructing the cause from the final message or logging an entire
   proxy target to make the conflict more specific.
 
-### tether writes its own Serve entry and picks a new path secret at each start
+### muxen writes its own Serve entry and picks a new path secret at each start
 
-- **What:** `tether serve --publish` reads the serve config and its `Etag` through
+- **What:** `muxen serve --publish` reads the serve config and its `Etag` through
   LocalAPI, changes only `Web["<MagicDNS name>:443"]`, `TCP["443"]` when it is
-  missing, and its own earlier handlers (tether-shaped:
-  `http://127.0.0.1:<its port>/tether-<43 base64url chars>`), and writes it back with
+  missing, and its own earlier handlers (muxen-shaped:
+  `http://127.0.0.1:<its port>/muxen-<43 base64url chars>`), and writes it back with
   `If-Match` only when the resulting config passes canonical-origin validation. It
   publishes once per start and never unpublishes.
-- **Why:** the macsys proof token, which tether already needs to read LocalAPI, can
+- **Why:** the macsys proof token, which muxen already needs to read LocalAPI, can
   write the serve config, and `If-Match` turns the write into a compare-and-swap
   (probed: a wrong `Etag` gets `412`). The extension logs the full target at every
   write, so a secret that never changes would stay valid in every log copy forever;
@@ -2673,10 +2673,10 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   - Rotating on a timer: each rotation is another write and log line, and live sockets
     would need both secrets for a while; the threat it shortens needs local code on
     the Mac.
-  - Re-publishing whenever the config loses tether's entry: it would undo Jimmy's own
+  - Re-publishing whenever the config loses muxen's entry: it would undo Jimmy's own
     `tailscale serve reset`.
-  - Removing tether-shaped handlers for any port: a handler for another port isn't
-    this front's publication, and tether changes only what it published.
+  - Removing muxen-shaped handlers for any port: a handler for another port isn't
+    this front's publication, and muxen changes only what it published.
   - Putting the secret somewhere the extension doesn't log: a Serve target is a URL
     and the extension logs it whole, userinfo included; Serve can't add a header.
 
@@ -2684,12 +2684,12 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 
 - **What:** without it a Mac daemon binds only `local.sock` and never touches the
   serve config. On Linux the flag is a configuration error (exit 78).
-- **Why:** the real-daemon e2e stack and dev runs start `tether serve` on the Mac; a
+- **Why:** the real-daemon e2e stack and dev runs start `muxen serve` on the Mac; a
   daemon that published on every start would overwrite Jimmy's Serve entry during
   tests.
 - **Rejected:** always publishing on macOS (the above); a `config.toml` key (it would
   apply to every daemon that reads Jimmy's config, including one he starts by hand to
-  debug; the flag puts publishing in the command, which the LaunchAgent carries); a separate `tether publish` command (the publication must follow the
+  debug; the flag puts publishing in the command, which the LaunchAgent carries); a separate `muxen publish` command (the publication must follow the
   daemon's life, which only the daemon knows).
 
 ### launchd holds the Mac front's socket
@@ -2709,7 +2709,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   loads, launchd's bind fails silently and the job gets one unbound fd (probed),
   while Serve's entry from the last session points at that process. The daemon
   requires the socket at `127.0.0.1` with a non-zero port; otherwise it withdraws
-  every tether-shaped handler (any port) from `Web["<name>:443"]`, trying for 2 s, and
+  every muxen-shaped handler (any port) from `Web["<name>:443"]`, trying for 2 s, and
   exits 78. launchd's 10 s restarts retry it. Rejected: exiting without withdrawing
   (the phone's device token keeps going to that process); checking only in gate M0
   (a login item can race launchd at any login).
@@ -2718,11 +2718,11 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 - **Rejected:**
   - A port the daemon binds itself, kernel-picked or fixed: freed by every crash. A
     probe showed a wildcard bind with `SO_REUSEADDR` on the same port can even
-    pre-position while tether's own listener runs, and receive Serve's connections
-    the moment tether stops.
+    pre-position while muxen's own listener runs, and receive Serve's connections
+    the moment muxen stops.
   - A watchdog parent process holding the socket: dies with the daemon under `kill
     -9` of the process group or jetsam.
-  - A wildcard or tailnet address: tailnet clients would reach tether without Serve.
+  - A wildcard or tailnet address: tailnet clients would reach muxen without Serve.
   - A configurable HTTPS port: the app can't use it.
 
 ### The path secret is checked first, in constant time, and answers an empty 404
@@ -2736,10 +2736,10 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 - **Why:** everything after the gate trusts headers that only Serve should be able to
   write. An empty 404 tells a local prober nothing about what listens.
 - **Rejected:** checking `Host` or the Tailscale headers first (they are forgeable,
-  and judging them costs a tailnet-state read); `403` with tether's JSON error body
-  (identifies tether to a prober).
+  and judging them costs a tailnet-state read); `403` with muxen's JSON error body
+  (identifies muxen to a prober).
 
-### The Mac front's `Host` rule uses the authority tether published
+### The Mac front's `Host` rule uses the authority muxen published
 
 - **What:** `Host` must equal `<MagicDNS name>` (`:443` optional) and exactly one
   `X-Forwarded-Host` must equal it, both held in memory from the publication; before
@@ -2750,7 +2750,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   origin. Holding it in memory keeps the native lane free of a LocalAPI read it
   doesn't otherwise need.
 - **Rejected:** no `Host` rule (a misdirected publication would go unnoticed); comparing
-  with the canonical origin on every lane (a handler added beside tether would refuse
+  with the canonical origin on every lane (a handler added beside muxen would refuse
   the native app too, which on Linux keeps working).
 
 ### The LocalAPI transport is chosen at startup and its endpoint found per connection
@@ -2762,9 +2762,9 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   identity_unavailable`, never a startup refusal.
 - **Why:** the extension's port and token change when it restarts. The macsys lookup is
   two system calls; `lsof` spawns a process, so it goes second, unlike Tailscale's CLI.
-- **Rejected:** a `TETHER_LOCALAPI` override (a test hook in the production identity
+- **Rejected:** a `MUXEN_LOCALAPI` override (a test hook in the production identity
   path, rejected before for the e2e stack); resolving once at startup (a Tailscale
-  restart would need a tether restart); the App Store lookup first (a process spawn on
+  restart would need a muxen restart); the App Store lookup first (a process spawn on
   every reconnect on the common install); verifying who listens on LocalAPI's port
   (an unprivileged process can't see root's sockets); re-reading `ipnport`
   before every request, reconnecting on `401`/`403`, and exiting when the endpoint
@@ -2782,28 +2782,28 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 - **Rejected:** keeping it for a Homebrew `tailscaled` setup (rejected as a setup;
   the macOS transport doesn't look for its socket).
 
-### The publication has one owner, and `tether enroll` asks the daemon on a Mac
+### The publication has one owner, and `muxen enroll` asks the daemon on a Mac
 
 - **What:** one task owns the publication's state. Publishing removes every
-  tether-shaped handler that targets the front's port, wherever it is, and drops
+  muxen-shaped handler that targets the front's port, wherever it is, and drops
   entries and plain-HTTPS `TCP` ports it leaves unused. Refusal text comes from each
   serve target, so a Mac never shows the Linux `sudo tailscale serve` command. On a
-  Mac `tether enroll` prints what the running daemon's `GET /auth/info` says over
+  Mac `muxen enroll` prints what the running daemon's `GET /auth/info` says over
   `local.sock`.
 - **Why :** a handler left under an old MagicDNS name would make the
   serve target appear twice and refuse browsers; only the daemon knows its secret, so
-  a separate computation in `tether enroll` couldn't apply the "named exactly once"
+  a separate computation in `muxen enroll` couldn't apply the "named exactly once"
   rule.
 - **Rejected:** a file in the runtime directory recording the published origin for
-  `tether enroll` (a second copy of state the daemon already serves).
+  `muxen enroll` (a second copy of state the daemon already serves).
 
 ### The daemon never unpublishes; teardown removes its handlers
 
 - **Decided:** 2026-10-24, design; teardown by tech lead, 2026-10-25.
 - **What:** the daemon never unpublishes on exit. The next start replaces a stale
   handler; in between Serve answers `502`. If launchd could not bind the front, startup
-  withdraws the unsafe tether-shaped handlers. `tether teardown` stops the service,
-  removes only tether-matching Serve handlers and removes the service file.
+  withdraws the unsafe muxen-shaped handlers. `muxen teardown` stops the service,
+  removes only muxen-matching Serve handlers and removes the service file.
 - **Why:** launchd holds the port across crashes. On a one-account Mac there is no
   second login account to protect against after a stop, while teardown reverses setup
   without removing other Serve entries.
@@ -2811,16 +2811,16 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   swap retry (extra shutdown state and a race with publication); asking Jimmy to clear
   the whole HTTPS entry by hand; a separate unpublish command duplicating teardown.
 
-## tether setup
+## muxen setup
 
 ### Setup runs in the foreground by default
 
 - **Decided:** 2026-10-25, Jimmy.
-- **What:** plain Linux `tether setup` runs tether in the terminal until SIGINT or
-  SIGTERM; `tether setup --background` installs the systemd user service. Plain setup
+- **What:** plain Linux `muxen setup` runs muxen in the terminal until SIGINT or
+  SIGTERM; `muxen setup --background` installs the systemd user service. Plain setup
   on a Mac refuses before changing anything; the LaunchAgent is still the only Mac
   front phones can reach.
-- **Why:** Jimmy chose plain `tether setup` to stay attached to the terminal; background
+- **Why:** Jimmy chose plain `muxen setup` to stay attached to the terminal; background
   installation requires an explicit flag. Stopping the process does not imply ownership
   of the tailnet's Serve config.
 - **Rejected:** background by default (Jimmy chose foreground); a foreground Mac run
@@ -2831,7 +2831,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 ### Linux setup publishes as the operator
 
 - **Decided:** 2026-10-25, lead (setup review findings).
-- **What:** Linux `tether setup` writes Serve through LocalAPI as Jimmy, the Tailscale
+- **What:** Linux `muxen setup` writes Serve through LocalAPI as Jimmy, the Tailscale
   operator, after the first-run grant.
 - **Why:** reruns and teardown need no root command when the account has the operator
   grant, and LocalAPI's compare-and-swap preserves concurrent changes from other apps.
@@ -2845,10 +2845,10 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   setup and the daemon would otherwise race as two publication owners.
 - **Rejected:** having the Linux daemon publish like the Mac daemon.
 
-### Every background setup run restarts tether
+### Every background setup run restarts muxen
 
 - **Decided:** 2026-10-25, lead (setup review findings).
-- **What:** every successful `tether setup --background` run restarts the service,
+- **What:** every successful `muxen setup --background` run restarts the service,
   even when its installed file is identical. Foreground setup starts the daemon in the
   current process instead.
 - **Why:** rerunning background setup is how Jimmy applies a config change, upgrade or
@@ -2898,7 +2898,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 - **Decided:** 2026-10-26, Jimmy.
 - **What:** Setup prints one link, `<origin>/#code=<CODE>`, and encodes that exact
   link in its QR and terminal clipboard. The browser reads the code from the fragment;
-  the daemon does not parse it. `tether enroll` prints the bare MagicDNS name on
+  the daemon does not parse it. `muxen enroll` prints the bare MagicDNS name on
   `Host:` and the same code-bearing URL on `Browser:`.
 - **Why:** Scanning or opening the link can enrol a browser without transcribing the
   code. Unlike the earlier decision, the web and iOS flows now consume the fragment.
@@ -2919,12 +2919,12 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   setup refuses before grants or installation when that lock belongs to a terminal run;
   an active service may be restarted. Teardown reports a terminal run that remains
   active. Foreground setup requires `config::runtime_dir()` to equal
-  `/run/user/<uid>/tether`. `daemon::open` owns the budget, runtime directory, flock,
+  `/run/user/<uid>/muxen`. `daemon::open` owns the budget, runtime directory, flock,
   binds, state store and auth before setup grants the operator. Setup publishes Serve,
   refreshes the daemon's cache, issues the code and prints; `Opened::run` then registers
-  signals and serves. Exit 78 is mapped only for `tether serve`, and teardown mentions
+  signals and serves. Exit 78 is mapped only for `muxen serve`, and teardown mentions
   linger only when `loginctl` reports `Linger=yes`.
-- **Why:** setup must refuse before a change if another process owns tether's daemon
+- **Why:** setup must refuse before a change if another process owns muxen's daemon
   slot; one flock keeps setup and serving on the same instance rule. Opening state and
   auth before the grant keeps filesystem refusals on the no-mutation side of the setup
   boundary. Keeping publication in the foreground sequence removes a split assembly
@@ -2941,17 +2941,17 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 - **What:** the success report is the mode line (with "starts at boot" or "starts when
   you log in" for a service), one line per change, any notes, the link, its QR code and
   "Enrolment code: <code> (one device, 10 minutes)", then "For another device, run
-  `tether enroll`." A terminal run logs at `warn`
+  `muxen enroll`." A terminal run logs at `warn`
   unless `RUST_LOG` is set, from before the daemon opens so its budget warnings show.
   An unenrolled node logs at `debug` on every route: the response already reports it,
   and every phone is unenrolled until it enters its code.
 - **Why:** each dropped line repeated another one or explained something a second run
   doesn't need: "Nothing else to change" (no change lines says it), "Published on your
   tailnet", per-client enrolment steps (the phone page asks for the code; the iOS host
-  name is the link's), the `teardown` line (in running.md; `tether enroll` keeps a line under the code, since
+  name is the link's), the `teardown` line (in running.md; `muxen enroll` keeps a line under the code, since
   Jimmy had to ask how to get another code), the clipboard
   sentence (setup can't tell whether OSC 52 landed), the daemon's "listening" line
-  under a report that already says tether is running, and a warning for the expected
+  under a report that already says muxen is running, and a warning for the expected
   enrol-after-opening order.
 - **Rejected:** a `--quiet` flag (two output formats to keep correct); keeping the
   banner for the foreground Serve entry that outlives Ctrl-C (running.md says so, and
@@ -2980,7 +2980,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 - **What:** session listings omit `attachedElsewhere` and do not query tmux clients to
   compute it.
 - **Why:** Jimmy said the note is not useful; acted-last sizing makes switching between
-  laptop and tether harmless. Removing it saves a field and the tmux query per listing.
+  laptop and muxen harmless. Removing it saves a field and the tmux query per listing.
   Removing the field alone needed no protocol bump: version 1 had not shipped, and a
   v1 web peer treated the missing value as false. Protocol 2 was later required by
   session watches, not by this field removal.
@@ -2992,7 +2992,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 ### One tab per session, like `tmux attach`
 
 - **Decided:** 2026-10-25, Jimmy, from first real use.
-- **What:** a tether terminal tab is a tmux session. It shows the session's current
+- **What:** a muxen terminal tab is a tmux session. It shows the session's current
   window and follows it when any client changes it. Session lists show sessions, not
   window rows; multi-window sessions offer window switching. The route to create a
   window in a one-window session remains open.
@@ -3022,10 +3022,10 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 - **Rejected:** the daemon telling the client and the client re-watching the new window
   (an extra round trip on every switch, on the connections where it hurts most); a
   session-scoped subscription carrying the acts and cwd in place of the per-window one
-  (the laptop riding along on a switch would read as an act and yield tether's claim;
+  (the laptop riding along on a switch would read as an act and yield muxen's claim;
   a session subscription carrying only the current window id is kept, as the backstop
-  for `swap-window`); grouped sessions so tether's window choice doesn't move the laptop
-  (tether would create sessions in Jimmy's tmux, against "a window onto tmux, never its
+  for `swap-window`); grouped sessions so muxen's window choice doesn't move the laptop
+  (muxen would create sessions in Jimmy's tmux, against "a window onto tmux, never its
   owner"); using failure of `display-message` to detect a missing target (tmux 3.4
   succeeds with empty fields).
 
@@ -3064,7 +3064,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   under `detach-on-destroy off`), the hub closes it and checks the session, which
   reports `sessionClosed`. Only a `%session-changed` naming another session counts:
   tmux also sends one naming the client's own session at attach and for every take
-  ("tether takes tmux's `latest` with a same-session `switch-client`"), and `Session`
+  ("muxen takes tmux's `latest` with a same-session `switch-client`"), and `Session`
   drops those.
 - **Why:** a control client belongs to one session for life; reusing it for the
   session tmux picked would bind views to a session nobody watched.
@@ -3173,7 +3173,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 - **Rejected:** a `pane` in the request that the hub refuses when stale (a refusal to
   handle for a race the client can settle alone).
 
-### tether takes tmux's `latest` with a same-session `switch-client`
+### muxen takes tmux's `latest` with a same-session `switch-client`
 
 - **Decided:** 2026-10-25, Jimmy and design. Evidence: [probe-latest-client.md](research/probe-latest-client.md), [probe-session-follow.md](research/probe-session-follow.md).
 - **What:** when a take is due, the owner **takes** `latest` before its vote: when it
@@ -3193,11 +3193,11 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   session's current window on every `switch-client`, the session it is already on
   included; on 3.4 it does so after its own recalculation, so the vote after the
   switch recalculates. The take injects no key, leaves `window-size` alone and dies
-  with the control client, so tmux's state never depends on tether's: after a crash,
+  with the control client, so tmux's state never depends on muxen's: after a crash,
   the laptop's next key sizes the window as before. Since tabs follow sessions, a claim
   is always on the session's current window, the one window a switch can take.
 - **Rejected:**
-  - `resize-window`: it sets the window's `window-size` to `manual`, which tether would
+  - `resize-window`: it sets the window's `window-size` to `manual`, which muxen would
     have to restore on every yield, and a crash would leave behind.
   - `send-keys -K` for input: keys go through tmux's key tables, so `C-b` starts the
     prefix and the next key runs a binding; on 3.4 ASCII and Enter didn't reach the pane.
@@ -3225,7 +3225,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 ### The band shows whenever the window isn't at this screen's size
 
 - **Decided:** 2026-10-25, Jimmy ("Sized for another terminal" + Fit whenever tmux's
-  size differs from tether's, nothing when tether holds it), and design.
+  size differs from muxen's, nothing when muxen holds it), and design.
 - **What:** draw the pane at tmux's size and the chosen font, aligned left; wider
   content is clipped, and a smaller window sits at top left. The band appears after
   the window's size differs in either direction for longer than one second or the last
@@ -3233,7 +3233,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   wait; Fit sends this screen's size and takes `latest`. A larger pane uses xterm's DOM
   renderer; `watching` reports the window size.
 - **Why:** another terminal's window is for glancing, with Fit one tap away. Once
-  tether holds a window, the sizes match, so a mismatch identifies the situation
+  muxen holds a window, the sizes match, so a mismatch identifies the situation
   without another daemon flag. Waiting avoids a flash while a claim is in flight.
 - **Rejected:** scaling the font (a wide laptop terminal is unreadably small on a
   phone and font changes feed the sizer); CSS scaling (blur and incorrect cell
@@ -3303,7 +3303,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   cursor row at the bottom, as before. It never pans past the last row, does nothing while
   all rows fit, and does not pan while scrolled into history. The dock refreshes its area
   when `Viewport.visibleHeight` changes, including the native app's keyboard resize where
-  `keyboardInset` remains 0. The tether chrome is measured from the surface in a short
+  `keyboardInset` remains 0. The muxen chrome is measured from the surface in a short
   window after layout, density, directInput, width, stable height or the safe area change,
   and at the start, as client-architecture.md §5.4 says; a keyboard changes none of those,
   so a shrinking web view never becomes chrome.
@@ -3409,7 +3409,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   the shared tmux session, so an attached laptop follows it; Jimmy accepted that.
 - **Why:** Jimmy uses windows infrequently and agreed that the current window makes more
   sense than selecting the first; the tab continues to match the session as other
-  clients change it. tmux prefix keys do not switch windows from tether: `send-keys`
+  clients change it. tmux prefix keys do not switch windows from muxen: `send-keys`
   writes to the pane past tmux's key tables.
 - **Rejected:** making each tab a fixed tmux window; selecting the first window on open;
   a window switcher visible for every one-window session; a separate phone window
@@ -3548,12 +3548,12 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 
 - **Decided:** 2026-10-27, Jimmy (“if we can find it”; the hook: “yes, although wait for
   my tmux restart”; the agent setting: “okay with that change (but u need to also add it
-  to tether docs)”).
+  to muxen docs)”).
 - **What:** an attention dot on session rows, tabs and the current-tab button marks a
   terminal bell since this device last showed the tab. The streamed tab's BEL comes from
-  pane output; other sessions are covered by one server-global `alert-bell` hook tether
-  appends at runtime and removes on stop, recording the session in a tether user option.
-  tether keeps "seen" itself. Users make agents ring BEL (Claude Code:
+  pane output; other sessions are covered by one server-global `alert-bell` hook muxen
+  appends at runtime and removes on stop, recording the session in a muxen user option.
+  muxen keeps "seen" itself. Users make agents ring BEL (Claude Code:
   `preferredNotifChannel: "terminal_bell"`); running.md documents it with the feature.
   The hook reaches Jimmy's live server only after his planned tmux restart. Show a
   connection indicator on the terminal only when not live; it is separate from the dot.
@@ -3570,7 +3570,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   `refresh-client -B` subscriptions (scoped to the control client's own session);
   editing `.tmux.conf` or changing `monitor-bell`/`bell-action` to widen
   coverage; per-session hooks that would override a user's own session hook. Accepted
-  limits: a session-level user hook shadows tether's global one, and `monitor-bell off`
+  limits: a session-level user hook shadows muxen's global one, and `monitor-bell off`
   or an excluding `bell-action` suppresses it.
 
 ### Face ID relock is selectable, not disabled
@@ -3595,7 +3595,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 ### A clean launch opens Home
 
 - **Decided:** 2026-10-27, Jimmy ("I think we should default to home from a clean
-  launch...? what if tether isn't running anymore?").
+  launch...? what if muxen isn't running anymore?").
 - **What:** a cold start opens Home even when tabs are saved; the saved tabs are listed on
   their server cards. Returning from the background keeps the screen the user left.
 - **Why:** if the daemon or server is down, reopening the last tab would land on a
@@ -3606,11 +3606,11 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 ### Several servers are a product rule
 
 - **Decided:** 2026-10-27, Jimmy ("multiple servers becomes a product rule").
-- **What:** tether serves several servers at once: Home has a card per server, the
+- **What:** muxen serves several servers at once: Home has a card per server, the
   sessions sheet groups by server, and tabs from different servers coexist. The app
   already connects to each host directly; the browser/PWA stays bound to its page origin
   until a multi-server browser design keeps its admission boundary.
-- **Why:** Jimmy runs tether on more than one machine (pop-os and his Mac), and the
+- **Why:** Jimmy runs muxen on more than one machine (pop-os and his Mac), and the
   redesigned Home and sheet are built around server cards and groups.
 - **Rejected:** one host in the MVP with a layout that merely allows more later (the
   lead's lean), since it would ship Home and the sheet in a shape the product rule then
@@ -3733,7 +3733,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 - **Decided:** 2026-10-27, Jimmy.
 - **What:** the Playwright specs that ran against the harness's fake daemon (Files, Home
   keyboard, PWA, admission, navigation, routes, the axe checks), their helpers,
-  `@axe-core/playwright`, the `e2e` script and `TETHER_PREFLIGHT_E2E` are deleted. Kept: the
+  `@axe-core/playwright`, the `e2e` script and `MUXEN_PREFLIGHT_E2E` are deleted. Kept: the
   harness and its fixtures (every state has one, for looking at it), vitest, Rust and Swift
   tests, and the `*.real.ts` end-to-end scripts on `e2e/shared/stack.ts`. Those run a real
   daemon on a private tmux 3.4 and 3.8, opt-in and never in preflight, to exercise full
@@ -3985,18 +3985,18 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 - **Decided:** 2026-10-27, slice 7 design (spec: [daemon-core.md §4.8](daemon-core.md#48-bell-attention), §3.3, §5.3).
   Probes on isolated tmux 3.4 and 3.8 servers; measurements are in the spec.
 - **A fixed hook index (9100), not `set-hook -ga`.** `-a` takes the first free index,
-  so tether would search `show-hooks` for its own entry to find, update or remove it, and
+  so muxen would search `show-hooks` for its own entry to find, update or remove it, and
   could not tell it from a user's. A fixed index makes install idempotent, two daemons on
   one server write the same entry, a crashed daemon's stale entry is overwritten, and
   "ours" is one indexed read. Remove is one guarded `if-shell -F` command list (unset
-  only while the element still starts with tether's text), so it never removes a user's
+  only while the element still starts with muxen's text), so it never removes a user's
   entry. This replaces `-ga` in the entry "Bell attention: BEL in the stream, plus one
   runtime alert-bell hook". Rejected: `-ga` with a content search (races between the
   read and the unset, and a stale duplicate per crash); a per-daemon option name and
   pid-liveness cleanup (more state to detect a dead owner than the entry is worth);
   an unguarded install (it clobbers a user's entry; see "Install is guarded" below).
-- **The marker is a per-session counter**, `set-option -F @tether-bell
-  "#{e|+:#{?#{@tether-bell},#{@tether-bell},0},1}"`. Exact for bells within one second,
+- **The marker is a per-session counter**, `set-option -F @muxen-bell
+  "#{e|+:#{?#{@muxen-bell},#{@muxen-bell},0},1}"`. Exact for bells within one second,
   survives the daemon not running, needs no clock. Rejected: a timestamp (two bells in a
   second look like one; format clocks are one-second), a boolean (needs the daemon to
   clear it, which a crashed or absent daemon can't).
@@ -4018,9 +4018,9 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   from xterm.js's `onBell` (free on the wire, but it would put a dot on a tab the user is
   looking at). The client treats the on-screen tab as seen
   ([browser-behaviors.md](client/browser-behaviors.md)).
-- **Listing lines are records by construction.** The window name passes through `#{s/<LF>/\\n/:…}` and the user-writable `@tether-bell` through `#{e|+:…,0}`, so no field holds a raw line break and every line is one window record; a line that doesn't parse is a bad reply, not skipped. Rejected: length framing with `#{n:window_name}` (it counts stored bytes, while 3.4 escapes control characters only on output, so a length-framed parser loses sync). Probed on 3.4 and 3.8 (re-check p364).
+- **Listing lines are records by construction.** The window name passes through `#{s/<LF>/\\n/:…}` and the user-writable `@muxen-bell` through `#{e|+:…,0}`, so no field holds a raw line break and every line is one window record; a line that doesn't parse is a bad reply, not skipped. Rejected: length framing with `#{n:window_name}` (it counts stored bytes, while 3.4 escapes control characters only on output, so a length-framed parser loses sync). Probed on 3.4 and 3.8 (re-check p364).
 - **The bell poll is the existing `List` one-shot** (review p362), with the session's
-  `@tether-bell`, and a per-window coverage test in each window line, placed before the
+  `@muxen-bell`, and a per-window coverage test in each window line, placed before the
   names. Measured 5.2 ms wall, 1.0 ms server CPU, 2351 bytes at 60 windows against
   5.1 ms, 0.7 ms and 1811 bytes for the current listing. It deletes the separate
   `Markers` one-shot, `Reply::Bells` and marker lines, and takes the server-instance and
@@ -4055,7 +4055,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 - **Stated limits** (plan.md "Coverage limits"): bells before the first device connects
   after a tmux start are lost; with two daemons on one server the first to stop removes
   the shared entry and the survivor reinstalls at its next listing. No cheap fix exists:
-  tether has no contact with tmux while no device is connected.
+  muxen has no contact with tmux while no device is connected.
 - **Poll failure is server-level.** One `bell { available: false }`; per-session `covered`
   is tmux configuration only, so the client says "Bell tracking unavailable on this host"
   and "tmux settings hide bells in this session" separately.
@@ -4074,7 +4074,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   when any client selects the window, and `kill-session -C` clears it, so a bell in another
   client's current window, the common case, is missed and "since this device last showed
   it" cannot be kept. It would also bring back marking tmux's flags for the phone. The hook
-  writes tether's own marker; the cost is the one runtime hook Jimmy approved.
+  writes muxen's own marker; the cost is the one runtime hook Jimmy approved.
 - **Protocol: one new message `bell` (`{ server, available, sessions }`) and an optional
   `bell` field per listed session; no version bump.** Both are ignorable by an older peer (`src/proto/AGENTS.md`: new message
   types and optional fields need no bump); the old client shows no dot. A reconnect learns
@@ -4249,7 +4249,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   from taking the held touch, which only resigning the native field allowed; `select` no longer does.
   While the flag is on, the web view refuses every edit action and removes WebKit's AutoFill submenu
   (which no refusal reaches). Told only on release, the flag sometimes came after WebKit built that
-  menu, and AutoFill showed over tether's Copy and Paste in the Simulator.
+  menu, and AutoFill showed over muxen's Copy and Paste in the Simulator.
 - **The terminal's surface isolates its stacking.** The opaque selection snapshot (z 3) painted over
   the dock (z 2) once the dock rode over the surface with the keyboard up.
 - **The snapshot is not a scroller while the finger that made the selection is down.** With
@@ -4258,7 +4258,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   keyboard up or down (Jimmy: "i can't select text if the keyboard is up"; in the Simulator with the
   snapshot unscrollable, the same presses kept their selection). It scrolls again once the finger is up.
 - **Writing Tools are off in the app** (`writingToolsBehavior = .none` on the web view and the native
-  field): Apple Intelligence's button sat over tether's Copy and Paste on a selection. tether's text is a
+  field): Apple Intelligence's button sat over muxen's Copy and Paste on a selection. muxen's text is a
   terminal and short fields, none of them prose.
 
 ## The keyboard control stays in the tab row (2026-10-30)
@@ -4272,7 +4272,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 
 ## Icons come from Lucide (2026-10-31)
 
-- **Every icon is a Lucide icon** (`lucide-preact`, ISC, imported one by one), behind tether's own names
+- **Every icon is a Lucide icon** (`lucide-preact`, ISC, imported one by one), behind muxen's own names
   in `web/ui/primitives/Icon.tsx`. The hand-drawn set it replaces drew Settings as a circle with rays,
   which read as a sun (Jimmy: "the setings icon is hard to read - its not a freaking gear icon"; then
   "yeah just Lucide"). Same 24-unit grid and 2 px stroke as before. Hide keyboard is Lucide's
@@ -4330,7 +4330,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 
 - **The page marks, native shows the menu.** With the keyboard up the mark is a CSS highlight, not a DOM
   selection, so WebKit offers no menu. Bridge v9 adds `editMenu { rect | null }` (web to native) and `menuCopy`
-  and `menuPaste` (native to web). `TetherWebView` presents a `UIEditMenuInteraction` over the rect; a choice comes
+  and `menuPaste` (native to web). `MuxenWebView` presents a `UIEditMenuInteraction` over the rect; a choice comes
   back as a message and the page does the work: Copy through `copy` with the mark's joined text, Paste through
   `pasteFromMenu`. v9 is a new version because the contract is strict equality.
 - **Native owns whether the menu is up.** iOS can dismiss it itself, and a page that tracked its visibility went

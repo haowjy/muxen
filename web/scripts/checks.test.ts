@@ -8,7 +8,7 @@ describe("copy rule", () => {
     expect(findCopyViolations("status ● live")).toHaveLength(1);
   });
   it("passes plain copy", () => {
-    expect(findCopyViolations("tether / agent, 2 windows. Checking access…")).toEqual([]);
+    expect(findCopyViolations("muxen / agent, 2 windows. Checking access…")).toEqual([]);
   });
 });
 
@@ -52,8 +52,8 @@ describe("budgets", () => {
     expect(initialSizes(huge, manifest)).toEqual({ js: 1_300_000, css: 90_000 });
   });
   it("fails a terminal font over 120 KB and the symbols over 150 KB", () => {
-    expect(budgetBreaches([...ok, file("assets/tether-mono-bold-x.woff2", BUDGETS.terminalFont + 1)], manifest).join()).toContain("tether-mono-bold");
-    expect(budgetBreaches([...ok, file("assets/tether-symbols-x.woff2", BUDGETS.symbolsFont + 1)], manifest).join()).toContain("tether-symbols");
+    expect(budgetBreaches([...ok, file("assets/muxen-mono-bold-x.woff2", BUDGETS.terminalFont + 1)], manifest).join()).toContain("muxen-mono-bold");
+    expect(budgetBreaches([...ok, file("assets/muxen-symbols-x.woff2", BUDGETS.symbolsFont + 1)], manifest).join()).toContain("muxen-symbols");
   });
   it("counts every file, stubs included", () => {
     const many = [...ok, ...Array.from({ length: BUDGETS.shellFiles }, (_, i) => file(`assets/stub-${String(i)}.js`, 44))];

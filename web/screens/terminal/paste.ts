@@ -1,6 +1,6 @@
 // Paste and copy interception on the terminal surface (client-architecture.md §7.5, §7.2).
 // A capture-phase listener runs before xterm's own, from either browser source (xterm's
-// textarea or tether's owned input), so the browser and tmux can never both bracket a paste.
+// textarea or muxen's owned input), so the browser and tmux can never both bracket a paste.
 // `Pastes` is what a paste, a copy and an inserted path do after that.
 import type { AppController } from "../../app/controller";
 import type { PasteResult } from "../../net/host";

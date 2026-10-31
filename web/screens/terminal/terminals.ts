@@ -62,7 +62,7 @@ const INPUT_BATCH_MS = 8;
 
 const instances = new WeakMap<AppController, Terminals>();
 
-/** The viewport inputs the tether chrome depends on; a keyboard changes none of them. */
+/** The viewport inputs the muxen chrome depends on; a keyboard changes none of them. */
 function chromeInputsChanged(a: Viewport, b: Viewport): boolean {
   const sa = a.safeArea;
   const sb = b.safeArea;
@@ -101,7 +101,7 @@ export class Terminals extends Store<TerminalsView> {
   /** Keys typed for one tab and one window, which is the window the tab showed when they were typed. */
   private batch: { id: string; window: number | null; events: InputEvent[] } | null = null;
   private batchTimer: ReturnType<typeof setTimeout> | undefined;
-  /** tether's own input on a phone browser; created the first time it is needed. */
+  /** muxen's own input on a phone browser; created the first time it is needed. */
   private owned: HTMLTextAreaElement | null = null;
   private panArea: number | null = null;
   /** The shown pane is larger than the box: the renderer stays DOM. */
@@ -167,7 +167,7 @@ export class Terminals extends Store<TerminalsView> {
     app.focus.subscribe(() => { this.drawCursor(); });
     document.addEventListener("selectionchange", () => { this.applyTheme(); });
     app.platform.subscribe((event) => {
-      // The app's edit menu over the mark, or over iOS's own selection: its choices are the same as tether's own menu had.
+      // The app's edit menu over the mark, or over iOS's own selection: its choices are the same as muxen's own menu had.
       if (event.type === "menuCopy") this.pastes.copySelection();
       if (event.type === "menuPaste") this.pastes.pasteFromMenu();
       // Native's responder: only the tab on screen still takes input.
@@ -444,7 +444,7 @@ export class Terminals extends Store<TerminalsView> {
   }
 
   /**
-   * The tether chrome is whatever surrounds the surface in the keyboard-hidden layout: the stable
+   * The muxen chrome is whatever surrounds the surface in the keyboard-hidden layout: the stable
    * box less the surface. It changes only when layout, density, width or the safe area do
    * (client-architecture.md §5.4), so it is measured in a short window after such a change and
    * at the start; a keyboard shrinking a native web view's surface never opens one.
@@ -502,7 +502,7 @@ export class Terminals extends Store<TerminalsView> {
     // xterm measures its cell once, at open: the faces must be in.
     const style = getComputedStyle(this.element);
     const size = style.fontSize;
-    await Promise.all([document.fonts.load(`${size} tether-mono`), document.fonts.load(`bold ${size} tether-mono`)]).catch(() => undefined);
+    await Promise.all([document.fonts.load(`${size} muxen-mono`), document.fonts.load(`bold ${size} muxen-mono`)]).catch(() => undefined);
     const font = getComputedStyle(this.element);
     const renderer = createXtermRenderer(this.element, {
       fontFamily: font.fontFamily,
@@ -531,7 +531,7 @@ export class Terminals extends Store<TerminalsView> {
     requestAnimationFrame(() => { this.measure(); });
   }
 
-  /** Desktop direct input is xterm's own textarea, held by the focus controller; a phone browser's is tether's owned input; native brings its own. */
+  /** Desktop direct input is xterm's own textarea, held by the focus controller; a phone browser's is muxen's owned input; native brings its own. */
   private applyInput(): void {
     const renderer = this.renderer;
     if (!renderer) return;
@@ -555,7 +555,7 @@ export class Terminals extends Store<TerminalsView> {
         : null,
     );
     if (this.registered) this.app.focus.withdraw("terminal", this.registered);
-    // Where tether's own input (or native's) takes the keyboard, xterm's helper textarea is inert: out of the accessibility tree, so VoiceOver cannot land on it.
+    // Where muxen's own input (or native's) takes the keyboard, xterm's helper textarea is inert: out of the accessibility tree, so VoiceOver cannot land on it.
     const helper = renderer.inputElement();
     if (xterm) helper?.removeAttribute("aria-hidden");
     else helper?.setAttribute("aria-hidden", "true");

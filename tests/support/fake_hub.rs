@@ -10,17 +10,17 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use bytes::Bytes;
-use serde_json::{Value, json};
-use tether::blocking::Lanes;
-use tether::budget::DEFAULT_CAPS;
-use tether::hub::{ConnId, Effect, Endpoints, FromConn, Input, PasteFile, State, ToConn};
-use tether::proto::{self, ClientMsg, SessionRef};
-use tether::tmux::fake::{self, Capture, Command};
-use tether::tmux::{
+use muxen::blocking::Lanes;
+use muxen::budget::DEFAULT_CAPS;
+use muxen::hub::{ConnId, Effect, Endpoints, FromConn, Input, PasteFile, State, ToConn};
+use muxen::proto::{self, ClientMsg, SessionRef};
+use muxen::tmux::fake::{self, Capture, Command};
+use muxen::tmux::{
     Bell, ClientId, Created, Endpoint, Found, ListedSession, Listing, Location, OneShotCmd, Op,
     PaneId, PumpMsg, Reply, ServerInstance, SessionId, Size, Socket, Tag, TmuxError, TmuxVersion,
     WindowId, command,
 };
+use serde_json::{Value, json};
 use tokio::sync::Semaphore;
 
 const SERVER: ServerInstance = ServerInstance {

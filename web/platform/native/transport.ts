@@ -61,10 +61,10 @@ class NativeLink implements Link {
   }
 }
 
-/** `tether-app://h-<handle>` is native's HTTP proxy for a host (auth, files, completion); sockets use the Link above. */
+/** `muxen-app://h-<handle>` is native's HTTP proxy for a host (auth, files, completion); sockets use the Link above. */
 export function createNativeTransport(bridge: Bridge): Transport {
   return {
     openSocket: (handle, handlers) => new NativeLink(handle, handlers, bridge),
-    httpBase: (handle) => `tether-app://h-${handle}`,
+    httpBase: (handle) => `muxen-app://h-${handle}`,
   };
 }

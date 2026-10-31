@@ -9,7 +9,7 @@ export function NoServers() {
     <div class={styles.page}>
       <div class={styles.form}>
         <h1 class={styles.title}>Add a server</h1>
-        <p class={styles.step}>On the server, run <code>tether enroll</code>, then enter its address and the code it prints.</p>
+        <p class={styles.step}>On the server, run <code>muxen enroll</code>, then enter its address and the code it prints.</p>
         <Button variant="primary" onClick={() => { app.platform.manageHosts?.(); }}>Add a server</Button>
       </div>
     </div>

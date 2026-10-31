@@ -382,7 +382,7 @@ pub struct HostInfo {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub enum WatchEndReason {
-    /// Another tmux client detached tether's control client.
+    /// Another tmux client detached muxen's control client.
     Detached,
     Error,
     /// The memory tier's control-client cap is full.
@@ -409,7 +409,7 @@ pub struct SessionListing {
 
 /// A session's bell attention state. `mark` is opaque: a client shows a dot while it
 /// differs from the mark it last showed, and never orders them. `covered: false` says
-/// tmux's settings keep this session's bells from tether's hook.
+/// tmux's settings keep this session's bells from muxen's hook.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct BellState {

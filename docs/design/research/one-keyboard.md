@@ -209,8 +209,8 @@ app, not in a throwaway spike.
 
 ## Sources
 
-- `ios/Tether/Input/{TerminalInputView,FocusController,LineFieldLender}.swift`,
-  `ios/Tether/Web/WebKitAccessoryBar.swift`, `WebShellController.swift:204–292`
+- `ios/Muxen/Input/{TerminalInputView,FocusController,LineFieldLender}.swift`,
+  `ios/Muxen/Web/WebKitAccessoryBar.swift`, `WebShellController.swift:204–292`
 - `web/screens/terminal/dock/{Dock,LineField}.tsx`, `web/ui/primitives/LineInput.tsx`,
   `web/platform/native/bridge.ts`
 - decisions.md, 2026-10-24 "Phone input follows Termius" section and 2026-10-26 "No

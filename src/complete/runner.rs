@@ -1,7 +1,7 @@
 //! carapace's runner (complete.md "carapace"): one task that owns the child process, one
 //! run at a time, the latest key winning. Every finished run's result goes into
 //! `carapace::Shared`, whether anyone still waits or not. Under systemd each run gets
-//! its own transient scope, outside tether's memory limit. Arguments and output are
+//! its own transient scope, outside muxen's memory limit. Arguments and output are
 //! never logged.
 
 use std::ffi::OsString;
@@ -34,7 +34,7 @@ const SCOPE: [&str; 15] = [
     "--scope",
     "--quiet",
     "--collect",
-    "--description=tether completion",
+    "--description=muxen completion",
     "-p",
     "MemoryMax=128M",
     "-p",

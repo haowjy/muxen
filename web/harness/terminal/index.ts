@@ -10,6 +10,6 @@ export const fixtures: Fixtures = {
   terminalLimited: {
     options: () => ({ workspace: SAVED }),
     openActive: true,
-    daemon: (d) => { d.listing = LISTING; d.watch = { limit: "tether on pop-os allows 1 tmux session at a time; open now: notes" }; },
+    daemon: (d) => { d.listing = LISTING; d.watch = { limit: "muxen on pop-os allows 1 tmux session at a time; open now: notes" }; },
   },
 };

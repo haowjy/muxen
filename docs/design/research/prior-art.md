@@ -1,7 +1,7 @@
-# Prior art and the gap tether fills
+# Prior art and the gap muxen fills
 
-Survey of projects that overlap tether, done while writing the first plan
-(2026-10-21). It explains why tether is worth building and which projects to read
+Survey of projects that overlap muxen, done while writing the first plan
+(2026-10-21). It explains why muxen is worth building and which projects to read
 before building each subsystem; the current design is in [plan.md](../plan.md).
 
 | Project | What it is | Transport / reconnect | Mobile UX | Files | License / maturity | Borrow / avoid |
@@ -17,7 +17,7 @@ before building each subsystem; the current design is in [plan.md](../plan.md).
 | [Blink Shell](https://blink.sh) ([source](https://github.com/blinksh/blink)) | iOS SSH/mosh terminal | Best-in-class mosh on iOS | Strong keyboard handling, smart keys | Files.app integration, scp | GPL-3 source, paid app | Benchmark for keyboard and key-bar ergonomics. Native, so its keyboard is not a web precedent |
 | [Termius](https://termius.com) ([keyboard](https://docs.termius.com/terminal/mobile-terminal), [autocomplete](https://docs.termius.com/terminal/autocomplete-and-shell-integration)) | Cross-platform SSH client (Jimmy's current tool) | SSH. iOS suspends it, so it drops | Keyboard benchmark: an always-visible add-on above the keyboard shows the first 3 groups of 4 keys, reorderable and customizable. A side panel has the extended keyboard, snippets and history. Shift+Tab included for Claude Code. Press-and-drag acts as arrow keys, double-tap sends Tab. Autocomplete covers history, paths and commands with arguments, using shell integration over extra SSH exec channels. Collapsed bottom bar: back, host pill with ×, +, keyboard toggle | SFTP | Proprietary, freemium | Match its keyboard and collapsed bar. Its disconnect pain comes from iOS backgrounding a TCP session |
 | [Moshi](https://getmoshi.app) | iOS terminal built for coding agents (SSH + mosh) | mosh survives sleep and app kills | Agent-focused. Push, Dynamic Island and Watch approvals | Limited | Proprietary | Closest commercial competitor. Its notification UX is out of scope here |
-| tmux [control mode](https://github.com/tmux/tmux/wiki/Control-Mode), used by [iTerm2](https://iterm2.com/documentation-tmux-integration.html) | tmux emits structured `%output`, `%window-add`, `%session-changed` and similar events | Text protocol over stdio | iTerm2 maps tmux windows to native tabs | n/a | Part of tmux (ISC) | The building block for per-pane streams and native tabs. tether uses plain `tmux -C`; `-CC` is the iTerm2 variant. Pitfalls: output escaping, snapshot boundaries, flow control, resize ([daemon-core.md](../daemon-core.md)) |
+| tmux [control mode](https://github.com/tmux/tmux/wiki/Control-Mode), used by [iTerm2](https://iterm2.com/documentation-tmux-integration.html) | tmux emits structured `%output`, `%window-add`, `%session-changed` and similar events | Text protocol over stdio | iTerm2 maps tmux windows to native tabs | n/a | Part of tmux (ISC) | The building block for per-pane streams and native tabs. muxen uses plain `tmux -C`; `-CC` is the iTerm2 variant. Pitfalls: output escaping, snapshot boundaries, flow control, resize ([daemon-core.md](../daemon-core.md)) |
 | [zellij web client](https://zellij.dev) (added in 0.43) | Zellij serves sessions to the browser | WS, built-in auth tokens | Browser, not phone-optimized | No | MIT | Shows a multiplexer-native web UI works. Jimmy uses tmux, though |
 | [VibeTunnel](https://vibetunnel.sh) ([source](https://github.com/amantus-ai/vibetunnel)) | Wraps commands with `vt`, browser terminal for Mac (now Linux too). Built for watching agents | WS / SSE, Tailscale recommended | Mobile web works, but has open iOS keyboard reports. Native iOS is WIP | Basic file browser, git follow mode | MIT, beta | Borrow: mobile web layout. Its iOS keyboard issues show a hidden textarea alone doesn't solve the keyboard. Avoid: wrapping commands |
 | [Happy (Coder)](https://happy.engineering) ([source](https://github.com/slopus/happy)) | Native iOS/Android/web app for Claude Code and Codex. Encrypted relay you can self-host | E2E relay, push notifications | Chat UI, voice, permission prompts | File mentions | MIT, very active (~22k stars) | Avoid wrapping the agent CLI. Omnara's archived wrapper shows the upkeep cost |
@@ -30,7 +30,7 @@ before building each subsystem; the current design is in [plan.md](../plan.md).
 
 ## Young projects that overlap (2026)
 
-Five small projects now cover parts of tether. None has a license, so they are for
+Five small projects now cover parts of muxen. None has a license, so they are for
 study only: read the code, copy nothing.
 
 | Project | Overlap | What to study first |
@@ -54,11 +54,11 @@ for the snapshot boundary ([daemon-core.md §3.5](../daemon-core.md#35-snapshot)
 - **Two families, nobody bridges them.** (a) Terminal transports: ttyd, mosh, ET,
   Blink. Robust but blind to what's running. (b) Agent dashboards: herdr, Happy, Moshi,
   Omnara. These either wrap the agent CLIs or are desktop-only. Jimmy's harness already
-  does notifications, so tether needs only (a), done well on a phone.
+  does notifications, so muxen needs only (a), done well on a phone.
 
 ## The gap
 
-No mature, licensed project offers all of the following together, so tether is still
+No mature, licensed project offers all of the following together, so muxen is still
 worth building:
 
 - An existing tmux server as the source of truth, with no wrapping of commands or agents.
@@ -70,4 +70,4 @@ worth building:
 - Tailnet-only access with no third-party relay.
 
 terminal-web and tmuxy come closest (above). Read terminal-web's iOS input code and
-tmuxy's restore code before building the matching tether subsystems.
+tmuxy's restore code before building the matching muxen subsystems.

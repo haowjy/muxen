@@ -1,4 +1,4 @@
-// The real-daemon stack the `*.real.ts` specs share: a real tether daemon on a private tmux,
+// The real-daemon stack the `*.real.ts` specs share: a real muxen daemon on a private tmux,
 // with the app served by Vite's dev server through the dev proxy (client-architecture.md
 // §5.11). Everything is isolated under one directory, `<tmpdir>/e2e-<port>/<name>`: the
 // daemon's runtime, state and config, the tmux socket, and the ports. It never touches the
@@ -16,9 +16,9 @@ import path from "node:path";
 import type { Duplex } from "node:stream";
 
 // Keyed on the port the e2e run was given, so runs on different ports never share a directory.
-const ROOT = path.join(os.tmpdir(), `e2e-${process.env["TETHER_E2E_PORT"] ?? "5199"}`);
+const ROOT = path.join(os.tmpdir(), `e2e-${process.env["MUXEN_E2E_PORT"] ?? "5199"}`);
 const WEB = path.resolve(import.meta.dirname, "../..");
-const DAEMON = path.resolve(WEB, "../target/debug/tether");
+const DAEMON = path.resolve(WEB, "../target/debug/muxen");
 
 export type TmuxVersion = "3.4" | "3.7b";
 
@@ -46,7 +46,7 @@ export interface Laptop {
 }
 
 export function tmuxBinary(version: TmuxVersion): string {
-  return process.env["TETHER_TMUX"] ?? path.join(homedir(), ".cache/tether-tmux", version, "bin/tmux");
+  return process.env["MUXEN_TMUX"] ?? path.join(homedir(), ".cache/muxen-tmux", version, "bin/tmux");
 }
 
 async function freePort(): Promise<number> {
@@ -129,7 +129,7 @@ export async function startStack(options: StackOptions): Promise<Stack> {
     return child;
   };
 
-  const local = path.join(root, "run/tether/local.sock");
+  const local = path.join(root, "run/muxen/local.sock");
   let daemon: ChildProcess | undefined;
   const startDaemon = async (): Promise<void> => {
     rmSync(local, { force: true });
@@ -146,13 +146,13 @@ export async function startStack(options: StackOptions): Promise<Stack> {
   };
   await guarded(startDaemon);
   const token = execFileSync(DAEMON, ["--config", config, "device", "add", "e2e"], { env, encoding: "utf8" }).trim().split("\n").pop() ?? "";
-  const hostId = readFileSync(path.join(root, "state/tether/host_id"), "utf8").trim();
+  const hostId = readFileSync(path.join(root, "state/muxen/host_id"), "utf8").trim();
 
   const vitePort = await freePort();
   spawnChild(
     process.execPath,
     [path.join(WEB, "node_modules/vite/bin/vite.js"), "--config", "e2e/shared/vite.config.ts", "--port", String(vitePort), "--strictPort", "--host", "127.0.0.1", "--configLoader", "runner"],
-    { TETHER_SOCKET: local, TETHER_DEV_TOKEN: token, TETHER_E2E_VITE_CACHE: path.join(root, "vite-cache") },
+    { MUXEN_SOCKET: local, MUXEN_DEV_TOKEN: token, MUXEN_E2E_VITE_CACHE: path.join(root, "vite-cache") },
     WEB,
     "vite.log",
   );
@@ -236,7 +236,7 @@ export async function startStack(options: StackOptions): Promise<Stack> {
       signal("SIGTERM");
       await new Promise((r) => setTimeout(r, 300));
       signal("SIGKILL");
-      if (!process.env["TETHER_E2E_KEEP"]) rmSync(root, { recursive: true, force: true });
+      if (!process.env["MUXEN_E2E_KEEP"]) rmSync(root, { recursive: true, force: true });
     },
   };
 }

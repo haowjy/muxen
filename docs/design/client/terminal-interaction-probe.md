@@ -1,6 +1,6 @@
 # Isolated clipboard probes, 2026-10-22
 
-System: local tmux 3.4. Script /tmp/tether-c77-clipboard-probe.py used a dedicated socket tether-c77-clipboard-research, a 12-column pane, and synthetic text only. All test panes/server and their temporary files were removed in finally. Default tmux and live app were untouched.
+System: local tmux 3.4. Script /tmp/muxen-c77-clipboard-probe.py used a dedicated socket muxen-c77-clipboard-research, a 12-column pane, and synthetic text only. All test panes/server and their temporary files were removed in finally. Default tmux and live app were untouched.
 
 ## Wrap boundaries
 

@@ -15,11 +15,11 @@ use std::path::{Path, PathBuf};
 use std::{env, fs};
 
 use bytes::Bytes;
-use rand::{Rng, SeedableRng, rngs::StdRng};
-use tether::tmux::{
+use muxen::tmux::{
     Event, Found, Location, MAX_IN_FLIGHT, PaneId, Reply, Session, SessionId, Size, Tag, TmuxError,
     WindowId,
 };
+use rand::{Rng, SeedableRng, rngs::StdRng};
 
 const SEEDS: [u64; 4] = [0x5445_5448_4552, 0x1984_0314, 0xdead_beef, 0x3437];
 
@@ -35,7 +35,7 @@ fn fixtures() -> PathBuf {
 }
 
 fn fixture_version() -> String {
-    env::var("TETHER_TMUX_FIXTURE_VERSION").unwrap_or_else(|_| "3.4".into())
+    env::var("MUXEN_TMUX_FIXTURE_VERSION").unwrap_or_else(|_| "3.4".into())
 }
 
 /// The fixtures the targeted tests read; every version's are replayed below.
@@ -301,7 +301,7 @@ fn failures_name_their_cause() {
     assert_eq!(done(&replay, 2), &Ok(Reply::Ok));
     assert_eq!(
         done(&replay, 3),
-        &Err(TmuxError::Command("no buffer tether-3".into()))
+        &Err(TmuxError::Command("no buffer muxen-3".into()))
     );
     assert_eq!(
         done(&replay, 4),
@@ -331,7 +331,7 @@ fn a_failed_paste_deletes_its_buffer() {
         .iter()
         .filter_map(|line| line.strip_prefix("delete-buffer -b "))
         .collect::<Vec<_>>();
-    assert_eq!(deleted, ["tether-3", "tether-4", "tether-5"]);
+    assert_eq!(deleted, ["muxen-3", "muxen-4", "muxen-5"]);
 }
 
 /// A hook that resizes the window after the state read changes the pane without

@@ -22,7 +22,7 @@ impl MacFront {
         let mut random = [0; 32];
         getrandom::fill(&mut random)?;
         let secret = format!(
-            "tether-{}",
+            "muxen-{}",
             base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(random)
         );
         Ok(Self::new(port, secret))
@@ -43,17 +43,17 @@ impl MacFront {
         )
     }
 
-    /// Matches a previous tether proxy without parsing URL syntax. The path format is
+    /// Matches a previous muxen proxy without parsing URL syntax. The path format is
     /// deliberately exact because Serve config is untrusted input at this boundary.
-    pub fn is_tether_shaped(proxy: &str, port: u16) -> bool {
-        Self::tether_port(proxy) == Some(port)
+    pub fn is_muxen_shaped(proxy: &str, port: u16) -> bool {
+        Self::muxen_port(proxy) == Some(port)
     }
 
-    pub fn is_any_tether_shaped(proxy: &str) -> bool {
-        Self::tether_port(proxy).is_some()
+    pub fn is_any_muxen_shaped(proxy: &str) -> bool {
+        Self::muxen_port(proxy).is_some()
     }
 
-    fn tether_port(proxy: &str) -> Option<u16> {
+    fn muxen_port(proxy: &str) -> Option<u16> {
         let target = proxy.strip_prefix("http://127.0.0.1:")?;
         let (port_text, secret) = target.split_once('/')?;
         let Ok(found_port) = port_text.parse::<u16>() else {
@@ -62,7 +62,7 @@ impl MacFront {
         if found_port == 0 || port_text != found_port.to_string() {
             return None;
         }
-        let secret = secret.strip_prefix("tether-")?;
+        let secret = secret.strip_prefix("muxen-")?;
         (secret.len() == 43
             && secret
                 .bytes()

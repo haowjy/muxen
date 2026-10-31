@@ -44,7 +44,7 @@ const HEX_CHUNK: usize = 512;
 
 /// Not a tmux command: `only_on`'s branch, which fails to parse. tmux names it in its
 /// error, which is how `oneshot` tells this failure from others.
-pub(super) const SERVER_CHANGED: &str = "tether-server-changed";
+pub(super) const SERVER_CHANGED: &str = "muxen-server-changed";
 
 /// The control client's first line (`reply::STARTUP_FORMAT`).
 pub fn startup() -> Group {
@@ -194,7 +194,7 @@ pub fn delete_paste_buffer(tag: Tag) -> Group {
 }
 
 fn paste_buffer(tag: Tag) -> String {
-    format!("tether-{}", tag.0)
+    format!("muxen-{}", tag.0)
 }
 
 /// `w<W>`: the subscription for other clients' acts and the active pane's cwd.
@@ -300,11 +300,11 @@ pub fn oneshot(cmd: &OneShotCmd) -> Result<Vec<String>, TmuxError> {
     })
 }
 
-/// Tether's `alert-bell` entry (§4.8): runs in the ringing session's context and
+/// Muxen's `alert-bell` entry (§4.8): runs in the ringing session's context and
 /// counts its bells in a user option. The double quotes are part of the text: unquoted,
 /// tmux reads `#` as a comment and stores a truncated hook.
 const BELL_HOOK: &str =
-    r##"set-option -F @tether-bell "#{e|+:#{?#{@tether-bell},#{@tether-bell},0},1}""##;
+    r##"set-option -F @muxen-bell "#{e|+:#{?#{@muxen-bell},#{@muxen-bell},0},1}""##;
 
 /// Writes the global entry only while the index is empty. It reads no session's hooks,
 /// so a session-level `alert-bell` can't make a foreign entry look empty.

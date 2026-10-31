@@ -1,8 +1,8 @@
 //! The hub against a real tmux (daemon-core.md §8): `hub::spawn` with real pumps and
 //! one-shots on a private server, and a connection that does what `http/` will, minus
 //! the socket: it moves every `ToConn` through an `Outbox`, decodes the frames and
-//! returns the credit. Runs only with `TETHER_TMUX_TESTS=1`, one test at a time;
-//! `TETHER_TMUX` picks the tmux binary.
+//! returns the credit. Runs only with `MUXEN_TMUX_TESTS=1`, one test at a time;
+//! `MUXEN_TMUX` picks the tmux binary.
 
 #[path = "support/tmux_server.rs"]
 mod tmux_server;
@@ -11,11 +11,11 @@ use std::io::Write as _;
 use std::time::{Duration, Instant};
 
 use bytes::Bytes;
+use muxen::budget::DEFAULT_CAPS;
+use muxen::hub::{self, ConnId, Endpoints, FromConn, HubHandle, Next, Outbox, ToConn};
+use muxen::proto::frames::{self, Frame as Binary};
+use muxen::proto::{ClientMsg, Size};
 use serde_json::{Value, json};
-use tether::budget::DEFAULT_CAPS;
-use tether::hub::{self, ConnId, Endpoints, FromConn, HubHandle, Next, Outbox, ToConn};
-use tether::proto::frames::{self, Frame as Binary};
-use tether::proto::{ClientMsg, Size};
 use tokio::sync::mpsc;
 
 use tmux_server::{Server, setup};
@@ -248,8 +248,8 @@ async fn a_watch_echoes_input_and_a_rewatch_snapshots_what_it_showed() {
         .await;
 
     let mark = conn.got.len();
-    conn.input(1, 0, "echo tether-$((6*7))").await;
-    conn.wait_output(mark, 1, "tether-42").await;
+    conn.input(1, 0, "echo muxen-$((6*7))").await;
+    conn.wait_output(mark, 1, "muxen-42").await;
 
     conn.send(json!({"type": "unwatch", "data": {"watch": 1}}))
         .await;
@@ -259,7 +259,7 @@ async fn a_watch_echoes_input_and_a_rewatch_snapshots_what_it_showed() {
         .await;
     let (_, restore) = conn.wait_snapshot(mark, 2).await;
     assert!(
-        contains(&restore, "tether-42"),
+        contains(&restore, "muxen-42"),
         "the snapshot shows the echo"
     );
 }

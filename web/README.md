@@ -1,4 +1,4 @@
-# tether web client
+# muxen web client
 
 One Preact app for the desktop browser, the phone browser or installed PWA, and the native
 iPhone app's web view. The design is
@@ -34,13 +34,13 @@ through Tailscale Serve.
 1. Run a daemon against a private tmux, never your own sessions:
 
    ```bash
-   tmux -L tether-dev new-session -d -s dev
-   cargo run -- --config /tmp/tether-dev/config.toml serve
-   cargo run -- --config /tmp/tether-dev/config.toml device add dev   # prints the token
+   tmux -L muxen-dev new-session -d -s dev
+   cargo run -- --config /tmp/muxen-dev/config.toml serve
+   cargo run -- --config /tmp/muxen-dev/config.toml device add dev   # prints the token
    ```
 
-2. `TETHER_DEV_TOKEN=<token> TETHER_PORT=17850 pnpm --dir web run dev` (`TETHER_SOCKET=<path>`
-   instead of `TETHER_PORT` once the daemon listens on `local.sock`).
+2. `MUXEN_DEV_TOKEN=<token> MUXEN_PORT=17850 pnpm --dir web run dev` (`MUXEN_SOCKET=<path>`
+   instead of `MUXEN_PORT` once the daemon listens on `local.sock`).
 3. Publish the dev server with `tailscale serve` and open that address. Enrol and the admission
    problems can't be reached this way; the harness drives them.
 
@@ -50,7 +50,7 @@ Phone layouts are checked in a real phone browser or the iOS Simulator: there is
 
 The `*.real.ts` scripts (`e2e/terminal/`, `e2e/home/`, `e2e/dock/`, `e2e/gesture/`) are
 Playwright scripts that exercise full behaviour end to end, and are where performance recording
-will live (not built yet). Each describe block runs the app against a real tether daemon and a
+will live (not built yet). Each describe block runs the app against a real muxen daemon and a
 private tmux on its own isolated stack (`e2e/shared/stack.ts`): a
 daemon started with `--allow-login e2e`, Vite's dev server with the dev proxy, and a small front
 proxy that stands in for Tailscale Serve and answers `/auth/info` itself, since a daemon on this
@@ -58,21 +58,21 @@ machine has no tailscaled to ask. Nothing touches the installed service, Tailsca
 sessions; everything lives under `<tmpdir>/e2e-<port>/`.
 
 They are opt-in, never part of preflight. They need a debug build of the daemon
-(`cargo build`), tmux builds at `~/.cache/tether-tmux/3.4/bin/tmux` and
-`~/.cache/tether-tmux/3.7b/bin/tmux`, and Playwright's browsers
+(`cargo build`), tmux builds at `~/.cache/muxen-tmux/3.4/bin/tmux` and
+`~/.cache/muxen-tmux/3.7b/bin/tmux`, and Playwright's browsers
 (`pnpm --dir web exec playwright install chromium webkit`, once):
 
 ```bash
 cargo build
 pnpm --dir web run e2e:real                       # both tmux versions, both browsers
-TETHER_E2E_TMUX=3.4 pnpm --dir web run e2e:real   # one version
-TETHER_E2E_PORT=5220 TMPDIR=/tmp/some/dir pnpm --dir web run e2e:real   # keep a run's files elsewhere
+MUXEN_E2E_TMUX=3.4 pnpm --dir web run e2e:real   # one version
+MUXEN_E2E_PORT=5220 TMPDIR=/tmp/some/dir pnpm --dir web run e2e:real   # keep a run's files elsewhere
 ```
 
-`TETHER_E2E_KEEP=1` leaves a stack's directory (daemon, Vite and tmux logs) after the run.
+`MUXEN_E2E_KEEP=1` leaves a stack's directory (daemon, Vite and tmux logs) after the run.
 
 To drive the app by hand on the same isolated stack, `pnpm --dir web run e2e:stack` starts one
-(`TETHER_E2E_TMUX=3.7b` picks the tmux), prints its URL and runs until Ctrl-C.
+(`MUXEN_E2E_TMUX=3.7b` picks the tmux), prints its URL and runs until Ctrl-C.
 
 ## PWA checks that need a real box
 
@@ -81,7 +81,7 @@ the daemon itself and Tailscale Serve's HTTPS origin, from a second enrolled mac
 hand:
 
 1. `cargo build` embeds `web/dist`. Open the Serve URL in Chromium: `/sw.js` is `no-cache`, the
-   manifest `name` is "tether <host>", and DevTools > Application > Manifest shows no errors and
+   manifest `name` is "muxen <host>", and DevTools > Application > Manifest shows no errors and
    three icons.
 2. Install from the address-bar button; the installed window opens standalone at `/#/`.
 3. Stop the daemon and launch the installed app: Home opens from cache with the host banner.
@@ -90,7 +90,7 @@ hand:
 5. Ship a second build in the daemon binary and tap Update in one of two windows; repeat for
    two updates in a row.
 6. After a session with a terminal open, Cache Storage holds no `/auth`, `/ws` or `/fs` entry.
-7. iPhone Safari and the installed app: Add to Home Screen shows the icon and "tether <host>";
+7. iPhone Safari and the installed app: Add to Home Screen shows the icon and "muxen <host>";
    standalone launch; offline launch.
 
 ## Fonts

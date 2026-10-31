@@ -5,7 +5,7 @@ export function openURL(url: string): void {
 }
 
 /**
- * The tether app runs only on iPhone and iPad. iPadOS 13+ reports a Macintosh user agent, told
+ * The muxen app runs only on iPhone and iPad. iPadOS 13+ reports a Macintosh user agent, told
  * apart from a Mac by its touch points. A UA can be spoofed and the page cannot see whether the
  * app is installed, so on iOS the offer may still find nothing to open.
  */
@@ -13,7 +13,7 @@ export function canOpenApp(): boolean {
   return /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 }
 
-/** The one place that knows the app's scheme: `tether://add?host=<origin>[&code=<code>]`. With a code the app enrols itself; without one it mints from this device's node enrolment. */
+/** The one place that knows the app's scheme: `muxen://add?host=<origin>[&code=<code>]`. With a code the app enrols itself; without one it mints from this device's node enrolment. */
 export function openInApp(origin: string, code: string | null): void {
-  location.assign(`tether://add?host=${encodeURIComponent(origin)}${code === null ? "" : `&code=${encodeURIComponent(code)}`}`);
+  location.assign(`muxen://add?host=${encodeURIComponent(origin)}${code === null ? "" : `&code=${encodeURIComponent(code)}`}`);
 }

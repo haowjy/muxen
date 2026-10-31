@@ -1,4 +1,4 @@
-# Library health check for the tether plan
+# Library health check for the muxen plan
 
 **Snapshot:** 2026-10-21 (ET).  Versions are the newest stable registry releases I
 could verify on that date (not necessarily the newest git commit).  Where a registry

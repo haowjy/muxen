@@ -3,7 +3,7 @@ import { expect, type Page } from "@playwright/test";
 /** Home, with its workspace row. */
 export async function goHome(page: Page, stackUrl: string): Promise<void> {
   await page.goto(`${stackUrl}/#/`);
-  await expect(page.getByRole("heading", { name: "tether" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "muxen" })).toBeVisible();
 }
 
 /** The workspace's tab overview from Home: its row opens the last tab, or the overview when there is none; from a tab, All tabs opens the tab list over it. */

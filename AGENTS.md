@@ -1,4 +1,4 @@
-# tether
+# muxen
 
 Phone-first client for tmux on a dev server, over Tailscale. A Rust daemon bridges
 tmux control mode to a native iOS app that hosts a web UI. The design is in
@@ -7,7 +7,7 @@ specs; `decisions.md` logs every decision. Read them before adding a subsystem.
 
 ## How work lands (initial build)
 
-tether is being built in one pass: commit straight to `main` in the primary
+muxen is being built in one pass: commit straight to `main` in the primary
 checkout. No PRs, no feature branches, no worktrees. Dropping PRs drops only the
 review ceremony; the rigor stays:
 
@@ -27,7 +27,7 @@ review ceremony; the rigor stays:
 
 Direct pushes to `main` never release. Cut a release only when Jimmy asks, with
 `scripts/manually-release.sh`. The PR-and-label release flow in `docs/releasing.md`
-applies once tether switches to PRs.
+applies once muxen switches to PRs.
 
 ## Safety Rules
 
@@ -59,17 +59,17 @@ is `web/pnpm-lock.yaml`; don't add a `package-lock.json`.
 Invariants (`docs/design/plan.md`, "Invariants"). A change that breaks one makes a
 different product:
 
-- **tmux is the source of truth.** tether is a window onto Jimmy's tmux, never its
-  owner: tmux's life never depends on tether's.
+- **tmux is the source of truth.** muxen is a window onto Jimmy's tmux, never its
+  owner: tmux's life never depends on muxen's.
 - **Usable on spotty, barely-there connections.** Every byte and round trip on the
   network costs the user; reconnecting must be cheap.
-- **Light on a busy host.** The dev box runs many processes. tether's CPU and memory
+- **Light on a busy host.** The dev box runs many processes. muxen's CPU and memory
   stay small, bounded, and capped where Jimmy chooses.
 - **Content from disk or tmux never runs as the app.** Rendered Markdown and Mermaid
   are sanitized; proxied files are served sandboxed.
 
 Product rules are Jimmy's standing decisions and change only through
-`docs/design/decisions.md`. Among them: tether is reachable only from Jimmy's tailnet;
+`docs/design/decisions.md`. Among them: muxen is reachable only from Jimmy's tailnet;
 it serves several servers; hosts are POSIX (Linux, macOS), since tmux doesn't run on
 Windows.
 

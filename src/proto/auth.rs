@@ -107,7 +107,7 @@ mod fixtures {
     #[test]
     fn auth_json_fixtures_match_rust_wire_types() {
         let directory =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ios/TetherKit/Tests/Fixtures/auth");
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("ios/MuxenKit/Tests/Fixtures/auth");
         if std::env::var("UPDATE_AUTH_FIXTURES").as_deref() == Ok("1") {
             std::fs::create_dir_all(&directory).expect("create auth fixture directory");
             for (name, fixture) in fixtures() {

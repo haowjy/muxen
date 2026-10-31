@@ -1,4 +1,4 @@
-const RELOAD_KEY = "tether.lastStuckReload";
+const RELOAD_KEY = "muxen.lastStuckReload";
 const RELOAD_EVERY_MS = 10 * 60_000;
 
 /**

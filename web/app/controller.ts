@@ -32,7 +32,7 @@ export interface AppView {
   hosts: HostClient[];
   /** One message at a time, for the polite live region. */
   notice: string | null;
-  /** The origin to hand to the tether app; null when no offer is showing. The handoff adds the setup link's code while this page still holds it. Held in memory. */
+  /** The origin to hand to the muxen app; null when no offer is showing. The handoff adds the setup link's code while this page still holds it. Held in memory. */
   appOffer: string | null;
   /** The database was closed for a newer build's schema upgrade: later writes stay in memory. */
   storageClosed: boolean;

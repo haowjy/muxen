@@ -9,7 +9,7 @@ import { expect, test, type CDPSession, type Page } from "@playwright/test";
 import { openSessionRow } from "../shared/home";
 import { startStack, type Stack, type TmuxVersion } from "../shared/stack";
 
-const VERSIONS = (process.env["TETHER_E2E_TMUX"] ?? "3.4,3.7b").split(",") as TmuxVersion[];
+const VERSIONS = (process.env["MUXEN_E2E_TMUX"] ?? "3.4,3.7b").split(",") as TmuxVersion[];
 
 test.use({ viewport: { width: 393, height: 852 }, hasTouch: true });
 test.skip(({ browserName }) => browserName !== "chromium", "touch injection needs CDP");
@@ -94,7 +94,7 @@ for (const version of VERSIONS) {
       }, [from, to, String(offset)]);
     }
 
-    test("a long press is the system's: no snapshot, no menu of tether's, and nothing reaches the pane", async ({ page }) => {
+    test("a long press is the system's: no snapshot, no menu of muxen's, and nothing reaches the pane", async ({ page }) => {
       const s = newSession();
       const finger = await open(page, s);
       stack.tmux("send-keys", "-t", s, "echo alpha beta gamma", "Enter");

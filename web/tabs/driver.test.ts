@@ -220,8 +220,8 @@ describe("losing the watch or the link", () => {
   it("keeps a tab the daemon refused for its session limit, with the daemon's message, and asks again on a growing backoff", () => {
     const t = setup();
     const l = t.bind();
-    l.say({ type: "watchEnded", data: { watch: 1, reason: "limit", message: "tether on pop-os allows 3 tmux sessions at a time; open now: a, b, c" } });
-    expect(t.state()).toMatchObject({ kind: "limited", message: "tether on pop-os allows 3 tmux sessions at a time; open now: a, b, c" });
+    l.say({ type: "watchEnded", data: { watch: 1, reason: "limit", message: "muxen on pop-os allows 3 tmux sessions at a time; open now: a, b, c" } });
+    expect(t.state()).toMatchObject({ kind: "limited", message: "muxen on pop-os allows 3 tmux sessions at a time; open now: a, b, c" });
     vi.advanceTimersByTime(500);
     expect(l.types()).toEqual(["watch", "watch"]);
     l.say({ type: "watchEnded", data: { watch: 2, reason: "limit" } });

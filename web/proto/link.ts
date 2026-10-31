@@ -27,7 +27,7 @@ export interface LinkHandlers {
 export interface LinkOptions {
   /** `ws(s)://host/ws` */
   url: string;
-  /** Native's device token; the browser holds none and offers `tether.v1` alone. */
+  /** Native's device token; the browser holds none and offers `muxen.v1` alone. */
   token?: string;
   build: string;
   kind: "ios" | "web";
@@ -51,7 +51,7 @@ export class HostLink {
   constructor(opts: LinkOptions, handlers: LinkHandlers) {
     this.handlers = handlers;
     const create = opts.createSocket ?? ((u, p) => new WebSocket(u, p));
-    this.ws = create(opts.url, opts.token ? ["tether.v1", `tether.auth.${opts.token}`] : ["tether.v1"]);
+    this.ws = create(opts.url, opts.token ? ["muxen.v1", `muxen.auth.${opts.token}`] : ["muxen.v1"]);
     this.ws.binaryType = "arraybuffer";
     this.ws.onopen = () => {
       this.send({

@@ -1,9 +1,9 @@
 // The only place the web UI talks to native (ios-shell.md "The bridge"). One method per
 // web → native request, each returning what native replies; `parseEvent` checks what native
-// sends. The shapes are pinned against ios/TetherKit/Tests/Fixtures/bridge/ by bridge.test.ts.
+// sends. The shapes are pinned against ios/MuxenKit/Tests/Fixtures/bridge/ by bridge.test.ts.
 import type { DraftRecord, MenuRect, FocusMode, HostEntry, InputEvent, Lifecycle, NativeLineSnapshot, Preferences, SavedWorkspaces, TabKey, TextRange, Viewport } from "../types";
 
-/** Bumped with every incompatible change here and in ios/TetherKit/.../Bridge.swift. */
+/** Bumped with every incompatible change here and in ios/MuxenKit/.../Bridge.swift. */
 export const BRIDGE_VERSION = 9;
 
 export interface Boot {
@@ -83,22 +83,22 @@ interface WebkitHandler {
 }
 
 function handler(): WebkitHandler | undefined {
-  const w = window as unknown as { webkit?: { messageHandlers?: { tether?: WebkitHandler } } };
-  return w.webkit?.messageHandlers?.tether;
+  const w = window as unknown as { webkit?: { messageHandlers?: { muxen?: WebkitHandler } } };
+  return w.webkit?.messageHandlers?.muxen;
 }
 
 /** False in a browser, where main.tsx picks the browser adapter. */
 export const hasNativeBridge = (): boolean => handler() !== undefined;
 
-/** The `tether` WKScriptMessageHandlerWithReply. */
+/** The `muxen` WKScriptMessageHandlerWithReply. */
 export const webkitPost: Post = (msg) => {
   const h = handler();
   return h ? h.postMessage(msg) : Promise.reject(new Error("no native bridge"));
 };
 
-/** Registers `window.__tether.receive`, which native calls with arrays of events. Call before `ready`. */
+/** Registers `window.__muxen.receive`, which native calls with arrays of events. Call before `ready`. */
 export function installReceiver(onEvent: (msg: NativeMsg) => void): void {
-  (window as unknown as { __tether: unknown }).__tether = {
+  (window as unknown as { __muxen: unknown }).__muxen = {
     receive: (messages: unknown[]) => {
       for (const raw of messages) {
         const msg = parseEvent(raw);

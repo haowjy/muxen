@@ -33,14 +33,14 @@ export function Enrol({ host }: { host: HostClient }) {
     const result = await app.hosts.enrol(host.entry.handle, code, deviceName.trim() || nodeName);
     setBusy(false);
     if (result.kind === "badCode") setError("That code is wrong or has expired");
-    else if (result.kind === "tryAgain") setError("tether is busy, try again");
+    else if (result.kind === "tryAgain") setError("muxen is busy, try again");
     else if (result.kind === "enrolled") app.enrolled(origin);
     // `enrolled` and `nodeRefused` change the host's admission, which swaps this screen out.
   };
 
   const { openInApp } = app.platform;
   const handoff = openInApp && origin && code.length === CODE_LENGTH && (
-    <Button onClick={() => { openInApp(origin, code); }}>Open in the tether app</Button>
+    <Button onClick={() => { openInApp(origin, code); }}>Open in the muxen app</Button>
   );
 
   const onCode = step === "code";
@@ -53,12 +53,12 @@ export function Enrol({ host }: { host: HostClient }) {
       >
         <h1 class={styles.title}>Set up {hostName}</h1>
         <p>
-          This lets every browser and app on <strong>{nodeName}</strong> use tether on <strong>{hostName}</strong>.
+          This lets every browser and app on <strong>{nodeName}</strong> use muxen on <strong>{hostName}</strong>.
           Safari and the installed app keep their own drafts and tabs.
         </p>
         {onCode ? (
           <>
-            <p class={styles.step}>On the server, run <code>tether enroll</code> and enter the code it prints.</p>
+            <p class={styles.step}>On the server, run <code>muxen enroll</code> and enter the code it prints.</p>
             <CodeField label="Code" value={code} onInput={setCode} />
             <Button variant="primary" type="submit" disabledReason={code.length === CODE_LENGTH ? undefined : "Enter all eight characters of the code"}>Next</Button>
           </>

@@ -1,4 +1,4 @@
-// The phone browser's terminal input (client-architecture.md §7.3): a textarea tether owns,
+// The phone browser's terminal input (client-architecture.md §7.3): a textarea muxen owns,
 // because xterm's diffs its own value and relies on composition events iOS and Android
 // keyboards don't always send. `beforeinput` decides what each edit means and cancels what it
 // doesn't map, so the element only ever holds a sentinel and never committed text. Hardware keys

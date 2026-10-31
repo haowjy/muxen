@@ -270,7 +270,7 @@ export function describeError(error: HttpRefusal, host: string): string {
     case "not_a_directory": return "That's a file, not a folder.";
     case "not_a_file": return "That isn't a regular file.";
     case "busy": return `${host} is busy. Try again in a moment.`;
-    case "config_unavailable": return "tether can't read config.toml on the server. Fix it there.";
+    case "config_unavailable": return "muxen can't read config.toml on the server. Fix it there.";
     case "incompatible": return problem("incompatible");
     case "auth_required": case "forbidden": case "http_401": return problem("unauthorized");
     case "bad_request": return "The server refused that path.";

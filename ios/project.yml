@@ -1,42 +1,42 @@
-name: Tether
+name: Muxen
 options:
   createIntermediateGroups: true
   deploymentTarget:
     iOS: "17.0"
 packages:
-  TetherKit:
-    path: TetherKit
+  MuxenKit:
+    path: MuxenKit
 schemes:
-  Tether:
+  Muxen:
     build:
       targets:
-        Tether: all
+        Muxen: all
     run:
       config: Debug
 targets:
-  Tether:
+  Muxen:
     type: application
     platform: iOS
     sources:
-      - path: Tether
+      - path: Muxen
     dependencies:
-      - package: TetherKit
+      - package: MuxenKit
     info:
       path: build/Info.plist
       properties:
         CFBundleURLTypes:
-          - CFBundleURLName: com.jimmyyao.tether
+          - CFBundleURLName: com.jimmyyao.muxen
             CFBundleURLSchemes:
-              - tether
+              - muxen
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.jimmyyao.tether
-        PRODUCT_NAME: tether
+        PRODUCT_BUNDLE_IDENTIFIER: com.jimmyyao.muxen
+        PRODUCT_NAME: muxen
         SWIFT_VERSION: "5.0"
         IPHONEOS_DEPLOYMENT_TARGET: "17.0"
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        INFOPLIST_KEY_NSFaceIDUsageDescription: "Unlock tether to connect to your servers."
+        INFOPLIST_KEY_NSFaceIDUsageDescription: "Unlock muxen to connect to your servers."
         INFOPLIST_KEY_NSCameraUsageDescription: "Take a photo to upload it to a tmux session."
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: NO

@@ -30,7 +30,7 @@ type Result<T, E = Box<dyn Error>> = std::result::Result<T, E>;
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum OpenError {
-    #[error("tether is already running")]
+    #[error("muxen is already running")]
     AlreadyRunning,
     #[error(transparent)]
     Other(#[from] Box<dyn Error>),
@@ -163,7 +163,7 @@ impl Opened {
         let mut fronts = serve.fronts;
         fronts.push((Listener::Unix(local), Front::Local));
 
-        let name = config.name.clone().unwrap_or_else(|| "tether".to_owned());
+        let name = config.name.clone().unwrap_or_else(|| "muxen".to_owned());
         let endpoint = config.endpoint();
         let program_version = crate::tmux::oneshot::program_version(&endpoint.program).await;
         let mut shutdown = signal(SignalKind::terminate())?;
@@ -311,7 +311,7 @@ async fn start_file_api(config: &Config, home: &Path, lanes: &Lanes) {
 }
 
 /// Logs to stderr, which systemd puts in the journal (with its own timestamps).
-/// `RUST_LOG` takes targets, as `info` or `tether=debug`, and overrides `default`.
+/// `RUST_LOG` takes targets, as `info` or `muxen=debug`, and overrides `default`.
 pub(crate) fn init_tracing(default: LevelFilter) {
     let filter = std::env::var("RUST_LOG")
         .ok()

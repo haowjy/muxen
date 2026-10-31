@@ -1,4 +1,4 @@
-# Tether plan Rust crate research
+# Muxen plan Rust crate research
 
 Research date: 2026-10-21 ET. No project files changed.
 
@@ -51,12 +51,12 @@ Research date: 2026-10-21 ET. No project files changed.
 - API: optional `control-mode` feature; `ControlMode::attach(server, id).await?.split()` gives a `ControlSender` and event stream; `ControlSender::send`, `subscribe`, `pause_after`, `resume_pane`, `watch_only`; events include `Output`, `Exit` and other notifications. It also has typed server/session/window/pane APIs, compatibility testing against tmux 3.2a, 3.4, 3.5a, 3.6b, 3.7b, and configurable control/output limits. [module docs](https://docs.rs/libtmux/latest/libtmux/control/index.html) [latest guide](https://libtmux.org/en/rs/latest/guides/control-mode/) [API overview](https://docs.rs/libtmux/latest/libtmux/)
 - Fit: **not for MVP production dependency** despite excellent feature alignment. It is broader than a parser and explicitly unstable. It is worth studying for control-mode semantics, limits and tests; revisit once stable or use a pinned fork if the typed API saves enough implementation time.
 
-### tmux-cmc — small synchronous client, incomplete for tether
+### tmux-cmc — small synchronous client, incomplete for muxen
 
 - Version/release: GitHub README advertises dependency version **0.1**; I found no independently indexed crates.io/docs.rs release page with a release date, so registry status/date is **unverified**. [GitHub repo](https://github.com/ArcavenAE/tmux-cmc)
 - Ownership/activity: [ArcavenAE/tmux-cmc](https://github.com/ArcavenAE/tmux-cmc), MIT, 56 commits, 1 star, 2 forks, 1 issue and 2 PRs shown by GitHub. The README says it was built for forestage/marvel, tested on macOS tmux 3.6a and Linux aarch64 tmux 3.5a.
 - API: synchronous `Client::connect`, cloned `Client` over `Arc`, writer thread + reader thread, serial-correlated command replies, typed session/window/pane management and notification stream. Explicitly not implemented: `list-sessions`, `list-panes`, reconnection on tmux exit, async feature. [README](https://github.com/ArcavenAE/tmux-cmc)
-- Fit: **no for the planned Tokio daemon without substantial adaptation**. It is a useful reference or a possible fork for a tiny synchronous tool, but missing list APIs and reconnect are central to tether; thread/channel lifecycle and “drop kills tmux child” semantics also need review.
+- Fit: **no for the planned Tokio daemon without substantial adaptation**. It is a useful reference or a possible fork for a tiny synchronous tool, but missing list APIs and reconnect are central to muxen; thread/channel lifecycle and “drop kills tmux child” semantics also need review.
 
 ### par-term-emu-core-rust — parser exists, dependency too broad
 
@@ -71,7 +71,7 @@ Research date: 2026-10-21 ET. No project files changed.
 - `muster` 0.5.6 (2026-05-05) includes `StreamParser`/control-mode events but is a higher-level session/profile manager; its docs say “Not accepting public PRs.” [docs.rs](https://docs.rs/crate/muster/latest)
 - `tmux-client` 0.1.0-alpha.1 (2026-09-01) is a typed async client/port of Python libtmux; it is alpha and not the focused parser layer. [docs.rs](https://docs.rs/crate/tmux-client/latest)
 
-## Recommended tether plan adjustment
+## Recommended muxen plan adjustment
 
 1. Keep `vt100` first; pin `=0.18.1` for the spike and build a screen fixture suite from real tmux 3.4 `%output` captures.
 2. Make the tmux bridge a seam independent of the emulator. Evaluate `tmuxctl` as the first external parser candidate, but do not let its pre-1.0 types define the daemon protocol; own a small adapter and retain a fallback in-tree parser plan.

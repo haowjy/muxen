@@ -11,13 +11,13 @@ use super::install::{self, FileState, LaunchAgentAction, ServiceState};
 use super::{PlanError, SetupError};
 use crate::auth::identity::ServeTargetMatcher;
 
-const LABEL: &str = "com.jimmyyao.tether";
+const LABEL: &str = "com.jimmyyao.muxen";
 const UNLOAD_TIMEOUT: Duration = Duration::from_secs(5);
 pub(super) const KIND: super::report::ServiceKind = super::report::ServiceKind {
     name: "LaunchAgent",
     startup: "starts when you log in",
 };
-pub(super) const STOPPED: &str = "Stopped tether's LaunchAgent.";
+pub(super) const STOPPED: &str = "Stopped muxen's LaunchAgent.";
 
 pub(super) struct Host {
     pub home: PathBuf,
@@ -62,12 +62,12 @@ pub(super) fn inspect() -> Result<Host, SetupError> {
         });
     let other_account = other_account(&user)?;
     let path = std::env::var_os("PATH").unwrap_or_default();
-    let service_file = home.join("Library/LaunchAgents/com.jimmyyao.tether.plist");
+    let service_file = home.join("Library/LaunchAgents/com.jimmyyao.muxen.plist");
     let installed_port = read_port(&service_file);
     let port_available =
         loaded || TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 7851)).is_ok();
     let runtime_root = super::command_text("getconf", &["DARWIN_USER_TEMP_DIR"])?;
-    let runtime_dir = PathBuf::from(runtime_root).join("tether");
+    let runtime_dir = PathBuf::from(runtime_root).join("muxen");
     let expected_file =
         install::launch_agent(&home.to_string_lossy(), &path.to_string_lossy()).into_bytes();
     let previous_file = match std::fs::read(&service_file) {
@@ -103,10 +103,10 @@ pub(super) fn inspect_teardown() -> Result<TeardownHost, SetupError> {
     let home = super::config::home()?;
     let domain = format!("gui/{uid}");
     let loaded = launchctl(&["print", &format!("{domain}/{LABEL}")]).is_ok();
-    let service_file = home.join("Library/LaunchAgents/com.jimmyyao.tether.plist");
+    let service_file = home.join("Library/LaunchAgents/com.jimmyyao.muxen.plist");
     let port = read_port(&service_file).ok().flatten().unwrap_or(7851);
     let runtime_root = super::command_text("getconf", &["DARWIN_USER_TEMP_DIR"])?;
-    let runtime_dir = PathBuf::from(runtime_root).join("tether");
+    let runtime_dir = PathBuf::from(runtime_root).join("muxen");
     Ok(TeardownHost {
         service_file,
         loaded,
@@ -156,7 +156,7 @@ pub(super) fn apply(host: &Host) -> Result<Vec<String>, SetupError> {
                 let backup = super::backup_file(host, &contents)?;
                 super::write_file(host)?;
                 changes.push(format!(
-                    "Replaced {}, which differed from this tether's; the old copy is {}.",
+                    "Replaced {}, which differed from this muxen's; the old copy is {}.",
                     host.service_file
                         .file_name()
                         .unwrap_or_default()
@@ -166,7 +166,7 @@ pub(super) fn apply(host: &Host) -> Result<Vec<String>, SetupError> {
             }
             LaunchAgentAction::EnableJob => {
                 run("enable", &[&format!("{}/{LABEL}", host.domain)])?;
-                changes.push("Enabled tether in Login Items".to_owned());
+                changes.push("Enabled muxen in Login Items".to_owned());
             }
             LaunchAgentAction::Bootout => {
                 run("bootout", &[&format!("{}/{LABEL}", host.domain)])?;
@@ -259,7 +259,7 @@ pub(super) async fn before_teardown(
     if host.loaded {
         api.serve_config_raw().await.map_err(|error| {
             SetupError::new(format!(
-                "Can't reach Tailscale to remove tether's Serve entry; open the Tailscale app and rerun. ({error})"
+                "Can't reach Tailscale to remove muxen's Serve entry; open the Tailscale app and rerun. ({error})"
             ))
         })?;
     }
@@ -272,7 +272,7 @@ pub(super) fn teardown_withdraw_failed(
     version: &str,
 ) -> Option<SetupError> {
     eprintln!(
-        "Serve still points at 127.0.0.1:{}, which any process can now bind. Remove it now: `tailscale serve --https=443 off`, or rerun tether teardown once Tailscale answers",
+        "Serve still points at 127.0.0.1:{}, which any process can now bind. Remove it now: `tailscale serve --https=443 off`, or rerun muxen teardown once Tailscale answers",
         host.port
     );
     Some(SetupError::new(format!(
@@ -282,7 +282,7 @@ pub(super) fn teardown_withdraw_failed(
 }
 
 pub(super) fn logs(host: &Host) -> String {
-    let path = host.home.join("Library/Logs/tether.log");
+    let path = host.home.join("Library/Logs/muxen.log");
     std::fs::read_to_string(&path)
         .map(|text| {
             text.lines()
@@ -354,7 +354,7 @@ fn run(action: &str, args: &[&str]) -> Result<(), SetupError> {
     launchctl(&args_with_action(action, args)).map(|_| ()).map_err(|error| {
         if action == "bootstrap" {
         SetupError::new(format!(
-            "{error}\nIf tether is off under System Settings → General → Login Items, turn it on and rerun."
+            "{error}\nIf muxen is off under System Settings → General → Login Items, turn it on and rerun."
         ))
         } else {
             error

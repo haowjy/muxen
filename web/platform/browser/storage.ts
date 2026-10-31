@@ -1,14 +1,14 @@
-// Browser storage (client-architecture.md §5.6): one IndexedDB database, `tether`, schema
+// Browser storage (client-architecture.md §5.6): one IndexedDB database, `muxen`, schema
 // version 1, two stores. `workspace` holds the one saved workspace; `drafts` is keyed by
 // tab key. Every write is one small record. A page writes its workspace only while it has
 // focus, so the saved workspace is the one from the page used last.
 import { isTabKey, tabId } from "../tabKey";
 import type { DraftRecord, DraftStore, PlatformEvent, PlatformStorage, SavedWorkspaces, TabKey } from "../types";
 
-const DB_NAME = "tether";
+const DB_NAME = "muxen";
 const DB_VERSION = 1;
 const WORKSPACE_KEY = "workspace";
-const CHANNEL = "tether";
+const CHANNEL = "muxen";
 
 export interface BrowserStorage {
   storage: PlatformStorage;

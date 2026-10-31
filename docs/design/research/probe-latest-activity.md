@@ -11,7 +11,7 @@ Spawns p117, p118 and p120, 2026-10-24, on macOS arm64 with tmux 3.4 and 3.7b bu
 their tags; Homebrew tmux 3.8 was the host's. Each run used a private `-L` socket. The
 "laptop" was a real pty client driven through its master (`openpty`, `TIOCSWINSZ`), so
 its keys were client input, not `send-keys`. The control client attached to the same
-session over pipes and set `refresh-client -C 200x49` first, as tether does (§3.1 of
+session over pipes and set `refresh-client -C 200x49` first, as muxen does (§3.1 of
 [daemon-core.md](../daemon-core.md)).
 
 ## The subscription
@@ -41,9 +41,9 @@ run before `.#{client_flags}` was appended to each entry:
 
 | Act | Line |
 |---|---|
-| subscribe (first value, after 1.0 s) | `%subscription-changed w1 $0 @1 1 - : /dev/ttys033.1792856215.200x50;\|/Users/jimmyyao/repos/tether` |
+| subscribe (first value, after 1.0 s) | `%subscription-changed w1 $0 @1 1 - : /dev/ttys033.1792856215.200x50;\|/Users/jimmyyao/repos/muxen` |
 | laptop types in `@1` | `… : /dev/ttys033.1792856217.200x50;\|…` |
-| laptop switches to `@0` (prefix n) | `… : \|/Users/jimmyyao/repos/tether` |
+| laptop switches to `@0` (prefix n) | `… : \|/Users/jimmyyao/repos/muxen` |
 | laptop switches back | `… : /dev/ttys033.1792856222.200x50;\|…` |
 | laptop's terminal resized to 200x45 | `… : /dev/ttys033.1792856222.200x45;\|…` |
 | `cd /tmp` in `@1` | `… : /dev/ttys033.1792856228.200x45;\|/private/tmp` |

@@ -89,9 +89,9 @@
 
 ## State / Protocol Changes
 
-<!-- Remove if none. Covers the config file (~/.config/tether/config.toml),
+<!-- Remove if none. Covers the config file (~/.config/muxen/config.toml),
      stored auth state (passkeys, sessions), the wire protocol between daemon
-     and web app, and the tmux options tether expects. For each: old → new
+     and web app, and the tmux options muxen expects. For each: old → new
      shape, how existing state upgrades, what an older daemon or a cached older
      web app sees, and how to roll back. Diagram changed relationships in
      Mermaid when it helps. -->

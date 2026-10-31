@@ -36,7 +36,7 @@ export type KeyDecision =
   /** Not routed here: xterm's own encoding in xterm mode, nothing in owned mode (the text arrives through `beforeinput`). */
   | { kind: "default" };
 
-/** Which source is live: xterm's textarea, or tether's owned input on a phone. */
+/** Which source is live: xterm's textarea, or muxen's owned input on a phone. */
 export type KeyMode = "xterm" | "owned";
 
 const NAVIGATION: Record<string, string> = {

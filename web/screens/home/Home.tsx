@@ -59,7 +59,7 @@ export function Home() {
     <div class={styles.home}>
       <header class={styles.header}>
         <div class={styles.bar}>
-          <h1 class={styles.title}>tether</h1>
+          <h1 class={styles.title}>muxen</h1>
           {!docked && <IconButton icon="settings" label="Settings" onClick={(e) => { openSettings(e.currentTarget); }} />}
         </div>
       </header>

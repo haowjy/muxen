@@ -26,7 +26,7 @@ Rules the code relies on, which are easy to break:
   unchanged by later writes. Name allocation checks both typed and refused rows, and
   `device list` shows names from refused rows; `remove_device` can remove one by name,
   and removing a named node also removes native tokens bound to it.
-- Checks re-read `auth.toml`, so `tether device remove` reaches a running daemon with
+- Checks re-read `auth.toml`, so `muxen device remove` reaches a running daemon with
   no IPC and closes a live socket at its next 10 s check. Don't add a device cache.
 - Only native token hashes are stored. Browser nodes store the stable node ID and
   owner login; a native token minted by an enrolled node also stores that binding.

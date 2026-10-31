@@ -32,7 +32,7 @@ interface HostBells {
 export interface BellLook {
   /** A bell since this device last showed the session. */
   ring: boolean;
-  /** tmux's settings keep this session's bells from tether, so no dot would not mean no bells. */
+  /** tmux's settings keep this session's bells from muxen, so no dot would not mean no bells. */
   hidden: boolean;
 }
 

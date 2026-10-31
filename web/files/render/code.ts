@@ -21,7 +21,7 @@ async function highlighterFor(lang: Language): Promise<HighlighterCore> {
       import("shiki/engine/javascript"),
     ]);
     return createHighlighterCore({
-      themes: [createCssVariablesTheme({ name: "tether", variablePrefix: "--shiki-" })],
+      themes: [createCssVariablesTheme({ name: "muxen", variablePrefix: "--shiki-" })],
       langs: [],
       engine: createJavaScriptRegexEngine(),
     });
@@ -53,7 +53,7 @@ export async function highlightedLines(text: string, lang: Language): Promise<Do
   } catch {
     return null;
   }
-  const { tokens } = h.codeToTokens(text, { lang, theme: "tether", tokenizeMaxLineLength: LINE_MAX });
+  const { tokens } = h.codeToTokens(text, { lang, theme: "muxen", tokenizeMaxLineLength: LINE_MAX });
   if (tokens.at(-1)?.length === 0) tokens.pop();
   const out = document.createDocumentFragment();
   for (const line of tokens) {

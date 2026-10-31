@@ -36,7 +36,7 @@ push (`scripts/manually-release.sh`).
    the commit is `release: v<version>` and is reachable from `main`.
 2. Build on native runners: `x86_64-unknown-linux-musl` (ubuntu-latest),
    `aarch64-unknown-linux-musl` (ubuntu-24.04-arm), `aarch64-apple-darwin`
-   (macos-latest). Each runs `tether --version` against the tag, and the Linux
+   (macos-latest). Each runs `muxen --version` against the tag, and the Linux
    builds must be statically linked.
 3. Publish a GitHub Release with the three binaries and `SHA256SUMS`; `-rc.N` tags
    are prereleases.

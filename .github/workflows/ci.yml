@@ -64,7 +64,7 @@ jobs:
       - uses: ./.github/actions/web-toolchain
 
       - name: Real tmux suites
-        run: TETHER_TMUX_TESTS=1 cargo test --test tmux_real --test hub_real -- --test-threads=1
+        run: MUXEN_TMUX_TESTS=1 cargo test --test tmux_real --test hub_real -- --test-threads=1
 
   msrv:
     name: Minimum Rust version

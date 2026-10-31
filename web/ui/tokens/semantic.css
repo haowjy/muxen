@@ -33,7 +33,7 @@
   --color-status-error-bg: light-dark(var(--red-3), oklch(0.27 0.06 25));
 
   --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-mono: "tether-mono", "tether-symbols", ui-monospace, Menlo, Consolas, monospace;
+  --font-mono: "muxen-mono", "muxen-symbols", ui-monospace, Menlo, Consolas, monospace;
   --text-meta: var(--font-size-1);
   --text-small: var(--font-size-2);
   /* Every text field: Safari zooms into a focused field set smaller than 16px. */

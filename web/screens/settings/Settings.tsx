@@ -120,14 +120,14 @@ export function Settings() {
               <Choice label="Terminal text size" options={TEXT_SIZES} value={preferences.textSize} onChange={(v) => { app.platform.setPreference("textSize", v); }} />
             </Section>
             {setRelock && preferences.relock && (
-              <Section title="Ask for Face ID" detail="How long tether can stay in the background before it asks for Face ID again. At launch asks once each time the app starts. A longer wait asks for Face ID now.">
+              <Section title="Ask for Face ID" detail="How long muxen can stay in the background before it asks for Face ID again. At launch asks once each time the app starts. A longer wait asks for Face ID now.">
                 <Choice label="Ask for Face ID" options={RELOCKS} value={preferences.relock} onChange={setRelock} />
               </Section>
             )}
             {manageHosts && (
               <Section
                 title="Servers"
-                detail={<>The servers this app connects to. Add one, pair it again with a code from <code>tether enroll</code>, or remove it.</>}
+                detail={<>The servers this app connects to. Add one, pair it again with a code from <code>muxen enroll</code>, or remove it.</>}
               >
                 <Button variant="secondary" onClick={manageHosts}>Manage servers</Button>
               </Section>
@@ -135,7 +135,7 @@ export function Settings() {
             {target && (
               <Section
                 title="This device"
-                detail={<>Every browser and app on {device} uses tether on {hostName}. Removing it signs them all out; enrol again with <code>tether enroll</code>.</>}
+                detail={<>Every browser and app on {device} uses muxen on {hostName}. Removing it signs them all out; enrol again with <code>muxen enroll</code>.</>}
               >
                 <Button variant="secondary" class={styles.danger} onClick={(e) => { ask("removeDevice", e.currentTarget); }}>Remove this device</Button>
               </Section>

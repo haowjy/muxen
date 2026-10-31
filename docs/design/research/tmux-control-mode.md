@@ -4,7 +4,7 @@
 
 A server-side terminal emulator is **not a protocol requirement**. tmux already owns a pane's authoritative grid, mode state, dimensions, and pending input parser. A daemon can seed xterm.js from `capture-pane`, keep the client as the only emulator, and stream raw `%output` thereafter. However, that is only safe if the daemon treats the capture/live transition as a protocol boundary and restores the mode state that `capture-pane` cannot represent. A naïve “capture, then append future `%output`” implementation will lose or duplicate bytes and will produce the wrong cursor, alternate-screen, mouse, keypad, wrap, and scroll-region behavior.
 
-For tether, I recommend:
+For muxen, I recommend:
 
 1. Keep tmux as the authoritative screen model for the first implementation; do not require `vt100` or `alacritty_terminal` per pane merely to bridge output.
 2. Make the initial snapshot a serialized transaction: request a private marker after the capture/state commands, consume every queued `%output` before that marker exactly once, then send the snapshot and only post-marker bytes to xterm.js. Use a small adapter modeled on libtmux-rs's tested snapshot boundary.
@@ -49,11 +49,11 @@ A robust sequence is:
 4. At the marker, install the captured primary/alternate grid and mode/cursor record. Discard only bytes proved to be represented by the capture; do not blindly discard all bytes read “around” the command.
 5. Deliver the buffered post-boundary bytes once, in wire order, then resume normal streaming.
 
-The Rust `libtmux-rs` implementation is the clearest reusable precedent. `crates/libtmux/src/control/actor.rs` (around lines 717–725) documents that tmux queues pane output and command replies in one order and emits a private marker after `%end`. `crates/libtmux/src/control.rs` (roughly lines 1480–1538) has a `PaneOutput::snapshot` path that consumes output through a callback until the boundary. Its tests (`crates/libtmux/src/control/tests.rs`, roughly lines 405–456) show `before` output consumed once while `after` output is delivered once. Tether should copy that *boundary model*, not merely issue `capture-pane` and hope the ordering works.
+The Rust `libtmux-rs` implementation is the clearest reusable precedent. `crates/libtmux/src/control/actor.rs` (around lines 717–725) documents that tmux queues pane output and command replies in one order and emits a private marker after `%end`. `crates/libtmux/src/control.rs` (roughly lines 1480–1538) has a `PaneOutput::snapshot` path that consumes output through a callback until the boundary. Its tests (`crates/libtmux/src/control/tests.rs`, roughly lines 405–456) show `before` output consumed once while `after` output is delivered once. Muxen should copy that *boundary model*, not merely issue `capture-pane` and hope the ordering works.
 
 ### iTerm2's practical approach
 
-iTerm2 does not treat the initial command list as a general-purpose live boundary. `TmuxWindowOpener.m` sends the initial capture/state commands and only later enables normal notification acceptance in `TmuxGateway.m`; dropped output is considered recoverable by another capture. That is acceptable for a GUI with a recovery path, but tether needs an explicit per-pane snapshot boundary because a phone connection can reconnect while output is active.
+iTerm2 does not treat the initial command list as a general-purpose live boundary. `TmuxWindowOpener.m` sends the initial capture/state commands and only later enables normal notification acceptance in `TmuxGateway.m`; dropped output is considered recoverable by another capture. That is acceptable for a GUI with a recovery path, but muxen needs an explicit per-pane snapshot boundary because a phone connection can reconnect while output is active.
 
 ## 3. What iTerm2 restores from tmux
 
@@ -96,13 +96,13 @@ bracket_paste_flag
 pane_key_mode
 ```
 
-The exact list varies with tmux version. The comments note that `pane_key_mode` is available in newer tmux (3.5+ in the iTerm source) and that bracket-paste reporting was not available in released tmux at the time of that code. This is a good version-gated field list for tether, not a promise that every field exists everywhere.
+The exact list varies with tmux version. The comments note that `pane_key_mode` is available in newer tmux (3.5+ in the iTerm source) and that bracket-paste reporting was not available in released tmux at the time of that code. This is a good version-gated field list for muxen, not a promise that every field exists everywhere.
 
-`PTYSession.m`, around lines 11189–11200, shows the recovery policy: if the live session exists, decoded bytes are applied; if it does not, screen-affecting bytes are discarded because a capture will recover the screen. `TmuxDroppedOutputScanner.swift` preserves selected OSC 1337 integration state (`SetUserVar`, `RemoteHost`, `CurrentDir`, `ShellIntegrationVersion`) and replays it after recovery. This is a warning that a screen snapshot alone is not enough if tether wants shell metadata.
+`PTYSession.m`, around lines 11189–11200, shows the recovery policy: if the live session exists, decoded bytes are applied; if it does not, screen-affecting bytes are discarded because a capture will recover the screen. `TmuxDroppedOutputScanner.swift` preserves selected OSC 1337 integration state (`SetUserVar`, `RemoteHost`, `CurrentDir`, `ShellIntegrationVersion`) and replays it after recovery. This is a warning that a screen snapshot alone is not enough if muxen wants shell metadata.
 
 ### iTerm2's `%output` decoder
 
-`TmuxGateway.m`, approximately lines 188–269, decodes tmux's output escaping: a backslash followed by three octal digits represents one byte; ordinary bytes pass through. High bytes are not UTF-8-decoded by the protocol and must be preserved as bytes. The implementation has compatibility handling for carriage returns; tether should follow tmux's actual escaping rule rather than copy any one client's historical workaround.
+`TmuxGateway.m`, approximately lines 188–269, decodes tmux's output escaping: a backslash followed by three octal digits represents one byte; ordinary bytes pass through. High bytes are not UTF-8-decoded by the protocol and must be preserved as bytes. The implementation has compatibility handling for carriage returns; muxen should follow tmux's actual escaping rule rather than copy any one client's historical workaround.
 
 The current tmux encoder (`control.c`, around lines 814–842) octal-escapes C0 bytes and backslash, while passing bytes at or above 0x80 through. The decoder therefore must be byte-oriented, not a Unicode string replacement. Invalid UTF-8 is legal pane output.
 
@@ -131,7 +131,7 @@ The implementation in `cmd-capture-pane.c` confirms the distinction: around line
 - copy/choose/mode overlays unless the appropriate mode-screen path is explicitly captured;
 - a browser emulator's exact character-width interpretation for combining marks, variation selectors, ZWJ sequences, and wide characters.
 
-The last point matters for xterm.js: tmux's grid width and a browser terminal's width calculation can diverge on Unicode edge cases. A server emulator does not automatically solve that mismatch, but it can provide a canonical cell model if tether chooses to own one.
+The last point matters for xterm.js: tmux's grid width and a browser terminal's width calculation can diverge on Unicode edge cases. A server emulator does not automatically solve that mismatch, but it can provide a canonical cell model if muxen chooses to own one.
 
 The `-e` output should therefore be treated as an initial rendering payload, not as a serialized terminal emulator. The daemon must send a separate state record or inject equivalent control sequences. Prefer explicit structured state over guessing from `-e`.
 
@@ -161,7 +161,7 @@ On reconnect, the reliable procedure is: stop delivery for that pane, obtain a n
 
 `refresh-client -C WxH` makes a control client participate in the tmux client-size calculation; without `-C`, the control client does not supply the phone's dimensions. Recent tmux also accepts the `@window:WxH` form in relevant contexts. The plan's `refresh-client -C` is therefore directionally correct.
 
-The risk is `window-size latest`: tmux's shared window size policy can let the most recently active client resize the pane, causing a laptop or another attached terminal to receive a SIGWINCH. `tmuxy` uses `window-size manual` around attach/resize/capture to avoid races. Tether should choose and document a policy (manual while phone-viewed, or latest with explicit interference accepted) and serialize resize, capture, and state restoration. A resize between the capture and browser application is another reason to include dimensions in the snapshot and reject/apply stale snapshots by generation.
+The risk is `window-size latest`: tmux's shared window size policy can let the most recently active client resize the pane, causing a laptop or another attached terminal to receive a SIGWINCH. `tmuxy` uses `window-size manual` around attach/resize/capture to avoid races. Muxen should choose and document a policy (manual while phone-viewed, or latest with explicit interference accepted) and serialize resize, capture, and state restoration. A resize between the capture and browser application is another reason to include dimensions in the snapshot and reject/apply stale snapshots by generation.
 
 ## 8. Format subscriptions as a cheap event source
 
@@ -186,7 +186,7 @@ session_id window_id pane_id pane_index cursor_x cursor_y
 pane_width pane_height pane_left pane_top pane_active
 ```
 
-Its capture path (roughly lines 971–1009) uses `capture-pane -p -t %id -e -C -S`, decodes tmux `unvis`/octal escaping, strips the trailing newline, converts line endings, and writes the result into a local terminal. It also handles early output/backlog and cursor position. WezTerm has a local terminal emulator because its native GUI needs a local mux/pane model; this demonstrates the state needed, not that tether must choose the same architecture.
+Its capture path (roughly lines 971–1009) uses `capture-pane -p -t %id -e -C -S`, decodes tmux `unvis`/octal escaping, strips the trailing newline, converts line endings, and writes the result into a local terminal. It also handles early output/backlog and cursor position. WezTerm has a local terminal emulator because its native GUI needs a local mux/pane model; this demonstrates the state needed, not that muxen must choose the same architecture.
 
 ### tmuxy
 
@@ -197,7 +197,7 @@ Its capture path (roughly lines 971–1009) uses `capture-pane -p -t %id -e -C -
 - `https://github.com/ace-rs/tmuxctl` / `https://docs.rs/tmuxctl/latest/src/tmuxctl/lib.rs.html`: young byte-level control-mode parser, reply correlation, layout parsing, and octal decoding; no terminal emulator.
 - `https://github.com/tmux/tmux`'s own `control.c`: authoritative protocol behavior and the source to use for version-specific tests.
 - `https://github.com/ArcavenAE/tmux-cmc`: persistent reader/writer-thread wrapper, but pre-1.0 and not a complete reconnect/list/snapshot solution.
-- `https://github.com/haowjy/libtmux-rs` (local clone `/home/jimyao/.meridian/ref/libtmux-rs`): current alpha library with the most relevant tested snapshot boundary. Its protocol layer is worth adapting or studying even if tether does not take the whole dependency.
+- `https://github.com/haowjy/libtmux-rs` (local clone `/home/jimyao/.meridian/ref/libtmux-rs`): current alpha library with the most relevant tested snapshot boundary. Its protocol layer is worth adapting or studying even if muxen does not take the whole dependency.
 
 Termux-style clients and OmniTerm use ordinary PTYs or use control mode only for activity/metadata; they do not provide a stronger `-CC` snapshot protocol precedent. iTerm2, WezTerm, tmuxy, par-term, and geistty all keep a terminal emulator somewhere, but GUI clients commonly need a local emulator for rendering. Protocol-only clients demonstrate that an emulator is optional at the control layer.
 
@@ -206,12 +206,12 @@ Termux-style clients and OmniTerm use ordinary PTYs or use control mode only for
 | crate | observed release / state | assessment |
 |---|---|---|
 | `vt100` | 0.18.1, released 2026-10-19; `doy/vt100-rust`; Jesse Luehrs; MIT | Small, focused parser/screen API, active and practical for a lazy per-pane model. Small maintainer footprint; pin and test behavior needed. [crates.io](https://crates.io/crates/vt100), [docs.rs](https://docs.rs/crate/vt100/latest) |
-| `alacritty_terminal` | 0.26.0, released 2026-04-06; Alacritty project; Apache-2.0 | Active and feature-rich, but pre-1.0 and substantially larger/heavier. Use only if tether needs its richer terminal/grid semantics. [crates.io](https://crates.io/crates/alacritty_terminal), [docs.rs](https://docs.rs/crate/alacritty_terminal/latest) |
+| `alacritty_terminal` | 0.26.0, released 2026-04-06; Alacritty project; Apache-2.0 | Active and feature-rich, but pre-1.0 and substantially larger/heavier. Use only if muxen needs its richer terminal/grid semantics. [crates.io](https://crates.io/crates/alacritty_terminal), [docs.rs](https://docs.rs/crate/alacritty_terminal/latest) |
 | `portable-pty` | 0.9.0, released 2025-02-11; WezTerm project; MIT | Healthy enough as a PTY abstraction, but irrelevant to a daemon that only attaches to an existing tmux control client. Its blocking I/O should be isolated from Tokio if used for tests or a different path. [crates.io](https://crates.io/crates/portable-pty), [docs.rs](https://docs.rs/crate/portable-pty/latest) |
 | `tmuxctl` | 0.1.0, released 2026-06-19; ace-rs | Plausible parser starting point, but young and not a state/reconnect implementation. Hide it behind an adapter if used. [docs.rs source](https://docs.rs/tmuxctl/latest/src/tmuxctl/lib.rs.html) |
 | `libtmux-rs` | repository alpha.16; registry/report observed alpha.15 discrepancy | The snapshot boundary and compatibility tests are valuable. Alpha status argues for copying the narrow protocol idea or pinning carefully rather than making it a foundational dependency immediately. [repository](https://github.com/haowjy/libtmux-rs) |
 
-Release dates above are the state observed during this research on 2026-10-21; verify before dependency selection. The main health risk is not that these crates are abandoned, but that `alacritty_terminal` and the alpha control libraries add API and behavior surface far beyond the first tether bridge.
+Release dates above are the state observed during this research on 2026-10-21; verify before dependency selection. The main health risk is not that these crates are abandoned, but that `alacritty_terminal` and the alpha control libraries add API and behavior surface far beyond the first muxen bridge.
 
 ## 11. Plan claims that are wrong or risky
 
@@ -234,7 +234,7 @@ Release dates above are the state observed during this research on 2026-10-21; v
 
 Proceed with tmux as the only authoritative server-side screen model and xterm.js as the renderer, but make the snapshot protocol explicit: primary/alternate captures, pane format state, pending-parser policy, byte-accurate `%output` decoding, and a tested private boundary marker. Keep a bounded ring only for diagnostics/short buffering; every pause, reconnect, resize generation change, or uncertain boundary must force a new snapshot.
 
-Do not add `alacritty_terminal` per pane to solve the control-mode handoff. If tether later needs server-side search, semantic current-command state independent of client delivery, deterministic multi-client replay, or a canonical cell protocol, add a lazy `vt100` model behind the same snapshot boundary. That is the lowest-complexity escalation: it preserves tmux authority while avoiding the size and maintenance cost of an Alacritty terminal core in the MVP.
+Do not add `alacritty_terminal` per pane to solve the control-mode handoff. If muxen later needs server-side search, semantic current-command state independent of client delivery, deterministic multi-client replay, or a canonical cell protocol, add a lazy `vt100` model behind the same snapshot boundary. That is the lowest-complexity escalation: it preserves tmux authority while avoiding the size and maintenance cost of an Alacritty terminal core in the MVP.
 
 ## Sources and local clones
 

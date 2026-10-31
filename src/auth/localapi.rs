@@ -541,7 +541,7 @@ fn basic_authorization(token: &str) -> HeaderValue {
 
 #[derive(Debug, Error)]
 pub enum SetServeConfigError {
-    #[error("tailscaled's Serve config changed while tether was publishing")]
+    #[error("tailscaled's Serve config changed while muxen was publishing")]
     Conflict,
     #[error("tailscaled's LocalAPI: /localapi/v0/serve-config: 403 Forbidden")]
     Denied { body: String },

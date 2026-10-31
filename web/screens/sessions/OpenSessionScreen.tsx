@@ -99,7 +99,7 @@ function Body({ host, workspace }: { host: HostClient; workspace: Workspace }) {
       ? <div class={styles.loading}><Spinner label="Loading sessions" /><span>Loading sessions</span></div>
       : <EmptyState icon="alert" title={failure === null ? `${name} can't be reached` : failure === "offline" ? "Couldn't load sessions" : `${name} refused the request`} action={retry}>Your open tabs and drafts are kept.</EmptyState>;
   } else if (listing === null) {
-    list = <EmptyState icon="terminal" title={`No tmux server is running on ${name}`} action={retry}>tether never starts one. Start tmux on the server, then retry.</EmptyState>;
+    list = <EmptyState icon="terminal" title={`No tmux server is running on ${name}`} action={retry}>muxen never starts one. Start tmux on the server, then retry.</EmptyState>;
   } else {
     list = (
       <ul class={styles.list} aria-label={`Sessions on ${name}`}>
