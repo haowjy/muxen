@@ -83,12 +83,15 @@ export class SelectionControl {
     // The window is anchored on what is in view: from MAX_SNAPSHOT_HISTORY_ROWS above its top to a row below its bottom.
     // On the normal screen with the whole buffer in, what was fetched above it joins in.
     const { rows: buffer, from } = renderer.rows(alt ? 0 : Math.max(0, top - MAX_SNAPSHOT_HISTORY_ROWS), alt ? undefined : top + visible + 1);
-    let rows = alt || from > 0 ? buffer : this.deps.joinHistory(buffer);
-    const history = rows.length - buffer.length;
-    const keep = keepFrom(rows, visible);
-    rows = rows.slice(keep);
-    // The row at the top of the host: the screen's first, less the rows the history slide or the pan moved it by.
-    const topRow = history + (top - from) - keep + (hostRect.top - origin.top) / cell.height;
+    const joined = alt || from > 0 ? buffer : this.deps.joinHistory(buffer);
+    const history = joined.length - buffer.length;
+    // The (fractional) joined row at the top of the host: the screen's first, less the rows the history slide or the pan moved it by.
+    const hostRow = history + (top - from) + (hostRect.top - origin.top) / cell.height;
+    // What is in view stays whole; the budget is spent above it. A wrapped row cut off at the top keeps its flag.
+    const inView = { from: Math.max(0, Math.floor(hostRow)), to: Math.min(joined.length, Math.ceil(hostRow + hostRect.height / cell.height)) };
+    const keep = budgetStart(joined.map((row) => rowText(row).length), Math.min(inView.from, inView.to), inView.to);
+    const rows = joined.slice(keep, inView.to);
+    const topRow = hostRow - keep;
     const index = Math.floor(topRow + (y - hostRect.top) / cell.height);
     const row = rows[index];
     const word = row && wordAt(rowCells(row), Math.floor((x - origin.left) / cell.width));
@@ -175,11 +178,4 @@ export class SelectionControl {
   private readonly escape = (event: KeyboardEvent): void => {
     if (event.key === "Escape") this.dismiss();
   };
-}
-
-/** Where the snapshot starts: `rows` end at the view's bottom, so this is the budget's worth of rows above it, never inside a wrapped line. */
-function keepFrom(rows: readonly Row[], visibleRows: number): number {
-  let keep = budgetStart(rows.map((row) => ({ rows: 1, bytes: rowText(row).length })), visibleRows);
-  while (rows[keep]?.wrapped) keep++;
-  return keep;
 }
