@@ -9,9 +9,11 @@
   font-variant-ligatures: none;
 }
 
-/* A wide character fills two cells whatever advance its fallback font gives it. */
+/* A wide character fills two cells whatever advance its fallback font gives it. `vertical-align: top` because an
+   inline-block that clips takes its bottom edge as its baseline, which would drop the rest of the row. */
 .wide {
   display: inline-block;
+  vertical-align: top;
   width: calc(var(--cell-width, 1ch) * 2);
   overflow: hidden;
   letter-spacing: 0;

@@ -49,10 +49,17 @@ export class PageSelection {
 
   /** Whether any row in `seqs` lies between a range's first and last row: the text it marked was rewritten (J7). */
   rewrites(range: Range | null, seqs: readonly number[]): boolean {
+    return this.overlaps(range, (first, last) => seqs.some((seq) => seq >= first && seq <= last));
+  }
+
+  /** Whether the rows `from` to `to` overlap a range's rows: the text it marked is about to go (J7). */
+  drops(range: Range | null, from: number, to: number): boolean {
+    return this.overlaps(range, (first, last) => from <= last && to >= first);
+  }
+
+  private overlaps(range: Range | null, test: (first: number, last: number) => boolean): boolean {
     const span = range && this.deps.list()?.span(range);
-    if (!span) return false;
-    const [first, last] = [Number(span.first.dataset["seq"]), Number(span.last.dataset["seq"])];
-    return seqs.some((seq) => seq >= first && seq <= last);
+    return !!span && test(Number(span.first.dataset["seq"]), Number(span.last.dataset["seq"]));
   }
 
   /** The selected text with soft wraps joined, one line per logical line; empty with no selection. */

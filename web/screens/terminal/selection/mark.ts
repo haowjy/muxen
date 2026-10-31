@@ -153,6 +153,11 @@ export class Mark {
     if (this.handles) for (const end of ENDS) this.handles[end].hidden = true;
   }
 
+  /** Content moved under the rows (a block dropped above): the handles stand in content coordinates, so they follow their text again. */
+  reposition(): void {
+    if (this.state) this.placeHandles(this.state.range);
+  }
+
   private paint(): void {
     const { state } = this;
     if (!state) return;

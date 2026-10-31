@@ -3,7 +3,7 @@
 //
 // With the phone's own input (`directInput: "owned"`) the rows are the row list's page text, and its scroll and
 // the long press are WebKit's. Touch events are shared with it: every listener but the handles' is passive
-// where it can be, `touchmove` is cancelled only for the mark, a second finger and a pinned terminal's swipe
+// where it can be, `touchmove` is cancelled only for the mark and a pinned terminal's swipe
 // (which becomes wheel events), `touchend` is cancelled for a tap (so a tap is never a click or a blur), and
 // `touchcancel` is what a long press that WebKit took over looks like. A swipe past the slop is the browser's
 // scroll: the recognizer only hides the mark's menu for it.
@@ -43,6 +43,8 @@ interface TouchDeps {
   /** A pinned terminal's swipe as wheel events, and whether the row list is coasting (the owned path). */
   wheel: PinnedWheel;
   listCoasting(): boolean;
+  /** Whether a finger holds the row list: it is left alone, and at rest a moment after the last lifts. */
+  holdList(held: boolean): void;
   selection: SelectionControl;
   page: PageSelection;
   /** The app's keyboard-up mark. */
@@ -135,7 +137,11 @@ export class TouchControl {
     // The rest of a touch's events go to its own target (`follow`), not the surface: a touch that began on a row xterm
     // then replaced goes on being dispatched to that detached node, and never bubbles to the surface or the document.
     for (const type of MOUSE_EVENTS) element.addEventListener(type, this.blockMouse, true);
-    document.addEventListener("visibilitychange", () => { if (document.hidden) this.cancel(); });
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) return;
+      this.cancel();
+      for (const id of [...this.targets.keys()]) this.unfollow(id); // a finger the background took never lifts
+    });
     // Android's long-press menu would fight the gesture; iOS shows no callout (CSS). Owned input leaves it to the system.
     element.addEventListener("contextmenu", (event) => { if (!this.owned && !this.deps.selection.owns(event.target)) event.preventDefault(); });
   }
@@ -143,6 +149,13 @@ export class TouchControl {
   /** The phone's own input: touch events, and a long press that is WebKit's. */
   private get owned(): boolean {
     return this.deps.directInput() === "owned";
+  }
+
+  /** The list scrolled: a press still waiting to become a tap or a hold is the browser's scroll, and neither. */
+  scrolled(): void {
+    if (this.recognizer.deadline === null) return;
+    this.run(this.recognizer.cancel());
+    this.schedule();
   }
 
   /** Ends any gesture in progress: a selection still being dragged goes with it. */
@@ -157,11 +170,17 @@ export class TouchControl {
     this.schedule();
   }
 
-  /** Listens on the node a touch began on, which keeps receiving its events after xterm replaces it; non-passive, to cancel a scroll or a tap. */
+  /**
+   * Listens on the node a touch began on, which keeps receiving its events after xterm replaces it. `touchend` is
+   * non-passive to cancel a tap; `touchmove` only where a move may need cancelling (the mark, a pinned swipe), so
+   * that elsewhere a native scroll never waits on this code. The list is held while any such touch is down.
+   */
   private follow(touch: Touch): void {
     const target = touch.target;
     this.targets.set(touch.identifier, target);
-    target.addEventListener("touchmove", this.touchMove as EventListener, { passive: false });
+    this.deps.holdList(true);
+    const cancellable = this.deps.wheel.active || (this.deps.owner() !== "none" && this.deps.mark.available);
+    target.addEventListener("touchmove", this.touchMove as EventListener, { passive: !cancellable });
     target.addEventListener("touchend", this.touchEnd as EventListener, { passive: false });
     target.addEventListener("touchcancel", this.touchCancelled as EventListener);
   }
@@ -171,6 +190,7 @@ export class TouchControl {
     const target = this.targets.get(id);
     if (!target) return;
     this.targets.delete(id);
+    this.deps.holdList(this.targets.size > 0);
     if ([...this.targets.values()].includes(target)) return;
     target.removeEventListener("touchmove", this.touchMove as EventListener);
     target.removeEventListener("touchend", this.touchEnd as EventListener);
@@ -238,9 +258,9 @@ export class TouchControl {
       if (this.fingers.has(touch.identifier)) this.run(this.recognizer.move(touch.identifier, touch.clientX, touch.clientY, performance.now()));
     }
     this.schedule();
-    // Only a pinned terminal's swipe, the mark and a second finger (which would pinch the page) are muxen's: any
-    // other move is WebKit's, and the list scrolls natively.
-    if ((this.pinned && this.recognizer.scrolling) || this.marking || event.touches.length > 1) event.preventDefault();
+    // Only a pinned terminal's swipe and the mark are muxen's: any other move is WebKit's, and the list scrolls
+    // natively (`touch-action: pan-y` keeps a second finger from pinching the page).
+    if ((this.pinned && this.recognizer.scrolling) || this.marking) event.preventDefault();
   };
 
   private readonly touchEnd = (event: TouchEvent): void => {

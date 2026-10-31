@@ -99,6 +99,7 @@ export class TerminalView {
       scroll: this.scroll,
       wheel: this.wheel,
       listCoasting: () => deps.list()?.coasting ?? false,
+      holdList: (held) => { deps.list()?.hold(held); },
       selection: this.selection,
       page: this.page,
       mark: this.mark,
@@ -108,12 +109,19 @@ export class TerminalView {
     element.addEventListener("wheel", this.wheelPastTop, { capture: true, passive: false });
   }
 
-  /** Wires a new row list: the output that rewrites a selected row closes the selection (J7), and a scroll hides the mark's menu. */
+  /** Wires a new row list: output that rewrites or drops a selected row closes the selection (J7), and a scroll hides the mark's menu. */
   attach(list: RowList): void {
     list.onRewritten((seqs) => {
       if (this.page.rewrites(this.page.current(), seqs) || this.page.rewrites(this.mark.range(), seqs)) this.dismissSelection();
     });
-    list.onUserScroll(() => { this.mark.hideMenu(); });
+    list.onDropped((first, last) => {
+      if (this.page.drops(this.page.current(), first, last) || this.page.drops(this.mark.range(), first, last)) this.dismissSelection();
+    });
+    list.onShifted(() => { this.mark.reposition(); });
+    list.onUserScroll(() => {
+      this.mark.hideMenu();
+      this.touch.scrolled();
+    });
   }
 
   /** The ranges the row list must not drop rows under. */
