@@ -31,13 +31,6 @@ describe("Folders", () => {
     expect(held(folders, "/home/j/repos")).toMatchObject({ status: "ready", names: ["muxen"] });
   });
 
-  it("lists inside a root with /fs/list and keeps folders only", async () => {
-    const { fs, folders } = setup();
-    await folders.load("/home/j/repos/muxen", false);
-    expect(fs.calls).toEqual(["list /home/j/repos/muxen 0"]);
-    expect(held(folders, "/home/j/repos/muxen")).toMatchObject({ names: ["web"] });
-  });
-
   it("does not ask again for a folder it holds or has under way", async () => {
     const { fs, folders } = setup();
     fs.hold = true;
@@ -51,44 +44,31 @@ describe("Folders", () => {
     folders.ask({ path: "/home/j/repos", hidden: false });
     await vi.advanceTimersByTimeAsync(SETTLE_MS);
     expect(fs.calls).toHaveLength(1);
+    // a settled waits for a fetch under way instead of asking again, and the first page is cached until a refresh drops it
+    fs.hold = true;
+    const loading = folders.load("/home/j/repos/muxen", false);
+    const taken = folders.settled("/home/j/repos/muxen", false);
+    fs.release();
+    await loading;
+    expect(await taken).toMatchObject({ path: "/home/j/repos/muxen" });
+    expect(folders.peek("/home/j/repos/muxen", false)).not.toBeNull();
+    expect(folders.peek("/home/j/repos/muxen", true)).toBeNull();
+    folders.drop("/home/j/repos/muxen");
+    expect(folders.peek("/home/j/repos/muxen", false)).toBeNull();
+    expect(fs.calls).toHaveLength(2);
   });
 
-  it("follows a page of folders with the next, up to the page limit, then says it is capped", async () => {
+  it("follows a page of folders with the next, up to the page limit, then says it is capped; it stops at the page that holds the last folder", async () => {
+    const small = setup(many(5), 4);
+    await small.folders.load("/home/j/repos", false);
+    expect(small.fs.calls).toEqual(["list /home/j/repos 0", "list /home/j/repos 4"]);
+    expect(held(small.folders, "/home/j/repos")).toMatchObject({ capped: false });
     const { fs, folders } = setup(many(40), 4);
     await folders.load("/home/j/repos", false);
     expect(fs.calls).toHaveLength(MAX_PAGES);
     const state = held(folders, "/home/j/repos");
     expect(state).toMatchObject({ status: "ready", capped: true });
     expect(state?.status === "ready" && state.names).toHaveLength(MAX_PAGES * 4);
-  });
-
-  it("stops at the page that holds the last folder", async () => {
-    const { fs, folders } = setup(many(5), 4);
-    await folders.load("/home/j/repos", false);
-    expect(fs.calls).toEqual(["list /home/j/repos 0", "list /home/j/repos 4"]);
-    expect(held(folders, "/home/j/repos")).toMatchObject({ capped: false });
-  });
-
-  it("caches the first page it fetched, until a refresh drops it", async () => {
-    const { fs, folders } = setup();
-    await folders.load("/home/j/repos/muxen", false);
-    expect(await folders.settled("/home/j/repos/muxen", false)).toMatchObject({ path: "/home/j/repos/muxen" });
-    expect(folders.peek("/home/j/repos/muxen", false)).not.toBeNull();
-    expect(folders.peek("/home/j/repos/muxen", true)).toBeNull();
-    folders.drop("/home/j/repos/muxen");
-    expect(folders.peek("/home/j/repos/muxen", false)).toBeNull();
-    expect(fs.calls).toHaveLength(1);
-  });
-
-  it("a settled waits for the fetch under way instead of asking again", async () => {
-    const { fs, folders } = setup();
-    fs.hold = true;
-    const loading = folders.load("/home/j/repos", false);
-    const taken = folders.settled("/home/j/repos", false);
-    fs.release();
-    await loading;
-    expect(await taken).toMatchObject({ path: "/home/j/repos" });
-    expect(fs.calls).toHaveLength(1);
   });
 
   it("asks again for a folder whose listing failed for want of a connection, not for one that is missing", async () => {

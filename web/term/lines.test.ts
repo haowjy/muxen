@@ -15,21 +15,14 @@ async function copied(cols: number, data: string, rows = 10): Promise<string> {
 }
 
 describe("copying a real buffer", () => {
-  it("joins a soft wrap with no newline", async () => {
-    expect((await copied(10, "0123456789abcdefghij12345\r\nnext", 4)).trimEnd()).toBe("0123456789abcdefghij12345\nnext");
-  });
-
-  it("keeps a hard break at the exact last column", async () => {
-    expect((await copied(10, "0123456789\r\nabc", 2))).toBe("0123456789\nabc");
-  });
-
-  it("keeps blank lines and drops trailing blanks only at a line's end", async () => {
-    expect((await copied(10, "one  \r\n\r\n\r\ntwo", 4))).toBe("one\n\n\ntwo");
-  });
-
-  it("keeps indentation and the space a wrap splits at", async () => {
-    expect((await copied(10, "    indented\r\n  x y z", 3))).toBe("    indented\n  x y z");
-    expect((await copied(5, "ab cd ef", 2))).toBe("ab cd ef");
+  it.each([
+    ["joins a soft wrap with no newline", 10, "0123456789abcdefghij12345\r\nnext", 4, "0123456789abcdefghij12345\nnext"],
+    ["keeps a hard break at the exact last column", 10, "0123456789\r\nabc", 2, "0123456789\nabc"],
+    ["keeps blank lines and drops trailing blanks only at a line's end", 10, "one  \r\n\r\n\r\ntwo", 4, "one\n\n\ntwo"],
+    ["keeps indentation", 10, "    indented\r\n  x y z", 3, "    indented\n  x y z"],
+    ["keeps the space a wrap splits at", 5, "ab cd ef", 2, "ab cd ef"],
+  ])("%s", async (_name, cols, data, rows, expected) => {
+    expect((await copied(cols, data, rows)).trimEnd()).toBe(expected);
   });
 });
 

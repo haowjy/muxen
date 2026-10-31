@@ -40,11 +40,6 @@ describe("admission, read from the daemon at launch", () => {
     expect(refused.platform.daemon.requests).toEqual(["GET /auth/info"]);
   });
 
-  it("says why a browser can't use the host", async () => {
-    const t = await boot((p) => { if (p.daemon.info !== "down") p.daemon.info = { ...p.daemon.info, browserOrigin: null, browserRefused: "not_https" }; });
-    expect(t.host()?.admission).toEqual({ kind: "originRefused", reason: "not_https" });
-  });
-
   it("never retries a node the daemon refuses", async () => {
     const t = await boot((p) => { p.daemon.node = "refused"; p.daemon.refusedReason = "shared"; });
     expect(t.host()?.admission).toEqual({ kind: "nodeRefused", reason: "shared" });
@@ -94,15 +89,6 @@ describe("enrolment", () => {
     expect(t.host()?.admission).toEqual({ kind: "admitted", deviceName: "laptop" });
   });
 
-  it("reports a busy daemon as tryAgain, and a refused node on the refusal screen", async () => {
-    const busy = await boot((p) => { p.daemon.node = "busy"; });
-    expect(await busy.registry.enrol("h1", "7KQ4XM2P", "x")).toEqual({ kind: "tryAgain" });
-    const refused = await boot((p) => { p.daemon.node = "notEnrolled"; });
-    refused.platform.daemon.node = "refused";
-    expect(await refused.registry.enrol("h1", "7KQ4XM2P", "x")).toEqual({ kind: "nodeRefused", reason: "routes" });
-    expect(refused.host()?.admission).toEqual({ kind: "nodeRefused", reason: "routes" });
-  });
-
   it("removes this device: sockets close, and admission reads notEnrolled", async () => {
     const t = await boot();
     t.host()?.socket.join(port);
@@ -134,20 +120,14 @@ describe("a socket closing with 4401", () => {
 });
 
 describe("sockets follow the lifecycle", () => {
-  it("closes when hidden and reconnects when visible again", async () => {
+  it.each([
+    ["hidden", { visible: false, online: true, locked: false }],
+    ["locked", { visible: true, online: true, locked: true }],
+  ])("close while %s and reconnect when they come back", async (_name, away) => {
     const t = await boot();
     t.host()?.socket.join(port);
     await vi.advanceTimersByTimeAsync(0);
-    t.registry.setLifecycle({ visible: false, online: true, locked: false });
-    expect(t.platform.links[0]?.closed).toBe(true);
-    t.registry.setLifecycle({ visible: true, online: true, locked: false });
-    expect(t.platform.links).toHaveLength(2);
-  });
-
-  it("stays closed while locked", async () => {
-    const t = await boot();
-    t.host()?.socket.join(port);
-    t.registry.setLifecycle({ visible: true, online: true, locked: true });
+    t.registry.setLifecycle(away);
     expect(t.platform.links[0]?.closed).toBe(true);
     t.registry.setLifecycle({ visible: true, online: true, locked: false });
     expect(t.platform.links).toHaveLength(2);

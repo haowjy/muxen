@@ -29,7 +29,7 @@ const EMPTY: HostSessions = { listing: undefined, reachedAt: null, failure: null
  * busy and a `sessionsChanged` hint will follow). Everything the daemon refused is
  * `refused`; everything that never got an answer is `offline`.
  */
-export function classifyFailure(reason: string): Failure | null {
+function classifyFailure(reason: string): Failure | null {
   switch (reason) {
     case "busy":
     case "background":

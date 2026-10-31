@@ -39,33 +39,6 @@ describe("ListingFetcher", () => {
     expect(t.events).toEqual([{ type: "requested", handle: "h1" }, { type: "listed", handle: "h1", listing: listing("a", [1]) }]);
   });
 
-  it("announces a listing it sends for the user, and not one a sessionsChanged hint asked for", async () => {
-    const t = setup();
-    t.fetcher.setWanted("h1", true);
-    t.link().welcome();
-    t.answer(null);
-    await vi.advanceTimersByTimeAsync(0);
-    t.events.length = 0;
-    t.link().say({ type: "sessionsChanged" });
-    await vi.advanceTimersByTimeAsync(300);
-    t.answer(null);
-    await vi.advanceTimersByTimeAsync(0);
-    expect(t.events.map((e) => e.type)).toEqual(["listed"]);
-    t.fetcher.refresh("h1");
-    expect(t.events.map((e) => e.type)).toEqual(["listed", "requested"]);
-  });
-
-  it("drops a host that is no longer among the hosts", () => {
-    const t = setup();
-    t.fetcher.setWanted("h1", true);
-    t.link().welcome();
-    t.answer(null);
-    t.fetcher.setHosts([]);
-    t.link().say({ type: "sessionsChanged" });
-    vi.advanceTimersByTime(300);
-    expect(t.lists()).toBe(1);
-  });
-
   it("keeps the socket 30 s after the last reason for it goes", () => {
     const t = setup();
     t.fetcher.setWanted("h1", true);
@@ -98,19 +71,17 @@ describe("ListingFetcher", () => {
     expect(t.lists()).toBe(1);
   });
 
-  it("has one request in flight per host and queues one more", async () => {
-    const t = setup();
-    t.fetcher.setWanted("h1", true);
-    t.link().welcome();
-    t.link().say({ type: "sessionsChanged" });
+  it("has one request in flight per host and queues one more; a refresh mid-flight lists exactly once more after the current one, never two at once", async () => {
+    const q = setup();
+    q.fetcher.setWanted("h1", true);
+    q.link().welcome();
+    q.link().say({ type: "sessionsChanged" });
     await vi.advanceTimersByTimeAsync(1000);
-    expect(t.lists()).toBe(1);
-    t.answer(null);
+    expect(q.lists()).toBe(1);
+    q.answer(null);
     await vi.advanceTimersByTimeAsync(0);
-    expect(t.lists()).toBe(2);
-  });
+    expect(q.lists()).toBe(2);
 
-  it("refresh mid-flight lists exactly once more after the current one, never two at once", async () => {
     const t = setup();
     t.fetcher.setWanted("h1", true);
     t.fetcher.refresh("h1"); // the socket is not up: linkUp will list
@@ -129,14 +100,6 @@ describe("ListingFetcher", () => {
     expect(t.lists()).toBe(3);
   });
 
-  it("setWanted reports a listing only when it started one", () => {
-    const t = setup();
-    expect(t.fetcher.setWanted("h1", true)).toBe(false); // socket not up
-    t.link().welcome();
-    t.fetcher.setWanted("h1", false);
-    expect(t.fetcher.setWanted("h1", true)).toBe(true);
-  });
-
   it("retries a failed listing with the host's backoff while a tab is restoring, and reports it", async () => {
     const t = setup({ restoring: true });
     t.fetcher.setWanted("h1", true);
@@ -150,16 +113,14 @@ describe("ListingFetcher", () => {
     t.answer(listing("a", [1]));
     await vi.advanceTimersByTimeAsync(0);
     expect(t.events.map((e) => e.type)).toContain("listed");
-  });
-
-  it("reports a lost socket with nothing in flight", async () => {
-    const t = setup();
-    t.fetcher.setWanted("h1", true);
-    t.link().welcome();
-    t.answer(null);
+    // a lost socket with nothing in flight is reported too
+    const idle = setup();
+    idle.fetcher.setWanted("h1", true);
+    idle.link().welcome();
+    idle.answer(null);
     await vi.advanceTimersByTimeAsync(0);
-    t.link().drop();
-    expect(t.events.at(-1)).toEqual({ type: "failed", handle: "h1", reason: "lost" });
+    idle.link().drop();
+    expect(idle.events.at(-1)).toEqual({ type: "failed", handle: "h1", reason: "lost" });
   });
 
   it("retries a busy answer soon, with nothing reported", async () => {

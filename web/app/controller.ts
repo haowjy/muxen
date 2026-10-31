@@ -14,7 +14,7 @@ import { activeTab, allTabs, initialWorkspace, reduce, savedWorkspaces, screenOf
 import { FocusController } from "./focus";
 import { ListingFetcher } from "./listing";
 import { Persist } from "./persist";
-import { browserHistory, enrolCodeFromHash, Router, type Entry, type HistoryPort, type Overlay } from "./router";
+import { browserHistory, enrolCodeFromHash, Router, type Entry, type Overlay } from "./router";
 import { lineDraftsOf } from "../screens/terminal/dock/lineDrafts";
 import { startNativeLine } from "../screens/terminal/dock/nativeLine";
 
@@ -46,8 +46,6 @@ export interface StartOptions {
   applyPreferences?: (preferences: Preferences) => void;
   /** Fake the daemon's HTTP: the harness passes the test platform's. */
   fetchFn?: typeof fetch;
-  /** The harness and tests stand in for `window.history`. */
-  history?: HistoryPort;
 }
 
 /** The listing surface on screen: Home, or one sessions overlay (Open session). */
@@ -92,7 +90,7 @@ export class AppController extends Store<AppView> {
   private linkOfferPending: boolean;
 
   private constructor(readonly platform: Platform, boot: BootResult, options: StartOptions) {
-    const history = options.history ?? browserHistory();
+    const history = browserHistory();
     // Read before the Router: it replaces the link's `#code=…` with the entry hash, so a reload or Back cannot replay the code.
     const enrolCode = enrolCodeFromHash(history.current().hash);
     const saved = parseSavedWorkspaces(boot.workspace);

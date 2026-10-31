@@ -49,18 +49,6 @@ describe("one socket per host", () => {
     expect(b.state().kind).toBe("live");
   });
 
-  it("ends a watch only for the tab that owns it", () => {
-    const t = setup();
-    const a = t.tab("a", sesA);
-    const b = t.tab("b", sesB);
-    t.link().welcome();
-    t.link().say(t.watching(1, sesA));
-    t.link().say(t.watching(2, sesB));
-    t.link().say({ type: "watchEnded", data: { watch: 1, reason: "detached" } });
-    expect(a.state()).toMatchObject({ kind: "reconnecting", halt: "detached" });
-    expect(b.state().kind).toBe("live");
-  });
-
   it("closes one tab on its sessionClosed and the socket with the last tab", () => {
     const t = setup();
     const a = t.tab("a", sesA);

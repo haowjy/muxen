@@ -44,21 +44,14 @@ beforeEach(() => { vi.useFakeTimers(); });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe("HostLink", () => {
-  it("offers the token in the subprotocol list and says hello on open", () => {
-    const { sock } = setup();
-    expect(sock.protocols).toEqual(["muxen.v1", "muxen.auth.tok"]);
+  it.each([
+    ["with a token, as ios", "tok", "ios", ["muxen.v1", "muxen.auth.tok"]],
+    ["with no token, as web", null, "web", ["muxen.v1"]],
+  ] as const)("offers the subprotocols and says hello on open %s", (_name, token, kind, protocols) => {
+    const { sock } = setup(token, kind);
+    expect(sock.protocols).toEqual(protocols);
     sock.open();
-    expect(JSON.parse(sock.sent[0] ?? "")).toEqual({
-      type: "hello",
-      data: { protocol: 2, client: { kind: "ios", build: "1" } },
-    });
-  });
-
-  it("offers muxen.v1 alone, as a web client, when there is no token", () => {
-    const { sock } = setup(null, "web");
-    expect(sock.protocols).toEqual(["muxen.v1"]);
-    sock.open();
-    expect(JSON.parse(sock.sent[0] ?? "")).toMatchObject({ data: { client: { kind: "web" } } });
+    expect(JSON.parse(sock.sent[0] ?? "")).toEqual({ type: "hello", data: { protocol: 2, client: { kind, build: "1" } } });
   });
 
   it("holds everything but hello until welcome", () => {

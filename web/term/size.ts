@@ -17,7 +17,7 @@ const MIN_SIZE: Size = { cols: 20, rows: 4 };
 const SETTLE_MS = 150;
 
 /** Whole cells that fit in `width x height` CSS pixels. */
-export function fitSize(width: number, height: number, cell: CellSize): Size {
+function fitSize(width: number, height: number, cell: CellSize): Size {
   return {
     cols: Math.max(MIN_SIZE.cols, Math.floor(width / cell.width)),
     rows: Math.max(MIN_SIZE.rows, Math.floor(height / cell.height)),
@@ -45,7 +45,7 @@ export function terminalBottomPan(cursorRow: number, rows: number, cellHeight: n
  * less its safe-area insets and the muxen chrome around the terminal, from `stableHeight`,
  * which no software keyboard shortens. Nothing that only shows or hides changes an input.
  */
-export function terminalSize(viewport: Viewport, chrome: Chrome, cell: CellSize): Size {
+function terminalSize(viewport: Viewport, chrome: Chrome, cell: CellSize): Size {
   const { top, right, bottom, left } = viewport.safeArea;
   return fitSize(viewport.width - left - right - chrome.x, viewport.stableHeight - top - bottom - chrome.y, cell);
 }
@@ -54,7 +54,6 @@ export interface SizerOptions {
   cell(): CellSize | null;
   /** The size changed and has been stable for 150 ms. */
   onChange(size: Size): void;
-  settleMs?: number;
 }
 
 /**
@@ -114,6 +113,6 @@ export class TerminalSizer {
       if (!size || (this.applied?.cols === size.cols && this.applied.rows === size.rows)) return;
       this.applied = size;
       this.opts.onChange(size);
-    }, this.opts.settleMs ?? SETTLE_MS);
+    }, SETTLE_MS);
   }
 }

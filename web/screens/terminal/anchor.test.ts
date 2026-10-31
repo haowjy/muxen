@@ -2,26 +2,16 @@ import { describe, expect, it } from "vitest";
 import { locateRun } from "./anchor";
 
 describe("locateRun", () => {
-  it("finds the run where it was expected", () => {
-    expect(locateRun(["a", "b", "c", "d", "e"], ["d", "e"], 3)).toBe(3);
-  });
-
-  it("finds it moved: the numbering shifted by k rows", () => {
-    expect(locateRun(["a", "b", "c", "d", "e"], ["c", "d"], 3)).toBe(2);
-  });
-
-  it("takes the match nearest the expected place when a row repeats", () => {
-    const rows = ["", "", "", "", "x", "", ""];
-    expect(locateRun(rows, ["", ""], 5)).toBe(5);
-    expect(locateRun(rows, ["", ""], 1)).toBe(1);
-  });
-
-  it("takes the older of two equally near matches", () => {
-    expect(locateRun(["", "", "", ""], [""], 1.5)).toBe(1);
-  });
-
-  it("is null when the run is not there", () => {
-    expect(locateRun(["a", "b"], ["z"], 0)).toBeNull();
-    expect(locateRun(["a"], ["a", "b"], 0)).toBeNull();
+  const repeated = ["", "", "", "", "x", "", ""];
+  it.each([
+    [["a", "b", "c", "d", "e"], ["d", "e"], 3, 3], // where it was expected
+    [["a", "b", "c", "d", "e"], ["c", "d"], 3, 2], // moved: the numbering shifted
+    [repeated, ["", ""], 5, 5], // the match nearest the expected place
+    [repeated, ["", ""], 1, 1],
+    [["", "", "", ""], [""], 1.5, 1], // the older of two equally near
+    [["a", "b"], ["z"], 0, null], // not there
+    [["a"], ["a", "b"], 0, null],
+  ])("%j finding %j near %d is %j", (rows, run, near, at) => {
+    expect(locateRun(rows, run, near)).toBe(at);
   });
 });

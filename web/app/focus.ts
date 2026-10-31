@@ -29,7 +29,7 @@ interface FocusView {
  * The mode native rests in for a screen: `webText` wherever a web field may take the keyboard;
  * on Terminal, `select` while the selection snapshot holds the touch, so native lets the web view's text selection work.
  */
-export function restingMode(screen: Screen, overlay: boolean, keyboardWasUp: boolean, selecting = false): FocusMode {
+function restingMode(screen: Screen, overlay: boolean, keyboardWasUp: boolean, selecting = false): FocusMode {
   if (screen === "terminal" && !overlay) return selecting ? "select" : keyboardWasUp ? "terminal" : "hidden";
   return "webText";
 }

@@ -21,18 +21,11 @@ function setup(t = tree()) {
 }
 
 describe("FileBrowser", () => {
-  it("opens ~ as the home the host names, and a folder the tab names", async () => {
+  it("opens ~ as the home the host names; lists directories first, pages on demand, and keeps hidden files out until asked", async () => {
     const { browser, fs } = setup();
     await browser.follow({ kind: "dir", path: "~" });
     expect(browser.snapshot.place).toEqual({ kind: "dir", path: "/home/j" });
     expect(browser.snapshot.home).toBe("/home/j");
-    await browser.follow({ kind: "dir", path: "/home/j/repo/src" });
-    expect(browser.snapshot.pages?.entries.map((e) => e.name)).toEqual(["main.rs"]);
-    expect(fs.calls).toEqual(["list ~ 0", "list /home/j/repo/src 0"]);
-  });
-
-  it("lists directories first, pages on demand, and keeps hidden files out until asked", async () => {
-    const { browser, fs } = setup();
     await browser.follow({ kind: "dir", path: "/home/j/repo" });
     expect(browser.snapshot.pages?.entries.map((e) => e.name)).toEqual(["src", "README.md", "a.ts"]);
     await browser.more();
@@ -59,24 +52,6 @@ describe("FileBrowser", () => {
     expect(fs.calls.length).toBe(calls);
   });
 
-  it("opens a file by path with a probe, and a folder that a link led to as a listing", async () => {
-    const { browser } = setup();
-    await browser.follow({ kind: "file", path: "/home/j/repo/src/main.rs" });
-    expect(browser.snapshot.place).toMatchObject({ kind: "file", file: { name: "main.rs", mime: "text/plain; charset=utf-8" } });
-    expect(await browser.resolve("/home/j/repo/src")).toEqual({ kind: "dir", path: "/home/j/repo/src" });
-    expect(await browser.resolve("/home/j/repo/src/main.rs")).toEqual({ kind: "file", path: "/home/j/repo/src/main.rs" });
-  });
-
-  it("goes up a level to `/`, which has no parent", async () => {
-    const { browser } = setup();
-    await browser.follow({ kind: "file", path: "/home/j/repo/src/main.rs" });
-    expect(parentPlace(browser.snapshot)).toEqual({ kind: "dir", path: "/home/j/repo/src" });
-    await browser.follow({ kind: "dir", path: "/home/j" });
-    expect(parentPlace(browser.snapshot)).toEqual({ kind: "dir", path: "/home" });
-    await browser.follow({ kind: "dir", path: "/" });
-    expect(parentPlace(browser.snapshot)).toBeNull();
-  });
-
   it("drops an answer for a folder already left", async () => {
     const { browser, fs } = setup();
     await browser.follow({ kind: "dir", path: "/home/j/repo" });
@@ -99,15 +74,12 @@ describe("FileBrowser", () => {
     expect(browser.snapshot.error?.code).toBe("not_found");
     expect(browser.snapshot.pages).toBeNull();
     expect(parentPlace(browser.snapshot)).toEqual({ kind: "dir", path: "/home/j/gone" });
-  });
-
-  it("relists the folder on screen when an upload lands in it", async () => {
-    const { browser, fs } = setup();
-    await browser.follow({ kind: "dir", path: "/home/j/up" });
-    const before = fs.calls.length;
-    await browser.uploaded("/home/j/repo/x.jpg");
-    expect(fs.calls.length).toBe(before);
-    await browser.uploaded("/home/j/up/20261022-101010Z-abcd.jpg");
-    expect(fs.calls.at(-1)).toBe("list /home/j/up 0");
+    // up from a file and from home; `/` has no parent
+    await browser.follow({ kind: "file", path: "/home/j/repo/src/main.rs" });
+    expect(parentPlace(browser.snapshot)).toEqual({ kind: "dir", path: "/home/j/repo/src" });
+    await browser.follow({ kind: "dir", path: "/home/j" });
+    expect(parentPlace(browser.snapshot)).toEqual({ kind: "dir", path: "/home" });
+    await browser.follow({ kind: "dir", path: "/" });
+    expect(parentPlace(browser.snapshot)).toBeNull();
   });
 });

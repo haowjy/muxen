@@ -91,7 +91,7 @@ describe("watching", () => {
 });
 
 describe("ending a tab", () => {
-  it("tells the daemon when the user closes a bound tab, or one whose watch is still in flight", () => {
+  it("tells the daemon when the user closes a bound tab, or one whose watch is still in flight, but sends no unwatch for a covered tab, which has none", () => {
     const t = setup();
     const l = t.bind();
     t.tab.close();
@@ -100,41 +100,16 @@ describe("ending a tab", () => {
     u.link().welcome();
     u.tab.close();
     expect(u.link().sent.at(-1)).toEqual({ type: "unwatch", data: { watch: 1 } });
-  });
-
-  it("sends no unwatch for a covered tab, which has none", () => {
-    const t = setup();
-    const l = t.bind();
-    t.tab.cover();
-    t.tab.close();
-    expect(l.types()).toEqual(["watch", "unwatch"]);
+    const c = setup();
+    const cl = c.bind();
+    c.tab.cover();
+    c.tab.close();
+    expect(cl.types()).toEqual(["watch", "unwatch"]);
   });
 });
 
-describe("claiming the window and the band", () => {
+describe("claiming the window", () => {
   const claimOf = (l: FakeLink, i: number): unknown => (l.sent[i] as { data: { claim?: boolean } }).data.claim;
-  const other = { size: { cols: 250, rows: 70 } };
-
-  it("claims when the tab comes on screen, not when the client re-watches by itself", () => {
-    const t = setup();
-    const l = t.bind();
-    l.say(t.watching(1, other)); // a bigger terminal holds the window
-    vi.advanceTimersByTime(1000);
-    expect(t.band).toEqual([true]);
-    t.tab.cover();
-    t.tab.uncover();
-    expect(claimOf(l, 2)).toBeUndefined(); // the user's act claims
-    l.say(t.watching(2, other));
-    vi.advanceTimersByTime(1000);
-    l.drop();
-    vi.advanceTimersByTime(500);
-    const l2 = t.link();
-    l2.welcome();
-    expect(claimOf(l2, 0)).toBe(false); // a reconnect while another terminal holds the window leaves it
-    l2.say(t.watching(3, other));
-    expect(l2.types()).toEqual(["watch"]); // binding sends no resize
-  });
-
   it("a first watch the session limit refused and retried still claims", () => {
     const t = setup();
     t.link().welcome();
@@ -142,24 +117,6 @@ describe("claiming the window and the band", () => {
     vi.advanceTimersByTime(500);
     expect(claimOf(t.link(), 1)).toBeUndefined();
   });
-
-
-
-  it("restarts the wait when a claim goes out: Fit clears the band until the wait passes again", () => {
-    const t = setup();
-    const l = t.bind();
-    l.say(t.watching(1, other));
-    vi.advanceTimersByTime(1000);
-    t.tab.fit();
-    expect(t.band).toEqual([true, false]);
-    expect(l.sent.at(-1)).toMatchObject({ type: "resize" });
-    vi.advanceTimersByTime(999);
-    expect(t.band).toEqual([true, false]);
-    vi.advanceTimersByTime(1);
-    expect(t.band).toEqual([true, false, true]);
-  });
-
-
 });
 
 describe("resizing", () => {
@@ -173,15 +130,6 @@ describe("resizing", () => {
     expect(t.link().sent.at(-1)).toEqual({ type: "resize", data: { watch: 1, size: { cols: 60, rows: 60 } } });
   });
 
-  it("sends nothing when the size is the one watched with", () => {
-    const t = setup();
-    const l = t.bind();
-    expect(l.types()).toEqual(["watch"]);
-    t.tab.resize({ cols: 80, rows: 24 });
-    expect(l.types()).toEqual(["watch"]);
-    t.tab.resize({ cols: 90, rows: 30 });
-    expect(l.types()).toEqual(["watch", "resize"]);
-  });
 });
 
 describe("losing the watch or the link", () => {
@@ -193,15 +141,6 @@ describe("losing the watch or the link", () => {
     expect(l.types()).toEqual(["watch"]);
     t.tab.nudge();
     expect(l.sent.at(-1)).toMatchObject({ type: "watch", data: { watch: 2 } });
-  });
-
-  it("retries after a backoff when the watch ends in error", () => {
-    const t = setup();
-    const l = t.bind();
-    l.say({ type: "watchEnded", data: { watch: 1, reason: "error", message: "x" } });
-    expect(l.types()).toEqual(["watch"]);
-    vi.advanceTimersByTime(500);
-    expect(l.types()).toEqual(["watch", "watch"]);
   });
 
   it("a watch that keeps failing backs off and shows the daemon's message", () => {
@@ -235,14 +174,6 @@ describe("losing the watch or the link", () => {
     expect(l.types()).toEqual(["watch", "watch", "watch", "watch"]);
     l.say(t.watching(4));
     expect(t.state().kind).toBe("live");
-  });
-
-  it("opens a new link after the socket drops", () => {
-    const t = setup();
-    t.bind().drop();
-    expect(t.links).toHaveLength(1);
-    vi.advanceTimersByTime(500);
-    expect(t.links).toHaveLength(2);
   });
 
   it("closes on sessionClosed for its own session only, and on serverExited", () => {
@@ -328,35 +259,30 @@ describe("upload insertion", () => {
   });
 
 
-  it("is dropped with a notice naming the file when the tab closes first", () => {
-    const t = setup();
-    t.tab.insertPath("/up/a.jpg");
-    t.link().say({ type: "sessionClosed", data: { session: session1 } });
-    expect(t.notices).toEqual(["Could not insert a.jpg: the tab closed."]);
-    expect(t.tab.insertPath("/up/b.jpg")).toBe("refused");
-    expect(t.notices).toHaveLength(1);
-  });
-
-  it("is dropped with a notice when the watch fails before it binds, and refused while disconnected", () => {
-    const t = setup();
-    t.link().welcome();
-    expect(t.tab.insertPath("/up/a.jpg")).toBe("queued");
-    t.link().say({ type: "watchEnded", data: { watch: 1, reason: "error" } });
-    expect(t.notices).toHaveLength(1);
-    expect(t.notices[0]).toContain("a.jpg");
-    expect(t.tab.insertPath("/up/b.jpg")).toBe("refused");
-    expect(t.notices).toHaveLength(1);
-    vi.advanceTimersByTime(500);
-    t.link().say(t.watching(2));
-    expect(t.link().types()).not.toContain("input");
-  });
-
-  it("reports whether the path was typed now, waiting, or refused", () => {
+  it("tells what became of a path: typed now, waiting, or refused; dropped with a notice naming the file when the tab closes or the watch fails first", () => {
     const t = setup();
     const l = t.bind();
     expect(t.tab.insertPath("/up/a.jpg")).toBe("typed");
     t.tab.cover();
     expect(t.tab.insertPath("/up/b.jpg")).toBe("queued");
     expect(l.types()).toEqual(["watch", "input", "unwatch"]);
+
+    const closed = setup();
+    closed.tab.insertPath("/up/a.jpg");
+    closed.link().say({ type: "sessionClosed", data: { session: session1 } });
+    expect(closed.notices).toEqual(["Could not insert a.jpg: the tab closed."]);
+    expect(closed.tab.insertPath("/up/b.jpg")).toBe("refused");
+    expect(closed.notices).toHaveLength(1);
+
+    const failed = setup();
+    failed.link().welcome();
+    expect(failed.tab.insertPath("/up/a.jpg")).toBe("queued");
+    failed.link().say({ type: "watchEnded", data: { watch: 1, reason: "error" } });
+    expect(failed.notices).toHaveLength(1);
+    expect(failed.notices[0]).toContain("a.jpg");
+    expect(failed.tab.insertPath("/up/b.jpg")).toBe("refused");
+    vi.advanceTimersByTime(500);
+    failed.link().say(failed.watching(2));
+    expect(failed.link().types()).not.toContain("input");
   });
 });

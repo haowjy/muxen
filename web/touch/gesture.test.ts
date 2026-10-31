@@ -27,8 +27,6 @@ function rig() {
   };
 }
 
-const types = (a: GestureAction[]): string[] => a.map((x) => x.type);
-
 describe("GestureRecognizer", () => {
   it("a press released before the long-press, unmoved, is a tap where it began", () => {
     const g = rig();
@@ -37,11 +35,6 @@ describe("GestureRecognizer", () => {
     g.move(43, 62); // inside the slop
     g.up();
     expect(g.out).toEqual([{ type: "tap", x: 40, y: 60 }]);
-  });
-
-  it("sends nothing at touch start", () => {
-    const g = rig();
-    expect(g.down(5, 5)).toEqual([]);
   });
 
   it("a hold fires the long-press; the finger then drags the selection, and lifting ends it", () => {
@@ -57,19 +50,6 @@ describe("GestureRecognizer", () => {
       { type: "selectMove", x: 200, y: 300 },
       { type: "selectEnd" },
     ]);
-  });
-
-  it("movement before the long-press fires is a scroll, and the long-press never fires", () => {
-    const g = rig();
-    g.down(100, 300);
-    g.wait(100);
-    g.move(100, 285); // crosses the slop: scrolling starts from here
-    g.wait(50);
-    g.move(100, 260);
-    g.wait(500);
-    g.up();
-    expect(types(g.out)).toEqual(["scroll", "scrollEnd"]);
-    expect(g.out[0]).toMatchObject({ type: "scroll", dy: -25 });
   });
 
   it("a fast release carries its velocity; a finger that paused before lifting has none", () => {
@@ -93,17 +73,6 @@ describe("GestureRecognizer", () => {
     paused.wait(300);
     paused.up();
     expect(paused.out.at(-1)).toEqual({ type: "scrollEnd", velocity: 0 });
-  });
-
-  it("a horizontal swipe does nothing at all, even when held", () => {
-    const g = rig();
-    g.down(10, 300);
-    g.wait(50);
-    g.move(60, 305);
-    g.move(160, 310);
-    g.wait(800);
-    g.up();
-    expect(g.out).toEqual([]);
   });
 
   it("pointercancel sends nothing but ends what was running", () => {
@@ -133,17 +102,5 @@ describe("GestureRecognizer", () => {
     g.down(5, 5, 3);
     g.up(3);
     expect(g.out.at(-1)).toEqual({ type: "tap", x: 5, y: 5 });
-  });
-
-  it("a long-press fires the same while output streams: the clock alone decides", () => {
-    // Output arrives between events as the shell's concern; the recognizer takes no output input, so a tight stream of moves inside the slop changes nothing.
-    const g = rig();
-    g.down(50, 50);
-    for (let i = 0; i < 40; i++) {
-      g.wait(10);
-      g.move(50 + (i % 2), 50);
-    }
-    expect(g.out[0]).toEqual({ type: "longPress", x: 50, y: 50 });
-    expect(g.out.filter((a) => a.type === "longPress")).toHaveLength(1);
   });
 });

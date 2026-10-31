@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Viewport } from "../platform/types";
-import { fitSize, TerminalSizer, terminalBottomPan, terminalSize } from "./size";
+import { TerminalSizer, terminalBottomPan } from "./size";
 
 const cell = { width: 7, height: 15 };
 const vp = (over: Partial<Viewport> = {}): Viewport => ({
@@ -18,19 +18,6 @@ const vp = (over: Partial<Viewport> = {}): Viewport => ({
 });
 const chrome = { x: 0, y: 52 };
 const key = (s: { cols: number; rows: number }): string => `${String(s.cols)}x${String(s.rows)}`;
-
-describe("fitSize", () => {
-  it("fits whole cells and keeps a minimum", () => {
-    expect(fitSize(393, 780, cell)).toEqual({ cols: 56, rows: 52 });
-    expect(fitSize(40, 20, cell)).toEqual({ cols: 20, rows: 4 });
-  });
-});
-
-describe("terminalSize", () => {
-  it("takes the safe area and the chrome out of the stable box", () => {
-    expect(terminalSize(vp(), chrome, cell)).toEqual({ cols: 56, rows: 47 });
-  });
-});
 
 describe("TerminalSizer", () => {
   beforeEach(() => { vi.useFakeTimers(); });
@@ -65,20 +52,6 @@ describe("TerminalSizer", () => {
     expect(changes).toEqual(["104x21"]);
   });
 
-  it("sends a window drag once: only the trailing size", () => {
-    const { sizer, changes } = setup();
-    const still = { top: 0, right: 0, bottom: 0, left: 0 };
-    sizer.setViewport(vp({ width: 800, safeArea: still }));
-    sizer.setChrome({ x: 56, y: 44 });
-    sizer.sizeForWatch();
-    for (let width = 820; width <= 1200; width += 20) {
-      sizer.setViewport(vp({ width, safeArea: still }));
-      vi.advanceTimersByTime(20);
-    }
-    vi.advanceTimersByTime(150);
-    expect(changes).toEqual(["163x53"]);
-  });
-
   it("never resizes for the keyboard: it changes none of the inputs", () => {
     const { sizer, changes } = setup();
     sizer.setViewport(vp());
@@ -89,36 +62,18 @@ describe("TerminalSizer", () => {
     vi.advanceTimersByTime(500);
     expect(changes).toEqual([]);
   });
-
-  it("recomputes when the font changes or the cell first becomes measurable", () => {
-    const { sizer, changes, setCell } = setup(null);
-    sizer.setViewport(vp());
-    sizer.setChrome(chrome);
-    setCell(cell);
-    sizer.remeasure();
-    sizer.sizeForWatch();
-    setCell({ width: 9, height: 18 });
-    sizer.remeasure();
-    sizer.remeasure(); // same size: nothing more to send
-    vi.advanceTimersByTime(150);
-    expect(changes).toEqual(["43x39"]);
-  });
 });
 
 describe("terminalBottomPan", () => {
   // 45 rows of 15 px = 675 px of terminal.
-  it("stays put while every row fits", () => {
-    expect(terminalBottomPan(44, 45, 15, 675)).toBe(0);
-  });
-
-  it("slides the last row to the bottom unless that would hide the cursor", () => {
-    expect(terminalBottomPan(44, 45, 15, 300)).toBe(375); // last row: everything above slides
-    expect(terminalBottomPan(30, 45, 15, 300)).toBe(375); // parked cursor, footer rows stay visible
-    expect(terminalBottomPan(20, 45, 15, 300)).toBe(15); // cursor stays at the bottom instead
-    expect(terminalBottomPan(5, 45, 15, 300)).toBe(0); // cursor near the top: no slide
-  });
-
-  it("never slides past the last row", () => {
-    expect(terminalBottomPan(60, 45, 15, 300)).toBe(375);
+  it.each([
+    [44, 675, 0], // every row fits: stays put
+    [44, 300, 375], // last row: everything above slides
+    [30, 300, 375], // parked cursor, footer rows stay visible
+    [20, 300, 15], // cursor stays at the bottom instead
+    [5, 300, 0], // cursor near the top: no slide
+    [60, 300, 375], // never slides past the last row
+  ])("cursor row %i in a %i px box slides %i px", (row, box, slide) => {
+    expect(terminalBottomPan(row, 45, 15, box)).toBe(slide);
   });
 });

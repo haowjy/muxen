@@ -88,7 +88,7 @@ function hex(r: number, g: number, b: number): string {
 }
 
 /** A colour as CSS, the first sixteen from the theme so the DOM matches the canvas. */
-export function cssColor(color: Color, theme: TerminalTheme): string | undefined {
+function cssColor(color: Color, theme: TerminalTheme): string | undefined {
   if (typeof color === "string") return color;
   if (color < 8) return theme[ANSI[color] ?? "black"];
   if (color < 16) {

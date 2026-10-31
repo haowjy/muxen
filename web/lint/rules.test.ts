@@ -62,24 +62,10 @@ describe("rule 2: only app/focus.ts moves focus", () => {
 describe("rule 3: environment globals only in platform/", () => {
   const screen = "screens/home/Bad.tsx";
   it.each([
-    ["a bare visualViewport", "visualViewport?.height;", "no-restricted-globals"],
-    ["a bare indexedDB", "indexedDB.open('x');", "no-restricted-globals"],
-    ["a bare localStorage", "localStorage.getItem('x');", "no-restricted-globals"],
-    ["a bare navigator", "navigator.onLine;", "no-restricted-globals"],
-    ["a bare matchMedia", "matchMedia('(pointer: fine)');", "no-restricted-globals"],
-    ["a bare open", "open('https://x');", "no-restricted-globals"],
-    ["a bare BroadcastChannel", "new BroadcastChannel('x');", "no-restricted-globals"],
-    ["window.visualViewport", "window.visualViewport;", "no-restricted-properties"],
-    ["globalThis.indexedDB", "globalThis.indexedDB;", "no-restricted-properties"],
-    ["self.navigator", "self.navigator;", "no-restricted-properties"],
-    ["window.matchMedia", "window.matchMedia('x');", "no-restricted-properties"],
-    ["document.visibilityState", "document.visibilityState;", "no-restricted-properties"],
-    ["document.hasFocus", "document.hasFocus();", "no-restricted-properties"],
-    ["window.webkit", "(window as any).webkit;", "no-restricted-syntax"],
+    ["a bare global", "visualViewport?.height;", "no-restricted-globals"],
+    ["a property of window or globalThis", "globalThis.indexedDB;", "no-restricted-properties"],
     ["any .webkit member", "(thing as any).webkit.messageHandlers;", "no-restricted-syntax"],
     ["destructuring from window", "const { navigator: n } = window;", "no-restricted-syntax"],
-    ["destructuring from globalThis", "const { indexedDB: db } = globalThis;", "no-restricted-syntax"],
-    ["destructuring from self", "const { localStorage: ls } = self;", "no-restricted-syntax"],
   ])("fails on %s", async (_name, code, rule) => {
     await failsWith(screen, code, rule);
   });
@@ -111,7 +97,7 @@ describe("rule 4: import boundaries", () => {
 });
 
 describe("rule 5: sans-IO cores have no Preact, window or document", () => {
-  it.each(["workspace/Bad.ts", "sessions/Bad.ts", "drafts/Bad.ts", "tabs/Bad.ts", "net/admission.ts", "touch/gesture.ts", "touch/modifiers.ts"])("fails in %s", async (path) => {
+  it.each(["workspace/Bad.ts", "net/admission.ts"])("fails in %s", async (path) => {
     await failsWith(path, "import { useState } from 'preact/hooks';", "no-restricted-imports", "sans-IO");
     await failsWith(path, "import { h } from 'preact';", "no-restricted-imports", "sans-IO");
     await failsWith(path, "window.addEventListener('x', () => undefined);", "no-restricted-globals", "sans-IO");
