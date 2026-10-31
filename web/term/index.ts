@@ -41,6 +41,8 @@ export interface RendererOptions {
   fontFamily: string;
   fontSize: number;
   theme: TerminalTheme;
+  /** WebGL when the context can be had, else the DOM renderer. A phone wants the DOM renderer: its rows are page text. */
+  webgl: boolean;
   /** A URL in the output was tapped. */
   openLink(url: string): void;
 }
@@ -54,6 +56,7 @@ export interface TerminalRenderer {
   cellSize(): CellSize | null;
   /** One cell's size in CSS pixels from the font alone: current at once and while hidden, which the laid-out {@link cellSize} is not. Sizes tmux. */
   fontCell(): CellSize | null;
+  /** Applies a theme; while a selection is on the rows it waits, since redrawing them would end the selection. */
   setTheme(theme: TerminalTheme): void;
   /** Calls `listener` whenever the view moves onto or off the newest line. */
   onScrolledUp(listener: (scrolledUp: boolean) => void): void;
@@ -106,9 +109,4 @@ export interface TerminalRenderer {
   screenOrigin(): { left: number; top: number } | null;
   /** What remains visible of the terminal, in CSS pixels, for the cursor pan; null follows the container (the default). */
   setPanArea(px: number | null): void;
-  /**
-   * How the cursor draws while xterm itself is unfocused (the phone: its input is tether's, not
-   * xterm's textarea). `block` is the terminal holding the keyboard, `outline` anything else.
-   */
-  setInactiveCursor(style: "block" | "outline"): void;
 }

@@ -60,7 +60,7 @@
   --term-bg: var(--color-bg-sunken);
   --term-fg: light-dark(oklch(0.25 0.01 262), oklch(0.9 0 0));
   --term-cursor: light-dark(oklch(0.45 0.14 245), oklch(0.9 0 0));
-  --term-selection: light-dark(oklch(0.5 0.14 245 / 0.22), oklch(1 0 0 / 0.25));
+  --term-selection: light-dark(oklch(0.5 0.14 245 / 0.22), oklch(0.78 0.11 240 / 0.32));
   --term-black: light-dark(oklch(0.25 0.01 262), oklch(0.3 0 0));
   --term-red: light-dark(oklch(0.52 0.19 25), oklch(0.7 0.16 25));
   --term-green: light-dark(oklch(0.5 0.14 145), oklch(0.76 0.14 145));

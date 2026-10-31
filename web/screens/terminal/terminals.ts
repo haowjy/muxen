@@ -104,6 +104,8 @@ export class Terminals extends Store<TerminalsView> {
   /** tether's own input on a phone browser; created the first time it is needed. */
   private owned: HTMLTextAreaElement | null = null;
   private panArea: number | null = null;
+  /** The shown pane is larger than the box: the renderer stays DOM. */
+  private paneLarge = false;
   /** The shell's command line under the cursor, for a tap on the prompt row. */
   private promptLine: PromptLine | null = null;
   /** The touch side of looking at the shown tab: scroll, history, selection, gestures. */
@@ -341,10 +343,10 @@ export class Terminals extends Store<TerminalsView> {
           // The renderer follows the snapshot's pane alone, never the tab's own resizes: DOM before xterm grows to a pane larger
           // than the box (a canvas that size runs the phone out of memory), WebGL again only once a fitting pane is in place.
           const box = this.sizer.sizeForWatch();
-          const large = snapshot.cols > box.cols || snapshot.rows > box.rows;
-          if (large) this.renderer?.setWebgl(false);
+          this.paneLarge = snapshot.cols > box.cols || snapshot.rows > box.rows;
+          if (this.paneLarge) this.renderer?.setWebgl(false);
           await this.renderer?.snapshot(snapshot);
-          if (!large) this.renderer?.setWebgl(true);
+          if (!this.paneLarge && this.viewport.directInput === "xterm") this.renderer?.setWebgl(true);
           // What was fetched or selected sat above the buffer this snapshot replaced.
           this.view.reset();
           // The surface now holds this tab's content, whichever tab is on screen by the time xterm finished parsing.
@@ -483,6 +485,8 @@ export class Terminals extends Store<TerminalsView> {
       fontFamily: font.fontFamily,
       fontSize: parseFloat(font.fontSize),
       theme: terminalTheme(),
+      // Desktop draws the screen as a picture. A phone draws it as page text, which iOS can select.
+      webgl: this.viewport.directInput === "xterm",
       openLink: (url) => { this.app.platform.openURL(url); },
     });
     this.renderer = renderer;
@@ -509,6 +513,7 @@ export class Terminals extends Store<TerminalsView> {
     if (!renderer) return;
     const { directInput } = this.viewport;
     const xterm = directInput === "xterm";
+    renderer.setWebgl(xterm && !this.paneLarge);
     renderer.setInput(
       xterm
         ? {
@@ -564,10 +569,15 @@ export class Terminals extends Store<TerminalsView> {
     return this.owned;
   }
 
-  /** Solid block while the terminal holds the keyboard, hollow otherwise (§7.4); a desktop's real xterm focus draws itself. */
+  /**
+   * Solid block while the terminal holds the keyboard, hollow otherwise (§7.4); a desktop's real xterm focus
+   * draws itself. The look is CSS keyed to an attribute: an xterm option change would redraw every row, and
+   * a selection on the rows with them.
+   */
   private drawCursor(): void {
     const solid = this.viewport.directInput !== "xterm" && this.app.focus.snapshot.owner === "terminal";
-    this.renderer?.setInactiveCursor(solid ? "block" : "outline");
+    if (solid) this.element.dataset["cursor"] = "solid";
+    else delete this.element.dataset["cursor"];
   }
 
   /**

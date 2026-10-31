@@ -25,6 +25,13 @@
   -webkit-user-select: none;
   user-select: none;
 }
+/* xterm draws the cursor hollow while its own textarea is unfocused (always, on a phone). Holding the keyboard
+   fills it. CSS and not an xterm option: an option change redraws every row, and a selection on them with it. */
+.host[data-cursor="solid"] :global(.xterm-cursor-outline) {
+  background-color: var(--term-cursor) !important;
+  color: var(--term-bg) !important;
+  outline: none !important;
+}
 /* Nothing of another tab, and no cursor on an empty screen, until this tab's snapshot lands. */
 .host[data-blank] { opacity: 0; } /* not visibility: its input must stay focusable */
 .empty { position: absolute; z-index: var(--z-band); inset: 0; display: grid; place-items: center; pointer-events: none; }

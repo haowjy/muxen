@@ -35,12 +35,15 @@ export function createXtermRenderer(container: HTMLElement, options: RendererOpt
   // A tapped URL leaves the app through native, never `window.open` (ios-shell.md "Web content security").
   term.loadAddon(new WebLinksAddon((_event, url) => { options.openLink(url); }));
   term.open(container);
+  // The DOM rows draw no cursor until the terminal first takes focus or switches buffers, and a phone's input never
+  // focuses xterm. Selecting the normal buffer, which is already showing, marks the cursor drawable.
+  term.write("\x1b[?47l");
   const setDesktopInput = createDesktopInput(term);
   setDesktopInput(null);
 
   let recreations = 0;
   let webgl: WebglAddon | undefined;
-  let webglWanted = true;
+  let webglWanted = options.webgl;
   const attachWebgl = (): void => {
     try {
       const addon = new WebglAddon();
@@ -56,7 +59,7 @@ export function createXtermRenderer(container: HTMLElement, options: RendererOpt
       webgl = undefined; // no WebGL here: stay on the DOM renderer
     }
   };
-  attachWebgl();
+  if (webglWanted) attachWebgl();
 
   // xterm keeps the report format private; the parser sees the same DECSET that sets it.
   let encoding: MouseEncoding = "x10";
@@ -102,6 +105,20 @@ export function createXtermRenderer(container: HTMLElement, options: RendererOpt
     return { width: (webgl ? Math.floor(width) : width) / dpr, height: Math.ceil(height * dpr) / dpr };
   };
 
+  // On a phone the rows are page text the user selects, and a redraw replaces a row's text and the
+  // selection on it. A new theme redraws every row, so it waits for the selection to close.
+  let pendingTheme: ITheme | undefined;
+  const rowsSelected = (): boolean => {
+    const selection = getSelection();
+    return selection !== null && selection.rangeCount > 0 && !selection.isCollapsed && term.element !== undefined && selection.getRangeAt(0).intersectsNode(term.element);
+  };
+  const applyTheme = (): void => {
+    if (!pendingTheme || rowsSelected()) return;
+    term.options.theme = withoutScrollbar(pendingTheme);
+    pendingTheme = undefined;
+  };
+  document.addEventListener("selectionchange", applyTheme);
+
   // The keyboard shortens what is visible but never tmux: the terminal keeps its rows and
   // slides to put the last row at the pan area's bottom. If that would hide the cursor above
   // the area, the cursor row meets the bottom instead. The browser's container never shrinks.
@@ -145,7 +162,10 @@ export function createXtermRenderer(container: HTMLElement, options: RendererOpt
     snapshot: (snapshot: Snapshot) => pipeline.snapshot(snapshot),
     cellSize,
     fontCell,
-    setTheme: (theme) => { term.options.theme = withoutScrollbar(theme); },
+    setTheme: (theme) => {
+      pendingTheme = theme;
+      applyTheme();
+    },
     onScrolledUp: (listener) => { scrollListeners.push(listener); },
     scrollToBottom: () => { term.scrollToBottom(); },
     onPromptLine: (listener) => { prompt.onLine(listener); },
@@ -202,7 +222,6 @@ export function createXtermRenderer(container: HTMLElement, options: RendererOpt
       panArea = px;
       pan(true);
     },
-    setInactiveCursor: (style) => { term.options.cursorInactiveStyle = style; },
   };
 }
 
