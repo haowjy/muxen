@@ -15,11 +15,11 @@ function setup() {
   const dec = new TextDecoder();
   const tab = (name: string, session: SessionRef) => {
     const states: ConnectionState[] = [];
-    const renderer: TabOptions["renderer"] = {
+    const model: TabOptions["model"] = {
       output: (b) => painted.push(`${name}:o:${dec.decode(b)}`),
       snapshot: (s) => { painted.push(`${name}:s:${dec.decode(s.restore)}`); return Promise.resolve(); },
     };
-    const driver = new TabDriver({ session, renderer, host: h.host, size: () => ({ cols: 80, rows: 24 }), onState: (s) => states.push(s), onNotice: () => undefined, random: () => 0.5 });
+    const driver = new TabDriver({ session, model, host: h.host, size: () => ({ cols: 80, rows: 24 }), onState: (s) => states.push(s), onNotice: () => undefined, random: () => 0.5 });
     return { driver, state: (): ConnectionState => states[states.length - 1] as ConnectionState };
   };
   const watching = (watch: number, session: SessionRef): ServerMsg => ({

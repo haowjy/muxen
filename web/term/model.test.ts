@@ -73,4 +73,43 @@ describe("TerminalModel.frame", () => {
     await write("\x1b[?1049l\r\nl9");
     expect(texts(m.frame().frozen)).toEqual(["l4"]);
   });
+
+  it("does not repeat the normal screen's lines while the alternate screen is up after ED3", async () => {
+    const { model: m, write } = await model();
+    await write(`${lines(1, 12)}\x1b[3J\r\n${lines(13, 20)}\x1b[?1049h`);
+    const first = m.frame();
+    expect(texts(first.frozen)).toEqual(["l8", "l9", "l10", "l11", "l12", "l13", "l14", "l15"]);
+    expect(m.frame().frozen).toEqual([]);
+    await write("\x1b[?1049l\r\nz1");
+    expect(texts(m.frame().frozen)).toEqual(["l16"]);
+  });
+
+  it("sets the gap only when a line was lost, also when a clear follows the output", async () => {
+    const { model: m, write } = await model();
+    await write(`${lines(1, 100)}\x1b[H\x1b[2J`);
+    const frame = m.frame();
+    expect(frame.gap).toBe(false);
+    expect(frame.frozen).toHaveLength(96 + 4);
+  });
+
+  it("follows RIS: freezes the screen, keeps the history, restores the modes", async () => {
+    const { model: m, write } = await model();
+    await write(`${lines(1, 8)}\x1b[?25l\x1b[?1006h`);
+    m.frame();
+    await write(`\x1bc${lines(1, 3)}`);
+    const frame = m.frame();
+    expect(frame.reset).toBe(false);
+    expect(texts(frame.frozen)).toEqual(["l4", "l5", "l6", "l7", "l8"]);
+    expect(frame.cursor.visible).toBe(true);
+    expect(m.mouseEncoding()).toBe("x10");
+  });
+
+  it.each([
+    ["SU", `${lines(1, 5)}\x1b[2S`, ["l1", "l2"]],
+    ["LF at the bottom of a region with a top margin", `${lines(1, 5)}\x1b[2;4r\x1b[4;1H\r\nr1\r\nr2`, ["l2", "l3"]],
+  ])("freezes the lines tmux pushes into its history on %s", async (_name, bytes, expected) => {
+    const { model: m, write } = await model();
+    await write(bytes);
+    expect(texts(m.frame().frozen)).toEqual(expected);
+  });
 });

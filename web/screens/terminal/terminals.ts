@@ -83,8 +83,8 @@ export function terminalsOf(app: AppController): Terminals {
 export class Terminals extends Store<TerminalsView> {
   /** The element the renderer draws into; the screen places it and never creates it. */
   readonly element: HTMLDivElement = document.createElement("div");
-  private renderer: XtermView | null = null;
-  private model: TerminalModel | null = null;
+  /** The model and the view that draws it, created together once the element has a size. */
+  private surface: { model: TerminalModel; view: XtermView } | null = null;
   private creating = false;
   private readonly drivers = new Map<string, TabDriver>();
   private readonly sizer: TerminalSizer;
@@ -127,7 +127,7 @@ export class Terminals extends Store<TerminalsView> {
     this.element.className = styles.host ?? "";
     this.element.dataset["blank"] = "true"; // until the first snapshot: no pretend-live empty terminal
     this.sizer = new TerminalSizer({
-      cell: () => this.renderer?.fontCell() ?? null,
+      cell: () => this.surface?.view.fontCell() ?? null,
       // A new size redraws the rows, and a selection on them goes first.
       onChange: (size) => {
         this.view.dismissSelection();
@@ -145,12 +145,12 @@ export class Terminals extends Store<TerminalsView> {
     interceptClipboard(this.element, {
       onPaste: (pasted) => { this.pastes.paste(pasted); },
       // The phone's selection is page text; desktop's is xterm's own.
-      selectionText: () => this.view.pageText() || (this.renderer?.selectionText() ?? ""),
+      selectionText: () => this.view.pageText() || (this.surface?.view.selectionText() ?? ""),
     });
     this.view = new TerminalView({
       element: this.element,
-      renderer: () => this.renderer,
-      model: () => this.model,
+      renderer: () => this.surface?.view ?? null,
+      model: () => this.surface?.model ?? null,
       theme: terminalTheme,
       fetchHistory: (start, end) => this.shownDriver()?.history(start, end) ?? null,
       send: (id, events) => { this.typeTo(id, events); },
@@ -289,7 +289,7 @@ export class Terminals extends Store<TerminalsView> {
   /** What remains visible of the terminal above the dock, for the cursor pan; null follows the surface. */
   setPanArea(px: number | null): void {
     this.panArea = px;
-    this.renderer?.setPanArea(px);
+    this.surface?.view.setPanArea(px);
   }
 
   private sync(): void {
@@ -354,17 +354,17 @@ export class Terminals extends Store<TerminalsView> {
     const hostId = client.hostId ?? "";
     const driver = new TabDriver({
       session,
-      renderer: {
-        output: (bytes) => { this.model?.output(bytes); },
+      model: {
+        output: (bytes) => { this.surface?.model.output(bytes); },
         snapshot: async (snapshot) => {
           // The renderer follows the snapshot's pane alone, never the tab's own resizes: DOM before xterm grows to a pane larger
           // than the box (a canvas that size runs the phone out of memory), WebGL again only once a fitting pane is in place.
           const box = this.sizer.sizeForWatch();
           this.view.dismissSelection();
           this.paneLarge = snapshot.cols > box.cols || snapshot.rows > box.rows;
-          if (this.paneLarge) this.renderer?.setWebgl(false);
-          await this.model?.snapshot(snapshot);
-          if (!this.paneLarge && this.viewport.directInput === "xterm") this.renderer?.setWebgl(true);
+          if (this.paneLarge) this.surface?.view.setWebgl(false);
+          await this.surface?.model.snapshot(snapshot);
+          if (!this.paneLarge && this.viewport.directInput === "xterm") this.surface?.view.setWebgl(true);
           // What was fetched or selected sat above the buffer this snapshot replaced.
           this.view.reset();
           // The surface now holds this tab's content, whichever tab is on screen by the time xterm finished parsing.
@@ -465,7 +465,7 @@ export class Terminals extends Store<TerminalsView> {
   private measure(frame = 0): void {
     const { clientWidth: width, clientHeight: height } = this.element;
     const laidOut = width > 0 && height > 0;
-    if (!this.renderer) {
+    if (!this.surface) {
       if (laidOut) void this.createRenderer();
       return;
     }
@@ -495,7 +495,7 @@ export class Terminals extends Store<TerminalsView> {
   private applyTheme(): void {
     if (!this.themeStale || this.view.selected) return;
     this.themeStale = false;
-    this.renderer?.setTheme(terminalTheme());
+    this.surface?.view.setTheme(terminalTheme());
   }
 
   private async createRenderer(): Promise<void> {
@@ -515,8 +515,7 @@ export class Terminals extends Store<TerminalsView> {
       webgl: this.viewport.directInput === "xterm",
       openLink: (url) => { this.app.platform.openURL(url); },
     });
-    this.model = model;
-    this.renderer = renderer;
+    this.surface = { model, view: renderer };
     renderer.setPanArea(this.panArea);
     model.onPromptLine((line) => { this.promptLine = line; });
     renderer.onScrolledUp(() => { this.view.scroll.scrolledChanged(); });
@@ -527,7 +526,7 @@ export class Terminals extends Store<TerminalsView> {
   }
 
   private refont(): void {
-    const renderer = this.renderer;
+    const renderer = this.surface?.view;
     if (!renderer) return;
     this.view.dismissSelection(); // a new font redraws every row
     const style = getComputedStyle(this.element);
@@ -537,7 +536,7 @@ export class Terminals extends Store<TerminalsView> {
 
   /** Desktop direct input is xterm's own textarea, held by the focus controller; a phone browser's is muxen's owned input; native brings its own. */
   private applyInput(): void {
-    const renderer = this.renderer;
+    const renderer = this.surface?.view;
     if (!renderer) return;
     const { directInput } = this.viewport;
     const xterm = directInput === "xterm";

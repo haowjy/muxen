@@ -5,15 +5,18 @@ import type { Row } from "./rows";
 /**
  * tmux's history rows (`capture-pane -e`, one per physical row) as rows, decoded by xterm in a
  * Terminal of its own at the pane's width: one style, attribute and width rule for every row in the
- * list. Each row is written after a reset of its style, so none carries into the next, and a row
- * wraps when the one before it continued. Async because xterm parses writes asynchronously.
+ * list. Each row is written after a reset of its style, so none carries into the next. The stream
+ * sets up DEC line drawing (tmux writes it as SO/SI) and turns autowrap off, so a row wider than
+ * `cols` (the width changed since tmux laid it out) is clipped and cannot shift the rows after it.
+ * Async because xterm parses writes asynchronously.
  */
 export async function decodeChunk(rows: readonly { bytes: Uint8Array; continues: boolean }[], cols: number): Promise<Row[]> {
   // One row more than the chunk: the last row's line break must not scroll the first away.
   const term = parsingTerminal({ cols, rows: rows.length + 1, scrollback: 0 });
   const head = new TextEncoder().encode("\x1b[0m");
+  const prefix = new TextEncoder().encode("\x1b[?7l\x1b)0");
   const tail = new TextEncoder().encode("\r\n");
-  const parts = rows.flatMap((row) => [head, row.bytes, tail]);
+  const parts = [prefix, ...rows.flatMap((row) => [head, row.bytes, tail])];
   const data = new Uint8Array(parts.reduce((n, part) => n + part.length, 0));
   let at = 0;
   for (const part of parts) {

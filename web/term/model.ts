@@ -32,9 +32,16 @@ export function parsingTerminal(options: { cols?: number; rows?: number; scrollb
   return term;
 }
 
+/** xterm's internals that the scroll hooks wrap: nothing public runs before a scroll moves a line out of the screen. */
+type Hookable = Record<string, (...args: unknown[]) => unknown>;
+interface XtermCore {
+  _bufferService: Hookable & { buffer: { scrollTop: number; scrollBottom: number } };
+  _inputHandler: Hookable;
+}
+
 /**
- * One per tab, on every platform: the xterm Terminal that parses a pane's output, and the
- * frames the view draws from it. The rule: xterm owns the screen; the view owns every line
+ * One per terminal surface, on every platform (one for all tabs until phase 6): the xterm Terminal
+ * that parses a pane's output, and the frames the view draws from it. The rule: xterm owns the screen; the view owns every line
  * that has left it. Nothing outside term/ imports xterm.
  */
 export class TerminalModel {
@@ -52,7 +59,10 @@ export class TerminalModel {
    * On the line just above the screen, moved by every collect. The lines between it and the
    * screen's top are the ones that left since: counted by the marker, not by `baseY`, which stops
    * moving once the buffer is full. Null after ED3 or a reset (everything in the buffer is new);
-   * disposed when xterm trimmed its line (lines were skipped).
+   * disposed when xterm trimmed its line (lines were skipped). Not on the screen's top line: xterm
+   * disposes a marker whose line an erase (ED2) or a delete clears, and a marker above the screen is
+   * untouched by every edit inside it. The price is a spurious gap when exactly `SCROLLBACK` lines
+   * scroll between two collects.
    */
   private marker: IMarker | null = null;
 
@@ -65,7 +75,9 @@ export class TerminalModel {
     const { term } = this;
     const mode = (set: boolean) => (params: (number | number[])[]): boolean => {
       for (const param of params) {
-        if (param === 1006) this.encoding = set ? "sgr" : "x10";
+        // Collect before the alternate screen goes up: the normal buffer cannot change while it is.
+        if (set && (param === 47 || param === 1047 || param === 1049)) this.collect();
+        else if (param === 1006) this.encoding = set ? "sgr" : "x10";
         else if (param === 1005 && this.encoding !== "sgr") this.encoding = set ? "utf8" : "x10";
         else if (param === 25) this.cursorVisible = set;
       }
@@ -88,15 +100,26 @@ export class TerminalModel {
       else if (kind === 2 || (kind === 0 && buffer.cursorX === 0 && buffer.cursorY === 0)) this.freezeScreen();
       return false;
     });
+    // RIS: xterm swaps in empty buffers, so the marker's buffer is gone. tmux pushes the screen into its history and keeps it.
+    term.parser.registerEscHandler({ final: "c" }, () => {
+      if (term.buffer.active.type === "normal") this.freezeScreen();
+      this.marker?.dispose();
+      this.marker = null;
+      this.resetModes();
+      return false;
+    });
+    term.parser.registerCsiHandler({ intermediates: "!", final: "p" }, () => { // DECSTR
+      this.resetModes();
+      return false;
+    });
     term.onWriteParsed(() => { this.changed(); });
+    this.hookScrolls();
 
     this.prompt = new PromptTracker(term);
     this.pipeline = new WritePipeline({
       write: (data, callback) => { term.write(data, callback); },
       reset: () => {
-        this.encoding = "x10";
-        this.cursorVisible = true;
-        this.cursorShape = "block";
+        this.resetModes();
         this.prompt.reset();
         term.reset();
         this.restart();
@@ -165,6 +188,45 @@ export class TerminalModel {
     return frame;
   }
 
+  /** What a snapshot, RIS or DECSTR puts back to xterm's defaults. */
+  private resetModes(): void {
+    this.encoding = "x10";
+    this.cursorVisible = true;
+    this.cursorShape = "block";
+  }
+
+  /**
+   * tmux pushes a scroll region's top line into its history when the region scrolls (any region on SU, a
+   * region with a top margin on LF at its bottom), where xterm drops the line. So the line is frozen
+   * before xterm moves it.
+   */
+  private hookScrolls(): void {
+    const core = (this.term as unknown as { _core: XtermCore })._core;
+    const region = (): { scrollTop: number; scrollBottom: number } => core._bufferService.buffer; // reset and the alternate screen swap the buffer object
+    const hook = (owner: Hookable, name: string, rows: (args: unknown[]) => [number, number] | null): void => {
+      const original = owner[name];
+      if (!original) throw new Error(`xterm has no ${name}`);
+      owner[name] = (...args) => {
+        const span = this.altScreen() ? null : rows(args);
+        if (span) {
+          this.collect(); // the lines that left before this one come first
+          this.freezeRows(...span);
+        }
+        return original.apply(owner, args);
+      };
+    };
+    // LF, IND, NEL and a wrapping print at the region's bottom all scroll through here; with no top margin xterm sends the line to scrollback itself.
+    hook(core._bufferService, "scroll", () => {
+      const { scrollTop } = region();
+      return scrollTop > 0 ? [scrollTop, scrollTop + 1] : null;
+    });
+    hook(core._inputHandler, "scrollUp", (args) => {
+      const n = (args[0] as { params: ArrayLike<number> }).params[0] || 1;
+      const { scrollTop, scrollBottom } = region();
+      return [scrollTop, Math.min(scrollTop + n, scrollBottom + 1)];
+    });
+  }
+
   private changed(): void {
     for (const listener of this.listeners) listener();
   }
@@ -182,6 +244,7 @@ export class TerminalModel {
 
   /** Moves the lines that left the screen since the last collect into `pending`. */
   private collect(): void {
+    if (this.altScreen()) return; // the normal buffer cannot change under it
     const normal = this.term.buffer.normal;
     const marker = this.marker;
     let from = marker === null ? 0 : marker.line + 1;
@@ -190,16 +253,22 @@ export class TerminalModel {
       this.pending = [];
       from = Math.max(0, normal.baseY - 2 * this.term.rows);
     }
-    this.pending.push(...readRows(normal, from, normal.baseY));
+    this.push(readRows(normal, from, normal.baseY));
     this.anchor();
   }
 
-  /** A frame that nobody pulls must not grow: past two screens the oldest lines are skipped. */
-  private bound(): void {
-    const cap = 2 * this.term.rows;
-    if (this.pending.length <= cap) return;
-    this.pending = this.pending.slice(-cap);
+  /** Pending rows are bounded like xterm's scrollback: past it the oldest are lost, as they would be scrolling, and the newest two screens stay. */
+  private push(rows: Row[]): void {
+    this.pending.push(...rows);
+    if (this.pending.length <= SCROLLBACK) return;
+    this.pending = this.pending.slice(-2 * this.term.rows);
     this.gap = true;
+  }
+
+  /** Rows `from` to `to` of the normal screen leave it for tmux's history. */
+  private freezeRows(from: number, to: number): void {
+    const { baseY } = this.term.buffer.normal;
+    this.push(readRows(this.term.buffer.normal, baseY + from, baseY + to));
   }
 
   private freezeScreen(): void {
@@ -208,8 +277,7 @@ export class TerminalModel {
     const screen = readRows(buffer, buffer.baseY, buffer.baseY + this.term.rows);
     // tmux leaves the blank rows at the bottom out of its history.
     while (screen.length > 0 && screen[screen.length - 1]?.runs.length === 0) screen.pop();
-    this.pending.push(...screen);
-    this.bound();
+    this.push(screen);
   }
 
   /** ED3, a snapshot or a resize: the view starts over, and the buffer holds only what is new. */

@@ -16,14 +16,14 @@ function setup() {
   const notices: string[] = [];
   const band: boolean[] = [];
   const dec = new TextDecoder();
-  const renderer: TabOptions["renderer"] = {
+  const model: TabOptions["model"] = {
     output: (b) => painted.push(`o:${dec.decode(b)}`),
     snapshot: (s: Snapshot) => { painted.push(`s:${dec.decode(s.restore)}`); return Promise.resolve(); },
   };
   let size = { cols: 80, rows: 24 };
   const tab = new TabDriver({
     session: session1,
-    renderer,
+    model,
     host,
     size: () => size,
     onState: (s) => states.push(s),

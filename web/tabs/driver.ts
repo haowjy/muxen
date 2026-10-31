@@ -25,7 +25,7 @@ const BAND_RTT_MARGIN_MS = 500;
 
 export interface TabOptions {
   session: SessionRef;
-  renderer: Pick<TerminalModel, "output" | "snapshot">;
+  model: Pick<TerminalModel, "output" | "snapshot">;
   /** The host's shared socket. */
   host: Host;
   /** The terminal's size right now, in cells. */
@@ -330,8 +330,8 @@ export class TabDriver {
 
   private onFrame(frame: Frame): void {
     if (frame.watch !== this.watchId) return;
-    if (frame.kind === "output") this.opts.renderer.output(frame.bytes);
-    else void this.opts.renderer.snapshot(frame);
+    if (frame.kind === "output") this.opts.model.output(frame.bytes);
+    else void this.opts.model.snapshot(frame);
   }
 
   private flushInserts(): void {
