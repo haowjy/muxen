@@ -32,11 +32,9 @@ export function parsingTerminal(options: { cols?: number; rows?: number; scrollb
   return term;
 }
 
-/** xterm's internals that the scroll hooks wrap: nothing public runs before a scroll moves a line out of the screen. */
-type Hookable = Record<string, (...args: unknown[]) => unknown>;
+/** The one xterm internal the model reaches: nothing public runs before a scroll moves a line out of the screen. */
 interface XtermCore {
-  _bufferService: Hookable & { buffer: { scrollTop: number; scrollBottom: number } };
-  _inputHandler: Hookable;
+  _bufferService: { scroll: (...args: unknown[]) => unknown; buffer: { scrollTop: number; scrollBottom: number } };
 }
 
 /**
@@ -108,12 +106,22 @@ export class TerminalModel {
       this.resetModes();
       return false;
     });
-    term.parser.registerCsiHandler({ intermediates: "!", final: "p" }, () => { // DECSTR
-      this.resetModes();
+    // DECSTR: xterm resets the cursor and keeps the mouse modes, as tmux does.
+    term.parser.registerCsiHandler({ intermediates: "!", final: "p" }, () => {
+      this.resetCursor();
+      return false;
+    });
+    // SU drops the region's top lines in xterm and pushes them into tmux's history: freeze them first.
+    term.parser.registerCsiHandler({ final: "S" }, (params) => {
+      if (!this.altScreen()) {
+        const { scrollTop, scrollBottom } = this.bufferService().buffer;
+        this.collect(); // the lines that left before this one come first
+        this.freezeRows(scrollTop, Math.min(scrollTop + (params[0] as number || 1), scrollBottom + 1));
+      }
       return false;
     });
     term.onWriteParsed(() => { this.changed(); });
-    this.hookScrolls();
+    this.hookScroll();
 
     this.prompt = new PromptTracker(term);
     this.pipeline = new WritePipeline({
@@ -188,43 +196,38 @@ export class TerminalModel {
     return frame;
   }
 
-  /** What a snapshot, RIS or DECSTR puts back to xterm's defaults. */
+  /** A snapshot and RIS put every mode back to xterm's defaults. */
   private resetModes(): void {
     this.encoding = "x10";
+    this.resetCursor();
+  }
+
+  private resetCursor(): void {
     this.cursorVisible = true;
     this.cursorShape = "block";
   }
 
+  /** Read `buffer` on every use: reset and the alternate screen swap the object. */
+  private bufferService(): XtermCore["_bufferService"] {
+    return (this.term as unknown as { _core: XtermCore })._core._bufferService;
+  }
+
   /**
-   * tmux pushes a scroll region's top line into its history when the region scrolls (any region on SU, a
-   * region with a top margin on LF at its bottom), where xterm drops the line. So the line is frozen
-   * before xterm moves it.
+   * LF, IND, NEL and a wrapping print at the bottom of a region with a top margin scroll through
+   * `bufferService.scroll`, which has no public hook; tmux pushes the region's top line into its
+   * history where xterm drops it. With no top margin xterm sends the line to scrollback itself.
    */
-  private hookScrolls(): void {
-    const core = (this.term as unknown as { _core: XtermCore })._core;
-    const region = (): { scrollTop: number; scrollBottom: number } => core._bufferService.buffer; // reset and the alternate screen swap the buffer object
-    const hook = (owner: Hookable, name: string, rows: (args: unknown[]) => [number, number] | null): void => {
-      const original = owner[name];
-      if (!original) throw new Error(`xterm has no ${name}`);
-      owner[name] = (...args) => {
-        const span = this.altScreen() ? null : rows(args);
-        if (span) {
-          this.collect(); // the lines that left before this one come first
-          this.freezeRows(...span);
-        }
-        return original.apply(owner, args);
-      };
+  private hookScroll(): void {
+    const service = this.bufferService();
+    const original = service.scroll;
+    service.scroll = (...args) => {
+      const { scrollTop } = service.buffer;
+      if (scrollTop > 0 && !this.altScreen()) {
+        this.collect();
+        this.freezeRows(scrollTop, scrollTop + 1);
+      }
+      return original.apply(service, args);
     };
-    // LF, IND, NEL and a wrapping print at the region's bottom all scroll through here; with no top margin xterm sends the line to scrollback itself.
-    hook(core._bufferService, "scroll", () => {
-      const { scrollTop } = region();
-      return scrollTop > 0 ? [scrollTop, scrollTop + 1] : null;
-    });
-    hook(core._inputHandler, "scrollUp", (args) => {
-      const n = (args[0] as { params: ArrayLike<number> }).params[0] || 1;
-      const { scrollTop, scrollBottom } = region();
-      return [scrollTop, Math.min(scrollTop + n, scrollBottom + 1)];
-    });
   }
 
   private changed(): void {
