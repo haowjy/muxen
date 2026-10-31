@@ -3,6 +3,7 @@
 // row creates. The router overlay `{ screen: "sessions", name: "open", params: { workspace } }`, so Back, Escape
 // and the opener's focus return are the overlay machinery's.
 import { useRef, useState } from "preact/hooks";
+import { useFocus } from "../../ui/focus";
 import { useApp, useAppView, useBells, useDocked, useOverlay } from "../../app/context";
 import type { HostClient } from "../../net/hosts";
 import { tabId } from "../../platform/tabKey";
@@ -51,6 +52,7 @@ function Body({ host, workspace }: { host: HostClient; workspace: Workspace }) {
   const [error, setError] = useState<string | null>(null);
   // New session with the field empty asks for a name there instead of creating one tmux names.
   const [asked, setAsked] = useState(false);
+  const focus = useFocus();
   const form = useRef<HTMLFormElement>(null);
   const name = host.name ?? "the server";
   const listing = sessions?.listing;
@@ -73,7 +75,8 @@ function Body({ host, workspace }: { host: HostClient; workspace: Workspace }) {
     if (busy || blocked !== undefined) return;
     if (typed === "") {
       setAsked(true);
-      form.current?.querySelector("input")?.focus();
+      const field = form.current?.querySelector("input");
+      if (field) focus.focusElement(field);
       return;
     }
     setBusy(true);
