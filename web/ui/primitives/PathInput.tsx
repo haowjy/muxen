@@ -2,7 +2,7 @@ import type { Ref, TargetedFocusEvent, TargetedKeyboardEvent } from "preact";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "preact/hooks";
 import { cx } from "../cx";
 import { useFocusRef, type FocusTarget } from "../focus";
-import { autocorrectOff } from "./autocorrectOff";
+import { applyFieldSettings } from "./fieldSettings";
 import styles from "./PathInput.module.css";
 
 interface PathInputProps {
@@ -54,7 +54,7 @@ export function PathInput({ label, value, ghost, onInput, inputRef, listId, acti
     (el: HTMLInputElement | null) => {
       registered(el);
       field.current = el;
-      autocorrectOff(el);
+      applyFieldSettings(el);
       if (typeof inputRef === "function") inputRef(el);
       else if (inputRef) inputRef.current = el;
     },
@@ -69,11 +69,7 @@ export function PathInput({ label, value, ghost, onInput, inputRef, listId, acti
       </div>
       <input
         type="text"
-        inputmode="text"
         enterkeyhint="go"
-        autocapitalize="off"
-        autocomplete="off"
-        spellcheck={false}
         aria-autocomplete="both"
         aria-controls={listId}
         aria-activedescendant={activeId}

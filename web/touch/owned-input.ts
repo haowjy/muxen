@@ -4,6 +4,7 @@
 // doesn't map, so the element only ever holds a sentinel and never committed text.
 import type { InputEvent } from "../platform/types";
 import { decideKey } from "../tabs/keymap";
+import { applyFieldSettings } from "../ui/primitives/fieldSettings";
 
 /** Two spaces with the caret at the end: a delete always has a target, and the OS repeats it while Backspace is held. */
 const SENTINEL = "  ";
@@ -15,12 +16,7 @@ const SENTINEL = "  ";
  */
 export function createOwnedInput(input: (events: InputEvent[]) => void): HTMLTextAreaElement {
   const el = document.createElement("textarea");
-  el.setAttribute("autocapitalize", "off");
-  el.setAttribute("autocorrect", "off");
-  el.setAttribute("autocomplete", "off");
-  el.spellcheck = false;
-  el.setAttribute("writingsuggestions", "false");
-  el.inputMode = "text";
+  applyFieldSettings(el);
   // Not in Safari's form bar order (its up and down arrows would jump between this and the line field), and no enterkeyhint: the plain Return is a focus cue.
   el.tabIndex = -1;
   el.setAttribute("aria-label", "Terminal keyboard");

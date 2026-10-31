@@ -4257,3 +4257,16 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   which read as a sun (Jimmy: "the setings icon is hard to read - its not a freaking gear icon"; then
   "yeah just Lucide"). Same 24-unit grid and 2 px stroke as before. Hide keyboard is Lucide's
   keyboard-off: Lucide has no keyboard with a down arrow. Rejected: drawing more icons by hand.
+
+## Every text box has autocorrect off (2026-10-31)
+
+- **One record of keyboard settings applies to every text box** (`web/ui/primitives/fieldSettings.ts`):
+  autocapitalize off, autocorrect off, autocomplete off, spellcheck false, writingsuggestions false,
+  inputmode text. The terminal input, the line box, the Files path box, the code box (capitals on) and
+  the text and search fields all take it, so Device name, Session name and the session search lose
+  autocorrect too. They are set as attributes, never JSX props: Preact assigns a prop to the element's
+  property when one exists, and WebKit's `autocorrect` property is a boolean, so `"off"` became true.
+  Jimmy: autocorrect off on every one of them, Device name included. Rejected: autocorrect kept on
+  prose-like fields such as Device name (a second kind of field to decide for, for names that are
+  mostly identifiers and short); one helper that fixes only `autocorrect` (the class of bug is the
+  property-versus-attribute mismatch, not one name).

@@ -3,7 +3,7 @@ import type { Ref } from "preact";
 import { useCallback, useLayoutEffect, useRef } from "preact/hooks";
 import { cx } from "../cx";
 import { useFocusRef, type FocusTarget } from "../focus";
-import { autocorrectOff } from "./autocorrectOff";
+import { applyFieldSettings } from "./fieldSettings";
 import styles from "./LineInput.module.css";
 
 interface LineInputProps {
@@ -43,10 +43,7 @@ export function LineInput({ label, value, onInput, focusTarget, inputRef, class:
   );
   const element = useCallback((el: HTMLTextAreaElement | null) => {
     field.current = el;
-    // A line is a command, not prose: no predictions above the keyboard, as on the terminal's input.
-    // (Not in Preact's attribute types yet.)
-    el?.setAttribute("writingsuggestions", "false");
-    autocorrectOff(el);
+    applyFieldSettings(el);
     attach(el);
     if (el) resize(el);
   }, [attach]);
@@ -69,10 +66,6 @@ export function LineInput({ label, value, onInput, focusTarget, inputRef, class:
   return (
     <textarea
       rows={1}
-      autocapitalize="off"
-      autocomplete="off"
-      spellcheck={false}
-      inputmode="text"
       {...rest}
       value={value}
       // Measure after the caller: a refused edit puts the old text back, and that is the text to fit.
