@@ -219,8 +219,8 @@ export class TouchControl {
     if (!this.owned) return;
     this.lastTouchAt = performance.now();
     this.reap(event);
-    // Not the mark's handles, which are inside the list but have touches of their own.
-    const inside = (touch: Touch): boolean => touch.target instanceof Node && this.deps.element.contains(touch.target) && !this.deps.mark.owns(touch.target);
+    const inside = (touch: Touch): boolean => touch.target instanceof Node && this.deps.element.contains(touch.target);
+    // Every finger on the surface holds the list, the mark's handles included: output must not slide the text under a drag.
     for (const touch of event.changedTouches) if (inside(touch)) this.follow(touch);
     if (this.handedOver) return;
     const first = event.changedTouches[0];
@@ -237,7 +237,7 @@ export class TouchControl {
     }
     // Only the surface's own fingers: one held on a dock key or a handle is not a second finger on the terminal.
     for (const touch of event.touches) {
-      if (this.fingers.has(touch.identifier) || !inside(touch)) continue;
+      if (this.fingers.has(touch.identifier) || !inside(touch) || this.deps.mark.owns(touch.target)) continue;
       if (this.fingers.size === 0) {
         this.stoppedCoast = this.deps.listCoasting() || this.deps.wheel.coasting;
         this.deps.wheel.stop();

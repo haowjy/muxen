@@ -69,7 +69,7 @@ export class RowList {
   private count = 0;
   private screen: ScreenRow[] = [];
   private seq = 0;
-  /** The gap row, while the last frames were gap frames: the next gap frame reuses it. */
+  /** The gap row, while the last frame was a gap frame: the next gap frame reuses it. */
   private gapRow: HTMLElement | null = null;
   private lastFrame: Frame | null = null;
   private cell: CellSize | null = null;
@@ -91,7 +91,7 @@ export class RowList {
   private coastTimer: ReturnType<typeof setTimeout> | undefined;
   private pullFrame = 0;
   /** Changes above the view that waited for a bounce to settle, in order. */
-  private deferred: (() => void)[] = [];
+  private deferred: (() => boolean)[] = [];
 
   private readonly rewritten: ((seqs: number[]) => void)[] = [];
   private readonly dropped: ((first: number, last: number) => void)[] = [];
@@ -273,7 +273,7 @@ export class RowList {
         for (const row of frame.frozen) this.append(row);
         this.screen = frame.screen.map((row) => this.append(row));
       } else {
-        if (frame.frozen.length > 0) this.gapRow = null; // lines that were seen now follow the gap
+        this.gapRow = null; // a frame that is no gap ends the run: the screens the user saw stay
         // The old screen's top rows are the lines that left: they take their final text, once drawn they never change.
         const left = Math.min(frame.frozen.length, old.length);
         for (let i = 0; i < left; i++) this.redraw(old[i], frame.frozen[i], changed);
@@ -499,9 +499,11 @@ export class RowList {
    * Every change above the view goes through here: Safari does no scroll anchoring of its own (and
    * `overflow-anchor: none` keeps Chromium's out), so the top visible row's offset is read before and
    * restored after, following or not (a finger may hold the view at latest). While the view is overscrolled
-   * the change waits for the bounce to settle; waiting changes run in order.
+   * the change waits for the bounce to settle; waiting changes run in order. A change returns false when it
+   * moved nothing. If it removes the row the view was anchored to, the view goes to the oldest row, the
+   * nearest to where it was.
    */
-  private editAbove(change: () => void): void {
+  private editAbove(change: () => boolean): void {
     const { element } = this;
     if (element.scrollTop < 0) {
       this.deferred.push(change);
@@ -510,11 +512,10 @@ export class RowList {
     const top = element.getBoundingClientRect().top;
     const anchor = this.topRow();
     const before = anchor ? anchor.getBoundingClientRect().top - top : 0;
-    change();
-    if (anchor?.isConnected) {
-      element.scrollTop += anchor.getBoundingClientRect().top - top - before;
-      this.written = element.scrollTop;
-    }
+    if (!change()) return;
+    if (anchor?.isConnected) element.scrollTop += anchor.getBoundingClientRect().top - top - before;
+    else element.scrollTop = 0;
+    this.written = element.scrollTop;
     for (const listener of this.shifted) listener();
   }
 
@@ -566,10 +567,11 @@ export class RowList {
       }
       const first = this.blocks[0]?.rows[0];
       const last = this.blocks[gone - 1]?.rows.at(-1);
-      if (!first || !last) return;
+      if (!first || !last) return false;
       this.reportDropped(Number(first.dataset["seq"]), Number(last.dataset["seq"]));
       for (const block of this.blocks.splice(0, gone)) block.element.remove();
       this.count = rows;
+      return true;
     });
   }
 
