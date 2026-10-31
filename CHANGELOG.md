@@ -5,6 +5,7 @@ version section on release.
 
 ## [Unreleased]
 
+- The enrolment code field takes a pasted code (with or without its dash) and typing on an iPhone, which stopped after the first character.
 - tether is now muxen. The command is `muxen`, config lives in `~/.config/muxen`, and the iPhone app is a new app (`com.jimmyyao.muxen`). Before installing, run `tether teardown` on each host, then `muxen setup`, re-enroll each device, and update any shell config that sources `contrib/shell/tether.zsh` or `tether.bash`.
 - In the iPhone app's web keyboard test, holding a word in the terminal with the keyboard up marks it without lowering the keyboard: drag your finger or the two handles to extend it, then iOS's Copy and Paste menu appears over it (tap the mark to show or hide the menu, tap elsewhere to clear it). With the keyboard down, iOS's own selection menu gains a Paste item. The app's selection handles use muxen's accent colour. Output keeps running, so a mark on rows that redraw goes away.
 - In phone Safari and the app's web keyboard test, a long press on terminal text with the keyboard down selects it with iOS's own handles and menu, and Copy joins a wrapped command into one line. A tap on the terminal no longer raises or lowers the keyboard: only the keyboard button does, and the cursor looks hollow or solid without redrawing the screen. With the keyboard up a long press still selects nothing. On a phone the terminal now draws as text rather than a picture, and the selection colour in dark mode is the accent blue, on the desktop too.
