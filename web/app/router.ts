@@ -61,8 +61,8 @@ export class Router {
   private at = 0;
   private readonly listeners = new Set<(entry: Entry) => void>();
   private nextId = Date.now();
-  /** The entry a tab switch settles on once its `go` back over the earlier tab's entries pops. */
-  private settling: (Next & { route: "tab" }) | null = null;
+  /** A tab switch going back over the earlier tab's entries: on the pop to entry `at`, `next` is pushed above it. */
+  private settling: { at: number; next: Next & { route: "tab" } } | null = null;
 
   /**
    * A clean launch opens Home, even with saved tabs: the first entry is replaced with Home's.
@@ -170,20 +170,23 @@ export class Router {
     else this.replace(next);
   }
 
-  /** Shows `next`, a tab entry with no overlay, on the first of the run of this workspace's tab entries it ends: one history step back, then a replace. */
+  /**
+   * Shows `next`, a tab entry with no overlay, as the one entry above the entry under this workspace's run of tab
+   * entries (Home): one history step back to it, then a push, which also drops the earlier tab's forward entries.
+   * With nothing under the run (an entry from an earlier page life), the current entry is replaced.
+   */
   private settle(next: Next & { route: "tab" }): void {
     if (this.settling) {
-      this.settling = next;
+      this.settling.next = next;
       return;
     }
-    const below = this.stack.slice(0, this.at);
-    const first = below.findLastIndex((e) => e.route !== "tab" || e.workspace !== next.workspace) + 1;
-    if (first >= this.at) {
+    const under = this.stack.slice(0, this.at).findLastIndex((e) => e.route !== "tab" || e.workspace !== next.workspace);
+    if (under < 0 || under === this.at - 1) {
       this.replace(next);
       return;
     }
-    this.settling = next;
-    this.port.go(first - this.at);
+    this.settling = { at: (this.stack[under] as Entry).id, next };
+    this.port.go(under - this.at);
   }
 
   /** Drilling into a folder or preview of Files tab `tab`: a new entry. */
@@ -247,10 +250,11 @@ export class Router {
     } else {
       this.stand({ id: this.nextId++, ...HOME });
     }
+    // Only the pop the switch asked for settles it: another traversal that landed first (a fast Back, ‹ Home) wins.
     const { settling } = this;
-    if (settling) {
-      this.settling = null;
-      this.replace(settling);
+    this.settling = null;
+    if (settling && this.entry.id === settling.at) {
+      this.push(settling.next);
       return;
     }
     const { entry } = this;

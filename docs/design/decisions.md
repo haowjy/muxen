@@ -3682,10 +3682,11 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 ### The current history entry names the active tab
 
 - **Decided:** 2026-10-27, slice 1 strict review (p330).
-- **What:** on a tab route the controller replaces the current history entry with
-  `{tab, place}` whenever the active tab changes (a replace adds no entry). The router's
-  entry is therefore never a stale copy of the workspace's active tab; a pop to an entry
-  of any other tab is stale and skips to Home. `Entry` is a union (`home`, or `tab` with
+- **What:** on a tab route the controller rewrites the current history entry to
+  `{tab, place}` whenever the active tab changes (no entry is added; since 2026-10-31 the
+  earlier tab's entries go too, see "A tab switch drops the earlier tab's entries"). The
+  router's entry names the active tab, except for the moment a switch's history step is in
+  flight; a pop to an entry of any other tab is stale and skips to Home. `Entry` is a union (`home`, or `tab` with
   its place), `history.state` is checked at the boundary including the place, and the
   router emits the `Entry` itself. A host's `Folders` holds one bounded record per folder
   (subfolder names and first page), and each Files session's scroll positions are bounded.
@@ -3706,7 +3707,22 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   follows that screen, not the route.
 - **Why:** browser-behaviors.md states "tab changes are not history" for terminal tabs
   only; extending it keeps Back meaning "leave this tab's folders, then leave to Home".
+  The folders are the shown tab's only: a switch drops the earlier tab's (below).
 - **Rejected:** an entry per tab switch (Back would replay every switch).
+
+### A tab switch drops the earlier tab's entries
+
+- **Decided:** 2026-10-31, ux-lead, from the swipe-back review (c419, p438) and its router review (p440).
+- **What:** a tab switch with no overlay open (and an overlay's close after a switch under it) goes back to the
+  entry under the workspace's run of tab entries, Home, and pushes the new tab there: history is Home, then the
+  tab, with nothing forward. The pop it waits for is named by entry id; a different traversal that lands first
+  (a quick Back or ‹ Home) wins and the switch's push is dropped. With nothing under the run (an entry from an
+  earlier page life) the entry is replaced.
+- **Why:** a Files tab's folders stayed below the tab switched to. A back swipe from it showed WebKit's snapshot
+  of the earlier tab, then the stale entry bounced to Home; Forward from Home did the same.
+- **Rejected:** leaving the stale entries with the bounce; skipping stale entries in the pop's direction (still two
+  steps, still the snapshot); a replace of the first entry of the run (left the earlier tab's entries forward of
+  it, so a second Forward bounced); tab entries that never stack (Files folders need their own entries for Back).
 
 ## Harness UI tests removed; real-daemon e2e kept as scripts
 

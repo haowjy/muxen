@@ -32,7 +32,8 @@ was opened over, or onto the tab picked in it. A workspace with no tab shows it 
 reached from Home; a tab opened from there takes its place, so it is never a stop on the way back.
 
 Back from a tab is Home. It lands on the nearest earlier Home entry, so folders drilled into on the
-way never add a stop.
+way never add a stop. Back walks out of the shown Files tab's folders only: switching tabs drops the
+earlier tab's, so the history is Home, then the tab and its folders.
 
 **Swipe back.** In the app, a swipe from the left edge is Back everywhere except on a terminal tab with
 nothing over it, where it is off (Jimmy, 2026-10-31: "that obiously shouldn't happen at the terminal"): the
