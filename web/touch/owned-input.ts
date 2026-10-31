@@ -19,6 +19,7 @@ export function createOwnedInput(input: (events: InputEvent[]) => void): HTMLTex
   el.setAttribute("autocorrect", "off");
   el.setAttribute("autocomplete", "off");
   el.spellcheck = false;
+  el.setAttribute("writingsuggestions", "false");
   el.inputMode = "text";
   // Not in Safari's form bar order (its up and down arrows would jump between this and the line field), and no enterkeyhint: the plain Return is a focus cue.
   el.tabIndex = -1;

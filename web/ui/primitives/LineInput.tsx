@@ -42,6 +42,9 @@ export function LineInput({ label, value, onInput, focusTarget, inputRef, class:
   );
   const element = useCallback((el: HTMLTextAreaElement | null) => {
     field.current = el;
+    // A line is a command, not prose: no predictions above the keyboard, as on the terminal's input.
+    // (Not in Preact's attribute types yet.)
+    el?.setAttribute("writingsuggestions", "false");
     attach(el);
     if (el) resize(el);
   }, [attach]);
@@ -69,6 +72,7 @@ export function LineInput({ label, value, onInput, focusTarget, inputRef, class:
       autocomplete="off"
       autocorrect="off"
       spellcheck={false}
+      inputmode="text"
       {...rest}
       value={value}
       onInput={(e) => { resize(e.currentTarget); onInput(e.currentTarget.value, e.currentTarget); }}

@@ -5,6 +5,7 @@ version section on release.
 
 ## [Unreleased]
 
+- On an iPhone in Safari (and in the app's web keyboard test), the line box no longer shows a row of word predictions above the keyboard: like the terminal's input, it is marked as not prose.
 - In the iPhone app, a long press on a word in the terminal selects it and shows tether's Copy and Paste again, anywhere on a full screen; it used to select nothing. A long press no longer lowers the keyboard: it stays as it was, and with it up the dock stays drawn above it. Apple Intelligence's Writing Tools button no longer appears over the selection. A tap anywhere on a selection closes it, so the next long press always starts a new one; a tap on the selected word used to leave it up and the next long press did nothing.
 - In the iPhone app, a long press on terminal text selects the word under your finger when the press fires, with fewer cases of Paste alone: deep scrollback and long wrapped lines no longer push the pressed row out of the selection, and the text no longer shifts by a row's fraction when selection starts on a long terminal.
 - In the iPhone app, the dock slides up and down with the keyboard instead of jumping to its keyboard-up place before the keyboard moves and dropping out as it closes, and switching to a Files tab no longer makes the page jump as if a keyboard were coming. With Reduce Motion on, the dock moves at once.
