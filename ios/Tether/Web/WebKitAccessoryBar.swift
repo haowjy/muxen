@@ -2,12 +2,13 @@ import ObjectiveC.runtime
 import UIKit
 import WebKit
 
-/// Takes the form accessory bar (⌃ ⌄ ✓) and the predictive text strip off the keyboard for web fields.
+/// Takes the form accessory bar (⌃ ⌄ ✓) off the keyboard for web fields.
 /// Used only while the web keyboard switch is on (`TetherAppModel.webKeyboard`).
 ///
-/// Both belong to the web view's content view, and UIKit has no public switch for either. If
+/// The bar belongs to the web view's content view, and UIKit has no public switch for it. If
 /// WebKit changes its internal view, the system's own chrome stays: nothing here is load-bearing
-/// for input, so a missing class only leaves the bar and the predictions visible.
+/// for input, so a missing class only leaves the bar visible. The predictive strip is not this
+/// hook's: the page's `autocorrect="off"` attributes remove it.
 enum WebKitAccessoryBar {
     private static let prefix = "Tether_NoFormChrome_"
 
@@ -28,15 +29,8 @@ enum WebKitAccessoryBar {
 
         guard let subclass = objc_allocateClassPair(contentClass, className, 0) else { return false }
         let noAccessory: @convention(block) (AnyObject) -> UIView? = { _ in nil }
-        // The terminal's input and the dock's line box are web text boxes, and a line is a command or a
-        // prompt, not prose: `autocorrect="off"` and `spellcheck="false"` say so, and WebKit still asks this
-        // view for the traits the keyboard strip reads. Answer as `KeyboardInput` does.
-        let noAutocorrection: @convention(block) (AnyObject) -> Int = { _ in UITextAutocorrectionType.no.rawValue }
-        let noSpellChecking: @convention(block) (AnyObject) -> Int = { _ in UITextSpellCheckingType.no.rawValue }
         let added = [
             (#selector(getter: UIResponder.inputAccessoryView), imp_implementationWithBlock(noAccessory), "@@:"),
-            (NSSelectorFromString("autocorrectionType"), imp_implementationWithBlock(noAutocorrection), "q@:"),
-            (NSSelectorFromString("spellCheckingType"), imp_implementationWithBlock(noSpellChecking), "q@:"),
         ].allSatisfy { class_addMethod(subclass, $0.0, $0.1, $0.2) }
         guard added else {
             objc_disposeClassPair(subclass)
