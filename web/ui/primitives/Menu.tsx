@@ -22,7 +22,7 @@ export interface MenuSection {
 }
 
 interface MenuProps {
-  /** The control it hangs from: it opens above when that control is in the lower half of the window, else below. */
+  /** The control it hangs from: it opens on the side with more room, above the keyboard. */
   anchor: HTMLElement;
   label: string;
   sections: MenuSection[];
@@ -47,9 +47,14 @@ export function Menu({ anchor, label, sections, onClose, focusFirst }: MenuProps
     const menu = ref.current;
     if (!menu) return;
     const rect = anchor.getBoundingClientRect();
-    const { clientWidth, clientHeight } = document.documentElement;
-    const up = rect.top > clientHeight / 2;
-    menu.style.maxHeight = `${String(up ? rect.top - 2 * GAP_PX : clientHeight - rect.bottom - 2 * GAP_PX)}px`;
+    const root = document.documentElement;
+    const { clientWidth, clientHeight } = root;
+    // The keyboard is a system window over the page: nothing drawn under it shows. Only the space above it counts.
+    const visibleBottom = clientHeight - (parseFloat(getComputedStyle(root).getPropertyValue("--keyboard-inset")) || 0);
+    const above = rect.top;
+    const below = visibleBottom - rect.bottom;
+    const up = above > below;
+    menu.style.maxHeight = `${String((up ? above : below) - 2 * GAP_PX)}px`;
     menu.style.top = up ? "" : `${String(rect.bottom + GAP_PX)}px`;
     menu.style.bottom = up ? `${String(clientHeight - rect.top + GAP_PX)}px` : "";
     menu.style.left = `${String(Math.max(GAP_PX, Math.min(rect.left, clientWidth - menu.offsetWidth - GAP_PX)))}px`;
