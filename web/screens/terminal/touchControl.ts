@@ -84,6 +84,8 @@ export class TouchControl {
   /** The fingers down, and the touches that belong to nobody (the one that dismissed the menu). */
   private readonly fingers = new Set<number>();
   private readonly spent = new Set<number>();
+  /** Where each touch began: the node that gets the rest of its events, and carries our listeners until it ends. */
+  private readonly targets = new Map<number, EventTarget>();
   /** Where the first finger went down: a wheel event's cell. */
   private origin = { x: 0, y: 0 };
   private scrolling = false;
@@ -114,11 +116,8 @@ export class TouchControl {
     // A finger whose pointer was taken away, or an app sent to the background mid-gesture, never lifts: end the gesture.
     element.addEventListener("lostpointercapture", this.cancelled);
     element.addEventListener("touchstart", this.touchStart, { passive: true });
-    // The rest on the document: a touch that began on a row xterm then replaced is dispatched to a detached node, and
-    // never reaches the surface.
-    document.addEventListener("touchmove", this.touchMove, { passive: false });
-    document.addEventListener("touchend", this.touchEnd, { passive: false });
-    document.addEventListener("touchcancel", this.touchCancelled);
+    // The rest of a touch's events go to its own target (`follow`), not the surface: a touch that began on a row xterm
+    // then replaced goes on being dispatched to that detached node, and never bubbles to the surface or the document.
     for (const type of MOUSE_EVENTS) element.addEventListener(type, this.blockMouse, true);
     document.addEventListener("visibilitychange", () => { if (document.hidden) this.cancel(); });
     // Android's long-press menu would fight the gesture; iOS shows no callout (CSS). Owned input leaves it to the system.
@@ -142,15 +141,36 @@ export class TouchControl {
     this.schedule();
   }
 
+  /** Listens on the node a touch began on, which keeps receiving its events after xterm replaces it; non-passive, to cancel a scroll or a tap. */
+  private follow(touch: Touch): void {
+    const target = touch.target;
+    this.targets.set(touch.identifier, target);
+    target.addEventListener("touchmove", this.touchMove as EventListener, { passive: false });
+    target.addEventListener("touchend", this.touchEnd as EventListener, { passive: false });
+    target.addEventListener("touchcancel", this.touchCancelled as EventListener);
+  }
+
+  /** The touch is over: its node is released unless another touch began on it too. */
+  private unfollow(id: number): void {
+    const target = this.targets.get(id);
+    if (!target) return;
+    this.targets.delete(id);
+    if ([...this.targets.values()].includes(target)) return;
+    target.removeEventListener("touchmove", this.touchMove as EventListener);
+    target.removeEventListener("touchend", this.touchEnd as EventListener);
+    target.removeEventListener("touchcancel", this.touchCancelled as EventListener);
+  }
+
   /**
-   * The platform's list of touches is the truth. A finger it no longer lists never delivered its end (the row it began
-   * on was replaced, or WebKit took the touch): counted on, it would make every later swipe a two-finger one. The
-   * gesture that finger belonged to is dead, so it is cancelled, never resolved as a tap.
+   * The platform's list of touches is the truth. A finger it no longer lists never delivered its end (WebKit took the
+   * touch, or its node went away unheard): counted on, it would make every later swipe a two-finger one. The gesture
+   * that finger belonged to is dead, so it is cancelled, never resolved as a tap.
    */
   private reap(event: TouchEvent): void {
     const listed = new Set<number>();
     for (const touch of event.touches) listed.add(touch.identifier);
     if (event.type === "touchend") for (const touch of event.changedTouches) listed.add(touch.identifier);
+    for (const id of this.targets.keys()) if (!listed.has(id)) this.unfollow(id);
     for (const id of this.fingers) {
       if (!listed.has(id)) {
         this.cancel();
@@ -163,6 +183,8 @@ export class TouchControl {
     if (!this.owned) return;
     this.lastTouchAt = performance.now();
     this.reap(event);
+    const inside = (touch: Touch): boolean => touch.target instanceof Node && this.deps.element.contains(touch.target);
+    for (const touch of event.changedTouches) if (inside(touch)) this.follow(touch);
     if (this.handedOver) return;
     const first = event.changedTouches[0];
     if (this.fingers.size === 0 && first && this.deps.page.exists()) {
@@ -176,8 +198,9 @@ export class TouchControl {
       if (this.deps.mark.contains(first.clientX, first.clientY)) this.onMark = true;
       else this.dismissing = true;
     }
+    // Only the surface's own fingers: one held on a dock key or a handle is not a second finger on the terminal.
     for (const touch of event.touches) {
-      if (this.fingers.has(touch.identifier)) continue;
+      if (this.fingers.has(touch.identifier) || !inside(touch)) continue;
       if (this.fingers.size === 0) {
         this.stoppedCoast = this.deps.scroll.coasting;
         this.deps.scroll.stop();
@@ -204,6 +227,11 @@ export class TouchControl {
   };
 
   private readonly touchEnd = (event: TouchEvent): void => {
+    this.end(event);
+    for (const touch of event.changedTouches) this.unfollow(touch.identifier);
+  };
+
+  private end(event: TouchEvent): void {
     if (!this.owned) return;
     this.reap(event);
     if (this.handedOver) {
@@ -225,10 +253,14 @@ export class TouchControl {
       this.onMark = false;
     }
     this.schedule();
-  };
+  }
 
   private readonly touchCancelled = (event: TouchEvent): void => {
-    if (this.owned && Array.from(event.changedTouches).some((touch) => this.fingers.has(touch.identifier))) this.cancel();
+    for (const touch of event.changedTouches) this.unfollow(touch.identifier);
+    if (!this.owned) return;
+    // A handed-over touch is not a counted finger, and its cancel is how a long press WebKit took ends.
+    if (event.touches.length === 0) this.handedOver = false;
+    if (Array.from(event.changedTouches).some((touch) => this.fingers.has(touch.identifier))) this.cancel();
   };
 
   /** Mouse events imitating a touch (a mouse-move over a link underlines it, and redraws rows) go no further than the surface. */

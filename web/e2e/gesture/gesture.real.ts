@@ -275,6 +275,31 @@ for (const version of VERSIONS) {
       }
     });
 
+    test("a swipe keeps scrolling when the touched span is removed mid-swipe, and the next swipe is not ignored", async ({ page }) => {
+      const s = newSession();
+      stack.tmux("send-keys", "-t", s, "seq 1 400 | sed 's/^/row /'", "Enter");
+      await paneIncludes(s, /row 400/);
+      const finger = await open(page, s);
+      const at = await mid(page, s, 4);
+      for (let i = 0; i < 2; i++) {
+        await finger.down(at.x, at.y);
+        // What xterm's row redraw does: the node the touch began on leaves the document, and its events go on to that node.
+        const detached = await page.evaluate(({ x, y }) => {
+          const node = document.elementFromPoint(x, y);
+          if (!node || node.closest(".xterm-rows") === null || node.classList.contains("xterm-rows")) return false;
+          node.remove();
+          return !node.isConnected;
+        }, at);
+        expect(detached).toBe(true);
+        await finger.drag(at.x, at.y, at.x, at.y + 300, 8, 6);
+        await finger.up();
+        await page.waitForTimeout(700);
+        await expect(page.getByRole("button", { name: "Jump to latest" })).toBeVisible();
+        await page.getByRole("button", { name: "Jump to latest" }).tap();
+        await expect(page.getByRole("button", { name: "Jump to latest" })).toHaveCount(0);
+      }
+    });
+
     test("horizontal swipes send nothing", async ({ page }) => {
       const cat = newSession("cat -vt");
       const catFinger = await open(page, cat);

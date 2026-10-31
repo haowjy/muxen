@@ -4345,10 +4345,15 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 
 - **A touch whose end never arrives must not outlive the next touch.** On the iPhone (DOM renderer, rows replaced as
   output arrives) a touch that began on a row xterm then replaced was dispatched to a detached node, so no end reached
-  `.host`; the leaked finger made every later swipe a two-finger one, which the recognizer ignores. Every touch event now
-  checks `event.touches`: a counted finger it no longer lists cancels the gesture it belonged to (never a tap), and the
-  next touch starts clean. `touchmove`, `touchend` and `touchcancel` are listened for on the document, filtered to the
-  fingers counted; `touchstart` stays on the surface.
+  `.host`; the leaked finger made every later swipe a two-finger one, which the recognizer ignores.
+  Chromium and the phone agree that a detached node's events never reach the surface or the document, only the node
+  itself. So at `touchstart` the shell listens, non-passive, on each new touch's own target for `touchmove`,
+  `touchend` and `touchcancel` (removed when that touch ends, unless another touch began on the same node), and a swipe
+  whose span is redrawn mid-gesture keeps scrolling. Only touches whose target is inside the surface are counted (a
+  finger held on a dock key is not a second finger on the terminal). Every touch event also checks `event.touches`, as
+  the safety net: a counted finger it no longer lists cancels the gesture it belonged to (never a tap), and the next
+  touch starts clean. A `touchcancel` with no touches left also ends a handed-over touch. Nothing non-passive is
+  attached to the document.
 - **The pointer path is left as it is.** It captures the pointer on the surface at `pointerdown`, so its events target the
   surface, not a row, and `lostpointercapture` already ends a gesture whose pointer was taken.
 - **Rejected: a timeout on a counted finger.** A held finger is long and legitimate; the platform's list says exactly

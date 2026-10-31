@@ -75,7 +75,7 @@ export class PageSelection {
   }
 
   /**
-   * Calls `onRedraw` once, when output redraws or drops a row the range touches: the text the range marked is
+   * Calls `onRedraw` once, when output redraws a row the range touches: the text the range marked is
    * gone. Rows it doesn't touch may redraw, and rows may be added. `range()` is read when output arrives, so a
    * drag that moves the range's ends costs nothing here; the rows it touches are found once per range.
    * Returns the cancel.
@@ -87,12 +87,9 @@ export class PageSelection {
       if (seen?.range !== current) seen = { range: current, rows: this.deps.rows().filter(({ element }) => current.intersectsNode(element)).map(({ element }) => element) };
       return seen.rows;
     };
-    // Redrawn (a mutation inside it) or dropped (removed with its root's child): a row that isn't touched may do either.
-    const gone = (record: MutationRecord, rows: HTMLElement[]): boolean =>
-      rows.some((row) => row.contains(record.target) || [...record.removedNodes].some((node) => node.contains(row)));
     const observer = new MutationObserver((records) => {
       const rows = touched();
-      if (!records.some((record) => gone(record, rows))) return;
+      if (!records.some((record) => rows.some((row) => row.contains(record.target)))) return;
       observer.disconnect();
       onRedraw();
     });
