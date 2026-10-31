@@ -1,5 +1,5 @@
 import { createContext, type ComponentChildren } from "preact";
-import { useContext } from "preact/hooks";
+import { useContext, useEffect } from "preact/hooks";
 import type { BellsState } from "../sessions/bells";
 import { FocusContext } from "../ui/focus";
 import { useStore } from "../ui/store";
@@ -9,6 +9,7 @@ const AppContext = createContext<AppController | null>(null);
 
 /** Provides the controller, and its focus controller to the primitives. */
 export function AppProvider({ app, children }: { app: AppController; children: ComponentChildren }) {
+  useEffect(() => app.focus.attach(), [app]);
   return (
     <AppContext.Provider value={app}>
       <FocusContext.Provider value={app.focus}>{children}</FocusContext.Provider>

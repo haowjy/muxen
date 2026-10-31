@@ -62,6 +62,24 @@ export class FocusController extends Store<FocusView> implements FocusPort {
     this.mode = initialMode;
   }
 
+  /** Starts watching the page's taps (`keepFocus`); returns the stop. */
+  attach(): () => void {
+    document.addEventListener("mousedown", this.keepFocus, true);
+    return () => { document.removeEventListener("mousedown", this.keepFocus, true); };
+  }
+
+  /**
+   * Only the keyboard control lowers the keyboard (plan.md "Keyboard"). On touch a tap reaches the page as
+   * a mousedown after the touch ends, whose default moves focus off the field holding the keyboard and so
+   * drops it; cancelling the pointerdown doesn't always stop it. So a tap on anything but another field
+   * keeps focus where it is. The tap's handlers still run: only the focus change is cancelled.
+   */
+  private readonly keepFocus = (event: MouseEvent): void => {
+    if (this.viewport().directInput !== "owned" || !document.activeElement?.matches("input, textarea")) return;
+    if (event.target instanceof Element && event.target.closest("input, textarea, select, label, [contenteditable]")) return;
+    event.preventDefault();
+  };
+
   /**
    * A tab switch with the keyboard up (it is sticky): the input of `target` takes it. The terminal is mounted
    * already, so it is focused after the switch renders, inside the tap's task; a Files tab's path field mounts
