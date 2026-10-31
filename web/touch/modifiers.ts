@@ -56,8 +56,12 @@ export function apply(armed: Armed, events: InputEvent[]): { events: InputEvent[
   const first = events[0];
   if (armed === null || first === undefined) return { events, armed };
   let event: InputEvent | null = null;
-  // A capital typed on the soft keyboard is a shifted letter.
-  if ("text" in first) event = chord({ ctrl: armed === "ctrl", alt: armed === "alt", shift: first.text !== first.text.toLowerCase() }, first.text);
+  // A capital typed on the soft keyboard is a shifted letter, but an armed ctrl still sends Ctrl-C for it: the hardware chord
+  // keeps Shift (`C-C`, as KeyMapper does), and an app reading extended keys would not take `C-C` for Ctrl-C.
+  if ("text" in first) {
+    const shift = armed === "alt" && first.text !== first.text.toLowerCase();
+    event = chord({ ctrl: armed === "ctrl", alt: armed === "alt", shift }, first.text);
+  }
   else if ("key" in first && PREFIXABLE.test(first.key)) event = { key: `${armed === "ctrl" ? "C-" : "M-"}${first.key}` };
   return { events: event === null ? events : [event, ...events.slice(1)], armed: null };
 }
