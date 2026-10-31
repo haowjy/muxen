@@ -5,7 +5,7 @@
 // text is `PageSelection.textOf`: one join for Copy. Output never pauses: when rows under the mark redraw, the
 // mark goes with its handles (`PageSelection.watch`).
 import type { MenuRect } from "../../../platform/types";
-import type { PageSelection } from "./pageSelection";
+import { boxOf, near, type PageSelection } from "./pageSelection";
 import styles from "./Mark.module.css";
 
 interface MarkDeps {
@@ -18,7 +18,7 @@ interface MarkDeps {
   tick(): void;
 }
 
-/** A touch this near the marked text counts as on it. */
+/** A touch this near the marked text counts as on it; `pageSelection.ts` says why the system's reach is wider. */
 const TAP_REACH = 8;
 /** Half a handle's hit area: a touch this near a knob's centre is that handle's. */
 const HIT = 22;
@@ -47,8 +47,7 @@ export class Mark {
   private handles: Record<End, HTMLElement> | null = null;
   private places: Record<End, Place> | null = null;
   /** A handle being dragged, and the vector from the finger to its text point at the grab. */
-  private grabbed: { end: End; dx: number; dy: number } | null = null;
-  private menuShown = false;
+  private grabbed: { end: End; touch: number; dx: number; dy: number } | null = null;
   private unwatch: (() => void) | null = null;
 
   constructor(private readonly deps: MarkDeps) {}
@@ -64,7 +63,7 @@ export class Mark {
 
   /** Whether the client point is on the marked text. */
   contains(x: number, y: number): boolean {
-    return [...(this.state?.range.getClientRects() ?? [])].some((r) => x >= r.left - TAP_REACH && x <= r.right + TAP_REACH && y >= r.top - TAP_REACH && y <= r.bottom + TAP_REACH);
+    return this.state !== null && near(this.deps.page.rectsOf(this.state.range), x, y, TAP_REACH);
   }
 
   /** Copy's text: the mark's range through the page selection's join. Empty with no mark. */
@@ -79,6 +78,7 @@ export class Mark {
     if (!word) return false;
     this.deps.tick();
     this.state = { range: word.cloneRange(), word };
+    this.unwatch = this.deps.page.watch(() => this.state?.range ?? word, () => { this.clear(); });
     this.paint();
     this.setInert(true); // until the finger lifts, a handle's hit area must not be what hit-testing finds under it
     return true;
@@ -100,12 +100,13 @@ export class Mark {
   /** The finger that held and dragged lifted: the mark is final and the menu comes up. */
   lift(): void {
     this.setInert(false);
-    this.showMenu(true);
+    this.toggleMenu();
   }
 
-  /** A tap inside the mark. */
+  /** A tap inside the mark. Native owns whether the menu is up (iOS can dismiss it itself): it shows over the mark or, if showing, hides. */
   toggleMenu(): void {
-    this.showMenu(!this.menuShown);
+    const box = this.state && boxOf(this.deps.page.rectsOf(this.state.range));
+    if (box) this.deps.editMenu()?.({ x: box.x, y: box.y, width: box.width, height: box.height });
   }
 
   clear(): void {
@@ -116,7 +117,7 @@ export class Mark {
     this.unwatch?.();
     this.unwatch = null;
     CSS.highlights.delete("tsel");
-    this.showMenu(false);
+    this.hideMenu();
     this.setInert(false);
     if (this.handles) for (const end of ENDS) this.handles[end].hidden = true;
   }
@@ -125,20 +126,11 @@ export class Mark {
     const { state } = this;
     if (!state) return;
     CSS.highlights.set("tsel", new Highlight(state.range));
-    this.unwatch?.(); // the rows it touches change as it grows
-    this.unwatch = this.deps.page.watch(state.range, () => { this.clear(); });
     this.placeHandles(state.range);
-    this.showMenu(false); // a hold or a drag hides it; `lift` brings it back
   }
 
-  /** Native's menu over the mark, or hidden. Told only when it changes. */
-  private showMenu(show: boolean): void {
-    const editMenu = this.deps.editMenu();
-    if (!editMenu || show === this.menuShown) return;
-    const box = show ? this.state?.range.getBoundingClientRect() : undefined;
-    if (show && !box) return;
-    this.menuShown = show;
-    editMenu(box ? { x: box.x, y: box.y, width: box.width, height: box.height } : null);
+  private hideMenu(): void {
+    this.deps.editMenu()?.(null);
   }
 
   /** The word under a client point, or null off the rows' text or on a blank. */
@@ -170,7 +162,7 @@ export class Mark {
   // the character being chosen.
 
   private placeHandles(range: Range): void {
-    const rects = [...range.getClientRects()].filter((r) => r.width > 0);
+    const rects = this.deps.page.rectsOf(range).filter((r) => r.width > 0);
     const first = rects[0];
     const last = rects.at(-1);
     if (!first || !last) return;
@@ -220,16 +212,17 @@ export class Mark {
     const other: End = end === "start" ? "end" : "start";
     const chosen = near(other) < near(end) && Math.abs(finger.clientX - places[other].knob.x) <= HIT && Math.abs(finger.clientY - places[other].knob.y) <= HIT ? other : end;
     const { text } = places[chosen];
-    this.grabbed = { end: chosen, dx: text.x - finger.clientX, dy: text.y - finger.clientY };
+    this.grabbed = { end: chosen, touch: finger.identifier, dx: text.x - finger.clientX, dy: text.y - finger.clientY };
     this.setInert(true);
-    this.showMenu(false);
+    this.hideMenu();
   }
 
   private drag(event: TouchEvent): void {
     event.preventDefault();
-    const finger = event.changedTouches[0];
     const { grabbed, state } = this;
-    if (!finger || !grabbed || !state) return;
+    if (!grabbed || !state) return;
+    const finger = [...event.changedTouches].find((t) => t.identifier === grabbed.touch);
+    if (!finger) return;
     const at = this.caretAt(finger.clientX + grabbed.dx, finger.clientY + grabbed.dy);
     if (!at) return;
     const range = state.range.cloneRange();
@@ -254,7 +247,7 @@ export class Mark {
 
   private drop(event: TouchEvent): void {
     event.preventDefault();
-    if (!this.grabbed) return;
+    if (!this.grabbed || ![...event.changedTouches].some((t) => t.identifier === this.grabbed?.touch)) return;
     this.grabbed = null;
     this.lift();
   }

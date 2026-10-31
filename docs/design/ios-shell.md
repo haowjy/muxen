@@ -378,9 +378,12 @@ responder. Terminal's native responder stays the same object while its target ch
   the keyboard up the page's mark is a CSS highlight, not a DOM selection, so WebKit offers no
   menu; the page sends `editMenu { rect }` and `TetherWebView` presents its own
   `UIEditMenuInteraction` (Copy, Paste) there, and reports the choice as `menuCopy` or
-  `menuPaste`. With the keyboard down iOS's selection and menu are WebKit's, and `buildMenu`
-  adds a Paste item (sending `menuPaste`) while a terminal tab is shown and no keyboard
-  covers the web view. The web view's `tintColor` is the accent (`--blue-7` light, `--blue-9`
+  `menuPaste`. Native owns whether that menu is up (the interaction's `willPresent` and
+  `willDismiss`, since iOS can dismiss it itself): `editMenu` with a rect shows it, or hides
+  it if it is up, and `null` hides it. With the keyboard down iOS's selection and menu are
+  WebKit's, and `buildMenu` adds a Paste item (sending `menuPaste`) whenever no keyboard
+  covers the web view, on a terminal or not: native keeps no terminal state for it, and the
+  page ignores a Paste when no terminal is shown (`pasteFromMenu`). The web view's `tintColor` is the accent (`--blue-7` light, `--blue-9`
   dark), so iOS's handles match tether's. `suppressesEditMenu` stays for native input only.
 - **Native coverage gates focus and input.** While the lock screen or native server
   sheet covers the app, `FocusController.set` records requested state rather than
@@ -520,7 +523,7 @@ token to native solely for comparison and revocation, never into storage or logs
 | `playVideo { host, path }` | `null` | Play an authenticated `/fs/raw` resource |
 | `setPreference { name, value }` | Every `Preferences` | Native keeps the choice (`appearance`, `textSize` or `relock`), applies it, and answers with all three; an unknown name or value is a refused request. The web shows the reply. Only the web's Settings changes a preference, so native sends no change event |
 | `backSwipe { enabled }` | `null` | Turn WebKit's left-edge back-forward swipe on or off for the current web view. It starts off and is off again for each new web view; the web sends it whenever it changes (off on a terminal tab with nothing over it, on elsewhere), so a swipe pops the page's own history. A content-process crash makes a new web view, so the back list never holds an earlier document |
-| `editMenu { rect }` | `null` | Show iOS's edit menu (`UIEditMenuInteraction` on the web view, Copy and Paste) over `rect` (`{ x, y, width, height }`, client points = web view points), or hide it when `rect` is `null`. The page owns the keyboard-up mark and sends the rect of its text; native only shows the menu where it is told. The choice comes back as `menuCopy` or `menuPaste` |
+| `editMenu { rect }` | `null` | Show iOS's edit menu (`UIEditMenuInteraction` on the web view, Copy and Paste) over `rect` (`{ x, y, width, height }`, client points = web view points), hide it if it is already up, or hide it when `rect` is `null`. The page owns the keyboard-up mark and sends the rect of its text; native owns whether the menu is up. The choice comes back as `menuCopy` or `menuPaste` |
 | `manageHosts` | `null` | Present the native server management sheet from the web's Home/Settings entry |
 | `openURL { url }` | `null` | Open only `http`, `https` or `mailto` externally |
 | `ack { id }` | `null` | Optional latency-measurement acknowledgement |
@@ -534,7 +537,7 @@ token to native solely for comparison and revocation, never into storage or logs
 | `lifecycle { lifecycle: Lifecycle }` | `visible`, `online`, `locked`, `covered` | One state for app foreground, connectivity, app lock and native coverage |
 | `hosts { hosts: PlatformHost[] }` | Native host handles and labels; never base URLs or tokens | Refresh host admission / connection state |
 | `menuCopy` | Copy was chosen in the menu `editMenu` showed | The page copies its mark's joined text through `copy` and clears the mark |
-| `menuPaste` | Paste was chosen in that menu, or in the Paste item `TetherWebView` adds to iOS's own menu over a terminal selection (keyboard down, a terminal tab shown) | The page runs its menu paste: `readPasteboard`, the size limit, one paste to tmux without Enter, or an image upload |
+| `menuPaste` | Paste was chosen in that menu, or in the Paste item `TetherWebView` adds to iOS's own menu over a selection (keyboard down) | The page runs its menu paste: `readPasteboard`, the size limit, one paste to tmux without Enter, or an image upload |
 | `upload { id, progress, path?, error?, cancelled? }` | `id` is the one the web sent with `pickMedia` or `readPasteboard`; the web routes by it alone. `path`, `error` or `cancelled` ends the stream; `cancelled` is a dismissed picker | Update upload UI; the web decides where the path goes (a pasted image inserts it, a Files upload offers it) |
 
 There are no separate `network`, `lock` or `lifecycle.covered` messages in v2. A

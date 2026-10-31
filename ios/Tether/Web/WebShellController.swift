@@ -294,8 +294,8 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
 
         let result = TetherWebView(frame: .zero, configuration: configuration)
         result.suppressesEditMenu = { [weak self] in self?.focus.selecting == true }
-        // With the keyboard down iOS's own menu over a terminal selection gets a Paste; the page's mark has its own menu.
-        result.addsTerminalPaste = { [weak self] in self.map { $0.activeTab != nil && $0.keyboardCover.height == 0 } ?? false }
+        // With the keyboard down iOS's own menu over a selection gets a Paste. Off a terminal the page ignores it (`pasteFromMenu`).
+        result.addsPaste = { [weak self] in self?.keyboardCover.height == 0 }
         result.onMenuChoice = { [weak self] choice in self?.send(choice, fields: [:]) }
         // iOS's selection handles, and the page's own (they read `--color-accent`): --blue-7 in light, --blue-9 in dark.
         result.tintColor = UIColor { $0.userInterfaceStyle == .dark
@@ -390,7 +390,7 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
                 if case .null = rect { webView.hideMarkMenu() }
                 else {
                     let r = try rect.decode(MenuRect.self)
-                    webView.showMarkMenu(over: CGRect(x: r.x, y: r.y, width: r.width, height: r.height))
+                    webView.toggleMarkMenu(over: CGRect(x: r.x, y: r.y, width: r.width, height: r.height))
                 }
                 reply(NSNull(), nil)
             case .manageHosts:
@@ -775,17 +775,22 @@ private final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandlerWi
 
 
 /// Native's two edit menus over the terminal. The page's mark (keyboard up) is no selection, so WebKit offers
-/// nothing there and the page asks for `showMarkMenu`. With the keyboard down iOS's own selection menu gets a Paste.
+/// nothing there and the page asks for `toggleMarkMenu`; native knows whether the menu is up, since iOS can dismiss it
+/// itself. With the keyboard down iOS's own selection menu gets a Paste, on a terminal or not: the page drops a Paste
+/// that has no terminal to go to.
 /// In native input mode the page draws its own menu over a snapshot selection and WebKit's is emptied
 /// (`suppressesEditMenu`); web text fields keep the system menu.
 final class TetherWebView: WKWebView, UIEditMenuInteractionDelegate {
     var suppressesEditMenu: () -> Bool = { false }
-    var addsTerminalPaste: () -> Bool = { false }
+    var addsPaste: () -> Bool = { false }
     var onMenuChoice: (BridgeMessageType) -> Void = { _ in }
     private lazy var markMenu = UIEditMenuInteraction(delegate: self)
     private var markRect = CGRect.zero
+    private var markMenuUp = false
 
-    func showMarkMenu(over rect: CGRect) {
+    /// Shows the menu over `rect`, or hides it if it is up.
+    func toggleMarkMenu(over rect: CGRect) {
+        if markMenuUp { hideMarkMenu(); return }
         if markMenu.view == nil { addInteraction(markMenu) }
         markRect = rect
         markMenu.presentEditMenu(with: UIEditMenuConfiguration(identifier: nil, sourcePoint: CGPoint(x: rect.midX, y: rect.midY)))
@@ -800,6 +805,10 @@ final class TetherWebView: WKWebView, UIEditMenuInteractionDelegate {
         ])
     }
 
+    func editMenuInteraction(_ interaction: UIEditMenuInteraction, willPresentMenuFor configuration: UIEditMenuConfiguration, animator: any UIEditMenuInteractionAnimating) { markMenuUp = true }
+
+    func editMenuInteraction(_ interaction: UIEditMenuInteraction, willDismissMenuFor configuration: UIEditMenuConfiguration, animator: any UIEditMenuInteractionAnimating) { markMenuUp = false }
+
     func editMenuInteraction(_ interaction: UIEditMenuInteraction, targetRectFor configuration: UIEditMenuConfiguration) -> CGRect { markRect }
 
     // WebKit's content view asks the web view whether each edit action may run; refusing them all leaves
@@ -813,7 +822,7 @@ final class TetherWebView: WKWebView, UIEditMenuInteractionDelegate {
     override func buildMenu(with builder: any UIMenuBuilder) {
         super.buildMenu(with: builder)
         if suppressesEditMenu() { builder.remove(menu: .autoFill) }
-        else if addsTerminalPaste() {
+        else if addsPaste() {
             builder.insertChild(
                 UIMenu(options: .displayInline, children: [UIAction(title: "Paste") { [weak self] _ in self?.onMenuChoice(.menuPaste) }]),
                 atEndOfMenu: .standardEdit)

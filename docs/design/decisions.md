@@ -4321,3 +4321,22 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   no animation. Held as the fallback if WebKit's swipe snapshot shows a stale terminal frame.
 - **A forward swipe exists** (WebKit's, not tested on a device) while the gesture is on and the forward list is non-empty (Home after Back from a
   tab, right-edge swipe returns to the tab). Left alone: it replays a router entry, as the browser's Forward.
+
+## The keyboard-up mark's menu is native's, over the page's mark (bridge v9) (2026-10-31)
+
+- **The page marks, native shows the menu.** With the keyboard up the mark is a CSS highlight, not a DOM
+  selection, so WebKit offers no menu. Bridge v9 adds `editMenu { rect | null }` (web to native) and `menuCopy`
+  and `menuPaste` (native to web). `TetherWebView` presents a `UIEditMenuInteraction` over the rect; a choice comes
+  back as a message and the page does the work: Copy through `copy` with the mark's joined text, Paste through
+  `pasteFromMenu`. v9 is a new version because the contract is strict equality.
+- **Native owns whether the menu is up.** iOS can dismiss it itself, and a page that tracked its visibility went
+  stale (the next tap on the mark did nothing). Native tracks `willPresent` and `willDismiss`; a rect from the
+  page shows the menu or, if up, hides it, so a tap on the mark needs no state of the page's. No close message.
+- **The Paste item on iOS's own menu (keyboard down) is there whenever no keyboard covers the view.** It was
+  gated on native's `activeTab`, which stays set on Home and the tab list, and which the native-input removal
+  deletes. The page already ignores a Paste with no terminal shown, so native keeps no terminal state for it.
+- **Rejected: the text sent with `editMenu`,** so native could copy itself. The page's join of soft-wrapped rows
+  is the one Copy path (`PageSelection.textOf`), and a copy in native would be a second.
+- **Rejected: a menu the web draws over the mark.** Step 0's Safari test failed it: a touch on a web-drawn menu
+  moves the selection or the keyboard, and it does not match the system's.
+- **Rejected: a `menuClosed` event** for the stale state; native owning the state needs no extra message.
