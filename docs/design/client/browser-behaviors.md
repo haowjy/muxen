@@ -391,12 +391,15 @@ input.
 - **Focus cues.** Terminal target: solid terminal cursor; the idle box has no caret and
   shows its draft or placeholder. Line target: box ring and caret, visible Send, hollow
   terminal cursor, and Return labelled Send. There is exactly one active typing cursor.
-- **Terminal taps.** With the keyboard down, a tap on the cursor's row or the
-  row directly above or below it raises terminal input, except while scrolled into
-  history. With the keyboard up and the box owning typing, a terminal tap does one thing:
-  it gives typing back to the terminal (no click, no cursor move; the next tap acts as usual). Otherwise mouse-mode taps send a click; OSC 133 prompt-row cursor placement may
-  move the cursor while terminal input already owns the keyboard. Scroll and selection
-  do not toggle it (the keyboard is sticky, above).
+- **Terminal taps.** A tap on the terminal never raises or lowers the keyboard; the key
+  row's toggle does. It sends a click when the application asked for mouse reporting, moves
+  the prompt cursor on an OSC 133 input row only while terminal input already owns the
+  keyboard, and otherwise does nothing apart from closing a selection
+  ([terminal-interaction-design.md](terminal-interaction-design.md), "One gesture owner").
+  The app's native input keeps the older rule until its removal: with the box owning typing,
+  a tap gives typing back to the terminal, and with the keyboard down a tap on or beside the
+  cursor's row raises terminal input. Scroll and selection do not toggle the keyboard
+  (it is sticky, above).
 - **Safari's form accessory bar.** The phone browser/PWA may put its own ⌃ ⌄ Done bar
   between tether's key row and the keyboard; the page cannot remove it. Done lowers the
   keyboard and the toggle follows. The native terminal/line responder is not a WebKit
@@ -454,4 +457,4 @@ Terminal context uses a bold primary session name, regular window name, and smal
 
 ## Touch and clipboard research gate
 
-The researched interaction direction is in [terminal-interaction-design.md](terminal-interaction-design.md). A long-press on the terminal fires with a haptic and highlights the word under the finger at once; dragging while still held extends the selection to the cell under the finger, and releasing shows the handles and an edit menu with Copy and Paste; over a blank cell the menu has Paste alone. Paste sends the clipboard's text to the terminal as one paste, without Enter, and an image takes the image paste route; it is the terminal's paste on the phone, beside the line field's own paste menu. Safari shows its own Paste confirmation; the app may show iOS's "Allow Paste" prompt unless tether is allowed in Settings. It sends no mouse event, in mouse-mode apps too (Jimmy, 2026-10-24). Terminal selection has no spacebar-trackpad mapping; the app's line mirror separately uses the native field's spacebar caret trackpad. Vertical swipes in alternate-screen apps still send ↑/↓ or wheel events. Tap-to-click must respect application mouse mode and not fire during long-press selection or scrolling; a tap never lowers the keyboard; it raises it only on or beside the cursor's row while down, and returns focus from the box to the terminal while up. Copy must preserve logical newlines, not visual wraps. L3 fixes snapshot restoration by replaying mapped wraps in daemon restore bytes, and history chunks carry their own map for copy; mobile selection still needs an app-owned interaction layer, not CSS selection on a canvas. Real iPhone Safari and native selection/keyboard/clipboard probes remain required.
+The interaction contract is [terminal-interaction-design.md](terminal-interaction-design.md). On the phone, selection is iOS's own on the terminal's rows, drawn as page text: a long press selects a word with iOS's handles and menu, tether draws nothing of it, and Copy joins soft wraps into logical lines; a tap elsewhere, a scroll or a redraw of the selected rows closes it. Paste on the phone is the line box's. The app's native input keeps tether's own long-press gesture and Copy/Paste menu until its removal. A touch sends no mouse event, in mouse-mode apps too (Jimmy, 2026-10-24). Vertical swipes in alternate-screen apps still send ↑/↓ or wheel events. Copy must preserve logical newlines, not visual wraps. Real iPhone Safari and app selection, keyboard and clipboard checks remain required.
