@@ -1,6 +1,7 @@
 import { useId, useRef, useState } from "preact/hooks";
 import { cx } from "../cx";
 import { useFocusRef, type FocusTarget } from "../focus";
+import { autocorrectOff } from "./autocorrectOff";
 import styles from "./CodeField.module.css";
 
 const LENGTH = 8;
@@ -74,7 +75,6 @@ export function CodeField({ label, value, onInput, focusTarget, class: className
           inputMode="text"
           autocapitalize="characters"
           autocomplete="off"
-          autocorrect="off"
           spellcheck={false}
           enterkeyhint="next"
           class={styles.input}
@@ -93,7 +93,7 @@ export function CodeField({ label, value, onInput, focusTarget, class: className
           onBlur={() => { setFocused(false); }}
           onKeyUp={(e) => { sync(e.currentTarget); }}
           onSelect={(e) => { sync(e.currentTarget); }}
-          ref={(el) => { input.current = el; focusRef(el); }}
+          ref={(el) => { input.current = el; autocorrectOff(el); focusRef(el); }}
         />
       </div>
     </div>

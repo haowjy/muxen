@@ -3,6 +3,7 @@ import type { Ref } from "preact";
 import { useCallback, useLayoutEffect, useRef } from "preact/hooks";
 import { cx } from "../cx";
 import { useFocusRef, type FocusTarget } from "../focus";
+import { autocorrectOff } from "./autocorrectOff";
 import styles from "./LineInput.module.css";
 
 interface LineInputProps {
@@ -45,6 +46,7 @@ export function LineInput({ label, value, onInput, focusTarget, inputRef, class:
     // A line is a command, not prose: no predictions above the keyboard, as on the terminal's input.
     // (Not in Preact's attribute types yet.)
     el?.setAttribute("writingsuggestions", "false");
+    autocorrectOff(el);
     attach(el);
     if (el) resize(el);
   }, [attach]);
@@ -69,7 +71,6 @@ export function LineInput({ label, value, onInput, focusTarget, inputRef, class:
       rows={1}
       autocapitalize="off"
       autocomplete="off"
-      autocorrect="off"
       spellcheck={false}
       inputmode="text"
       {...rest}
