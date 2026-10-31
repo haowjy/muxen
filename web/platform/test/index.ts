@@ -101,6 +101,8 @@ export interface TestPlatform extends Platform {
   clipboardWrites: string[];
   opened: string[];
   haptics: HapticKind[];
+  /** Every `setBackSwipe` call, newest last. */
+  backSwipes: boolean[];
   restarts: string[];
   savedWorkspaces: SavedWorkspaces[];
   drafts: Map<string, DraftRecord>;
@@ -225,6 +227,7 @@ export function createTestPlatform(options: TestPlatformOptions = {}): TestPlatf
     clipboardWrites: [],
     opened: [],
     haptics: [],
+    backSwipes: [],
     restarts: [],
     savedWorkspaces: [],
     drafts: new Map(),
@@ -328,6 +331,7 @@ export function createTestPlatform(options: TestPlatformOptions = {}): TestPlatf
     openURL: (url) => { platform.opened.push(url); },
     playVideo: () => "inline",
     haptic: (kind) => { platform.haptics.push(kind); },
+    setBackSwipe: (enabled) => { platform.backSwipes.push(enabled); },
     restart: (reason) => { platform.restarts.push(reason); },
   };
 

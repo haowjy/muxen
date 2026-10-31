@@ -4,7 +4,7 @@
 import type { DraftRecord, FocusMode, HostEntry, InputEvent, Lifecycle, NativeLineSnapshot, Preferences, SavedWorkspaces, TabKey, TextRange, Viewport } from "../types";
 
 /** Bumped with every incompatible change here and in ios/TetherKit/.../Bridge.swift. */
-export const BRIDGE_VERSION = 7;
+export const BRIDGE_VERSION = 8;
 
 export interface Boot {
   bridgeVersion: number;
@@ -195,6 +195,10 @@ export class Bridge {
 
   haptic(kind: string): void {
     this.fire({ type: "haptic", kind });
+  }
+
+  backSwipe(enabled: boolean): void {
+    this.fire({ type: "backSwipe", enabled });
   }
 
   /** Synchronously inside the tap: native presents its picker and uploads the pick to `host`, reporting it under `id`. */

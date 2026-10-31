@@ -88,6 +88,7 @@ export function createNativePlatform(post: Post = webkitPost): Platform {
       return "handled";
     },
     haptic: (kind) => { bridge.haptic(kind); },
+    setBackSwipe: (enabled) => { bridge.backSwipe(enabled); },
     restart: () => { bridge.recreateWebView(); },
     manageHosts: () => { bridge.manageHosts(); },
     setRelock: (value) => { choose("relock", value); },

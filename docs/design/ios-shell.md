@@ -5,7 +5,7 @@
 > UI rules below. Subsystem invariants remain in force; touch, clipboard and the phone
 > dock retain explicit device gates.
 
-The native shell and web adapter implement bridge v7; the device-only checks below still
+The native shell and web adapter implement bridge v8; the device-only checks below still
 need Jimmy's iPhone.
 
 tether's phone client is a Swift app: a `WKWebView` runs the web UI (terminal, tabs,
@@ -473,7 +473,7 @@ triggers it when the bridge request arrives.
 
 ## The bridge
 
-Bridge version 7 has one `tether` message handler
+Bridge version 8 has one `tether` message handler
 (`WKScriptMessageHandlerWithReply`) and a page entry point, invoked in the page
 content world: `window.__tether.receive(messages)` accepts an array of native events.
 The native shell does not query page state; web sends `activeTab` when selection changes,
@@ -487,7 +487,7 @@ token to native solely for comparison and revocation, never into storage or logs
 
 | Web → native | Reply | Purpose |
 |---|---|---|
-| `ready` | `Boot { bridgeVersion: 7, hosts, workspace, viewport, preferences, lifecycle, focusMode, lineSnapshot }` | Start and restore the saved workspace (opaque JSON) and native keyboard target/editing copy if WebKit's content process restarted |
+| `ready` | `Boot { bridgeVersion: 8, hosts, workspace, viewport, preferences, lifecycle, focusMode, lineSnapshot }` | Start and restore the saved workspace (opaque JSON) and native keyboard target/editing copy if WebKit's content process restarted |
 | `socket { host }` | `{ url, token }`, `{ locked: true }` or `{ notEnrolled: true }` | Resolve the WebSocket endpoint and credential inside `HostLink`; keep both there except echoing the exact refused token to native for `hostRejected` |
 | `hostRejected { host, token }` | `null` | Clear that exact rejected token only, then re-publish `hosts` |
 | `recreateWebView` | `null` | Discard/reload the page after unrecoverable WebSocket connection failure |
@@ -511,6 +511,7 @@ token to native solely for comparison and revocation, never into storage or logs
 | `pickMedia { id, host }` | `null` | Present the native media action sheet, then upload the pick to `host` under the web-chosen `id`. Needs no open tab |
 | `playVideo { host, path }` | `null` | Play an authenticated `/fs/raw` resource |
 | `setPreference { name, value }` | Every `Preferences` | Native keeps the choice (`appearance`, `textSize` or `relock`), applies it, and answers with all three; an unknown name or value is a refused request. The web shows the reply. Only the web's Settings changes a preference, so native sends no change event |
+| `backSwipe { enabled }` | `null` | Turn WebKit's left-edge back-forward swipe on or off for the current web view. It starts off and is off again for each new web view; the web sends it whenever it changes (off on a terminal tab with nothing over it, on elsewhere), so a swipe pops the page's own history. A content-process crash makes a new web view, so the back list never holds an earlier document |
 | `manageHosts` | `null` | Present the native server management sheet from the web's Home/Settings entry |
 | `openURL { url }` | `null` | Open only `http`, `https` or `mailto` externally |
 | `ack { id }` | `null` | Optional latency-measurement acknowledgement |
@@ -555,7 +556,7 @@ HostEntry = { id: string, name: string, baseURL: string }
 PlatformHost = { handle: string, hostId: string | null,
                  name: string | null, pageOrigin: string | null }
 TabKey = { host: string, session: { server: string, session: string } }
-Boot = { bridgeVersion: 7, hosts: PlatformHost[],
+Boot = { bridgeVersion: 8, hosts: PlatformHost[],
          workspace: JSON | null, viewport: Viewport,
          preferences: Preferences, lifecycle: Lifecycle, focusMode: FocusMode,
          lineSnapshot: NativeLineSnapshot | null }
@@ -568,7 +569,8 @@ NativeLineSnapshot = { tab: TabKey, gen: number, text: string,
 TextRange = { start: number, end: number }  // UTF-16 offsets
 ```
 
-When WKWebView's content process restarts, the native shell keeps its first responder and
+When WKWebView's content process restarts, the native shell builds a new web view (a reload
+would leave the dead document's entries in the back list) and keeps its first responder and
 route fragment. `Boot.focusMode` restores `terminal` or `line` as the web focus owner; if a
 native screen currently covers the web view, it reports the target saved for that screen's
 return. When that target is `line`, `lineSnapshot` carries the live native edit, caret,
@@ -582,7 +584,7 @@ the resulting draft and native selection state.
   bridge-safe form (`handle` resolves `tether-app://h-{handle}`, `pageOrigin: null`
   means token admission). Never send the base URL or token to JS.
 - A terminal tab is a tmux session, so `TabKey` names the session (server instance and
-  `$N`). Bridge version 7 carries `TabKey` in line, draft and active-tab messages; a Files
+  `$N`). Bridge version 8 carries `TabKey` in line, draft and active-tab messages; a Files
   tab has no `TabKey`, and `activeTab` is `null` while one is active.
 - Native stores the saved workspace as raw JSON under one key and never decodes it (Swift
   has no workspace types), so a newer web build's version round-trips. The web owns

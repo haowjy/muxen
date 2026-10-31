@@ -22,6 +22,9 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
     private var inputFlushQueued = false
     private var lineReceiverReady = false
     private var activeTab: TabKey?
+    /// WebKit's left-edge back swipe pops the page's history, which is every Back in the web app. The page turns it
+    /// off on a bare terminal tab. It starts off, and a new document starts off again, until the page has rendered a screen.
+    private var backSwipe = false { didSet { webView?.allowsBackForwardNavigationGestures = backSwipe } }
     private var lastViewport: Viewport?
     private var pendingPick: PendingPick?
     /// Web keyboard switch only: keeps the page's scroll offset at zero, and answers WebKit's "may this focus raise the keyboard".
@@ -242,7 +245,9 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         return nil
     }
 
-    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { loadUI(fragment: webView.url?.fragment) }
+    /// A new web view, not a reload of this one: a reload leaves the dead document's entries in the back list,
+    /// and a back swipe from the new document's first entry would load that old document again.
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { recreateWebView() }
 
     private func loadUI(fragment: String? = nil) {
         lineReceiverReady = false
@@ -257,6 +262,7 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
 
     private func recreateWebView() {
         lineReceiverReady = false
+        backSwipe = false
         let previous = webView!
         let fragment = previous.url?.fragment
         NSLayoutConstraint.deactivate(webViewConstraints)
@@ -293,7 +299,7 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         result.scrollView.minimumZoomScale = 1
         result.scrollView.maximumZoomScale = 1
         result.scrollView.bouncesZoom = false
-        result.allowsBackForwardNavigationGestures = false
+        result.allowsBackForwardNavigationGestures = backSwipe
         #if DEBUG
         result.isInspectable = true
         #endif
@@ -363,6 +369,9 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
                 let tab: JSONValue = try request.field("tab")
                 if case .null = tab { activeTab = nil }
                 else { activeTab = try tab.decode(TabKey.self) }
+                reply(NSNull(), nil)
+            case .backSwipe:
+                backSwipe = try request.field("enabled")
                 reply(NSNull(), nil)
             case .manageHosts:
                 model.showingServers = true

@@ -252,6 +252,8 @@ export interface Platform {
   openURL(url: string): void;
   playVideo(handle: string, path: string): "handled" | "inline";
   haptic(kind: HapticKind): void;
+  /** Whether the platform's own back swipe may run (native: WebKit's left-edge swipe, which pops the page's history). Browser: no-op, since Safari owns the edge swipe. */
+  setBackSwipe(enabled: boolean): void;
   restart(reason: "stuck" | "update"): void;
   /** Opens the platform's own screen for adding, pairing and removing servers. Native only. */
   manageHosts?: () => void;

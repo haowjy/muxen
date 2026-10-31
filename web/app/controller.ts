@@ -72,6 +72,7 @@ export class AppController extends Store<AppView> {
   private sentActive: string | null | undefined;
   /** The screen and overlay state the focus controller was last told. */
   private sentScreen: { screen: Screen; overlay: boolean } | null = null;
+  private sentBackSwipe: boolean | undefined;
   static async start(platform: Platform, options: StartOptions = {}): Promise<AppController> {
     const boot = await platform.boot();
     const app = new AppController(platform, boot, options);
@@ -303,6 +304,12 @@ export class AppController extends Store<AppView> {
     if (this.sentScreen?.screen === screen && this.sentScreen.overlay === overlay) return;
     this.sentScreen = { screen, overlay };
     this.focus.screenChanged(screen, overlay);
+    // The app's edge swipe goes back, except on a terminal with nothing over it (it would fight the terminal's own touches).
+    const backSwipe = screen !== "terminal" || overlay;
+    if (backSwipe !== this.sentBackSwipe) {
+      this.sentBackSwipe = backSwipe;
+      this.platform.setBackSwipe(backSwipe);
+    }
   }
 
   private hostsChanged(): void {

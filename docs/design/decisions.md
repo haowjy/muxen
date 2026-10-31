@@ -4286,3 +4286,22 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   the place of the dock's ‹: Home (Settings), the tab overview, page dialogs. Jimmy: "the back button jumps
   from top to bottom"; he chose bottom everywhere. Rejected: Back at the top in tabs, which costs a
   terminal row and is a reach on a large phone.
+
+## Swipe back is WebKit's own gesture, off at the terminal (2026-10-31)
+
+- **The app turns on WebKit's back-forward swipe (`allowsBackForwardNavigationGestures`) everywhere but a
+  terminal tab with nothing over it.** Jimmy: "going back by swiping", and it "obviously shouldn't happen at
+  the terminal". Every Back is a history entry, so the swipe pops the router and no back logic is added. The
+  web sends `backSwipe { enabled }` from `syncScreen` when the value changes (bridge v8: the contract is
+  strict equality and native refuses a message it doesn't know, so an older native cannot take the new one).
+  Native holds one `backSwipe` state, starting off and reset for each new web view, so a cold launch cannot
+  swipe before the page has rendered a screen. Phone Safari: no-op.
+- **A crashed content process makes a new web view instead of reloading.** A reload via `loadUI` left the
+  dead document's entry in the back list (measured: `back=1` after the kill), and a swipe from the new
+  document's first entry would load it again. Clearing the list is not public API. Rejected: gesture off
+  while the list leaves the document (a KVO on the list and a floor to track), and refusing the navigation
+  in the policy (it can't tell back from forward, nor the target document).
+- **Rejected: a native edge-pan recognizer calling `history.back()`.** It needs no WebKit snapshot but has
+  no animation. Held as the fallback if WebKit's swipe snapshot shows a stale terminal frame.
+- **A forward swipe exists** (WebKit's, not tested on a device) while the gesture is on and the forward list is non-empty (Home after Back from a
+  tab, right-edge swipe returns to the tab). Left alone: it replays a router entry, as the browser's Forward.

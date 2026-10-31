@@ -1,7 +1,7 @@
 import Foundation
 
 public enum BridgeContract {
-    public static let version = 7
+    public static let version = 8
 }
 
 public struct SafeArea: Codable, Equatable, Sendable {
