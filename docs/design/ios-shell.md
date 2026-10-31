@@ -618,12 +618,12 @@ pasteboard (`readPasteboard`) starts at step 1 too. Then:
    and only offers "Insert path" for a Files upload (client-architecture.md §7.5). If the tab
    closed meanwhile, the web explains that the file remains available but cannot be inserted.
 
-**Share extension (after the paid account).** A `TetherShare` target accepts images
+**Share extension (needs an explicit App ID).** A `TetherShare` target accepts images
 and movies, copies them into the App Group container (`Inbox/<uuid>.<ext>` plus a
 manifest), and tells Jimmy to open tether. On the next foreground the app offers "Send
 1 photo to main:1?" and runs the upload above. The extension never touches tokens or
-the network. App Groups are likely unavailable to a free Personal Team, which is why
-this waits.
+the network. It waits on an explicit App ID with the App Groups capability; the
+wildcard development profile has none (Distribution).
 
 **Clipboard (v2).** User-initiated `copy` writes `UIPasteboard` and is never gated by
 the server-write policy. OSC 52 writes remain disabled in the web client; the bridge
@@ -715,8 +715,9 @@ fixture. If the socket ever moves native, the WebSocket messages get the same tr
   no App Groups, so no share extension. Builds come from `xcodebuild` on the Mac (or
   Xcode); the team stays out of `project.yml` and is passed on the command line.
   Developer Mode must be on.
-- **Later:** paid account, TestFlight internal testing (builds last 90 days), App
-  Groups and the share extension.
+- **Later:** an explicit App ID for `com.jimmyyao.tether`, which brings TestFlight
+  internal testing (builds last 90 days), App Groups, the share extension and push
+  notifications.
 
 ## Device checklist
 
@@ -780,4 +781,3 @@ and fix this spec from them. The current Simulator cannot show the software keyb
 - **Video through the native player with an auth header**: the file-manager spike.
 - **Debug web-source switch and Vite HMR from the custom scheme** are deferred; P4a
   uses bundled assets with Web Inspector.
-- **Weekly reinstall on the free team** until the paid account.

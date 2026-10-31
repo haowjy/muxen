@@ -84,7 +84,7 @@ Jimmy's decisions, as they stand ([log](decisions.md#jimmys-decisions)):
   future iPad work.
 - **Client:** a native Swift app hosting the web UI in a WKWebView, with a native
   first responder owning the keyboard ([ios-shell.md](ios-shell.md)). Installed from
-  Xcode until a paid Apple account brings TestFlight.
+  Xcode on Jimmy's paid team until TestFlight is set up.
 - **tmux:** 3.4 on the server; tether supports 3.4 and newer. `window-size latest`, default prefix
   `C-b`, the laptop sometimes attached at the same time. A window takes the size of
   the client that acted on it last, as tmux's `latest` does: opening a tab, typing,
@@ -900,7 +900,7 @@ The spikes come first. The native app's keyboard checks are in
   viewer. PDFs. repo-viewer parity.
 - OSC 52 ↔ iOS clipboard and tmux-buffer sync. Snippets.
 - Multi-host.
-- Paid Apple account: TestFlight, App Groups, the share extension.
+- An explicit App ID: TestFlight, App Groups, the share extension.
 - New-output activity dots, scrollback search, tappable file paths, per-tab pan mode.
   Bell-dot coverage beyond the global-hook limits above.
 - Predictive local echo, if spike 3 shows 200 ms+ echo on travel links.
