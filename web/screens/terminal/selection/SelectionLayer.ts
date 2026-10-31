@@ -45,16 +45,19 @@ export class SelectionLayer {
    */
   align(top: number): void {
     const { element } = this;
-    const anchor = this.rows[Math.min(this.rows.length - 1, Math.max(0, Math.floor(top)))];
+    const at = Math.min(this.rows.length - 1, Math.max(0, Math.floor(top)));
+    const anchor = this.rows[at];
+    const first = this.rows[0];
     const last = this.rows[this.rows.length - 1];
-    if (!anchor || !last) return;
-    element.style.transform = "";
+    if (!anchor || !first || !last) return;
+    first.style.marginTop = "";
     const origin = element.getBoundingClientRect().top - element.scrollTop;
     const anchorRect = anchor.getBoundingClientRect();
-    const scroll = anchorRect.top - origin + (top - Math.floor(top)) * anchorRect.height;
+    const scroll = anchorRect.top - origin + (top - at) * anchorRect.height;
     element.style.paddingBottom = `${String(Math.max(0, scroll + element.clientHeight - (last.getBoundingClientRect().bottom - origin)))}px`;
     element.scrollTop = scroll;
-    element.style.transform = `translateY(${String(element.scrollTop - scroll)}px)`;
+    // The scroll lands on a whole pixel: the rest moves the rows, not the scroller, so no canvas shows at its edge.
+    first.style.marginTop = `${String(Math.max(0, element.scrollTop) - scroll)}px`;
   }
 
   /** Selects from one point to another, in either order. */
