@@ -15,8 +15,8 @@ import styles from "./TabRow.module.css";
 /**
  * The tab row (browser-behaviors.md "Tab row"), on every surface: ‹ to the workspace's tab overview, the
  * workspace's tabs as pills (the strip is the desktop's and the phone's alike), + for Open session and Open
- * files, and on touch the keyboard control while no input holds it. On the desktop it is the top row; on the
- * phone it is the dock's bottom row, which the dock keeps in place with the keyboard up.
+ * files, and on touch the keyboard control, which stays at the row's end with the keyboard up or down. On the
+ * desktop it is the top row; on the phone it is the dock's bottom row, which the dock keeps in place with the keyboard up.
  */
 export function TabRow({ place }: { place: "top" | "dock" }) {
   const app = useApp();
@@ -41,7 +41,7 @@ export function TabRow({ place }: { place: "top" | "dock" }) {
   const pills = space.tabs.map((tab) => pillOf(tab, env));
   const files = screen === "files";
   // A Files tab has no terminal input to raise: its keyboard control is its path field, which lowers with its keyboard.
-  const typing = !files && owner !== "none";
+  const up = files ? keyboard : owner !== "none";
 
   return (
     <nav class={styles.row} data-place={place} aria-label="Tabs" onPointerDown={(e) => { if (touchInput) e.preventDefault(); }}>
@@ -68,14 +68,14 @@ export function TabRow({ place }: { place: "top" | "dock" }) {
       >
         <Icon name="plus" size={20} />
       </DockButton>
-      {place === "dock" && !typing && (
+      {place === "dock" && (
         <DockButton
           kind="control"
           class={cx(styles.control, styles.keyboard)}
-          aria-label={files && keyboard ? "Hide keyboard" : "Show keyboard"}
+          aria-label={up ? "Hide keyboard" : "Show keyboard"}
           onClick={() => { if (files) app.focus.toggleFilesKeyboard(keyboard); else app.focus.toggleKeyboard(); }}
         >
-          <Icon name={files && keyboard ? "keyboardHide" : "keyboard"} size={20} />
+          <Icon name={up ? "keyboardHide" : "keyboard"} size={20} />
         </DockButton>
       )}
       <TabMenus target={menu} workspace={space} onClose={closeMenu} />

@@ -4232,3 +4232,12 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   menu, and AutoFill showed over tether's Copy and Paste in the Simulator.
 - **The terminal's surface isolates its stacking.** The opaque selection snapshot (z 3) painted over
   the dock (z 2) once the dock rode over the surface with the keyboard up.
+
+## The keyboard control stays in the tab row (2026-10-30)
+
+- **The phone's keyboard control is always the tab row's last control.** It reads Show keyboard with
+  the keyboard down and Hide keyboard with it up, in the same place; the key row no longer ends with
+  its own Hide keyboard. Jimmy: "when the keyboard is up, can we actually have the keyboard thing
+  remain on the tabs bar... so that its consistent and doesn't move". The key row gains that width for
+  keys. Rejected: Hide keyboard at the key row's end (Termius's place, taken earlier the same day),
+  which moved the control between rows as the keyboard rose.

@@ -300,9 +300,10 @@ phone, at rest                           phone, typing (keyboard up)
 ## Phone dock
 
 On touch, Terminal is full-bleed above a dock shared by the browser, PWA and native app.
-The tab row (Tab row, above) is the dock's bottom row with the keyboard down, ending with Show
-keyboard. With it up, the tab row stays where it is and the compose box and a text-only key row
-with Hide keyboard sit under it, on the keyboard, the same order as Termius (Jimmy, 2026-10-30).
+The tab row (Tab row, above) is the dock's bottom row with the keyboard down, ending with the
+keyboard control. With it up, the tab row stays where it is, its keyboard control in the same place
+(Show keyboard becomes Hide keyboard), and the compose box and a text-only key row sit under it, on
+the keyboard, the same order as Termius (Jimmy, 2026-10-30).
 A Files tab or preview reached with the keyboard down shows the tab row with Show keyboard. The terminal pans above the keyboard-up
 controls so its last row meets the bottom of the visible area;
 if that would put the cursor above the area's top, the cursor row meets the bottom instead.
@@ -351,7 +352,7 @@ input.
   target changes, paste falls back to that captured terminal target instead of editing
   the new line. An IME candidate Return remains with the editor.
 - **Key row.** A fixed, horizontally scrolling text-only row: esc, tab, ←, ↑, ↓, →,
-  ctrl, alt, `|`, `~`, `/`, `-`, ⇧tab, ⏎, then the chords ^R, ^Z, ^C, with Hide keyboard fixed at its end. Keys are plain text with no fill until pressed. The order serves agent CLIs first (esc interrupts, arrows walk menus); no chord sits in the first slots, ^Z is never beside ⏎, and ^C is last (Jimmy, 2026-10-29). ^S and ^Q are not offered: ^S freezes a terminal with flow control on. While the box owns focus, unmodified ← and →
+  ctrl, alt, `|`, `~`, `/`, `-`, ⇧tab, ⏎, then the chords ^R, ^Z, ^C. Keys are plain text with no fill until pressed. The order serves agent CLIs first (esc interrupts, arrows walk menus); no chord sits in the first slots, ^Z is never beside ⏎, and ^C is last (Jimmy, 2026-10-29). ^S and ^Q are not offered: ^S freezes a terminal with flow control on. While the box owns focus, unmodified ← and →
   move its caret and unmodified esc returns focus to the terminal; ↑, ↓, ^R, ^C, tab and other
   terminal controls go to tmux. Distinguish the two destinations visually. In terminal
   mode the controls go to tmux. Arrows repeat while held; ↑, ↓ and ^R use the shell's

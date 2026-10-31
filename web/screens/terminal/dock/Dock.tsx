@@ -6,8 +6,6 @@
 // `--keyboard-inset` (Dock.module.css).
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { useApp, useAppView } from "../../../app/context";
-import { Icon } from "../../../ui/primitives/Icon";
-import { DockButton } from "../../../ui/primitives/DockButton";
 import { useStore } from "../../../ui/store";
 import { labelOf } from "../../../workspace/labels";
 import { activeTerminal } from "../../../workspace/state";
@@ -135,9 +133,6 @@ export function Dock({ active }: { active: boolean }) {
           </div>
           <div class={styles.keyRow}>
             <KeyRow />
-            <DockButton kind="control" class={styles.toggle} aria-label="Hide keyboard" onClick={() => { app.focus.toggleKeyboard(); }}>
-              <Icon name="keyboardHide" size={20} />
-            </DockButton>
           </div>
         </div>
       </div>

@@ -372,9 +372,9 @@ iPhone app, phone browser/PWA and desktop. Every surface has three levels: Home 
 workspaces (a server's open tabs; one per server for now), the tab overview lists one
 workspace's tabs, and a tab fills the screen with the workspace's tab row: ‹ (back to the
 overview), the tabs as pills, and +, which opens Open session and Open files. Desktop has the
-tab row at the top; there is no rail. On the phone it is the dock's bottom row with Show keyboard;
-with the keyboard up it stays put and the one-line compose box and the text-only key row, with
-Hide keyboard, sit under it. The phone browser, PWA and native app share the web dock
+tab row at the top; there is no rail. On the phone it is the dock's bottom row, ending with the
+keyboard control (Show keyboard, Hide keyboard); with the keyboard up it stays put, control and all,
+and the one-line compose box and the text-only key row sit under it. The phone browser, PWA and native app share the web dock
 ([Phone dock](client/browser-behaviors.md#phone-dock)).
 
 Use actual tmux names and spacing, not dot separators. The bell attention dot does not
@@ -468,7 +468,7 @@ after Tab, ↑ or readline edits.
 Shown directly above the keyboard (above Safari's form bar) and below the compose box
 while the keyboard is up, the same in the browser, PWA and app. The text-only row scrolls
 horizontally, in this order: esc, tab, ⇧tab, ctrl, alt, ←, ↑, ↓, →, `|`, `~`, `/`, `-`,
-^C, ^R, ^S, ^Q, ^Z and ⏎, plus Hide keyboard. A keyboard's left edge first, then the keys a
+^C, ^R, ^S, ^Q, ^Z and ⏎. A keyboard's left edge first, then the keys a
 command needs, then the control chords; ^Q follows ^S because ^S stops a shell's output
 until it. While the line has focus, unmodified ← and → move its caret, esc returns focus to
 tmux, and ↑, ↓, ^R, ^C, tab and other terminal controls go to tmux. Visually distinguish destinations.
