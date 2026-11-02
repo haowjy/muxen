@@ -168,7 +168,7 @@ export class Terminals extends Store<TerminalsView> {
     app.subscribe(() => { this.sync(); });
     app.focus.subscribe(() => { this.drawCursor(); });
     app.platform.subscribe((event) => {
-      // The app's edit menu over the mark, or over iOS's own selection.
+      // The app's edit menu over the mark.
       if (event.type === "menuCopy") this.pastes.copySelection();
       if (event.type === "menuPaste") this.pastes.pasteFromMenu();
       // Native's responder: only the tab on screen still takes input.

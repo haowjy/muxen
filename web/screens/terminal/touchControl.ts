@@ -86,11 +86,9 @@ interface Gesture {
   scrolling: boolean;
   /** The scroll in progress is a pinned terminal's: its swipes are wheel events. */
   pinned: boolean;
-  /** A hold marked a word and the finger has not lifted. */
-  marking: boolean;
 }
 
-const IDLE: Gesture = { start: "plain", origin: { x: 0, y: 0 }, stoppedCoast: false, scrolling: false, pinned: false, marking: false };
+const IDLE: Gesture = { start: "plain", origin: { x: 0, y: 0 }, stoppedCoast: false, scrolling: false, pinned: false };
 
 /** How long after a touch the surface takes no mouse events. */
 const MOUSE_AFTER_TOUCH_MS = 800;
@@ -106,7 +104,7 @@ export class TouchControl {
   private readonly targets = new Map<number, EventTarget>();
   /** The touches handed to WebKit (they began on its selection): the gesture is its until none is left. */
   private readonly handed = new Set<number>();
-  private gesture: Gesture = IDLE;
+  private gesture: Gesture = { ...IDLE };
   private lastTouchAt = -Infinity;
 
   constructor(private readonly deps: TouchDeps) {
@@ -236,7 +234,7 @@ export class TouchControl {
     this.schedule();
     // Only a pinned terminal's swipe and the mark are muxen's: any other move is WebKit's, and the list scrolls
     // natively (`touch-action: pan-y` keeps a second finger from pinching the page).
-    if ((this.gesture.pinned && this.recognizer.scrolling) || this.gesture.marking) event.preventDefault();
+    if ((this.gesture.pinned && this.recognizer.scrolling) || this.deps.mark.holding) event.preventDefault();
   };
 
   private readonly touchEnd = (event: TouchEvent): void => {
@@ -256,7 +254,7 @@ export class TouchControl {
       if (!this.fingers.delete(touch.identifier)) continue;
       ours = true;
       const actions = this.recognizer.up(touch.identifier, performance.now());
-      if (this.gesture.marking || actions.some((action) => action.type === "tap")) event.preventDefault();
+      if (this.deps.mark.holding || actions.some((action) => action.type === "tap")) event.preventDefault();
       this.run(actions);
     }
     if (!ours) return;
@@ -321,23 +319,19 @@ export class TouchControl {
         break;
       case "longPress":
         // In the app the hold is the mark; a browser has no edit menu, so its long press stays WebKit's.
-        gesture.marking = this.deps.mark.available && this.deps.mark.begin(action.x, action.y);
+        if (this.deps.mark.available) this.deps.mark.begin(action.x, action.y);
         break;
       case "selectMove":
-        if (gesture.marking) this.deps.mark.extend(action.x, action.y);
+        if (this.deps.mark.holding) this.deps.mark.extend(action.x, action.y);
         break;
       case "selectEnd":
-        if (gesture.marking) {
-          gesture.marking = false;
-          this.deps.mark.lift();
-        }
+        if (this.deps.mark.holding) this.deps.mark.lift();
         break;
       case "cancel":
         gesture.scrolling = false;
         // A system gesture took the finger: the mark is made and has its handles, so it ends as a lift does. Clearing it would
         // lose a selection nobody dismissed; a redraw (J7), a tap elsewhere or a reset still close it.
-        if (gesture.marking) this.deps.mark.lift();
-        gesture.marking = false;
+        if (this.deps.mark.holding) this.deps.mark.lift();
         break;
     }
   }

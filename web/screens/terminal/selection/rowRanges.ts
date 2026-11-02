@@ -103,7 +103,7 @@ export class RowRanges {
   /** `range`'s text with soft wraps joined, one line per logical line: Copy's text for the selection and the mark alike. */
   textOf(range: Range): string {
     const pieces = this.rowsOf(range)
-      .map(({ element, wrapped }) => ({ text: clipped(range, element).toString().replaceAll(" ", " "), wrapped }));
+      .map(({ element, wrapped }) => ({ text: clipped(range, element).toString().replaceAll("\u00a0", " "), wrapped }));
     // A range that ends at a row's start still touches that row, and one that starts at a row's end touches it: neither selects it.
     while (pieces.at(-1)?.text === "") pieces.pop();
     while (pieces[0]?.text === "") pieces.shift();

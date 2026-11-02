@@ -1,5 +1,6 @@
 // How the shown tab is looked at by touch (client-architecture.md §7.6): the recognizer, the selection on the
-// row list (which scrolls natively), and, for desktop's xterm view, the wheel past the buffer's top onto the history rows. All of it is state of one tab on a surface every tab shares, so it lives in one object
+// row list (which scrolls natively), and, for desktop's xterm view, the wheel past the buffer's top onto the
+// history rows. All of it is state of one tab on a surface every tab shares, so it lives in one object
 // that is told which tab is shown and drops everything when that changes or a snapshot repaints the
 // pane. Nothing here outlives the view it began on: a held drag or a selection never reaches another tab's pane.
 import type { Owner } from "../../app/focus";
@@ -127,11 +128,6 @@ export class TerminalView {
     },
     scrolledUp: (scrolled) => { this.deps.onScrolled(scrolled); },
   };
-
-  /** The row list moved onto or off the newest line: the jump-to-latest control follows. */
-  reportScrolled(scrolled: boolean): void {
-    this.deps.onScrolled(scrolled);
-  }
 
   /** Whether the view is on the newest line. */
   get atLatest(): boolean {

@@ -53,7 +53,7 @@ export class Mark implements Selection {
   private handles: Record<End, HTMLElement> | null = null;
   private places: Record<End, Place> | null = null;
   /** A hold marked a word and the finger has not lifted. */
-  private holding = false;
+  private held = false;
   /** A handle being dragged, and the vector from the finger to its text point at the grab. */
   private grabbed: { end: End; touch: number; dx: number; dy: number } | null = null;
   /** The menu may be up: native owns whether it is, so only a shown one is hidden. */
@@ -62,6 +62,11 @@ export class Mark implements Selection {
   private edge: { dir: -1 | 1; x: number; y: number; apply: (x: number, y: number) => void; frame: number } | null = null;
 
   constructor(private readonly deps: MarkDeps) {}
+
+  /** A hold marked a word and the finger has not lifted: the recognizer's selection gesture is the mark's. */
+  get holding(): boolean {
+    return this.held;
+  }
 
   /** Whether the hold may mark: only where native shows the menu. */
   get available(): boolean {
@@ -103,7 +108,7 @@ export class Mark implements Selection {
     if (!word) return false;
     this.deps.tick();
     this.state = { range: word.cloneRange(), word };
-    this.holding = true;
+    this.held = true;
     this.sync();
     return true;
   }
@@ -129,7 +134,7 @@ export class Mark implements Selection {
   /** The finger that held and dragged lifted: the mark is final and the menu comes up. */
   lift(): void {
     this.stopEdge();
-    this.holding = false;
+    this.held = false;
     this.sync();
     this.toggleMenu();
   }
@@ -154,7 +159,7 @@ export class Mark implements Selection {
     this.state = null;
     this.places = null;
     this.grabbed = null;
-    this.holding = false;
+    this.held = false;
     this.stopEdge();
     this.hideMenu();
     this.sync();
@@ -166,7 +171,7 @@ export class Mark implements Selection {
   }
 
   /**
-   * Everything drawn follows from `state`, `holding` and `grabbed`; every path changes those and calls this, so no
+   * Everything drawn follows from `state`, `held` and `grabbed`; every path changes those and calls this, so no
    * path has a pair to remember. The handles are `data-inert` while a finger is down on the mark, so a handle's hit
    * area is never what hit-testing finds under a holding finger.
    */
@@ -176,7 +181,7 @@ export class Mark implements Selection {
       CSS.highlights.set("tsel", new Highlight(state.range));
       this.placeHandles(state.range);
     } else CSS.highlights.delete("tsel");
-    const touched = this.holding || this.grabbed !== null;
+    const touched = this.held || this.grabbed !== null;
     for (const end of ENDS) {
       const handle = this.handles?.[end]; // made by the first placeHandles
       handle?.toggleAttribute("hidden", !state);
