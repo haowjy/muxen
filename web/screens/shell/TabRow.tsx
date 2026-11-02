@@ -14,8 +14,7 @@ import styles from "./TabRow.module.css";
 
 /**
  * The tab row (browser-behaviors.md "Tab row"), on every surface: ‹ to Home, the workspace's tabs as pills
- * (the strip is the desktop's and the phone's alike), All tabs (the tab list over the tab), + for Open session and Open
- * files, and on touch the keyboard control, which stays at the row's end with the keyboard up or down. On the
+ * (the strip is the desktop's and the phone's alike), + for Open session and Open files, All tabs (the tab list over the tab), and on touch the keyboard control, which stays at the row's end with the keyboard up or down. On the
  * desktop it is the top row; on the phone it is the dock's bottom row, which the dock keeps in place with the keyboard up.
  */
 export function TabRow({ place }: { place: "top" | "dock" }) {
@@ -57,9 +56,6 @@ export function TabRow({ place }: { place: "top" | "dock" }) {
           onMenu={(id, anchor) => { setMenu({ kind: "tab", id, anchor }); }}
         />
       </div>
-      <DockButton kind="control" class={styles.control} aria-label="All tabs" onClick={(e) => { app.openOverlay({ screen: "overview", name: "tabs" }, e.currentTarget); }}>
-        <Icon name="tabs" size={20} />
-      </DockButton>
       <DockButton
         kind="control"
         class={styles.control}
@@ -70,6 +66,9 @@ export function TabRow({ place }: { place: "top" | "dock" }) {
         onClick={(e) => { const anchor = e.currentTarget; setMenu((m) => (m?.kind === "add" ? null : { kind: "add", anchor })); }}
       >
         <Icon name="plus" size={20} />
+      </DockButton>
+      <DockButton kind="control" class={styles.control} aria-label="All tabs" onClick={(e) => { app.openOverlay({ screen: "overview", name: "tabs" }, e.currentTarget); }}>
+        <Icon name="tabs" size={20} />
       </DockButton>
       {place === "dock" && (
         <DockButton

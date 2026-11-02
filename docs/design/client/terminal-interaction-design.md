@@ -40,7 +40,7 @@ Use real user paste/copy events and text/plain. A user-driven Copy action may ca
 
 ### The dock: line field, key row and one keyboard toggle
 
-On touch, Terminal ends in a dock shared by the phone browser, PWA and app. With the keyboard down, the tab row holds ‹ (Home), the tabs, All tabs (the tab list), + and Show keyboard. With it up, the tab row stays, Show keyboard becoming Hide keyboard in the same place, and the compose box and the text-only key row sit under it. The web draws the controls; layout and sizes are in [browser-behaviors.md](browser-behaviors.md#phone-dock).
+On touch, Terminal ends in a dock shared by the phone browser, PWA and app. With the keyboard down, the tab row holds ‹ (Home), the tabs, +, All tabs (the tab list) and Show keyboard. With it up, the tab row stays, Show keyboard becoming Hide keyboard in the same place, and the compose box and the text-only key row sit under it. The web draws the controls; layout and sizes are in [browser-behaviors.md](browser-behaviors.md#phone-dock).
 
 **Two targets share one keyboard.** The *terminal* target sends each keystroke as typed, from the terminal's own input (a text box in the page). The *line field* is an editable textarea, in the browser, the PWA and the app alike. Every text box carries the same keyboard settings (autocorrect, capitalization, spell checking and smart punctuation off); dictation may capitalize on its own. Nothing typed in the line target reaches tmux until Return.
 

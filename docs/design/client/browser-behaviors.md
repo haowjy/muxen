@@ -150,8 +150,8 @@ stopped daemon is explained. Returning from the background keeps the screen the 
 
 ## Tab row
 
-The tab row holds ‹ (Home), the workspace's tabs as pills in workspace order, All tabs (the tab list),
-and +; on the phone,
+The tab row holds ‹ (Home), the workspace's tabs as pills in workspace order, +,
+and All tabs (the tab list); on the phone,
 Show keyboard ends it while the keyboard is down. Every pill is filled; the active one is tinted with its
 status colour, its label and its circled × in that colour; other pills have a muted label and the
 attention dot when they have one (Jimmy, 2026-10-30, after Termius's tabs).
