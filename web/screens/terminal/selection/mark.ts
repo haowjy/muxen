@@ -210,6 +210,7 @@ export class Mark {
     const place = (end: End, x: number, rect: DOMRect): Place => {
       const element = handles[end];
       if (element.parentElement !== layer) layer.append(element);
+      element.hidden = false;
       element.style.left = `${String(x - host.left + layer.scrollLeft)}px`;
       element.style.top = `${String(rect.top - host.top + layer.scrollTop)}px`;
       element.style.height = `${String(rect.height)}px`;

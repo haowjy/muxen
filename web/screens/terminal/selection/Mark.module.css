@@ -6,7 +6,7 @@
 /* A handle sits on its stem: `left` is the stem's x, `top` and `height` are its line's. The knob is a
    10 px circle 2 px past the line (above for the start, below for the end); the hit area is 44 × 44 centred
    on the knob and transparent. The layer is the row list's scroller, which clips: a start knob that would lie above its
-   content's top hangs below its line (`data-below`). `touch-action: none` beats the scroller's `pan-y`. */
+   visible top hangs below its line (`data-below`). `touch-action: none` beats the scroller's `pan-y`. */
 .handle {
   position: absolute;
   z-index: var(--z-term-selection);
