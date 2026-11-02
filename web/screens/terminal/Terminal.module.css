@@ -35,14 +35,6 @@
   -webkit-user-select: text;
   user-select: text;
 }
-/* The keyboard-up mark is eligible: the hold is muxen's alone. WebKit's long-press selection would start after the
-   hold, send `touchcancel` and clear the mark. `caretRangeFromPoint` finds nothing under
-   `user-select: none`, so the mark makes the rows selectable for each lookup (`Mark.caretAt`). */
-.host[data-marking] {
-  -webkit-touch-callout: none;
-  -webkit-user-select: none;
-  user-select: none;
-}
 .host:not([data-direct-input="xterm"]) [data-rows] { touch-action: pan-y; }
 .host:not([data-direct-input="xterm"]) [data-rows][data-pinned] { touch-action: none; }
 .host:not([data-direct-input="xterm"]) ::selection { background-color: var(--term-selection); }

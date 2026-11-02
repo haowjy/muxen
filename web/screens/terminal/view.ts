@@ -83,8 +83,6 @@ export class TerminalView {
       mark: this.mark,
       send: (events) => { this.send(events); },
     });
-    // The app's hold is the mark, so WebKit's own long press must not start under it and cancel the touch.
-    if (this.mark.available) element.dataset["marking"] = "true";
     // A mouse wheel past the buffer's top goes on into the history, as a swipe does.
     element.addEventListener("wheel", this.wheelPastTop, { capture: true, passive: false });
   }

@@ -4471,16 +4471,29 @@ With the keyboard down, iOS's own long-press selection felt slow. Asked whether 
 states, Jimmy said: "i guess we should make it more consistent".
 
 - **In the app the hold is the mark with the keyboard up or down.** `Mark.available` (the platform has
-  `editMenu`) is the one check: `TerminalView` sets `data-marking` once, and the touch code starts the mark by it
-  alone. A browser has no edit menu, so no mark; it keeps WebKit's selection.
+  `editMenu`) is the one check: the touch code starts the mark by it alone. A browser has no edit menu, so no mark; it keeps WebKit's selection.
 - **Supersedes** the keyboard-down half of the 2026-11-02 "Keyboard down, WebKit takes the responder" entry
   (`hidden` lets WebKit take the responder; hardware keys through `Terminals.hardwareKey` in the app; the
   `selectionchange` reclaim and `TerminalView.markable`) and the step-0 choice that the keyboard-down state uses
   iOS's own selection. The native field refuses WebKit's responder request in every mode but `webText` again, as
   the 2026-10-30 "select is a flag" entry had it; `Terminals.hardwareKey` is the phone browser's only; the
-  reclaim and `markable` are deleted. The rest of that entry (`data-marking`, `touchcancel` ends the mark as a
-  lift, the cursor row, the reset order) stands.
+  reclaim and `markable` are deleted. The rest of that entry (`touchcancel` ends the mark as a lift, the cursor
+  row, the reset order) stands; its `data-marking` is deleted (next entry).
 - **Tap rules, keyboard down with a mark up:** a tap inside toggles the menu; a tap elsewhere clears the mark and
   does nothing else (no keyboard raise). With no mark a tap is as before.
 - **Rejected:** keeping iOS's selection with the keyboard down (the slowness is Jimmy's complaint; two
   selections with two looks and two lifetimes); a setting for it (a mode for one person's taste).
+
+## The rows stay selectable under the mark (2026-11-02)
+
+On the phone the mark showed its handles and Copy but no highlight. WebKit paints no CSS Custom Highlight on
+`user-select: none` text; a Playwright WebKit page with one highlight across a `text` row and a `none` row painted
+only the first. `data-marking` (the host `user-select: none` and `-webkit-touch-callout: none` in the app) is
+deleted, and with it `Mark.caretAt`'s selectable-for-the-lookup toggle.
+
+- **Why it isn't needed:** in the app the native field keeps first responder in every mode but `webText`, and a
+  locked responder lets WebKit select nothing (the native A/B, and Jimmy's keyboard-down report on that state: a
+  long press did nothing at all). A `touchcancel` after the mark exists ends it as a lift, so a system gesture
+  taking the finger no longer clears it.
+- **Rejected:** keeping `user-select: none` and drawing the highlight as boxes from the range's rects (a second
+  geometry to keep in step with scroll and history inserts, for a case the responder already rules out).

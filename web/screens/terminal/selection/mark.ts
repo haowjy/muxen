@@ -184,13 +184,8 @@ export class Mark {
 
   /** The caret position under a client point, if it lies in the rows' text. */
   private caretAt(x: number, y: number): Range | null {
-    // WebKit finds no caret in `user-select: none` text, which the host is while the mark is eligible
-    // (`data-marking`): the rows are selectable for the lookup, and the style recalculation it forces ends before it returns.
-    const layer = this.deps.layer();
-    if (layer) layer.style.setProperty("-webkit-user-select", "text");
     // eslint-disable-next-line @typescript-eslint/no-deprecated -- WebKit's own; the standard caretPositionFromPoint is later than iOS 17
     const at = document.caretRangeFromPoint(x, y);
-    layer?.style.removeProperty("-webkit-user-select");
     return at && this.deps.page.holds(at.startContainer) ? at : null;
   }
 
