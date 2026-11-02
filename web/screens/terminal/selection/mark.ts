@@ -52,6 +52,8 @@ export class Mark implements Selection {
   private state: { range: Range; word: Range } | null = null;
   private handles: Record<End, HTMLElement> | null = null;
   private places: Record<End, Place> | null = null;
+  /** A hold marked a word and the finger has not lifted. */
+  private holding = false;
   /** A handle being dragged, and the vector from the finger to its text point at the grab. */
   private grabbed: { end: End; touch: number; dx: number; dy: number } | null = null;
   /** The menu may be up: native owns whether it is, so only a shown one is hidden. */
@@ -94,8 +96,8 @@ export class Mark implements Selection {
     if (!word) return false;
     this.deps.tick();
     this.state = { range: word.cloneRange(), word };
-    this.paint();
-    this.setInert(true); // until the finger lifts, a handle's hit area must not be what hit-testing finds under it
+    this.holding = true;
+    this.sync();
     return true;
   }
 
@@ -114,13 +116,14 @@ export class Mark implements Selection {
     if (at.compareBoundaryPoints(Range.START_TO_START, word) < 0) range.setStart(at.startContainer, at.startOffset);
     else if (at.compareBoundaryPoints(Range.END_TO_END, word) > 0) range.setEnd(at.startContainer, at.startOffset);
     this.state.range = range;
-    this.paint();
+    this.sync();
   }
 
   /** The finger that held and dragged lifted: the mark is final and the menu comes up. */
   lift(): void {
     this.stopEdge();
-    this.setInert(false);
+    this.holding = false;
+    this.sync();
     this.toggleMenu();
   }
 
@@ -144,11 +147,10 @@ export class Mark implements Selection {
     this.state = null;
     this.places = null;
     this.grabbed = null;
+    this.holding = false;
     this.stopEdge();
-    CSS.highlights.delete("tsel");
     this.hideMenu();
-    this.setInert(false);
-    if (this.handles) for (const end of ENDS) this.handles[end].hidden = true;
+    this.sync();
   }
 
   /** Content moved under the rows (a block dropped above): the handles stand in content coordinates, so they follow their text again. */
@@ -156,11 +158,22 @@ export class Mark implements Selection {
     if (this.state) this.placeHandles(this.state.range);
   }
 
-  private paint(): void {
+  /**
+   * Everything drawn follows from `state`, `holding` and `grabbed`; every path changes those and calls this, so no
+   * path has a pair to remember. The handles are `data-inert` while a finger is down on the mark, so a handle's hit
+   * area is never what hit-testing finds under a holding finger.
+   */
+  private sync(): void {
     const { state } = this;
-    if (!state) return;
-    CSS.highlights.set("tsel", new Highlight(state.range));
-    this.placeHandles(state.range);
+    if (state) {
+      CSS.highlights.set("tsel", new Highlight(state.range));
+      this.placeHandles(state.range);
+    } else CSS.highlights.delete("tsel");
+    for (const end of ENDS) {
+      const handle = this.handles?.[end]; // made by the first placeHandles
+      handle?.toggleAttribute("hidden", !state);
+      handle?.toggleAttribute("data-inert", this.holding || this.grabbed !== null);
+    }
   }
 
   /** The word under a client point, or null off the rows' text or on a blank. */
@@ -203,7 +216,6 @@ export class Mark implements Selection {
     const place = (end: End, x: number, rect: DOMRect): Place => {
       const element = handles[end];
       if (element.parentElement !== layer) layer.append(element);
-      element.hidden = false;
       element.style.left = `${String(x - host.left + layer.scrollLeft)}px`;
       element.style.top = `${String(rect.top - host.top + layer.scrollTop)}px`;
       element.style.height = `${String(rect.height)}px`;
@@ -239,7 +251,7 @@ export class Mark implements Selection {
   private grab(end: End, event: TouchEvent): void {
     event.preventDefault();
     const finger = event.changedTouches[0];
-    if (this.state) this.placeHandles(this.state.range); // the list may have scrolled since the last paint
+    if (this.state) this.placeHandles(this.state.range); // the list may have scrolled since the last sync
     const { places } = this;
     if (!finger || !places || this.grabbed) return;
     // Two short marks' hit areas overlap: of the handles whose area holds the touch, the nearer knob takes it.
@@ -248,7 +260,7 @@ export class Mark implements Selection {
     const chosen = near(other) < near(end) && Math.abs(finger.clientX - places[other].knob.x) <= HIT && Math.abs(finger.clientY - places[other].knob.y) <= HIT ? other : end;
     const { text } = places[chosen];
     this.grabbed = { end: chosen, touch: finger.identifier, dx: text.x - finger.clientX, dy: text.y - finger.clientY };
-    this.setInert(true);
+    this.sync();
     this.hideMenu();
   }
 
@@ -281,11 +293,11 @@ export class Mark implements Selection {
       else short.setEnd(node, offset);
       if (short.collapsed) return;
       state.range = short;
-      this.paint();
+      this.sync();
       return;
     }
     state.range = range;
-    this.paint();
+    this.sync();
   }
 
   private drop(event: TouchEvent): void {
@@ -321,9 +333,5 @@ export class Mark implements Selection {
   private stopEdge(): void {
     if (this.edge) cancelAnimationFrame(this.edge.frame);
     this.edge = null;
-  }
-
-  private setInert(on: boolean): void {
-    for (const end of ENDS) this.handles?.[end].toggleAttribute("data-inert", on);
   }
 }
