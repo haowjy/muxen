@@ -32,6 +32,7 @@ interface ViewDeps {
   /** Desktop direct input is xterm's textarea: a touch there is a click, which focuses it. */
   directInput(): "xterm" | "owned" | "native";
   focusTerminal(): void;
+  /** Native only: iOS's selection closed with the keyboard down, so the field takes the responder back for hardware keys. */
   reclaimFocus(): void;
   /** The shell's command line under the cursor (OSC 133), or null. */
   prompt(): PromptLine | null;
@@ -53,6 +54,7 @@ export class TerminalView {
   private readonly mark: Mark;
   private readonly touch: TouchControl;
   private readonly wheel: PinnedWheel;
+  private hadSelection = false;
 
   constructor(private readonly deps: ViewDeps) {
     const { element } = deps;
@@ -82,8 +84,11 @@ export class TerminalView {
       wheel: this.wheel,
       page: this.page,
       mark: this.mark,
+      markable: () => this.markable,
       send: (events) => { this.send(events); },
     });
+    // The one place iOS's selection closing is seen, whichever way it closed (a tap, a redraw, a reset).
+    document.addEventListener("selectionchange", this.selectionChanged);
     // A mouse wheel past the buffer's top goes on into the history, as a swipe does.
     element.addEventListener("wheel", this.wheelPastTop, { capture: true, passive: false });
   }
@@ -118,6 +123,14 @@ export class TerminalView {
     return this.deps.directInput() === "xterm" ? this.scroll.atLatest : (this.deps.list()?.atLatest ?? true);
   }
 
+  /**
+   * Whether the hold marks (the app with the keyboard up) rather than leaving the long press to WebKit. Touch handling and
+   * the host's `data-marking` both follow this, so native selection is off exactly when the mark replaces it.
+   */
+  get markable(): boolean {
+    return this.deps.owner() !== "none" && this.mark.available;
+  }
+
   /** Leaves history for the newest line. */
   toLatest(): void {
     if (this.deps.directInput() === "xterm") this.scroll.toLatest();
@@ -133,8 +146,9 @@ export class TerminalView {
 
   /** A snapshot repainted the pane, or the tab changed: stop any gesture, and drop the selection and the fetched history. */
   reset(): void {
-    this.touch.cancel();
+    // Selection first: a hold cancelled with its mark still up would lift and show the menu for a mark about to go.
     this.dismissSelection();
+    this.touch.cancel();
     this.scroll.reset();
     this.wheel.stop();
   }
@@ -150,6 +164,12 @@ export class TerminalView {
     this.mark.clear();
     return text;
   }
+
+  private readonly selectionChanged = (): void => {
+    const has = this.page.current() !== null;
+    if (this.hadSelection && !has) this.deps.reclaimFocus();
+    this.hadSelection = has;
+  };
 
   /** Closes whichever selection is up: the page's, or the mark. */
   dismissSelection(): void {

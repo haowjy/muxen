@@ -4432,3 +4432,35 @@ Decided by Jimmy, 2026-10-31 ("the enroll entering code sucks ass... can we get 
 - **Rejected:** fixing the overlay by hand (the bug only shows on the device, and each fix is
   another guess at Safari); a plain single text field (Jimmy asked for the library; the cells are
   the spec's look).
+
+## Keyboard down, WebKit takes the responder for the selection; keyboard up, the mark owns the hold (2026-11-02)
+
+Five changes from the phone investigation of "selection does nothing with the keyboard down" and "the mark
+clears while I hold it". Source: `.meridian/work/tether-mvp/ios-simplify/redesign-touch/investigation-phone-selection.md`.
+
+- **`hidden` no longer refuses WebKit's responder request.** This overturns the premise of "The terminal's
+  selection keeps the keyboard; `select` is a flag" (2026-10-30), which held that the native field is first
+  responder in every mode but `webText`: a field that refuses to resign is why iOS's loupe, handles and Copy
+  never appeared with the keyboard down. `terminal` and `line` still refuse (the keyboard is up for the field).
+  While WebKit holds the responder, hardware keys arrive as `keydown` and `Terminals.hardwareKey` sends them to
+  tmux (it now runs in the app too). When the page's selection goes from a range to none, `TerminalView` asks
+  for `focus hidden` again, so the field takes the responder back if WebKit left none (one owner, on
+  `selectionchange`, not on each path that closes a selection).
+- **`data-marking` turns native selection off while the mark is eligible** (`user-select: none`,
+  `-webkit-touch-callout: none`), so WebKit's long press cannot start after muxen's 380 ms hold and
+  `touchcancel` the mark. `TerminalView.markable` is the one check; the touch code and the attribute both
+  follow it. `Mark.caretAt` makes the rows selectable for each lookup because `caretRangeFromPoint` finds nothing
+  in `none` text.
+- **`touchcancel` after the mark exists ends it as a lift does.** A system gesture took the finger; nobody
+  dismissed the mark. A second finger during the hold does the same. J7 (a redraw under the mark) is unchanged.
+  A reset drops the selection before cancelling the touch, so no menu shows for a mark about to go.
+- **The cursor is drawn by its own row** (`data-caret`, `--caret-x`, `--caret-w`, a `::after`). The overlay kept
+  a content coordinate that a history prepend or trim left stale. A pseudo-element, not a child, so it never
+  appears in selection ranges or rects. `frame().cursor` also carries `cell`, the drawn column: clamped to the
+  last column at pending wrap and stepped back to a wide character's lead cell; `col` stays the logical value.
+- **Rejected:** pausing output while a selection is up (J7 is designed; a different lifetime is Jimmy's call);
+  a longer hold timer (redraws still clear the mark, WebKit can still take the touch first); a blanket
+  `touchstart.preventDefault()` (breaks native scroll and the other touches); re-placing the overlay cursor
+  after `editAbove` (keeps the stale-coordinate state); switching the mode to `webText` to get past the
+  guard (a second responder owner and a wrong logical mode); reclaiming the responder only on the dismissing
+  tap (misses J7, reset, paste, font change, resize).

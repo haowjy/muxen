@@ -40,8 +40,8 @@ interface TouchDeps {
   directInput(): "xterm" | "owned" | "native";
   /** Focuses the terminal's input: a touch tap on or beside the cursor row, native input only. */
   focusTerminal(): void;
-  /** Native only: the keyboard is down and a tap closed iOS's selection, so the field takes the responder back for hardware keys. */
-  reclaimFocus(): void;
+  /** The hold may start the mark: a keyboard owner holds and the platform has the edit menu. */
+  markable(): boolean;
   /** The shell's command line under the cursor (OSC 133), or null. */
   prompt(): PromptLine | null;
   /** Who holds the keyboard. */
@@ -149,7 +149,7 @@ export class TouchControl {
     const target = touch.target;
     this.targets.set(touch.identifier, target);
     this.deps.list()?.hold(true);
-    const cancellable = this.deps.wheel.active || (this.deps.owner() !== "none" && this.deps.mark.available);
+    const cancellable = this.deps.wheel.active || this.deps.markable();
     target.addEventListener("touchmove", this.touchMove as EventListener, { passive: !cancellable });
     target.addEventListener("touchend", this.touchEnd as EventListener, { passive: false });
     target.addEventListener("touchcancel", this.touchCancelled as EventListener);
@@ -303,7 +303,6 @@ export class TouchControl {
         if (this.dismissing) {
           this.deps.page.clear();
           this.deps.mark.clear();
-          this.deps.reclaimFocus();
           break;
         }
         this.tap(action.x, action.y);
@@ -328,7 +327,7 @@ export class TouchControl {
         break;
       case "longPress":
         // Keyboard down, or in a browser: WebKit's, iOS selects the word under the finger. Keyboard up in the app: the mark.
-        this.marking = this.deps.owner() !== "none" && this.deps.mark.available && this.deps.mark.begin(action.x, action.y);
+        this.marking = this.deps.markable() && this.deps.mark.begin(action.x, action.y);
         break;
       case "selectMove":
         if (this.marking) this.deps.mark.extend(action.x, action.y);

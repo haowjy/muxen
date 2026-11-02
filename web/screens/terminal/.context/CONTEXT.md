@@ -74,7 +74,7 @@ The Terminal destination. The design is client-architecture.md §5.4, §5.5, §5
   mark's handles is not the recognizer's, a tap elsewhere only clears it, and mouse events stop at the host for
   800 ms after a touch. Nothing on or above the host may set `user-select: none`, `touch-action: none` (the
   pinned list excepted) or `-webkit-touch-callout: none`, or cancel `touchstart`: the long press would never
-  begin. The one exception is the keyboard-up mark (`data-marking` on the host, set while `Mark.available` and a
+  begin. The one exception is the keyboard-up mark (`data-marking` on the host, set from `TerminalView.markable`, the same check that starts the mark: `Mark.available` and a
   keyboard owner hold): there the host is `user-select: none` and `-webkit-touch-callout: none`, so WebKit's
   own long press cannot start after muxen's 380 ms hold and `touchcancel` the mark; `Mark.caretAt` makes the
   rows selectable for each lookup because `caretRangeFromPoint` finds nothing in `none` text. A tap never moves focus, except native input's older rule (`tapAction`'s `raises`). The list fetches

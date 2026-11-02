@@ -362,9 +362,12 @@ responder. Terminal's native responder stays the same object while its target ch
   hardware keys arrive and route to the terminal. A field that refused to resign blocked iOS's
   long-press selection (WebKit never became responder), so in `hidden` it resigns when WebKit asks.
   While WebKit holds the responder, hardware keys reach the page as `keydown`, and the page's one
-  hardware-key listener (`Terminals.hardwareKey`) sends them to tmux. A tap that closes the selection
-  sends `focus hidden` again (`FocusController.reclaimNative`), and the field takes the responder back;
-  `focus terminal` from the keyboard toggle or a tap near the cursor takes it the same way.
+  hardware-key listener (`Terminals.hardwareKey`) sends them to tmux. When the page's selection goes from
+  a range to none, by any path (a tap, a redraw under it, a reset), `TerminalView` sees the `selectionchange`
+  and asks for `focus hidden` again (`FocusController.reclaimNative`). If WebKit left no responder, the field
+  takes it back; if WebKit kept it, keys keep arriving as `keydown` and the page path carries them until the
+  next `focus` change. Either way keys reach tmux. `focus terminal` from the keyboard toggle or a tap near
+  the cursor takes the responder from WebKit.
 - **The guard.** In `terminal` and `line`, `canResignFirstResponder` refuses WebKit's attempt to take
   the responder: the keyboard is up for the field. `hidden` and `webText` allow it.
 - **Fields off Terminal.** Before a sheet or another destination's editable field is
