@@ -13,7 +13,10 @@ code and docs together. Done since: GitHub repo is `haowjy/muxen`; the dev box (
 runs muxen: checkout moved to `~/gitrepos/muxen`, `cargo install`, `~/.config/muxen`, old state kept at
 `~/.local/state/tether.bak-2026-10-31`, `@tether-bell` cleared, old binaries in
 `~/.cargo/bin/old-tether/`, `muxen setup --background` (Serve on `/run/user/1000/muxen/serve.sock`).
-No dotfile on the dev box sourced the shell hooks. Remaining: the Mac's install, the iPhone app,
+No dotfile on the dev box sourced the shell hooks. On 2026-11-02 the dev box's `old-tether/` binaries and
+`tether.bak-2026-10-31` state were deleted, and the Mac moved over: `tether teardown`, `cargo install` from main
+(729b867), old state, config, log and binary deleted (no backup; old tokens can't be used anyway), `muxen setup --background`.
+Remaining: the iPhone app (re-add both hosts, then delete the old app),
 the Mac's local folder, current KB pages (kb-lead; also: the Mac can now SSH to the dev box). This work item and `.meridian/` history keep the name
 `tether-mvp`; docs link into it by that path.
 
