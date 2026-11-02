@@ -5,7 +5,7 @@
 // Touch events are shared with it: every listener but the handles' is passive
 // where it can be, `touchmove` is cancelled only for the mark and a pinned terminal's swipe
 // (which becomes wheel events), `touchend` is cancelled for a tap (so a tap is never a click or a blur), and
-// `touchcancel` is what a long press that WebKit took over looks like. A swipe past the slop is the browser's
+// `touchcancel` is a finger a system gesture took. A swipe past the slop is the browser's
 // scroll: the recognizer only hides the mark's menu for it.
 // A touch on a live selection is WebKit's and never reaches the recognizer. After a touch, mouse events
 // on the surface stop for a while: iOS's imitation mouse-move over a link would redraw rows and end a selection.
@@ -341,7 +341,9 @@ export class TouchControl {
         break;
       case "cancel":
         this.scrolling = false;
-        if (this.marking) this.deps.mark.clear(); // a system gesture took the touch
+        // A system gesture took the finger: the mark is made and has its handles, so it ends as a lift does. Clearing it would
+        // lose a selection nobody dismissed; a redraw (J7), a tap elsewhere or a reset still close it.
+        if (this.marking) this.deps.mark.lift();
         this.marking = false;
         break;
     }

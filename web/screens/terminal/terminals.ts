@@ -630,6 +630,10 @@ export class Terminals extends Store<TerminalsView> {
     const solid = this.viewport.directInput !== "xterm" && this.app.focus.snapshot.owner === "terminal";
     if (solid) this.element.dataset["cursor"] = "solid";
     else delete this.element.dataset["cursor"];
+    // The hold is muxen's (the mark) whenever it can mark: WebKit's own long press must not start under it and cancel the touch.
+    const marking = this.viewport.directInput !== "xterm" && this.app.focus.snapshot.owner !== "none" && this.app.platform.editMenu !== undefined;
+    if (marking) this.element.dataset["marking"] = "true";
+    else delete this.element.dataset["marking"];
   }
 
   /**
