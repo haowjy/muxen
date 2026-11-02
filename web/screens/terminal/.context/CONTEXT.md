@@ -88,7 +88,7 @@ The Terminal destination. The design is client-architecture.md §5.4, §5.5, §5
   list is created the first time a non-xterm input is shown and hidden while xterm shows (an iPad's trackpad);
   it keeps pulling frames while hidden.
 - **Nothing redraws a still screen on touch.** A redraw replaces a row's text and a selection on it. The list
-  rewrites only the rows whose text differs, and the cursor is an overlay whose look is CSS on
+  rewrites only the rows whose text differs, and the cursor is a pseudo-element of its own row (`data-caret`; no overlay keeps a position that an edit above could leave stale) whose look is CSS on
   `data-cursor`, and its colours are CSS variables, so a theme change redraws no row. A resize, font change, snapshot or input switch closes a selection first.
 - **Rows are runs.** `term/rows.ts` `Row`: every row comes from xterm (`term/lines.ts`; history is
   decoded by `term/decode.ts`); a wide character is a run of its own (`wide`), which the view draws two cells

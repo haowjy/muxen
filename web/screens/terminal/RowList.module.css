@@ -22,24 +22,3 @@
   -webkit-user-select: none;
   user-select: none;
 }
-/* The cursor overlays the content: a solid box that inverts what is under it while the terminal holds the keyboard,
-   an outline otherwise (`data-cursor` on the host). It never redraws a glyph, so a move or a blink touches no row. */
-.cursor {
-  position: absolute;
-  left: 0;
-  top: 0;
-  pointer-events: none;
-  -webkit-user-select: none;
-  user-select: none;
-  box-sizing: border-box;
-  outline: 1px solid var(--term-cursor);
-  outline-offset: -1px;
-}
-.cursor[hidden] { display: none; }
-.cursor[data-shape="bar"] { width: 2px !important; }
-.cursor[data-shape="underline"] { height: 2px !important; margin-top: calc(var(--cell-height) - 2px); }
-:global([data-cursor="solid"]) .cursor {
-  outline: none;
-  background: white; /* difference against white inverts what is under it */
-  mix-blend-mode: difference;
-}

@@ -75,7 +75,8 @@ export class RowList {
   readonly element: HTMLDivElement = document.createElement("div");
   private readonly run: HTMLDivElement = document.createElement("div");
   private readonly spacer: HTMLDivElement = document.createElement("div");
-  private readonly cursorBox: HTMLDivElement = document.createElement("div");
+  /** The row that draws the cursor now (`data-caret`): the cursor lives in its row, so no edit above it can leave it behind. */
+  private caretRow: HTMLElement | null = null;
   private blocks: Block[] = [];
   /** Blocks that gained rows this frame: their intrinsic height follows at its end. */
   private grown = new Set<Block>();
@@ -120,14 +121,12 @@ export class RowList {
   private scrolledUp = false;
 
   constructor(private readonly model: TerminalModel, private readonly options: RowListOptions) {
-    const { element, run, spacer, cursorBox } = this;
+    const { element, run, spacer } = this;
     element.className = styles.scroller ?? "";
     element.dataset["rows"] = "";
     run.className = styles.run ?? "";
     spacer.className = styles.spacer ?? "";
-    cursorBox.className = styles.cursor ?? "";
-    cursorBox.hidden = true;
-    element.append(run, spacer, cursorBox);
+    element.append(run, spacer);
     this.history = new HistoryFetcher({ fetch: options.fetch, cols: () => model.cols() });
     // The list starts from the model's screen: whatever froze before it existed is not its to show.
     model.onChange(() => { this.schedule(); });
@@ -417,19 +416,25 @@ export class RowList {
     block.element.style.containIntrinsicSize = `auto ${String(block.rows.length * (this.cell?.height ?? 0))}px`;
   }
 
-  /** The cursor is an overlay in the scroller's content: moving or blinking it never touches a row. */
+  /**
+   * The cursor is drawn by its row (`data-caret`, a pseudo-element in `Rows.module.css`): it moves with the row through
+   * every insert, trim and scroll anchor, and a redraw of the row's text leaves the attributes alone. Moving or blinking
+   * it touches no text.
+   */
   private placeCursor(frame: Frame): void {
     const { cursor } = frame;
-    const box = this.cursorBox;
-    const row = this.screen[cursor.row]?.element;
     const cell = this.cell;
-    box.hidden = !cursor.visible || !row || !cell;
-    if (box.hidden || !row || !cell) return;
-    const top = this.contentTop(row);
-    box.dataset["shape"] = cursor.shape;
-    box.style.width = `${String(cell.width * cursor.width)}px`;
-    box.style.height = `${String(cell.height)}px`;
-    box.style.transform = `translate(${String(cursor.col * cell.width)}px, ${String(top)}px)`;
+    const row = cursor.visible && cell ? (this.screen[cursor.row]?.element ?? null) : null;
+    if (this.caretRow && this.caretRow !== row) {
+      this.caretRow.removeAttribute("data-caret");
+      this.caretRow.style.removeProperty("--caret-x");
+      this.caretRow.style.removeProperty("--caret-w");
+    }
+    this.caretRow = row;
+    if (!row || !cell) return;
+    row.dataset["caret"] = cursor.shape;
+    row.style.setProperty("--caret-x", `${String(cursor.col * cell.width)}px`);
+    row.style.setProperty("--caret-w", `${String(cell.width * cursor.width)}px`);
   }
 
   /** What a new size, font, keyboard or showing changes: the advance, the view's place and the cursor's. */

@@ -7,6 +7,30 @@
   white-space: pre;
   overflow: hidden;
   font-variant-ligatures: none;
+  position: relative;
+}
+
+/* The cursor, drawn by its row (`RowList.placeCursor` sets `data-caret` and the two variables): a solid box that inverts
+   what is under it while the terminal holds the keyboard (`data-cursor` on the host), an outline otherwise. A pseudo-element
+   is no node, so a selection's range and rects never see it. */
+.row[data-caret]::after {
+  content: "";
+  position: absolute;
+  left: var(--caret-x);
+  top: 0;
+  width: var(--caret-w);
+  height: 100%;
+  pointer-events: none;
+  box-sizing: border-box;
+  outline: 1px solid var(--term-cursor);
+  outline-offset: -1px;
+}
+.row[data-caret="bar"]::after { width: 2px; }
+.row[data-caret="underline"]::after { height: 2px; top: calc(100% - 2px); }
+:global([data-cursor="solid"]) .row[data-caret]::after {
+  outline: none;
+  background: white; /* difference against white inverts what is under it */
+  mix-blend-mode: difference;
 }
 
 /* A wide character fills two cells whatever advance its fallback font gives it. `vertical-align: top` because an
