@@ -89,6 +89,13 @@ export class Mark implements Selection {
     return this.state ? this.deps.rows.textOf(this.state.range) : "";
   }
 
+  /** The mark's text moved or was redrawn in new nodes (J7's follow); the word a drag grows from becomes the whole mark. */
+  replace(range: Range): void {
+    if (!this.state) return;
+    this.state = { range, word: range };
+    this.sync();
+  }
+
   /** The hold: marks the word under the finger. False when the finger is on no text. */
   begin(x: number, y: number): boolean {
     this.clear();

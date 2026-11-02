@@ -8,6 +8,20 @@ interface RowSource {
   contains(node: Node): boolean;
   rowsIn(range: Range): TextRow[];
   span(range: Range): { first: HTMLElement; last: HTMLElement } | null;
+  /** The rows of the live screen, top first. */
+  screenRows(): HTMLElement[];
+}
+
+/** A selection's rows as they were before a frame redrew them: whole rows' text, and where in the first and last row it begins and ends. */
+export interface Anchor {
+  rows: HTMLElement[];
+  texts: string[];
+  /** Character offsets into the first row's text and the last row's. */
+  start: number;
+  end: number;
+  /** The `seq` of the first and last row. */
+  first: number;
+  last: number;
 }
 
 export class RowRanges {
@@ -29,19 +43,65 @@ export class RowRanges {
     return cut;
   }
 
-  /** Whether any row in `seqs` lies between a range's first and last row: the text it marked was rewritten (J7). */
-  rewrites(range: Range | null, seqs: readonly number[]): boolean {
-    return this.overlaps(range, (first, last) => seqs.some((seq) => seq >= first && seq <= last));
+  /** The rows `range` covers and where in them it lies, to be kept across a frame that redraws them; null with none. */
+  anchor(range: Range | null): Anchor | null {
+    if (!range) return null;
+    const rows = this.rowsOf(range).map(({ element }) => ({ element, part: clipped(range, element) }));
+    // As in `textOf`: a row the range only touches at its edge is no part of it.
+    while (rows.at(-1)?.part.collapsed) rows.pop();
+    while (rows[0]?.part.collapsed) rows.shift();
+    const first = rows[0];
+    const last = rows.at(-1);
+    if (!first || !last) return null;
+    return {
+      rows: rows.map(({ element }) => element),
+      texts: rows.map(({ element }) => element.textContent),
+      start: textBefore(first.element, first.part.startContainer, first.part.startOffset),
+      end: textBefore(last.element, last.part.endContainer, last.part.endOffset),
+      first: Number(first.element.dataset["seq"]),
+      last: Number(last.element.dataset["seq"]),
+    };
+  }
+
+  /** Whether any row in `seqs` lies in the anchor's rows: the text it marked was redrawn (J7). */
+  rewrites(anchor: Anchor, seqs: readonly number[]): boolean {
+    return seqs.some((seq) => seq >= anchor.first && seq <= anchor.last);
+  }
+
+  /**
+   * The anchor's range over the rows as they are now (J7): the same rows if their text is unchanged (the redraw
+   * replaced their nodes, a style-only change among it), else the one place on the screen where that text now sits,
+   * the same columns in it. Null when the text changed, sits in several places, or left the screen.
+   */
+  follow(anchor: Anchor): { range: Range; moved: boolean } | null {
+    const { texts } = anchor;
+    const stays = anchor.rows.every((row, i) => row.isConnected && row.textContent === texts[i]);
+    const rows = stays ? anchor.rows : this.relocate(texts);
+    const head = rows?.[0];
+    const tail = rows?.at(-1);
+    if (!head || !tail) return null;
+    const range = document.createRange();
+    range.setStart(...pointAt(head, anchor.start));
+    range.setEnd(...pointAt(tail, anchor.end));
+    return { range, moved: !stays };
+  }
+
+  /** The screen rows that now hold `texts` as a contiguous block, when exactly one place does. */
+  private relocate(texts: readonly string[]): HTMLElement[] | null {
+    const screen = this.source()?.screenRows() ?? [];
+    if (texts.every((text) => text.trim() === "")) return null;
+    const found: number[] = [];
+    for (let at = 0; at + texts.length <= screen.length; at++) {
+      if (texts.every((text, i) => screen[at + i]?.textContent === text)) found.push(at);
+    }
+    const [only, other] = found;
+    return only !== undefined && other === undefined ? screen.slice(only, only + texts.length) : null;
   }
 
   /** Whether the rows `from` to `to` overlap a range's rows: the text it marked is about to go (J7). */
   drops(range: Range | null, from: number, to: number): boolean {
-    return this.overlaps(range, (first, last) => from <= last && to >= first);
-  }
-
-  private overlaps(range: Range | null, test: (first: number, last: number) => boolean): boolean {
     const span = range && this.source()?.span(range);
-    return !!span && test(Number(span.first.dataset["seq"]), Number(span.last.dataset["seq"]));
+    return !!span && from <= Number(span.last.dataset["seq"]) && to >= Number(span.first.dataset["seq"]);
   }
 
   /** `range`'s text with soft wraps joined, one line per logical line: Copy's text for the selection and the mark alike. */
@@ -78,6 +138,26 @@ function clipped(range: Range, element: HTMLElement): Range {
   if (range.compareBoundaryPoints(Range.START_TO_START, part) > 0) part.setStart(range.startContainer, range.startOffset);
   if (range.compareBoundaryPoints(Range.END_TO_END, part) < 0) part.setEnd(range.endContainer, range.endOffset);
   return part;
+}
+
+/** The number of characters of `row`'s text before the point. */
+function textBefore(row: HTMLElement, node: Node, offset: number): number {
+  const before = document.createRange();
+  before.selectNodeContents(row);
+  before.setEnd(node, offset);
+  return before.toString().length;
+}
+
+/** The point `offset` characters into `row`'s text. */
+function pointAt(row: HTMLElement, offset: number): [Node, number] {
+  const texts = document.createTreeWalker(row, NodeFilter.SHOW_TEXT);
+  let left = offset;
+  for (let node = texts.nextNode(); node; node = texts.nextNode()) {
+    const { length } = node as Text;
+    if (left <= length) return [node, left];
+    left -= length;
+  }
+  return [row, row.childNodes.length];
 }
 
 /** Whether the client point is on one of `rects`, or within `reach` of it. */

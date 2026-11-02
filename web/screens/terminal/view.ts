@@ -13,7 +13,7 @@ import type { RowList, RowListOptions } from "./rowList";
 import { ScrollControl } from "./scroll";
 import { Mark } from "./selection/mark";
 import { PageSelection } from "./selection/pageSelection";
-import { RowRanges } from "./selection/rowRanges";
+import { type Anchor, RowRanges } from "./selection/rowRanges";
 import type { Selection } from "./selection/selection";
 import { TouchControl } from "./touchControl";
 
@@ -52,6 +52,8 @@ export class TerminalView {
   /** The selection of the rows' text: the mark where the platform has an edit menu (the app), the browser's own otherwise. */
   private readonly selection: Selection;
   private readonly touch: TouchControl;
+  /** The selection's rows as they were before the frame in progress redrew any (J7). */
+  private anchored: Anchor | null = null;
   private readonly wheel: PinnedWheel;
 
   constructor(private readonly deps: ViewDeps) {
@@ -90,8 +92,9 @@ export class TerminalView {
   }
 
   /**
-   * What the row list asks of the view: output that rewrites or drops a selected row closes the selection (J7), a
-   * scroll hides the mark's menu, and it holds the rows a selection is over.
+   * What the row list asks of the view: output that rewrites a selected row moves the selection with its text or
+   * closes it, and output that drops one closes it (J7); a scroll hides the mark's menu; and it holds the rows a
+   * selection is over.
    */
   readonly listOptions: RowListOptions = {
     fetch: (start, end) => this.deps.fetchHistory(start, end),
@@ -99,8 +102,17 @@ export class TerminalView {
       const range = this.selection.range();
       return range ? [range] : [];
     },
+    rewriting: () => { this.anchored ??= this.rows.anchor(this.selection.range()); },
     rewritten: (seqs) => {
-      if (this.rows.rewrites(this.selection.range(), seqs)) this.dismissSelection();
+      const { anchored } = this;
+      this.anchored = null;
+      if (!anchored || !this.rows.rewrites(anchored, seqs)) return;
+      const followed = this.rows.follow(anchored);
+      if (!followed) this.dismissSelection();
+      else {
+        this.selection.replace(followed.range);
+        if (followed.moved) this.mark.hideMenu();
+      }
     },
     dropped: (first, last) => {
       if (this.rows.drops(this.selection.range(), first, last)) this.dismissSelection();
@@ -158,6 +170,7 @@ export class TerminalView {
   }
 
   dismissSelection(): void {
+    this.anchored = null;
     this.selection.clear();
   }
 

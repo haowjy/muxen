@@ -4514,3 +4514,46 @@ the daemon serves only the browser build. Deleted: `FocusMode.select`, `FocusCon
 `MuxenWebView.suppressesEditMenu`, its `canPerformAction` override and `buildMenu`'s AutoFill removal (with the Paste
 item gone above, `buildMenu` was empty). The wire doesn't change for the web, whose `FocusMode` never had `select`,
 so no bridge bump.
+
+## The selection follows text that moved (J7 refined) (2026-11-02)
+
+Jimmy, asking whether a selection can survive TUI redraws: "can it work with redraws or no...?" J7 closed the
+selection when a frame rewrote any selected row. Measured on real Claude Code 2.1.316 and OpenCode 2.2.5 traffic
+(`redesign-touch/claude-redraw-trace.md`): in fullscreen Claude and OpenCode a growing tool hint repaints
+completed paragraphs one to three rows up or down in place (no history rows), and J7 closed all 12 sampled
+selections 1.7-2.7 s after they were made. Classic Claude scrolls normally, row identity carries into history, and J7
+never fired on completed text (6 of 6 survived). Following the moved text kept 17 of 18 selections for 10 s,
+against 6 of 18 under J7 (18 of 18 at 5 s).
+
+- **The rule.** When a frame redraws rows under the selection: the selected rows' whole text, as a contiguous
+  block, unchanged in place keeps the selection (a style-only change included); that block now at other rows of the
+  same screen, in exactly one place, moves it there with the same columns and the same offsets within the rows;
+  otherwise it closes, as before (the text changed, it appears in more than one place, or it left the screen, which an
+  alternate screen cannot follow into). Output never pauses.
+- **One place.** `RowRanges.anchor` (before a frame's first redraw, `RowListOptions.rewriting`) and `RowRanges.follow`
+  (after it, `rewritten`), called from `TerminalView`. A redraw replaces a row's text nodes, so a range inside it is
+  rebuilt over the new nodes in every case, not only a move. `Selection.replace` puts the mark or the DOM selection on
+  the new range; the mark's native menu hides when text moved (its rect is stale), and a tap inside brings it back.
+- **Rejected:** following the characters rather than the rows (the survival table's variant c: more permissive, but
+  it needs partial-row matching, and a selection starting mid-row of a repainted paragraph is the same case with
+  more room to match something else); delayed reacquisition after a no-match (a repaint split across frames then
+  reads as text gone; this stays a close, since a guess that waits has no end); tracking the selection in the alt
+  screen's own scrollback (the app has none to give); a second path for the mark.
+- **Known limit:** muxen does not honor synchronized output (`CSI ? 2026`), so a repaint that reaches the model as
+  two frames (the erase, then the text) shows the text gone in between and closes the selection. Claude Code writes a
+  repaint in one chunk; a split across tmux's control-mode lines is possible and unmeasured.
+
+## One `Selection` per environment (2026-11-02)
+
+The mark and the DOM selection each had their own arms in the view, the touch control and the terminals: which
+one exists, what a touch near it means, how it dies. Replaced by one interface (`selection/selection.ts`: `range`,
+`text`, `touch`, `replace`, `clear`) that `TerminalView` picks once at construction, the mark where
+`Platform.editMenu` exists (the app) and the DOM selection otherwise (a browser). Both are ranges over the row
+list's rows, and range geometry (`textOf`, `rectsOf`, `cut`, the J7 tests, `near`, `boxOf`) is shared in
+`selection/rowRanges.ts`. Every rule about "the selection" (J7, dismissal, Copy, what a touch that begins on it
+means) is written once.
+
+- **Why at construction:** `editMenu` is a static property of the platform object, which exists before the view is
+  built, and there is one surface and one row list for all tabs; nothing changes it after.
+- **Rejected:** keeping both selections alive and checking each at every site (two lifetimes and two looks that
+  could disagree, and the arms had already drifted); choosing per touch (the platform does not change per touch).

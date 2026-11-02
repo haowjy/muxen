@@ -65,7 +65,8 @@ The Terminal destination. The design is client-architecture.md §5.4, §5.5, §5
   newest rows. The browser scrolls it, coasts it and autoscrolls a selection; muxen writes `scrollTop` only to
   follow output at latest (`follow`), from `editAbove` and from the mark's edge autoscroll. A row is created
   once and redrawn only when its text changes, so a selection sits on rows that stay put; the rows it rewrites
-  are reported (`RowListOptions.rewritten`) and the view closes a selection or mark between them (J7). Colours are the global
+  are reported (`RowListOptions.rewriting`, before the first redraw of a frame, snapshots the selection's rows; `rewritten`, after) and the view
+  moves the selection with its text or closes it (J7, `RowRanges.follow`). Colours are the global
   `--term-*` variables, which follow the scheme. The host is selectable (`Terminal.module.css`, off for
   `data-direct-input="xterm"`). The selection is one of two, picked once by `TerminalView` (`selection/selection.ts`):
   in a browser the long press is WebKit's and the selection the page's (`selection/pageSelection.ts` reads and

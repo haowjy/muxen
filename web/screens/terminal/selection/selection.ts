@@ -11,5 +11,7 @@ export interface Selection {
   text(): string;
   /** What a touch that begins at the client point means. */
   touch(x: number, y: number): TouchStart;
+  /** Puts the selection on `range`: the text it was on, in the rows' new nodes (J7's follow). */
+  replace(range: Range): void;
   clear(): void;
 }

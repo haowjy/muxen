@@ -31,6 +31,12 @@ export class PageSelection implements Selection {
     return near(this.rows.rectsOf(range), x, y, REACH) ? "handOver" : "dismiss";
   }
 
+  replace(range: Range): void {
+    const selection = getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  }
+
   clear(): void {
     if (this.range()) getSelection()?.removeAllRanges();
   }

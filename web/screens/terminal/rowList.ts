@@ -54,6 +54,8 @@ export interface RowListOptions {
   fetch: FetcherDeps["fetch"];
   /** Ranges the list must not drop rows under (the selection, the mark). */
   held(): Range[];
+  /** A row is about to be redrawn with other text or style: called before it is, while a range in it still reads true. */
+  rewriting(): void;
   /** Rows that were rewritten in a frame (J7), by their `seq`. */
   rewritten(seqs: number[]): void;
   /** Rows `first` to `last` (by `seq`) are about to leave the list: called before they go, while a range over them still reads true. */
@@ -233,6 +235,11 @@ export class RowList {
     return first && last ? { first, last } : null;
   }
 
+  /** The rows of the live screen, top first. */
+  screenRows(): HTMLElement[] {
+    return this.screen.map((row) => row.element);
+  }
+
   contains(node: Node): boolean {
     return this.run.contains(node);
   }
@@ -351,6 +358,7 @@ export class RowList {
 
   private redraw(screen: ScreenRow | undefined, row: Row | undefined, changed: Set<number>): void {
     if (!screen || !row || sameRow(screen.drawn, row)) return;
+    this.options.rewriting();
     this.draw(screen, row);
     changed.add(Number(screen.element.dataset["seq"]));
   }

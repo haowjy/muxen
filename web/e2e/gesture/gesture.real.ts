@@ -453,6 +453,70 @@ for (const version of VERSIONS) {
       expect(pane(s)).toBe(before);
     });
 
+    // A full-screen app repaints older text a few rows up or down when a status line grows (J7): the selection goes with it.
+    // `stage` is the app's own redraw, one per Enter: the paragraph moves down, restyles in place, moves up, then is edited.
+    function movingApp(): string {
+      const script = join(tmpdir(), `muxen-move-${String(process.pid)}.sh`);
+      writeFileSync(script, `#!/bin/bash
+printf '\\e[?1049h'
+paint() { out=$'\\e[H\\e[J'; for line in "$@"; do out+="$line"$'\\r\\n'; done; printf '%s' "$out"; }
+paint "header" "" "" "" "alpha beta gamma" "delta epsilon" "" "" "footer"
+for stage in down style up edit; do
+  read -r
+  case $stage in
+    down) paint "header" "" "" "" "hint one" "alpha beta gamma" "delta epsilon" "" "footer";;
+    style) printf '\\e[6;1H\\e[1malpha beta gamma\\e[0m';;
+    up) paint "header" "" "alpha beta gamma" "delta epsilon" "" "" "" "" "footer";;
+    edit) paint "header" "" "alpha beta CHANGED" "delta epsilon" "" "" "" "" "footer";;
+  esac
+done
+read -r
+`);
+      return `bash ${script}`;
+    }
+
+    for (const kind of ["the mark", "the page's selection"]) {
+      test(`${kind} goes with its text when the app repaints it elsewhere, and closes when the text changes`, async ({ page }) => {
+        const s = newSession(movingApp());
+        const marked = kind === "the mark";
+        if (marked) await stubEditMenu(page);
+        const finger = await open(page, s);
+        await paneIncludes(s, "alpha beta gamma");
+        // Which screen row the selected text is on, and what it is.
+        const height = Number(stack.tmux("display-message", "-p", "-t", s, "#{pane_height}").trim());
+        const selected = (): Promise<{ row: number; text: string } | null> => page.evaluate(([useMark, count]) => {
+          const highlighted = CSS.highlights.get("tsel")?.values().next().value as Range | undefined;
+          const range = useMark ? highlighted : getSelection()?.rangeCount ? getSelection()?.getRangeAt(0) : undefined;
+          if (!range || range.collapsed) return null;
+          const rows = [...document.querySelectorAll<HTMLElement>("[data-rows] [data-seq]")].slice(-count);
+          const row = rows.findIndex((r) => r.contains(range.startContainer));
+          return { row, text: range.toString() };
+        }, [marked, height] as const);
+        const next = async (): Promise<void> => { stack.tmux("send-keys", "-t", s, "Enter"); await page.waitForTimeout(400); };
+        if (marked) {
+          const at = await cellCentre(page, s, 7, 4);
+          await finger.down(at.x, at.y);
+          await page.waitForTimeout(550);
+          await finger.up();
+          expect(await selected()).toEqual({ row: 4, text: "beta" });
+        } else {
+          await select(page, "alpha beta", "alpha beta", 10);
+          expect(await selected()).toEqual({ row: 4, text: "alpha beta" });
+        }
+        const text = marked ? "beta" : "alpha beta";
+        await next(); // down: a row above gains text, this one moves down
+        expect(await selected()).toEqual({ row: 5, text });
+        await next(); // style only
+        expect(await selected()).toEqual({ row: 5, text });
+        await next(); // up
+        expect(await selected()).toEqual({ row: 2, text });
+        if (marked) await expect(page.locator("[data-end]").first()).toBeVisible();
+        await next(); // the words themselves change
+        expect(await selected()).toBeNull();
+        if (marked) await expect(page.locator("[data-end]").first()).toBeHidden();
+      });
+    }
+
     test.describe("a mouse wheel on a desktop", () => {
       test.use({ viewport: { width: 1100, height: 800 }, hasTouch: false });
 
