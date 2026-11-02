@@ -54,6 +54,16 @@ export interface RowListOptions {
   fetch: FetcherDeps["fetch"];
   /** Ranges the list must not drop rows under (the selection, the mark). */
   held(): Range[];
+  /** Rows that were rewritten in a frame (J7), by their `seq`. */
+  rewritten(seqs: number[]): void;
+  /** Rows `first` to `last` (by `seq`) are about to leave the list: called before they go, while a range over them still reads true. */
+  dropped(first: number, last: number): void;
+  /** Content moved under the rows that stayed (a block dropped or prepended above): anything placed in content coordinates is stale. */
+  shifted(): void;
+  /** The user's scroll, not muxen's own writes. */
+  userScroll(): void;
+  /** The view moved onto or off the newest line. */
+  scrolledUp(scrolledUp: boolean): void;
 }
 
 const sameRow = (a: Row, b: Row): boolean =>
@@ -93,7 +103,6 @@ export class RowList {
   private historyDone = false;
   private lastFrame: Frame | null = null;
   private cell: CellSize | null = null;
-  private font: { family: string; size: number } | null = null;
   private fitted = false;
   /** The scroller's height, read when its size changes: a per-frame read would force a layout. */
   private height = 0;
@@ -101,7 +110,7 @@ export class RowList {
   private visible: number | null = null;
   private pinned = false;
 
-  /** Following: muxen writes `scrollTop` to keep the view at latest while it is there. */
+  /** Following: muxen writes `scrollTop` to keep the view at latest while it is there. Only `setFollowing` changes it. */
   private following = true;
   /** The `scrollTop` muxen last wrote: the scroll event that lands on it is its own. */
   private written = Number.NaN;
@@ -112,13 +121,6 @@ export class RowList {
    * rows would come back). Only a chunk waits: a trim is recomputed every frame, so it never queues.
    */
   private pending: (() => boolean) | null = null;
-
-  private readonly rewritten: ((seqs: number[]) => void)[] = [];
-  private readonly dropped: ((first: number, last: number) => void)[] = [];
-  private readonly shifted: (() => void)[] = [];
-  private readonly scrolledListeners: ((scrolledUp: boolean) => void)[] = [];
-  private readonly userScrolls: (() => void)[] = [];
-  private scrolledUp = false;
 
   constructor(private readonly model: TerminalModel, private readonly options: RowListOptions) {
     const { element, run, spacer } = this;
@@ -170,31 +172,6 @@ export class RowList {
 
   // ---- what the callers tell it
 
-  /** Calls `listener` when the view moves onto or off the newest line. */
-  onScrolledUp(listener: (scrolledUp: boolean) => void): void {
-    this.scrolledListeners.push(listener);
-  }
-
-  /** The user's scroll, not muxen's own writes. */
-  onUserScroll(listener: () => void): void {
-    this.userScrolls.push(listener);
-  }
-
-  /** Rows that were rewritten in a frame (J7), by their `seq`. */
-  onRewritten(listener: (seqs: number[]) => void): void {
-    this.rewritten.push(listener);
-  }
-
-  /** Rows `first` to `last` (by `seq`) are about to leave the list: called before they go, while a range over them still reads true. */
-  onDropped(listener: (first: number, last: number) => void): void {
-    this.dropped.push(listener);
-  }
-
-  /** Content moved under the rows that stayed (a block dropped or prepended above): anything placed in content coordinates is stale. */
-  onShifted(listener: () => void): void {
-    this.shifted.push(listener);
-  }
-
   /**
    * A gesture holds the view (a finger is down): it is not written to, and rows above it stay. The touch layer
    * says so, since it alone knows its fingers. When the hold ends the view is at rest after a quiet moment.
@@ -205,7 +182,6 @@ export class RowList {
 
   /** A density change or a new font: the cell, and so every row's height, follows. */
   setFont(family: string, size: number): void {
-    this.font = { family, size };
     this.cell = fontCell(family, size, false);
     this.fitted = false;
     const height = this.cell?.height ?? 0;
@@ -235,10 +211,9 @@ export class RowList {
 
   /** Leaves history for the newest line. */
   toLatest(): void {
-    this.following = true;
+    this.setFollowing(true);
     this.follow(true);
     this.flushPending(); // the bounce is over: land the chunk, so its rows (and `historyDone`) are not lost
-    this.setScrolledUp(false);
   }
 
   /** The rows a range touches, oldest first; the gap row is no text. Empty when it touches none. */
@@ -351,7 +326,7 @@ export class RowList {
     const seq = (row: HTMLElement | undefined): number => Number(row?.dataset["seq"]);
     const doomed = this.blocks.flatMap((block) => block.rows.filter((row) => seq(row) >= first && seq(row) <= last));
     if (doomed.length === 0) return;
-    for (const listener of this.dropped) listener(seq(doomed[0]), seq(doomed.at(-1)));
+    this.options.dropped(seq(doomed[0]), seq(doomed.at(-1)));
     this.blocks = this.blocks.filter((block) => {
       if (seq(block.rows.at(-1)) < first || seq(block.rows[0]) > last) return true;
       const kept = block.rows.filter((row) => seq(row) < first || seq(row) > last);
@@ -391,25 +366,24 @@ export class RowList {
     this.historyDone = false;
     this.history.reset();
     this.pending = null;
-    this.following = true;
+    this.setFollowing(true);
   }
 
   /** The end of a frame: the pinned state, the cursor, following, and what was rewritten. */
   private finish(frame: Frame, changed: Set<number>): void {
     for (const block of this.grown) this.sizeBlock(block);
     this.grown.clear();
-    const pinned = this.model.altScreen() || this.model.mouseMode() !== "none";
+    const pinned = this.model.pinned();
     if (pinned !== this.pinned) {
       this.pinned = pinned;
       this.element.toggleAttribute("data-pinned", pinned);
-      if (pinned) this.following = true;
+      if (pinned) this.setFollowing(true);
     }
     if (!this.element.hidden) {
       this.follow();
       this.placeCursor(frame);
     }
-    this.setScrolledUp(!this.following);
-    if (changed.size > 0) for (const listener of this.rewritten) listener([...changed]);
+    if (changed.size > 0) this.options.rewritten([...changed]);
   }
 
   private sizeBlock(block: Block): void {
@@ -493,32 +467,35 @@ export class RowList {
   }
 
   private readonly scrolled = (): void => {
-    const { scrollTop } = this.element;
-    if (Math.abs(scrollTop - this.written) < 0.5) return;
+    if (Math.abs(this.element.scrollTop - this.written) < 0.5) return;
     if (this.pinned) {
       // Something scrolled a pinned list (a selection's autoscroll): back to latest.
       this.follow(true);
       return;
     }
-    this.following = this.atLatest;
-    this.setScrolledUp(!this.following);
+    this.setFollowing(this.atLatest);
     this.coast.scrolled();
-    for (const listener of this.userScrolls) listener();
-    if (scrollTop >= 0) this.flushPending();
+    this.options.userScroll();
+    if (!this.bouncing) this.flushPending();
     this.wantOlder();
   };
 
   /** No gesture and no fling: what waited for rest may go. */
   private rest(): void {
-    if (this.element.scrollTop >= 0) this.flushPending();
+    if (!this.bouncing) this.flushPending();
     this.trim();
     this.follow();
   }
 
-  private setScrolledUp(scrolledUp: boolean): void {
-    if (scrolledUp === this.scrolledUp) return;
-    this.scrolledUp = scrolledUp;
-    for (const listener of this.scrolledListeners) listener(scrolledUp);
+  private setFollowing(following: boolean): void {
+    if (following === this.following) return;
+    this.following = following;
+    this.options.scrolledUp(!following);
+  }
+
+  /** The view is pulled past the top by a bounce (iOS rubber-bands into negative `scrollTop`): nothing may land under it. */
+  private get bouncing(): boolean {
+    return this.element.scrollTop < 0;
   }
 
   // ---- changes above the view
@@ -539,7 +516,7 @@ export class RowList {
     if (anchor?.isConnected) element.scrollTop += anchor.getBoundingClientRect().top - top - before;
     else element.scrollTop = 0;
     this.written = element.scrollTop;
-    for (const listener of this.shifted) listener();
+    this.options.shifted();
   }
 
   private flushPending(): void {
@@ -577,7 +554,7 @@ export class RowList {
     if (this.count - (this.blocks[0]?.rows.length ?? 0) < CAP_ROWS) return;
     const urgent = this.count > CEILING_ROWS;
     // Not mid-bounce unless the ceiling forces it: a flash beats rows without bound. Otherwise the next frame retries.
-    if (!urgent && (this.coast.moving || this.element.hidden || this.element.scrollTop < 0)) return;
+    if (!urgent && (this.coast.moving || this.element.hidden || this.bouncing)) return;
     const held = this.options.held();
     this.editAbove(() => {
       const inView = urgent ? this.blocks.length : this.firstBelow(this.blocks, (b) => b.element, this.element.getBoundingClientRect().top);
@@ -658,7 +635,7 @@ export class RowList {
       for (const block of blocks) this.sizeBlock(block);
       return true;
     };
-    if (this.element.scrollTop < 0) this.pending = land; // lands when the bounce settles
+    if (this.bouncing) this.pending = land; // lands when the bounce settles
     else this.editAbove(land);
   }
 

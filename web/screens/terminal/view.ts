@@ -9,7 +9,7 @@ import type { PromptLine, TerminalModel, TerminalTheme, XtermView } from "../../
 import { rowText } from "../../term/rows";
 import { HistoryView } from "./history";
 import { PinnedWheel } from "./pinnedWheel";
-import type { RowList } from "./rowList";
+import type { RowList, RowListOptions } from "./rowList";
 import { ScrollControl } from "./scroll";
 import { Mark } from "./selection/mark";
 import { PageSelection } from "./selection/pageSelection";
@@ -89,26 +89,29 @@ export class TerminalView {
     element.addEventListener("wheel", this.wheelPastTop, { capture: true, passive: false });
   }
 
-  /** Wires a new row list: output that rewrites or drops a selected row closes the selection (J7), a scroll hides the mark's menu. */
-  attach(list: RowList): void {
-    list.onRewritten((seqs) => {
+  /**
+   * What the row list asks of the view: output that rewrites or drops a selected row closes the selection (J7), a
+   * scroll hides the mark's menu, and it holds the rows a selection is over.
+   */
+  readonly listOptions: RowListOptions = {
+    fetch: (start, end) => this.deps.fetchHistory(start, end),
+    held: () => {
+      const range = this.selection.range();
+      return range ? [range] : [];
+    },
+    rewritten: (seqs) => {
       if (this.rows.rewrites(this.selection.range(), seqs)) this.dismissSelection();
-    });
-    list.onDropped((first, last) => {
+    },
+    dropped: (first, last) => {
       if (this.rows.drops(this.selection.range(), first, last)) this.dismissSelection();
-    });
-    list.onShifted(() => { this.mark.reposition(); });
-    list.onUserScroll(() => {
+    },
+    shifted: () => { this.mark.reposition(); },
+    userScroll: () => {
       this.mark.hideMenu();
       this.touch.scrolled();
-    });
-  }
-
-  /** The ranges the row list must not drop rows under. */
-  heldRanges(): Range[] {
-    const range = this.selection.range();
-    return range ? [range] : [];
-  }
+    },
+    scrolledUp: (scrolled) => { this.deps.onScrolled(scrolled); },
+  };
 
   /** The row list moved onto or off the newest line: the jump-to-latest control follows. */
   reportScrolled(scrolled: boolean): void {

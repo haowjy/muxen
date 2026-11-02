@@ -35,7 +35,7 @@ export class ScrollControl {
   wheelPastTop(dy: number): boolean {
     const renderer = this.deps.renderer();
     const model = this.deps.model();
-    if (!renderer || !model || model.altScreen() || model.mouseMode() !== "none") return false;
+    if (!renderer || !model || model.pinned()) return false;
     const { rows, up } = renderer.scrollback();
     if (this.shift === 0 && !(dy > 0 && up === rows)) return false;
     this.measure();

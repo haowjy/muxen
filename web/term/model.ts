@@ -179,6 +179,11 @@ export class TerminalModel {
     return this.term.buffer.active.type === "alternate";
   }
 
+  /** The application owns scrolling (a full-screen or mouse-aware one): swipes are its wheel events, and the view stays at latest. */
+  pinned(): boolean {
+    return this.altScreen() || this.mouseMode() !== "none";
+  }
+
   /** Everything that changed since the last call. */
   frame(): Frame {
     this.collect();

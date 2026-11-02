@@ -30,8 +30,7 @@ export class PinnedWheel {
 
   /** Whether the terminal is pinned: swipes are the application's. */
   get active(): boolean {
-    const model = this.deps.model();
-    return model !== null && (model.altScreen() || model.mouseMode() !== "none");
+    return this.deps.model()?.pinned() ?? false;
   }
 
   /** Whether a fling is still coasting. */
