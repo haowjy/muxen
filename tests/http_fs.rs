@@ -171,6 +171,118 @@ async fn uploads_land_one_at_a_time_and_leave_no_part_file() {
 }
 
 #[tokio::test]
+async fn an_upload_can_name_its_folder_and_never_replaces_a_file() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let daemon = start("fs-upload-dir").await;
+    let folder = daemon.home("code");
+    std::fs::create_dir_all(&folder).expect("a dir");
+    let dir = |path: &std::path::Path| {
+        format!("dir={}", path.to_str().expect("UTF-8").replace('/', "%2F"))
+    };
+
+    // An image goes into the folder, with the same name shape as a default upload.
+    let png = b"\x89PNG not really";
+    let image = post(
+        &daemon,
+        &format!("/fs/upload?name=a.PNG&{}", dir(&folder)),
+        png,
+        false,
+    )
+    .await;
+    assert_eq!(image.status, 201, "{}", image.text());
+    let path = image.json()["path"].as_str().expect("a path").to_owned();
+    assert!(
+        path.starts_with(&format!("{}/", folder.display())) && path.ends_with(".png"),
+        "{path}"
+    );
+    assert_eq!(std::fs::read(&path).expect("the file"), png);
+    assert!(
+        !daemon.home("muxen-uploads").exists(),
+        "the default folder wasn't used"
+    );
+
+    // Text is a new file holding exactly the text; a second one never replaces the first.
+    let url = format!("/fs/upload?text=1&name=ignored.png&{}", dir(&folder));
+    let first = post(&daemon, &url, b"one\n", false).await;
+    let second = post(&daemon, &url, b"two\n", false).await;
+    let paths: Vec<String> = [&first, &second]
+        .iter()
+        .map(|reply| {
+            assert_eq!(reply.status, 201, "{}", reply.text());
+            reply.json()["path"].as_str().expect("a path").to_owned()
+        })
+        .collect();
+    assert_ne!(paths[0], paths[1]);
+    for path in &paths {
+        let name = path.rsplit('/').next().expect("a name");
+        assert!(
+            name.starts_with("pasted-") && name.ends_with(".txt"),
+            "{name}"
+        );
+    }
+    assert_eq!(std::fs::read(&paths[0]).expect("read"), b"one\n");
+    assert_eq!(std::fs::read(&paths[1]).expect("read"), b"two\n");
+
+    // A stale part file is swept by the next upload into its folder.
+    std::fs::write(folder.join(".muxen-upload-old.part"), b"x").expect("written");
+    let after = post(
+        &daemon,
+        &format!("/fs/upload?name=b.png&{}", dir(&folder)),
+        b"y",
+        false,
+    )
+    .await;
+    assert_eq!(after.status, 201, "{}", after.text());
+    assert!(!folder.join(".muxen-upload-old.part").exists());
+
+    // `~/…` works, a missing folder is not found, a file is not a directory.
+    let home = post(&daemon, "/fs/upload?name=c.png&dir=~%2Fcode", b"z", false).await;
+    assert_eq!(home.status, 201, "{}", home.text());
+    let missing = post(
+        &daemon,
+        &format!("/fs/upload?name=c.png&{}", dir(&daemon.home("nope"))),
+        b"z",
+        false,
+    )
+    .await;
+    assert_eq!(
+        (missing.status, missing.text()),
+        (404, r#"{"error":"not_found"}"#)
+    );
+    let file = post(
+        &daemon,
+        &format!("/fs/upload?name=c.png&{}", dir(std::path::Path::new(&path))),
+        b"z",
+        false,
+    )
+    .await;
+    assert_eq!(
+        (file.status, file.text()),
+        (409, r#"{"error":"not_a_directory"}"#)
+    );
+    let relative = post(&daemon, "/fs/upload?name=c.png&dir=code", b"z", false).await;
+    assert_eq!(relative.status, 400, "{}", relative.text());
+
+    // A folder the daemon's user can't write: refused, nothing left behind.
+    let locked = daemon.home("locked");
+    std::fs::create_dir_all(&locked).expect("a dir");
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o500)).expect("locked");
+    let denied = post(
+        &daemon,
+        &format!("/fs/upload?name=c.png&{}", dir(&locked)),
+        b"z",
+        false,
+    )
+    .await;
+    assert_eq!(
+        (denied.status, denied.text()),
+        (403, r#"{"error":"denied"}"#)
+    );
+    assert_eq!(std::fs::read_dir(&locked).expect("the folder").count(), 0);
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o700)).expect("unlocked");
+}
+
+#[tokio::test]
 async fn a_broken_config_fails_uploads_closed() {
     let daemon = start("fs-broken").await;
     std::fs::create_dir_all(daemon.home("code")).expect("a dir");

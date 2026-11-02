@@ -100,7 +100,7 @@ Jimmy's decisions, as they stand ([log](decisions.md#jimmys-decisions)):
   follows it. Tabs never close on network loss.
 - **Shell:** shell-agnostic, with one OSC 133 snippet in his dotfiles and carapace for
   completion.
-- **Files:** any folder or file the daemon's user can read; no favorites (the path field is the way in); one uploads folder; HEIC converted on
+- **Files:** any folder or file the daemon's user can read; no favorites (the path field is the way in); one default uploads folder, and Paste writes into the open folder; HEIC converted on
   the phone; no video thumbnails; no file watcher. The MVP views and uploads; edit,
   new file and rename come in v2. Move, mkdir and delete are done in the terminal.
 - **Auth:** allowlisted Tailscale login plus two device lanes: an iOS device token
@@ -627,7 +627,8 @@ at `~`; existing tabs are restored by selecting them.
 the terminal can; a device token already runs commands in tmux, so a boundary would
 guard against nothing but Jimmy. There are no favorites: the path field heads every
 Files tab and works like a browser's address bar, so going somewhere is typing its path.
-The uploads folder (`uploads_dir`, default `~/muxen-uploads`) is set in `config.toml`.
+The default uploads folder (`uploads_dir`, default `~/muxen-uploads`) is set in `config.toml`;
+Paste in a folder writes there instead, and any folder the daemon's user can write is allowed.
 No file watcher: listings are read on open, on pull-to-refresh, and after muxen's own
 file operations. Typed into, the path field completes the next existing folder from
 listings the client already holds, one request per folder entered, never one per
@@ -636,7 +637,7 @@ keystroke ([interaction contract](client/browser-behaviors.md#files)).
 **API.** The routes, path resolution, the uploads folder, limits and errors are in
 [fs.md](fs.md). The web reaches them through its host's scheme-handler origin,
 `muxen-app://h-{host}/fs/…` ([ios-shell.md](ios-shell.md#where-the-web-ui-comes-from));
-video goes to the native player instead. MVP: list, raw (Range) and upload. v2: save
+video goes to the native player instead. MVP: list, raw (Range) and upload (into `uploads_dir`, or a folder the request names). v2: save
 an edit, new file, rename.
 
 **Editing (v2).** With no file watcher, the conflict check is the ETag taken at open:

@@ -1,7 +1,8 @@
 //! `POST /fs/upload` (fs.md): the body streams into a 0600 part file (`files::Temp`) in
-//! `uploads_dir`, flushed every 2 MiB, then renamed without replacing to a name the
-//! daemon chooses. Only the client name's extension is used. A part file is deleted on
-//! any failure, and leftovers from a daemon that died are swept at startup.
+//! the destination folder (`uploads_dir` unless the request names one), flushed every
+//! 2 MiB, then renamed without replacing to a name the daemon chooses. Only the client
+//! name's extension is used. A part file is deleted on any failure, and leftovers from a
+//! daemon that died are swept from the folder by the next upload into it.
 
 use std::fs::File;
 use std::io;
@@ -15,7 +16,8 @@ use futures_util::{Stream, StreamExt as _};
 use rustix::io::Errno;
 use tracing::debug;
 
-use super::{FsError, Opened, Want, expand, open_absolute};
+use super::list::SCAN_ENTRIES;
+use super::{FsError, Opened, Want, expand, open, open_absolute};
 use crate::blocking::Lane;
 use crate::config::ConfigFile;
 use crate::files::{Dir, Temp};
@@ -38,9 +40,21 @@ const PART_SUFFIX: &str = ".part";
 const RENAME_TRIES: usize = 16;
 const BASE32: &[u8; 32] = b"abcdefghijklmnopqrstuvwxyz234567";
 
-/// `uploads_dir`, created 0700 if missing and then opened after creating it, so
-/// a folder that didn't exist a moment ago still counts. Blocks.
-pub fn open_dir(file: &ConfigFile, home: &Path) -> Result<Opened, FsError> {
+/// The folder an upload lands in: `dest` (`~`, `~/…` or absolute; it must exist), else
+/// `uploads_dir`, created 0700 if missing and then opened after creating it, so a folder
+/// that didn't exist a moment ago still counts. Blocks.
+pub fn open_dir(file: &ConfigFile, home: &Path, dest: Option<&str>) -> Result<Opened, FsError> {
+    let opened = match dest {
+        Some(dest) => open(dest, home, Want::Dir)?,
+        None => open_uploads_dir(file, home)?,
+    };
+    if memory_backed(&opened.file)? {
+        return Err(FsError::MemoryBacked);
+    }
+    Ok(opened)
+}
+
+fn open_uploads_dir(file: &ConfigFile, home: &Path) -> Result<Opened, FsError> {
     let config = file.load()?;
     let dir = expand(&config.uploads_dir, home).ok_or(FsError::NotADirectory)?;
     // A failure shows up in the open below.
@@ -52,11 +66,7 @@ pub fn open_dir(file: &ConfigFile, home: &Path) -> Result<Opened, FsError> {
         .ok()
         .and_then(|dir| dir.into_os_string().into_string().ok())
         .ok_or(FsError::NotADirectory)?;
-    let opened = open_absolute(&dir, Want::Dir)?;
-    if memory_backed(&opened.file)? {
-        return Err(FsError::MemoryBacked);
-    }
-    Ok(opened)
+    open_absolute(&dir, Want::Dir)
 }
 
 /// Upload pages would remain charged to muxen while the file lives on tmpfs/ramfs.
@@ -75,12 +85,41 @@ fn memory_backed(_dir: &File) -> Result<bool, FsError> {
     Ok(false)
 }
 
+/// What the daemon calls the file.
+#[derive(Debug, Clone, Copy)]
+pub enum Naming<'a> {
+    /// `YYYYMMDD-HHMMSSZ-xxxx.<ext>`, the extension from the client's file name.
+    Upload(&'a str),
+    /// `pasted-YYYYMMDD-HHMMSSZ.txt`, then `-2`, `-3`… on a clash.
+    PastedText,
+}
+
+impl Naming<'_> {
+    /// The names to try in turn: a clash moves to the next.
+    fn candidates(self, now: SystemTime) -> Vec<io::Result<String>> {
+        match self {
+            Self::Upload(client_name) => {
+                let extension = extension(client_name);
+                (0..RENAME_TRIES)
+                    .map(|_| final_name(now, &extension))
+                    .collect()
+            }
+            Self::PastedText => {
+                let stem = format!("pasted-{}", utc_stamp(now));
+                let first = format!("{stem}.txt");
+                let rest = (2..=RENAME_TRIES).map(|n| format!("{stem}-{n}.txt"));
+                std::iter::once(first).chain(rest).map(Ok).collect()
+            }
+        }
+    }
+}
+
 /// Writes `body` into a part file in `dir` and renames it to its final name. `limit` is
 /// the size cap. Takes one fs thread per chunk written; the caller holds the upload slot.
 pub async fn receive<S, E>(
     lane: &Lane,
     dir: Opened,
-    client_name: &str,
+    naming: Naming<'_>,
     limit: u64,
     body: S,
 ) -> Result<Uploaded, FsError>
@@ -96,9 +135,9 @@ where
     let file = part.file.clone();
     match copy(lane, file, limit, body).await {
         Ok(size) => {
-            let name = part.land(extension(client_name)).await?;
+            let name = part.land(naming.candidates(SystemTime::now())).await?;
             Ok(Uploaded {
-                path: format!("{dir_path}/{name}"),
+                path: format!("{}/{name}", dir_path.trim_end_matches('/')),
                 size,
             })
         }
@@ -184,13 +223,14 @@ fn write_error(error: io::Error) -> FsError {
     let errno = error.raw_os_error().map(Errno::from_raw_os_error);
     match errno {
         Some(Errno::NOSPC | Errno::DQUOT) => FsError::NoSpace,
+        Some(Errno::ACCESS | Errno::PERM | Errno::ROFS) => FsError::Denied,
         _ => FsError::Internal(error),
     }
 }
 
-/// `.muxen-upload-<random>.part` in the uploads folder, deleted unless it landed. The
+/// `.muxen-upload-<random>.part` in the destination folder, deleted unless it landed. The
 /// delete runs on the fs lane, since the folder may sit on the slow disk; one that gets
-/// no thread in time leaves the file to the startup sweep.
+/// no thread in time leaves the file to the next upload into the folder, which sweeps.
 struct Part {
     /// `None` once it landed or was deleted.
     temp: Option<Temp>,
@@ -199,7 +239,14 @@ struct Part {
 }
 
 impl Part {
+    /// Sweeps the folder's stale part files, then creates this one. Sweeping is safe
+    /// here: the caller holds the one upload slot and the daemon the runtime lock, so no
+    /// live part file is in any folder.
     fn create(dir: &Dir, lane: Lane) -> io::Result<Self> {
+        let swept = dir.remove_matching(SCAN_ENTRIES, is_part)?;
+        if swept > 0 {
+            debug!(swept, "deleted unfinished uploads from the folder");
+        }
         let name = format!("{PART_PREFIX}{}{PART_SUFFIX}", random(16)?);
         let temp = Temp::create(dir, name.as_ref(), 0o600)?;
         Ok(Self {
@@ -210,10 +257,9 @@ impl Part {
     }
 
     /// Renames the part file to a free final name. A failure deletes it.
-    async fn land(mut self, extension: String) -> Result<String, FsError> {
+    async fn land(mut self, names: Vec<io::Result<String>>) -> Result<String, FsError> {
         let temp = self.temp.take();
         let landed = self.lane.run(move || {
-            let names = (0..RENAME_TRIES).map(|_| final_name(SystemTime::now(), &extension));
             let gone = || io::Error::from(io::ErrorKind::NotFound);
             temp.ok_or_else(gone)?.land(names)
         });
@@ -275,26 +321,8 @@ fn random(n: usize) -> io::Result<String> {
         .collect())
 }
 
-/// Deletes part files a daemon that died left in `dir`. Run after the runtime lock and
-/// both HTTP sockets are established, so a second daemon can't sweep live uploads:
-/// a second daemon started by mistake mustn't delete the running one's uploads.
-pub fn sweep(dir: &Path) -> io::Result<usize> {
-    let entries = match std::fs::read_dir(dir) {
-        Ok(entries) => entries,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(0),
-        Err(error) => return Err(error),
-    };
-    let mut removed = 0;
-    for entry in entries {
-        let entry = entry?;
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
-        if name.starts_with(PART_PREFIX) && name.ends_with(PART_SUFFIX) {
-            std::fs::remove_file(entry.path())?;
-            removed += 1;
-        }
-    }
-    Ok(removed)
+fn is_part(name: &[u8]) -> bool {
+    name.starts_with(PART_PREFIX.as_bytes()) && name.ends_with(PART_SUFFIX.as_bytes())
 }
 
 #[cfg(test)]
@@ -364,7 +392,14 @@ mod tests {
         let tree = Tree::new("upload-cap");
         let lane = Lanes::default().fs;
         let chunks = vec![vec![0; 70_000], vec![0; 70_000]];
-        let refused = receive(&lane, dir(&tree), "a.png", 100_000, body(chunks)).await;
+        let refused = receive(
+            &lane,
+            dir(&tree),
+            Naming::Upload("a.png"),
+            100_000,
+            body(chunks),
+        )
+        .await;
         assert!(matches!(refused, Err(FsError::TooLarge)), "{refused:?}");
         assert!(names(&tree).is_empty());
     }
@@ -375,9 +410,45 @@ mod tests {
         let lane = Lanes::default().fs;
         let stalled = body(vec![vec![0; 10]]).chain(stream::pending());
         let started = tokio::time::Instant::now();
-        let refused = receive(&lane, dir(&tree), "a.png", MAX_UPLOAD, stalled).await;
+        let refused = receive(
+            &lane,
+            dir(&tree),
+            Naming::Upload("a.png"),
+            MAX_UPLOAD,
+            stalled,
+        )
+        .await;
         assert!(matches!(refused, Err(FsError::BadRequest)), "{refused:?}");
         assert!(started.elapsed() >= IDLE);
         assert!(names(&tree).is_empty());
+    }
+
+    #[test]
+    fn pasted_text_names_take_a_numeric_suffix_on_a_clash() {
+        let at = UNIX_EPOCH + Duration::from_secs(1_792_651_205);
+        let names: Vec<String> = Naming::PastedText
+            .candidates(at)
+            .into_iter()
+            .map(|name| name.expect("a name"))
+            .collect();
+        assert_eq!(names[0], "pasted-20261022-064005Z.txt");
+        assert_eq!(names[1], "pasted-20261022-064005Z-2.txt");
+        assert_eq!(names.len(), RENAME_TRIES);
+    }
+
+    #[tokio::test]
+    async fn pasted_text_lands_exactly_and_the_upload_sweeps_stale_parts() {
+        let tree = Tree::new("upload-text");
+        let lane = Lanes::default().fs;
+        tree.write(".muxen-upload-zzzz.part", b"left by a crash");
+        tree.write("keep.part", b"not ours");
+        let text = body(vec![b"hello\n".to_vec()]);
+        let saved = receive(&lane, dir(&tree), Naming::PastedText, MAX_UPLOAD, text).await;
+        let saved = saved.expect("saved");
+        assert_eq!(saved.size, 6);
+        assert_eq!(std::fs::read(&saved.path).expect("read"), b"hello\n");
+        assert!(saved.path.contains("/pasted-") && saved.path.ends_with(".txt"));
+        assert_eq!(names(&tree).len(), 2, "{:?}", names(&tree));
+        assert!(names(&tree).contains(&"keep.part".to_owned()));
     }
 }

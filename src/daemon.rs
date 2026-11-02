@@ -169,7 +169,7 @@ impl Opened {
         let mut shutdown = signal(SignalKind::terminate())?;
         let mut interrupt = signal(SignalKind::interrupt())?;
 
-        start_file_api(&config, &home, &lanes).await;
+        warn_if_uploads_dir_unusable(&config, &home);
         let (hub, mut hub_task) = hub::spawn(
             Endpoints {
                 main: endpoint.clone(),
@@ -292,21 +292,10 @@ fn assemble_serve_front(front: crate::runtime::ServeFront) -> Result<ServeAssemb
     })
 }
 
-/// Deletes part files of uploads a daemon that died left, and warns of an `uploads_dir` that
-/// fs ignores. Runtime::open holds the single-instance lock before this can run.
-async fn start_file_api(config: &Config, home: &Path, lanes: &Lanes) {
+/// Warns of an `uploads_dir` that fs ignores.
+fn warn_if_uploads_dir_unusable(config: &Config, home: &Path) {
     if fs::expand(&config.uploads_dir, home).is_none() {
         warn!(entry = %config.uploads_dir, "uploads_dir in config.toml isn't absolute or ~/: uploads are refused");
-    }
-    let Some(uploads) = fs::expand(&config.uploads_dir, home) else {
-        return;
-    };
-    let dir = uploads.clone();
-    match lanes.fs.run(move || fs::upload::sweep(&dir)).await {
-        Ok(Ok(0)) => {}
-        Ok(Ok(removed)) => info!(removed, dir = %uploads.display(), "deleted unfinished uploads"),
-        Ok(Err(cause)) => warn!(%cause, dir = %uploads.display(), "can't sweep the uploads folder"),
-        Err(cause) => warn!(%cause, dir = %uploads.display(), "the uploads sweep got no thread"),
     }
 }
 

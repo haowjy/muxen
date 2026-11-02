@@ -1,7 +1,7 @@
 # File API: listing, raw reads, uploads
 
 `src/fs/` serves the phone's file manager: directory listings, file bytes with Range
-for the viewers and the native video player, and photo uploads. It reads any path the daemon's user can read: there is no scope.
+for the viewers and the native video player, and uploads. It reads and, for an upload that names a folder, writes any path the daemon's user can: there is no scope.
 A device token already runs any command in tmux as Jimmy, so a boundary here would
 guard against nothing but Jimmy. Every path the file API touches passes through one
 function, `fs::open`, which canonicalizes the path and returns an open descriptor with
@@ -35,11 +35,17 @@ auth is [auth.md](auth.md). Decisions and the alternatives rejected are in
 
 ## The uploads folder
 
-Uploads go to `uploads_dir` in `config.toml` (default `~/muxen-uploads`), absolute or
+An upload that names no folder goes to `uploads_dir` in `config.toml` (default `~/muxen-uploads`), absolute or
 starting with `~/`. A missing absolute path is created by the next upload; one that is
 neither absolute nor `~/` makes every upload answer `409 not_a_directory`. There are no
 favorites and no route that writes `config.toml`: Jimmy edits it by hand
 ([decisions.md](decisions.md#no-favorites-2026-10-30)).
+
+An upload may instead name a folder ([`dir`](#post-fsupload)): Files' Paste writes into the
+folder it shows. Those folders are any path the daemon's user can write, which adds writes
+to the reads that already had no scope; the single-device-token argument above covers it
+([decisions.md](decisions.md#paste-into-an-open-folder-2026-11-02)). `uploads_dir` is only
+the default, for the terminal's pasted images and Files' Upload.
 
 **Uploads re-read `uploads_dir` on every request**, as auth re-reads `auth.toml`
 ([auth.md](auth.md#state-on-disk)): the file is small, so a hand edit applies to the next
@@ -228,22 +234,27 @@ stops it guessing), and an ETag that stays put while the file does.
 
 ### `POST /fs/upload`
 
-`POST /fs/upload?name=<the client's file name>`; the body is the file's bytes, not
-multipart or JSON. axum's default body limit is off on this route; the handler checks
+`POST /fs/upload?name=<the client's file name>[&dir=<folder>][&text=1]`; the body is the
+file's bytes, not multipart or JSON. `dir` is `~`, `~/…` or an absolute path to an
+existing folder, resolved by `fs::open(…, Dir)` (a missing one is `404 not_found`, a file
+`409 not_a_directory`, a relative path `400 bad_request`); absent, the folder is
+`uploads_dir`, as step 2 says. `text=1` says the body is pasted text: the file is named
+`pasted-YYYYMMDD-HHMMSSZ.txt`, then `…-2.txt`, `…-3.txt` on a clash, and `name` is ignored. axum's default body limit is off on this route; the handler checks
 the cap against `Content-Length` up front, when sent, and against the running count.
 
 1. Take the upload slot (none free: `503 busy` at once).
-2. Create `uploads_dir` (0700) if missing, then resolve it and `fs::open(…, Dir)`
+2. Without `dir`: create `uploads_dir` (0700) if missing, then resolve it and `fs::open(…, Dir)`
    it, so a directory that didn't exist when the config was read still counts. An `uploads_dir` that can't be resolved to a directory (neither absolute
    nor `~/`, or not a directory) answers `409 not_a_directory`.
    On Linux, `fstatfs` on the opened directory descriptor rejects tmpfs and ramfs with
-   `409 memory_backed` before a `.part` file is created. On macOS there is no cgroup
+   `409 memory_backed` before a `.part` file is created (a `dir` too). A folder the user
+   can't write is `403 denied`, and nothing is created. On macOS there is no cgroup
    memory limit, so this filesystem-type refusal is not applied.
 3. Name the file `YYYYMMDD-HHMMSSZ-xxxx.<ext>`: UTC (no time-zone crate), 4 random
    base32 characters, and the extension of `name`, lowercased, if it is 1 to 8 ASCII
    alphanumerics, else `bin`. Nothing else of `name` is used, so it can't carry a
    path, a shell metacharacter or a hidden name into the folder.
-4. Create `.muxen-upload-<random>.part` relative to the directory's descriptor with
+4. Delete the folder's stale part files (see below), then create `.muxen-upload-<random>.part` relative to the directory's descriptor with
    `O_CREAT | O_EXCL | O_NOFOLLOW`, mode 0600 (never executable). Write each body chunk
    on the fs lane. Every 2 MiB, `fdatasync` and
    `posix_fadvise(DONTNEED)` what was written, so the upload's dirty pages stay small
@@ -261,19 +272,19 @@ the cap against `Content-Length` up front, when sent, and against the running co
    internal`, since a check-then-rename could replace a file. No final `fsync`: a photo
    lost to a power cut is re-sent.
 
-If cleanup cannot get a thread from the fs lane, a `.part` file is left behind; startup
-sweeps stale part files from the `uploads_dir` read at startup (uploads re-read the file on
-every request, so a later edit isn't swept until the next start).
+If cleanup cannot get a thread from the fs lane, or the daemon dies mid-upload, a `.part`
+file is left behind. **Every upload, to any folder, first deletes the `.muxen-upload-*.part`
+files in its own folder** (step 4), looking at no more than the 5,000 entries a listing
+scan reads. That is safe because the upload slot is held and the daemon holds the runtime
+lock, so no live part file exists in any folder. There is no startup sweep: a folder
+nobody uploads to again keeps its one stale file, hidden by its dot, until someone does.
 6. Answer `201 { path, size }`, `path` the absolute canonical path, which native
    inserts, quoted, into the tab ([ios-shell.md](ios-shell.md#files-and-sharing)).
 
 On the cap, the idle timeout, a client disconnect or a write error, the part file is
 deleted. A body that stalls for the idle timeout, or that breaks because the client
 disconnected, answers `400 bad_request`: the body failed, and the client is usually
-gone to read it. At startup, after the runtime lock is held and both sockets are
-established (as for the paste directory), the daemon deletes leftover
-`.muxen-upload-*.part` files in `uploads_dir`; nothing else in
-muxen uses that prefix.
+gone to read it. Nothing else in muxen uses the `.muxen-upload-` prefix.
 
 ## Errors
 
@@ -286,11 +297,11 @@ The auth middleware also uses this body for `forbidden`, `auth_required`,
 |---|---|---|
 | 400 | `bad_request` | a path that is relative, too long, has a NUL, doesn't decode, or canonicalizes to non-UTF-8; a bad query value; an upload body that stalled past the idle timeout or broke (the client went away) |
 | 401 | `not_enrolled` | the browser's current Tailscale node has no enrolled device row |
-| 403 | `denied` | `EACCES` or `EPERM` |
+| 403 | `denied` | `EACCES` or `EPERM`; an upload into a folder that is read-only or not writable (`EROFS` too) |
 | 403 | `bad_origin` | Browser Origin, forwarded host or fetch metadata does not match the canonical Serve origin |
 | 403 | `node_refused` | The current Tailscale node fails a node-lane rule; includes the refusal reason |
 | 404 | `not_found` | `ENOENT`, `ENOTDIR` while resolving, `ELOOP` at open |
-| 409 | `not_a_directory`, `not_a_file` | the wrong kind for the route; a FIFO, socket or device is `not_a_file`; an upload when `uploads_dir` isn't an absolute or `~/` path or isn't a directory |
+| 409 | `not_a_directory`, `not_a_file` | the wrong kind for the route; a FIFO, socket or device is `not_a_file`; an upload when `uploads_dir` isn't an absolute or `~/` path, or the upload's `dir` or `uploads_dir` isn't a directory |
 | 409 | `memory_backed` | on Linux, an upload destination directory on tmpfs or ramfs; its pages would remain charged to muxen's unit while the file exists |
 | 413 | `too_large` | an upload over the cap |
 | 416 | `bad_range` | a range starting past the end |
@@ -337,7 +348,7 @@ which is why they have a row and why the flush interval is 2 MiB, not larger.
 ## Logging
 
 - **Writes at `info`, by action and canonical path:** an upload's final path and
-  size.
+  size (a `dir` upload too).
 - **Refusals** (`denied`) at `warn` with the path
   asked for.
 - **Reads** (listings, raw ranges) at `debug` only: one video is dozens of requests.
@@ -359,7 +370,7 @@ without a disk.
 | `fs/list.rs` | the scan; pure sort and page |
 | `fs/raw.rs` | pure `parse_range` and `If-Range`; the chunk producer; ETags come from `files::Stamp` |
 | `fs/mime.rs` | the extension table |
-| `fs/upload.rs` | pure name generation; part file, flush, rename, startup sweep |
+| `fs/upload.rs` | pure name generation; part file, flush, rename, the folder's stale-part sweep |
 
 Wire types go in `src/proto/fs.rs` and are generated for TypeScript like the WebSocket
 messages ([daemon-core.md §5.5](daemon-core.md#55-type-generation)); Swift hand-writes

@@ -173,7 +173,8 @@ Decided by Jimmy, 2026-10-21 unless an entry gives another date.
 
 ### Files: view and upload now, three write operations in v2
 
-- **What:** project roots picked in the app; one uploads folder; HEIC converted on the
+- **What:** project roots picked in the app; one uploads folder (superseded for Paste:
+  [Paste into an open folder](#paste-into-an-open-folder-2026-11-02)); HEIC converted on the
   phone; no video thumbnails; no file watcher. Write operations are edit, new file and
   rename, in v2.
 - **Rejected:** the plan review's rename/move/mkdir/delete-to-trash set. Move, mkdir and
@@ -4557,3 +4558,27 @@ means) is written once.
   built, and there is one surface and one row list for all tabs; nothing changes it after.
 - **Rejected:** keeping both selections alive and checking each at every site (two lifetimes and two looks that
   could disagree, and the arms had already drifted); choosing per touch (the platform does not change per touch).
+
+## Paste into an open folder (2026-11-02)
+
+Jimmy, first: "i want to be able to paste an image and have it upload (the files path)". Then: "I mean if u open a
+folder, u should be able to paste an image into it (or i guess text)?" This ends the product rule that uploads go
+to one folder: an upload may name the folder it lands in.
+
+- **The rule.** In a Files tab showing a folder, Paste (a toolbar control; Cmd/Ctrl-V on desktop) puts the
+  clipboard into that folder: an image as a file named like any upload, text as `pasted-<timestamp>.txt` holding
+  exactly the text. It never overwrites (a numeric suffix on a clash). `POST /fs/upload` takes an optional `dir`;
+  without it, uploads go to `uploads_dir` as before. Every limit, the one upload slot and the `memory_backed`
+  refusal carry over.
+- **Writes have no scope.** Reads of any path the daemon's user can read were already allowed, on the argument that
+  a device token runs any command in tmux as Jimmy, so a boundary guards nothing but Jimmy. `dir` adds writes under
+  the same argument: any folder the daemon's user can write.
+- **Stale part files.** A crash leaves a `.muxen-upload-*.part` file in whatever folder the upload was writing.
+  Rule: every upload first deletes the part files in its own folder (at most the 5,000 entries a listing scan reads).
+  The upload slot and the runtime lock mean none is live. This replaces the startup sweep of `uploads_dir`, which
+  would have covered only one folder.
+- **Rejected:** a startup sweep that also covers other folders (it needs a record of every folder ever written to:
+  state for a crash that leaves one hidden file); a part file in `uploads_dir` renamed into the folder (a
+  cross-filesystem rename fails, and no-replace needs one filesystem); `O_TMPFILE` (Linux only); a favorites list or
+  a config key naming the allowed folders (Jimmy chose none, [no favorites](#no-favorites-2026-10-30)); a new route
+  for text (the same body, slot and limits; only the name differs, so `text=1`).

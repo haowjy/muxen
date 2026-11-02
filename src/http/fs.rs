@@ -20,7 +20,7 @@ use super::{Ctx, Refusal};
 use crate::files::Stamp;
 use crate::fs::list::{self, Filter};
 use crate::fs::raw::{self, Span};
-use crate::fs::upload::{self, MAX_UPLOAD};
+use crate::fs::upload::{self, MAX_UPLOAD, Naming};
 use crate::fs::{FsError, Want, mime};
 use crate::proto::HttpError;
 
@@ -54,6 +54,11 @@ struct UploadQuery {
     /// The client's file name: only its extension is used.
     #[serde(default)]
     name: String,
+    /// The folder to upload into (`~`, `~/…` or absolute); absent: `uploads_dir`.
+    dir: Option<String>,
+    /// `1`: the body is pasted text, named `pasted-<time>.txt`; `name` is ignored.
+    #[serde(default)]
+    text: u8,
 }
 
 /// A page of any directory, holding the scan slot.
@@ -138,7 +143,7 @@ async fn raw(State(ctx): State<Arc<Ctx>>, path: WirePath, headers: HeaderMap) ->
     respond(&path, sent)
 }
 
-/// `201 { path, size }`: the body, as is, into `uploads_dir` under a name the daemon
+/// `201 { path, size }`: the body, as is, into `dir` (default `uploads_dir`) under a name the daemon
 /// picks. One upload at a time; a second is `busy` at once.
 async fn upload(
     State(ctx): State<Arc<Ctx>>,
@@ -159,13 +164,19 @@ async fn upload(
     let uploaded = async {
         let _slot = ctx.fs.upload()?;
         let app = ctx.clone();
+        let dest = query.dir.clone();
         let dir = ctx
             .fs
             .lane
-            .run(move || upload::open_dir(&app.app.config, &app.app.home))
+            .run(move || upload::open_dir(&app.app.config, &app.app.home, dest.as_deref()))
             .await??;
+        let naming = if query.text == 1 {
+            Naming::PastedText
+        } else {
+            Naming::Upload(&query.name)
+        };
         let body = body.into_data_stream();
-        upload::receive(&ctx.fs.lane, dir, &query.name, MAX_UPLOAD, body).await
+        upload::receive(&ctx.fs.lane, dir, naming, MAX_UPLOAD, body).await
     }
     .await;
     match uploaded {
