@@ -55,3 +55,5 @@
   transition: translate var(--keyboard-timing);
   box-shadow: var(--shadow-1);
 }
+/* Not under a finger that is extending the mark: `caretRangeFromPoint` would find the button, not the text beneath. */
+.surface:has([data-extending]) .latest { pointer-events: none; }

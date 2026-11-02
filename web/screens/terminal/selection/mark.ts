@@ -176,11 +176,14 @@ export class Mark implements Selection {
       CSS.highlights.set("tsel", new Highlight(state.range));
       this.placeHandles(state.range);
     } else CSS.highlights.delete("tsel");
+    const touched = this.holding || this.grabbed !== null;
     for (const end of ENDS) {
       const handle = this.handles?.[end]; // made by the first placeHandles
       handle?.toggleAttribute("hidden", !state);
-      handle?.toggleAttribute("data-inert", this.holding || this.grabbed !== null);
+      handle?.toggleAttribute("data-inert", touched);
     }
+    // A control floating over the list (Jump to latest) would be what hit-testing finds under the finger at the list's edge, and the mark would stop growing.
+    this.deps.layer()?.toggleAttribute("data-extending", touched);
   }
 
   /** The word under a client point, or null off the rows' text or on a blank. */

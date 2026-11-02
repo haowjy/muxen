@@ -517,6 +517,45 @@ read -r
       });
     }
 
+    test("the mark keeps growing under the finger at the list's bottom edge, with Jump to latest over it, until it meets the live rows", async ({ page }) => {
+      // Classic Claude's shape: completed lines scroll into history above a few live rows that are redrawn every 100 ms.
+      const script = join(tmpdir(), `muxen-live-${String(process.pid)}.sh`);
+      writeFileSync(script, `#!/bin/bash
+for i in $(seq 1 400); do echo "Completed finding $i: Amber queues keep their original input"; done
+printf '\\n\\n\\n'
+n=0
+while true; do
+  n=$((n+1))
+  printf '\\e[3F\\e[J* Working... (%ss)\\n  status %s\\n  footer\\n' $n $n
+  sleep 0.1
+done
+`);
+      const s = newSession(`bash ${script}`);
+      await stubEditMenu(page);
+      const finger = await open(page, s);
+      const box = await page.evaluate(() => { const r = document.querySelector<HTMLElement>("[data-rows]")?.getBoundingClientRect(); return r ? { top: r.top, bottom: r.bottom, left: r.left } : null; });
+      if (!box) throw new Error("no list");
+      for (let swipe = 0; swipe < 3; swipe++) { // read history: a real swipe down, three times
+        await finger.down(box.left + 200, box.top + 100);
+        await finger.drag(box.left + 200, box.top + 100, box.left + 200, box.bottom - 100, 8, 16);
+        await page.waitForTimeout(80);
+        await finger.up();
+        await page.waitForTimeout(900);
+      }
+      await expect(page.getByRole("button", { name: "Jump to latest" })).toBeVisible();
+      const marked = (): Promise<number> => page.evaluate(() => (CSS.highlights.get("tsel")?.values().next().value as Range | undefined)?.toString().length ?? 0);
+      const x = box.left + 150;
+      await finger.down(x, box.top + 150);
+      await page.waitForTimeout(550);
+      await finger.drag(x, box.top + 150, box.left + 270, box.bottom - 12, 12, 30); // the button's corner, on the edge
+      await page.waitForTimeout(500);
+      const first = await marked();
+      await page.waitForTimeout(700);
+      expect(await marked()).toBeGreaterThan(first + 500); // it grew while the list scrolled under the still finger
+      await expect.poll(marked, { timeout: 8000 }).toBe(0); // and closed when the extension reached the live rows (J7)
+      await finger.up();
+    });
+
     test.describe("a mouse wheel on a desktop", () => {
       test.use({ viewport: { width: 1100, height: 800 }, hasTouch: false });
 
