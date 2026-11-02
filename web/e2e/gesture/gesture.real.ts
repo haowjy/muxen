@@ -398,6 +398,61 @@ for (const version of VERSIONS) {
       expect(settled).toBeGreaterThanOrEqual(sent);
     });
 
+    // The browser has no edit menu, so no mark. The app's platform has one: this gives the browser's platform a stub, by
+    // wrapping its factory in the dev server's module, and records every menu the page asks for.
+    async function stubEditMenu(page: Page): Promise<void> {
+      await page.addInitScript(() => { (window as unknown as { __menus: unknown[] }).__menus = []; });
+      await page.route(/\/platform\/browser\/index\.ts/, async (route) => {
+        const response = await route.fetch();
+        const source = (await response.text()).replace("export function createBrowserPlatform(", "function createBrowserPlatformBase(");
+        const wrapped = `${source}\nexport function createBrowserPlatform() { const platform = createBrowserPlatformBase(); platform.editMenu = (rect) => { window.__menus.push(rect); }; return platform; }\n`;
+        await route.fulfill({ response, body: wrapped });
+      });
+    }
+
+    test("the mark: every hold shows its handles and paints its highlight, and a tap elsewhere clears both", async ({ page }) => {
+      const s = newSession();
+      await stubEditMenu(page);
+      const finger = await open(page, s);
+      stack.tmux("send-keys", "-t", s, "echo alpha beta gamma", "Enter");
+      await paneIncludes(s, /^alpha beta gamma$/m);
+      const row = stack.tmux("capture-pane", "-p", "-t", s).split("\n").findIndex((l) => l === "alpha beta gamma");
+      const at = await cellCentre(page, s, 7, row);
+      const away = await mid(page, s, 20);
+      const menus = (): Promise<unknown[]> => page.evaluate(() => (window as unknown as { __menus: unknown[] }).__menus);
+      const before = pane(s);
+      // The middle of "beta", between where the two handles stand: only the highlight can change these pixels.
+      const cell = await page.evaluate(() => parseFloat(document.querySelector<HTMLElement>("[data-rows]")?.style.getPropertyValue("--cell-width") ?? "0"));
+      const clip = { x: at.x - cell * 0.75, y: at.y - 6, width: cell * 1.5, height: 12 };
+      const bare = await page.screenshot({ clip });
+      const handles = page.locator("[data-end]");
+      const hold = async (): Promise<void> => {
+        await finger.down(at.x, at.y);
+        await page.waitForTimeout(550);
+        await finger.up();
+      };
+      const tapAway = async (): Promise<void> => {
+        await finger.down(away.x, away.y);
+        await finger.up();
+      };
+      for (const round of [1, 2]) {
+        await hold();
+        await expect(handles).toHaveCount(2);
+        await expect(handles.first()).toBeVisible();
+        await expect(handles.last()).toBeVisible();
+        expect(await page.evaluate(() => CSS.highlights.has("tsel"))).toBe(true);
+        // The registry alone missed a highlight WebKit would not paint: the pixels under it must change.
+        expect((await page.screenshot({ clip })).equals(bare)).toBe(false);
+        expect((await menus()).filter((rect) => rect !== null)).toHaveLength(round);
+        await tapAway();
+        await expect(handles.first()).toBeHidden();
+        await expect(handles.last()).toBeHidden();
+        expect(await page.evaluate(() => CSS.highlights.has("tsel"))).toBe(false);
+        expect((await page.screenshot({ clip })).equals(bare)).toBe(true);
+      }
+      expect(pane(s)).toBe(before);
+    });
+
     test.describe("a mouse wheel on a desktop", () => {
       test.use({ viewport: { width: 1100, height: 800 }, hasTouch: false });
 
