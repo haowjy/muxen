@@ -492,7 +492,7 @@ token to native solely for comparison and revocation, never into storage or logs
 
 | Web → native | Reply | Purpose |
 |---|---|---|
-| `ready` | `Boot { bridgeVersion: 8, hosts, workspace, viewport, preferences, lifecycle, focusMode, lineSnapshot }` | Start and restore the saved workspace (opaque JSON) and native keyboard target/editing copy if WebKit's content process restarted |
+| `ready` | `Boot { bridgeVersion: 9, hosts, workspace, viewport, preferences, lifecycle, focusMode, lineSnapshot }` | Start and restore the saved workspace (opaque JSON) and native keyboard target/editing copy if WebKit's content process restarted |
 | `socket { host }` | `{ url, token }`, `{ locked: true }` or `{ notEnrolled: true }` | Resolve the WebSocket endpoint and credential inside `HostLink`; keep both there except echoing the exact refused token to native for `hostRejected` |
 | `hostRejected { host, token }` | `null` | Clear that exact rejected token only, then re-publish `hosts` |
 | `recreateWebView` | `null` | Discard/reload the page after unrecoverable WebSocket connection failure |
@@ -564,7 +564,7 @@ HostEntry = { id: string, name: string, baseURL: string }
 PlatformHost = { handle: string, hostId: string | null,
                  name: string | null, pageOrigin: string | null }
 TabKey = { host: string, session: { server: string, session: string } }
-Boot = { bridgeVersion: 8, hosts: PlatformHost[],
+Boot = { bridgeVersion: 9, hosts: PlatformHost[],
          workspace: JSON | null, viewport: Viewport,
          preferences: Preferences, lifecycle: Lifecycle, focusMode: FocusMode,
          lineSnapshot: NativeLineSnapshot | null }

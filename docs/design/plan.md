@@ -549,10 +549,9 @@ Core MVP. Spikes 5–8 prototype these before feature work.
 ### Select, copy and paste
 
 The [researched interaction design](client/terminal-interaction-design.md) is the
-current direction. The rows are the page's text, so selection is iOS's own: with the
-keyboard down and in phone Safari a long-press selects the word under the finger with
-iOS's handles and menu, and dragging a handle to a screen edge autoscrolls the list. With
-the keyboard up in the app, a hold marks the word under the finger with muxen's highlight,
+current direction. The rows are the page's text, so selection is iOS's own in phone
+Safari: a long-press selects the word under the finger with iOS's handles and menu, and
+dragging a handle to a screen edge autoscrolls the list. In the app, with the keyboard up or down, a hold marks the word under the finger with muxen's highlight,
 the finger and two handles extend it, and native's edit menu shows Copy and Paste; the
 mark autoscrolls near the list's top and bottom edges. A selection survives scrolling and
 output below it; it closes only when output rewrites or the cap drops one of its rows. Copy
