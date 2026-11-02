@@ -349,7 +349,6 @@ responder. Terminal's native responder stays the same object while its target ch
 | `terminal` | `KeyboardInput` | up | `focus terminal`: toggle from `hidden`; a tap on the cursor row or the row above/below while down; a terminal tap or esc from `line` while up; restore after interruption |
 | `line` | `KeyboardInput` | up, Return labelled Send | `focus line`: tap the dock box; restore after interruption |
 | `webText` | WebKit content view | WebKit's | a sheet or Files screen needs its own field; overlay / destination opens |
-| `select` | unchanged | unchanged | `focus select`: not a target but a flag over the current one (`selecting`); any other mode clears it. The web no longer sends it (2026-10-31): no snapshot holds the touch |
 
 - **One responder, two targets.** Switching `terminal` ↔ `line` changes the mode and
   Return label, then calls `reloadInputViews()` on the same field. Tapping the dock box
@@ -366,19 +365,13 @@ responder. Terminal's native responder stays the same object while its target ch
   used, the web asks for `webText`, which resigns `KeyboardInput`; WebKit then owns the
   sheet field and its ordinary keyboard chrome. On close the held Terminal target is
   restored synchronously; the app does not require a new tap to raise the keyboard.
-- **Selection** ([plan.md](plan.md#select-copy-and-paste)) is iOS's own on the row list with the keyboard down,
-  and the web's mark with it up. Since 2026-10-31 the web never sends `focus select`; native still accepts it
-  because an older page, served by an older daemon, can send it (removal is tracked for the next bridge bump).
-  `focus select` sets `FocusController.selecting` and leaves the target alone: the keyboard
-  stays as it was, typing goes where it went, and only the hide button lowers it. Resigning
-  the field there dropped the keyboard, and on the phone WebKit cleared the page's
-  selection 1–100 ms later, so the long press selected nothing. The next target the web
-  sends clears the flag; a cover and uncover restore the target and leave the flag. While
-  it is on, WebKit's edit menu is emptied (iOS otherwise offers AutoFill for the native field). The line mirror has its own
+- **Selection** ([plan.md](plan.md#select-copy-and-paste)) is the web's mark, in every keyboard state: it is a
+  CSS highlight with no DOM selection and takes no focus, so nothing about the responder changes. The app serves
+  only its bundled page, and the web throws on a `bridgeVersion` other than its own, so no page this build can
+  load sends `focus select`; the mode is gone. The line mirror has its own
   tap-to-place caret and Paste / Select all / Clear menu; it has no handles and does not
   borrow WebKit focus.
-- **Edit menus over the mark** (any input with the keyboard up: the web keyboard switch and the app's default input). With
-  the keyboard up the page's mark is a CSS highlight, not a DOM selection, so WebKit offers no
+- **Edit menus over the mark** (either input, keyboard up or down). The page's mark is a CSS highlight, not a DOM selection, so WebKit offers no
   menu; the page sends `editMenu { rect }` and `MuxenWebView` presents its own
   `UIEditMenuInteraction` (Copy, Paste) there, and reports the choice as `menuCopy` or
   `menuPaste`. Native owns whether that menu is up (the interaction's `willPresent` and
@@ -505,7 +498,7 @@ token to native solely for comparison and revocation, never into storage or logs
 | `hostRejected { host, token }` | `null` | Clear that exact rejected token only, then re-publish `hosts` |
 | `recreateWebView` | `null` | Discard/reload the page after unrecoverable WebSocket connection failure |
 | `saveWorkspace { workspace }` | `null` | Persist the entire workspace JSON as given |
-| `focus { mode }` | `null` | `terminal`, `line`, `hidden`, `webText` or `select`; native alone changes first responder |
+| `focus { mode }` | `null` | `terminal`, `line`, `hidden` or `webText`; native alone changes first responder |
 | `activeTab { tab: TabKey | null }` | `null` | Update native's cached target for coalesced keyboard batches |
 | `lineSet { text, caret, tab }` | Native generation | Load the web-owned draft into native's editing copy and bind it to the tab atomically; native advances its generation and returns it to the web owner |
 | `lineCaret { index }` | `null` | Move the native editing caret to a UTF-16 offset |
@@ -579,7 +572,7 @@ Boot = { bridgeVersion: 8, hosts: PlatformHost[],
 Preferences = { appearance: "system" | "light" | "dark",
                 textSize: "small" | "default" | "large" | "larger",
                 relock: "5min" | "1hour" | "launch" }
-FocusMode = "hidden" | "terminal" | "line" | "webText" | "select"
+FocusMode = "hidden" | "terminal" | "line" | "webText"
 NativeLineSnapshot = { tab: TabKey, gen: number, text: string,
                        selection: TextRange, marked: TextRange | null }
 TextRange = { start: number, end: number }  // UTF-16 offsets
@@ -796,7 +789,7 @@ and fix this spec from them. The current Simulator cannot show the software keyb
   shared fixture. Simulator-verified: boot, token socket to a real daemon, listing, Home
   safe area, background closes the socket and resume reconnects. Not verified (the
   Simulator takes no touch or key input from here): the keyboard toggle through
-  `focus terminal`/`hidden`, `keyboardInset`, rotation, `select` and callout. Device
+  `focus terminal`/`hidden`, `keyboardInset`, rotation and callout. Device
   checklist.
 - **The empty-`inputView` trick for `hidden`** is common practice, not documented
   behaviour. Device checklist.

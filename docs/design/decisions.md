@@ -4505,3 +4505,12 @@ The app's long press is the mark in both keyboard states, so the rows never take
 `menuPaste` reaches `pasteFromMenu`, which pastes into the shown terminal tab even while a dialog is open over it,
 so a Paste from a dialog's text menu went into tmux. `MuxenWebView.addsPaste` and the insert are deleted;
 `menuPaste` stays for the mark's menu. Supersedes the "Paste item on iOS's own menu (keyboard down)" entry above.
+
+## `focus select` is deleted (2026-11-02)
+
+`select` stayed in `FocusMode` for "an older page, served by an older daemon" (issue #6). The app serves only its
+bundled `WebUI/` and the web throws on any `bridgeVersion` other than its own, so no page a build can load sends it;
+the daemon serves only the browser build. Deleted: `FocusMode.select`, `FocusController.selecting`,
+`MuxenWebView.suppressesEditMenu`, its `canPerformAction` override and `buildMenu`'s AutoFill removal (with the Paste
+item gone above, `buildMenu` was empty). The wire doesn't change for the web, whose `FocusMode` never had `select`,
+so no bridge bump.

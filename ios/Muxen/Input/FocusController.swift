@@ -6,12 +6,8 @@ import UIKit
 final class FocusController {
     typealias Mode = MuxenKit.FocusMode
 
-    /// The keyboard's target. Never `.select`: the terminal's selection is `selecting`, on top of it.
+    /// The keyboard's target.
     private(set) var mode: Mode = .hidden
-    /// The terminal's selection is up. The keyboard and typing stay with `mode` (resigning the field dropped
-    /// the keyboard, and on the phone WebKit cleared the page's selection with it); only the system edit
-    /// menus are emptied, since muxen draws Copy and Paste.
-    private(set) var selecting = false
     private var isCovered = false
     private var stateBeforeCover: Mode?
     private let input: KeyboardInput
@@ -21,7 +17,6 @@ final class FocusController {
 
     var canResignInput: Bool { mode == .webText }
     var covered: Bool { isCovered }
-    /// A page that loads fresh has no selection, so it gets the target alone.
     var modeForWeb: Mode { isCovered ? (stateBeforeCover ?? mode) : mode }
 
     init(input: KeyboardInput) {
@@ -29,11 +24,9 @@ final class FocusController {
         input.focusController = self
     }
 
-    /// The web's request: `select` turns the selection on; any target turns it off and takes the keyboard.
+    /// The web's request for the keyboard's target.
     func set(_ next: Mode) {
         guard !webKeyboard else { return }
-        selecting = next == .select
-        guard next != .select else { return }
         target(next)
     }
 
@@ -48,7 +41,6 @@ final class FocusController {
     func setWebKeyboard(_ on: Bool) {
         guard on != webKeyboard else { return }
         webKeyboard = on
-        selecting = false
         target(on ? .webText : .hidden)
     }
 

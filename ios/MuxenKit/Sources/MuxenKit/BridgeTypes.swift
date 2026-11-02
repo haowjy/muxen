@@ -176,7 +176,7 @@ public struct Lifecycle: Codable, Equatable, Sendable {
 }
 
 public enum FocusMode: String, Codable, Equatable, Sendable {
-    case hidden, terminal, line, webText, select
+    case hidden, terminal, line, webText
 }
 
 public struct TextRange: Codable, Equatable, Sendable {

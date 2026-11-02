@@ -293,7 +293,6 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         configuration.userContentController.addScriptMessageHandler(messageHandlerProxy, contentWorld: .page, name: "muxen")
 
         let result = MuxenWebView(frame: .zero, configuration: configuration)
-        result.suppressesEditMenu = { [weak self] in self?.focus.selecting == true }
         result.onMenuChoice = { [weak self] choice in self?.send(choice, fields: [:]) }
         // iOS's selection handles, and the page's own (they read `--color-accent`): --blue-7 in light, --blue-9 in dark.
         result.tintColor = UIColor { $0.userInterfaceStyle == .dark
@@ -772,13 +771,9 @@ private final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandlerWi
 }
 
 
-/// Native's two edit menus over the terminal. The page's mark (keyboard up) is no selection, so WebKit offers
-/// nothing there and the page asks for `toggleMarkMenu`; native knows whether the menu is up, since iOS can dismiss it
-/// itself.
-/// While a `focus select` is on (the web no longer sends it; an older page can) WebKit's menu is emptied
-/// (`suppressesEditMenu`); web text fields keep the system menu.
+/// Native's edit menu over the terminal's mark. The mark is no selection, so WebKit offers nothing there and the
+/// page asks for `editMenu`; native knows whether the menu is up, since iOS can dismiss it itself.
 final class MuxenWebView: WKWebView, UIEditMenuInteractionDelegate {
-    var suppressesEditMenu: () -> Bool = { false }
     var onMenuChoice: (BridgeMessageType) -> Void = { _ in }
     private lazy var markMenu = UIEditMenuInteraction(delegate: self)
     private var markRect = CGRect.zero
@@ -806,19 +801,6 @@ final class MuxenWebView: WKWebView, UIEditMenuInteractionDelegate {
     func editMenuInteraction(_ interaction: UIEditMenuInteraction, willDismissMenuFor configuration: UIEditMenuConfiguration, animator: any UIEditMenuInteractionAnimating) { markMenuUp = false }
 
     func editMenuInteraction(_ interaction: UIEditMenuInteraction, targetRectFor configuration: UIEditMenuConfiguration) -> CGRect { markRect }
-
-    // WebKit's content view asks the web view whether each edit action may run; refusing them all leaves
-    // its menu empty, so it never shows. (Removing menus in `buildMenu` left it up.)
-    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
-        suppressesEditMenu() ? false : super.canPerformAction(action, withSender: sender)
-    }
-
-    // AutoFill is a submenu, not an action, so the refusal above leaves it: it showed alone once native's
-    // field stayed first responder through the selection.
-    override func buildMenu(with builder: any UIMenuBuilder) {
-        super.buildMenu(with: builder)
-        if suppressesEditMenu() { builder.remove(menu: .autoFill) }
-    }
 }
 
 /// WebKit's input delegate (private `_WKInputDelegate`), asked whether a focused page element may start an input
