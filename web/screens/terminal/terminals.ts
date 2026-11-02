@@ -543,6 +543,8 @@ export class Terminals extends Store<TerminalsView> {
     const xterm = directInput === "xterm";
     // The surface's own look follows the input (Terminal.module.css); a trackpad appearing on an iPad closes a phone's selection.
     this.element.dataset["directInput"] = directInput;
+    // Where the mark is the selection (the app) the rows are not selectable, so iOS's long press starts none of its own.
+    this.element.toggleAttribute("data-marking", this.app.platform.editMenu !== undefined);
     this.view.dismissSelection();
     renderer?.setWebgl(xterm && !this.paneLarge);
     renderer?.setInput(

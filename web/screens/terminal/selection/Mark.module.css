@@ -1,7 +1,12 @@
-/* The mark (mark.ts): muxen's own highlight, which is no DOM selection, so focus and the keyboard
-   stay. Look: ios-simplify/selection-look.md. The colour is the one selection colour (`--term-selection`),
-   and sets no text colour, so ANSI colours show through. */
-::highlight(tsel) { background-color: var(--term-selection); }
+/* The mark (mark.ts): muxen's own highlight, boxes in the row list's scroller. It is no DOM selection, so focus and
+   the keyboard stay. Look: ios-simplify/selection-look.md. The colour is the one selection colour (`--term-selection`),
+   translucent, so ANSI colours show through. */
+.box {
+  position: absolute;
+  z-index: var(--z-term-selection);
+  background: var(--term-selection);
+  pointer-events: none;
+}
 
 /* A handle sits on its stem: `left` is the stem's x, `top` and `height` are its line's. The knob is a
    10 px circle 2 px past the line (above for the start, below for the end); the hit area is 44 × 44 centred

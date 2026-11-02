@@ -410,6 +410,31 @@ for (const version of VERSIONS) {
       });
     }
 
+    /**
+     * The mark's highlight is boxes in the list's scroller, not a DOM selection: where they stand is the only sign of it
+     * in the page. The row they lie on (counting `count` rows up from the bottom) and the text under them, by cell.
+     */
+    const markedRows = (page: Page, count: number): Promise<{ row: number; text: string } | null> => page.evaluate((n) => {
+      const boxes = [...document.querySelectorAll<HTMLElement>("[data-mark-box]")].map((b) => b.getBoundingClientRect());
+      const first = boxes[0];
+      if (!first) return null;
+      const cell = parseFloat(document.querySelector<HTMLElement>("[data-rows]")?.style.getPropertyValue("--cell-width") ?? "0");
+      const rows = [...document.querySelectorAll<HTMLElement>("[data-rows] [data-seq]")].slice(-n);
+      const middle = first.top + first.height / 2;
+      const row = rows.findIndex((r) => { const box = r.getBoundingClientRect(); return box.top <= middle && middle <= box.bottom; });
+      const there = rows[row]?.getBoundingClientRect();
+      if (!there) return null;
+      const lefts = boxes.filter((b) => b.top < there.bottom && b.bottom > there.top);
+      const start = Math.round((Math.min(...lefts.map((b) => b.left)) - there.left) / cell);
+      const end = Math.round((Math.max(...lefts.map((b) => b.right)) - there.left) / cell);
+      return { row, text: rows[row]?.textContent.slice(start, end) ?? "" };
+    }, count);
+    /** How many cells the mark covers, over every row it spans. */
+    const markedCells = (page: Page): Promise<number> => page.evaluate(() => {
+      const cell = parseFloat(document.querySelector<HTMLElement>("[data-rows]")?.style.getPropertyValue("--cell-width") ?? "0");
+      return Math.round([...document.querySelectorAll<HTMLElement>("[data-mark-box]")].reduce((sum, b) => sum + b.getBoundingClientRect().width, 0) / cell);
+    });
+
     test("the mark: every hold shows its handles and paints its highlight, and a tap elsewhere clears both", async ({ page }) => {
       const s = newSession();
       await stubEditMenu(page);
@@ -426,6 +451,7 @@ for (const version of VERSIONS) {
       const clip = { x: at.x - cell * 0.75, y: at.y - 6, width: cell * 1.5, height: 12 };
       const bare = await page.screenshot({ clip });
       const handles = page.locator("[data-end]");
+      const boxes = page.locator("[data-mark-box]");
       const hold = async (): Promise<void> => {
         await finger.down(at.x, at.y);
         await page.waitForTimeout(550);
@@ -440,14 +466,17 @@ for (const version of VERSIONS) {
         await expect(handles).toHaveCount(2);
         await expect(handles.first()).toBeVisible();
         await expect(handles.last()).toBeVisible();
-        expect(await page.evaluate(() => CSS.highlights.has("tsel"))).toBe(true);
-        // The registry alone missed a highlight WebKit would not paint: the pixels under it must change.
+        await expect(boxes).not.toHaveCount(0);
+        // The boxes' presence alone would miss a highlight that does not paint: the pixels under it must change.
         expect((await page.screenshot({ clip })).equals(bare)).toBe(false);
+        // The rows are not selectable here, so the long press starts no selection of the system's beside the mark.
+        expect(await page.evaluate(() => getSelection()?.toString())).toBe("");
+        expect(await page.evaluate(() => getComputedStyle(document.querySelector("[data-rows]") as Element).getPropertyValue("user-select"))).toBe("none");
         expect((await menus()).filter((rect) => rect !== null)).toHaveLength(round);
         await tapAway();
         await expect(handles.first()).toBeHidden();
         await expect(handles.last()).toBeHidden();
-        expect(await page.evaluate(() => CSS.highlights.has("tsel"))).toBe(false);
+        await expect(boxes).toHaveCount(0);
         expect((await page.screenshot({ clip })).equals(bare)).toBe(true);
       }
       expect(pane(s)).toBe(before);
@@ -484,14 +513,13 @@ read -r
         await paneIncludes(s, "alpha beta gamma");
         // Which screen row the selected text is on, and what it is.
         const height = Number(stack.tmux("display-message", "-p", "-t", s, "#{pane_height}").trim());
-        const selected = (): Promise<{ row: number; text: string } | null> => page.evaluate(([useMark, count]) => {
-          const highlighted = CSS.highlights.get("tsel")?.values().next().value as Range | undefined;
-          const range = useMark ? highlighted : getSelection()?.rangeCount ? getSelection()?.getRangeAt(0) : undefined;
+        const selected = (): Promise<{ row: number; text: string } | null> => marked ? markedRows(page, height) : page.evaluate((count) => {
+          const range = getSelection()?.rangeCount ? getSelection()?.getRangeAt(0) : undefined;
           if (!range || range.collapsed) return null;
           const rows = [...document.querySelectorAll<HTMLElement>("[data-rows] [data-seq]")].slice(-count);
           const row = rows.findIndex((r) => r.contains(range.startContainer));
           return { row, text: range.toString() };
-        }, [marked, height] as const);
+        }, height);
         const next = async (): Promise<void> => { stack.tmux("send-keys", "-t", s, "Enter"); await page.waitForTimeout(400); };
         if (marked) {
           const at = await cellCentre(page, s, 7, 4);
@@ -543,7 +571,7 @@ done
         await page.waitForTimeout(900);
       }
       await expect(page.getByRole("button", { name: "Jump to latest" })).toBeVisible();
-      const marked = (): Promise<number> => page.evaluate(() => (CSS.highlights.get("tsel")?.values().next().value as Range | undefined)?.toString().length ?? 0);
+      const marked = (): Promise<number> => markedCells(page);
       const x = box.left + 150;
       await finger.down(x, box.top + 150);
       await page.waitForTimeout(550);
