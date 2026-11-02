@@ -259,7 +259,10 @@ impl Part {
         let path = Path::new(dir_path).join(&name);
         std::fs::write(&record, path.as_os_str().as_encoded_bytes())
             .map_err(|error| FsError::Internal(io::Error::other(error)))?;
-        let temp = Temp::create(dir, name.as_ref(), 0o600).map_err(write_error)?;
+        let temp = Temp::create(dir, name.as_ref(), 0o600).map_err(|error| {
+            forget(&record);
+            write_error(error)
+        })?;
         Ok(Self {
             file: temp.file().clone(),
             temp: Some(temp),
