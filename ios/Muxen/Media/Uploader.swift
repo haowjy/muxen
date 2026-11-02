@@ -89,7 +89,7 @@ final class Uploader: NSObject, URLSessionDataDelegate, URLSessionTaskDelegate {
         if job.statusCode == 401 { job.rejectedToken(job.token) }
         guard job.statusCode == 201,
               let uploaded = try? JSONDecoder().decode(UploadedPath.self, from: job.responseData) else {
-            job.completion(.failure(UploadFailure.server(job.statusCode ?? 0)))
+            job.completion(.failure(UploadFailure.server(job.statusCode ?? 0, code: (try? JSONDecoder().decode(DaemonError.self, from: job.responseData))?.error)))
             finish(job)
             return
         }
@@ -142,14 +142,22 @@ final class Uploader: NSObject, URLSessionDataDelegate, URLSessionTaskDelegate {
 
 private struct UploadedPath: Decodable { let path: String }
 
-private enum UploadFailure: LocalizedError {
+/// The daemon's refusal body, `{"error": code}` (fs.md "Errors").
+private struct DaemonError: Decodable { let error: String }
+
+enum UploadFailure: LocalizedError {
     case invalidHost
-    case server(Int)
+    /// The HTTP status and the daemon's error code, if the body had one. The page words the code.
+    case server(Int, code: String?)
+
+    var code: String? {
+        if case .server(_, let code) = self { code } else { nil }
+    }
 
     var errorDescription: String? {
         switch self {
         case .invalidHost: "The server address is invalid."
-        case .server(let code): "The upload failed (HTTP \(code))."
+        case .server(let status, _): "The upload failed (HTTP \(status))."
         }
     }
 }

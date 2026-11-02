@@ -6,7 +6,7 @@ import { createBrowserUploads } from "./uploads";
 import { createBrowserPreferences } from "./preferences";
 import { createBrowserViewport } from "./viewport";
 import { readLifecycle, watchLifecycle } from "./lifecycle";
-import { clipboard, readClipboard } from "./clipboard";
+import { clipboard } from "./clipboard";
 import { canOpenApp, openInApp, openURL } from "./links";
 import { createPwa } from "./pwa";
 import { restart } from "./restart";
@@ -52,7 +52,7 @@ export function createBrowserPlatform(): Platform {
       viewport.check();
     },
     storage: storage.storage,
-    uploads: createBrowserUploads(readClipboard),
+    uploads: createBrowserUploads(),
     clipboard,
     openURL,
     ...(canOpenApp() && { openInApp }),

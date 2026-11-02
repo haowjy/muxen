@@ -159,22 +159,20 @@ export interface Clipboard {
   read(tab: TabKey): Promise<{ text: string } | { image: File } | { uploading: string } | "empty" | "denied">;
 }
 
-/** Where an upload goes when it isn't `uploads_dir`: a folder, and whether the body is pasted text (named `pasted-<time>.txt`). */
-export interface UploadTo {
-  dir: string;
-  text?: true;
-}
+/** What a paste carries: the first image if it holds one, else its plain text. */
+export type Pasted = { kind: "image"; file: File } | { kind: "text"; text: string } | { kind: "empty" };
 
 export interface Uploads {
   /** Call synchronously in the tap. Ends on completion, failure, or the picker's cancel. */
   pick(handle: string, signal: AbortSignal): AsyncIterable<UploadEvent>;
-  /** One pasted image the page already holds, into `to` (default `uploads_dir`). Present in the browser only. */
-  send?(handle: string, file: File, signal: AbortSignal, to?: UploadTo): AsyncIterable<UploadEvent>;
+  /** One pasted image the page already holds, into `uploads_dir`. Present in the browser only. */
+  send?(handle: string, file: File, signal: AbortSignal): AsyncIterable<UploadEvent>;
   /**
-   * The clipboard, an image or text, as a new file in folder `dir`. Call synchronously in the tap:
-   * the platform reads the clipboard itself. `empty` and `denied` start no upload.
+   * An image or text as a new file in folder `dir`: `pasted` (a paste event's contents) in the browser,
+   * else the clipboard, which the platform reads itself. Call synchronously in the tap. `empty` and
+   * `denied` start no upload. Native ignores `pasted` and reads the pasteboard.
    */
-  paste(handle: string, dir: string, signal: AbortSignal): Promise<AsyncIterable<UploadEvent> | "empty" | "denied">;
+  paste(handle: string, dir: string, signal: AbortSignal, pasted?: Pasted): Promise<AsyncIterable<UploadEvent> | "empty" | "denied">;
   /** An upload the platform started itself, by the id `clipboard.read` returned as `uploading`. Native only. */
   follow?(id: string, signal: AbortSignal): AsyncIterable<UploadEvent>;
 }

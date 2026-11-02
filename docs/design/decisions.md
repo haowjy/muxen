@@ -4587,6 +4587,20 @@ to one folder: an upload may name the folder it lands in.
   a config key naming the allowed folders (Jimmy chose none, [no favorites](#no-favorites-2026-10-30)); a new route
   for text (the same body, slot and limits; only the name differs, so `text=1`).
 
+## Paste into a folder: one paste path, one table of upload words (2026-11-02)
+
+Review of the paste-into-a-folder change found the app showing "The upload failed (HTTP 403)" for every refusal, and
+two web routes for one action.
+
+- **Words for refusals live in one web table** (`platform/uploadFailure.ts`). The browser reads the daemon's
+  `{"error": code}` body; native parses the same body and sends the code in the `upload` event; the page words it.
+  Rejected: words in Swift (a second table to keep in step with the daemon's codes).
+- **One paste path.** `uploads.paste(handle, dir, signal, pasted?)` serves the button and desktop Cmd/Ctrl-V; `send`
+  has no destination argument (it is the terminal's image upload). The screen no longer checks which methods a
+  platform has. `pasteInto` stays its own bridge message beside `readPasteboard`: one uploads, the other returns text.
+- **The Cmd/Ctrl-V listener stays on the document** and returns while any dialog is open. Rejected: a listener on the
+  pane, which needs focus inside the pane, and only `app/focus.ts` may move focus.
+
 ## The default uploads folder is hidden (2026-11-02)
 
 Jimmy, on the terminal's pasted images: "I think this is really nice feature... but I think it should go into a hidden

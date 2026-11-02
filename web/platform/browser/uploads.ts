@@ -4,7 +4,9 @@
 //
 // The daemon takes one upload at a time (fs.md "Constants"), so the page sends one file at a
 // time and holds at most four, the one in flight included. A fifth is refused.
-import type { Clipboard, UploadEvent, UploadTo, Uploads } from "../types";
+import type { Pasted, UploadEvent, Uploads } from "../types";
+import { uploadFailure } from "../uploadFailure";
+import { readClipboard } from "./clipboard";
 
 export const QUEUE_LIMIT = 4;
 export const QUEUE_FULL = "Wait for the current uploads to finish";
@@ -14,16 +16,6 @@ const MAX_BYTES = 128 * 1024 * 1024;
 
 /** `busy` means another upload holds the daemon's slot; a couple of retries ride out a short one. */
 const BUSY_RETRIES = 3;
-
-const REFUSALS: Record<string, string> = {
-  too_large: "That file is over the 128 MiB limit",
-  busy: "The server is busy. Try again in a moment",
-  no_space: "The server is out of disk space",
-  not_a_directory: "That isn't a usable folder. For the uploads folder, check uploads_dir in config.toml",
-  denied: "That folder isn't writable",
-  not_found: "That folder no longer exists",
-  memory_backed: "The uploads folder is on memory-backed storage",
-};
 
 /** A stream that events are pushed into and a consumer iterates; ends when told to. */
 class Channel implements AsyncIterable<UploadEvent> {
@@ -66,8 +58,8 @@ class Channel implements AsyncIterable<UploadEvent> {
 interface Job {
   id: string;
   file: File;
-  /** Absent: `uploads_dir`. */
-  to: UploadTo | undefined;
+  /** Absent: `uploads_dir`. `text`: the body is pasted text, named `pasted-<time>.txt`. */
+  to: { dir: string; text?: true } | undefined;
   channel: Channel;
   /** Set while the request is in flight. */
   abort: (() => void) | null;
@@ -80,8 +72,7 @@ interface Group {
   open: number;
 }
 
-/** `read` is the browser's clipboard read, which `paste` calls inside the tap. */
-export function createBrowserUploads(read: () => ReturnType<Clipboard["read"]>): Uploads {
+export function createBrowserUploads(): Uploads {
   /** Queued and in flight, in order; the head is in flight. */
   const jobs: Job[] = [];
   let counter = 0;
@@ -109,7 +100,7 @@ export function createBrowserUploads(read: () => ReturnType<Clipboard["read"]>):
         setTimeout(() => { if (jobs.includes(job)) attempt(job, retries - 1); }, 1000);
       } else {
         const code = typeof body["error"] === "string" ? body["error"] : `http_${String(xhr.status)}`;
-        finish(job, { id: job.id, error: REFUSALS[code] ?? `Upload failed (${code})` });
+        finish(job, { id: job.id, error: uploadFailure(code) });
       }
     };
     xhr.onerror = () => { finish(job, { id: job.id, error: "Couldn't reach the server" }); };
@@ -125,12 +116,12 @@ export function createBrowserUploads(read: () => ReturnType<Clipboard["read"]>):
   };
 
   /** Queues `files` into `group`; a file past the limit is refused at once. */
-  const enqueue = (files: File[], group: Group, to?: UploadTo): void => {
+  const enqueue = (files: File[], group: Group, to?: Job["to"]): void => {
     for (const file of files) {
       const id = `u${String(++counter)}`;
       group.open++;
       if (file.size > MAX_BYTES || jobs.length >= QUEUE_LIMIT) {
-        group.channel.push({ id, error: file.size > MAX_BYTES ? (REFUSALS["too_large"] ?? "") : QUEUE_FULL });
+        group.channel.push({ id, error: file.size > MAX_BYTES ? uploadFailure("too_large") : QUEUE_FULL });
         if (--group.open === 0) group.channel.end();
         continue;
       }
@@ -157,7 +148,7 @@ export function createBrowserUploads(read: () => ReturnType<Clipboard["read"]>):
   /** A picker opened and not yet answered: a new pick supersedes it. */
   let awaiting: { group: Group; stop(): void } | null = null;
 
-  const send = (_handle: string, file: File, signal: AbortSignal, to?: UploadTo): AsyncIterable<UploadEvent> => {
+  const send = (file: File, signal: AbortSignal, to?: Job["to"]): AsyncIterable<UploadEvent> => {
     const group: Group = { channel: new Channel(), open: 0 };
     cancelOn(signal, group);
     enqueue([file], group, to);
@@ -199,16 +190,25 @@ export function createBrowserUploads(read: () => ReturnType<Clipboard["read"]>):
       return group.channel;
     },
 
-    send,
+    send: (_handle, file, signal) => send(file, signal),
 
-    async paste(handle, dir, signal) {
-      const pasted = await read();
-      if (pasted === "empty" || pasted === "denied") return pasted;
-      if ("image" in pasted) return send(handle, pasted.image, signal, { dir });
-      if ("text" in pasted) return send(handle, new File([pasted.text], "pasted.txt", { type: "text/plain" }), signal, { dir, text: true });
-      return "denied"; // the browser never answers `uploading`
+    async paste(_handle, dir, signal, pasted) {
+      // `readClipboard` runs before any await: the browser reads only inside the tap.
+      const content = pasted ?? fromClipboard(await readClipboard());
+      if (content === "denied") return content;
+      if (content.kind === "empty") return "empty";
+      const file = content.kind === "image" ? content.file : new File([content.text], "pasted.txt", { type: "text/plain" });
+      return send(file, signal, { dir, ...(content.kind === "text" && { text: true as const }) });
     },
   };
+}
+
+function fromClipboard(read: Awaited<ReturnType<typeof readClipboard>>): Pasted | "denied" {
+  if (read === "denied") return read;
+  if (read === "empty") return { kind: "empty" };
+  if ("image" in read) return { kind: "image", file: read.image };
+  if ("text" in read) return { kind: "text", text: read.text };
+  return "denied"; // the browser never answers `uploading`
 }
 
 function parse(text: string): Record<string, unknown> {

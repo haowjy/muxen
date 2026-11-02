@@ -4,7 +4,7 @@
 // `Pastes` is what a paste, a copy and an inserted path do after that.
 import type { AppController } from "../../app/controller";
 import type { PasteResult } from "../../net/host";
-import type { UploadEvent } from "../../platform/types";
+import type { Pasted, UploadEvent } from "../../platform/types";
 import type { InsertResult, TabDriver } from "../../tabs/driver";
 import { cannotInsert, shellQuote } from "../../tabs/input";
 import { labelOf } from "../../workspace/labels";
@@ -20,9 +20,6 @@ export function pasteRefusal(text: string): string | null {
   const bytes = encoder.encode(text).length;
   return bytes > MAX_PASTE_BYTES ? `Too large to paste (${String(Math.ceil(bytes / 1024))} KiB; the limit is ${String(MAX_PASTE_BYTES / 1024)} KiB)` : null;
 }
-
-/** What a paste carries: the first image if it holds one, else its plain text. */
-export type Pasted = { kind: "image"; file: File } | { kind: "text"; text: string } | { kind: "empty" };
 
 export function readPaste(data: DataTransfer | null): Pasted {
   const image = [...(data?.files ?? [])].find((f) => f.type.startsWith("image/"));

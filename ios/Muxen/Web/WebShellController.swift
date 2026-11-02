@@ -126,10 +126,11 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
                 send(.lifecycle, fields: ["lifecycle": try .encode(lifecycle)])
             case .hosts(let hosts):
                 send(.hosts, fields: ["hosts": try .encode(hosts)])
-            case .upload(let id, let progress, let path, let error, let cancelled):
+            case .upload(let id, let progress, let path, let error, let code, let cancelled):
                 var fields: [String: JSONValue] = ["id": .string(id), "progress": .number(progress)]
                 if let path { fields["path"] = .string(path) }
                 if let error { fields["error"] = .string(error) }
+                if let code { fields["code"] = .string(code) }
                 if cancelled { fields["cancelled"] = .bool(true) }
                 send(.upload, fields: fields)
             }
@@ -430,9 +431,9 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
 
     /// Every `upload` event is deferred one turn: a paste's reply to the page goes out first, so its
     /// stream exists before the first event arrives.
-    private func sendUpload(id: String, progress: Double, path: String? = nil, error: String? = nil, cancelled: Bool = false) {
+    private func sendUpload(id: String, progress: Double, path: String? = nil, error: String? = nil, code: String? = nil, cancelled: Bool = false) {
         Task { @MainActor [weak self] in
-            self?.send(.upload(id: id, progress: progress, path: path, error: error, cancelled: cancelled))
+            self?.send(.upload(id: id, progress: progress, path: path, error: error, code: code, cancelled: cancelled))
         }
     }
 
@@ -462,7 +463,7 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         }, completion: { [weak self] result in
             switch result {
             case .success(let path): self?.sendUpload(id: id, progress: 1, path: path)
-            case .failure(let error): self?.sendUpload(id: id, progress: 1, error: error.localizedDescription)
+            case .failure(let error): self?.sendUpload(id: id, progress: 1, error: error.localizedDescription, code: (error as? UploadFailure)?.code)
             }
         })
         if accepted { sendUpload(id: id, progress: 0) }
@@ -610,7 +611,7 @@ enum NativeEvent {
     case viewport(Viewport)
     case lifecycle(Lifecycle)
     case hosts([PlatformHost])
-    case upload(id: String, progress: Double, path: String?, error: String?, cancelled: Bool)
+    case upload(id: String, progress: Double, path: String?, error: String?, code: String?, cancelled: Bool)
 }
 
 @MainActor

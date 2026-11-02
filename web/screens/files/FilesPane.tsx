@@ -15,7 +15,7 @@ import { DirList, MissingFolder } from "./FolderList";
 import { PathField } from "./PathField";
 import { Preview } from "./Preview";
 import { readPaste } from "../terminal/paste";
-import { pastedIntoFolder, pasteIntoFolder, scrollKey, startUpload, type FilesSession } from "./session";
+import { pasteIntoFolder, scrollKey, startUpload, type FilesSession } from "./session";
 import { UploadPanel } from "./UploadPanel";
 import styles from "./FilesScreen.module.css";
 
@@ -44,15 +44,18 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
     return () => { wantsNow.current = null; };
   }, [app, browser, wanted]);
 
-  // Cmd/Ctrl-V with the folder showing and no text box focused (the path field keeps its own paste).
+  // Cmd/Ctrl-V with the folder showing, no dialog open (Settings and the session list are modal and sit over the
+  // pane) and no text box focused (the path field keeps its own paste). The listener stays on the document, since
+  // nothing in the pane need hold focus; only app/focus.ts may move focus to make one.
   const folderShown = place.kind === "dir" && pages?.path === place.path && !error ? pages.path : null;
   useEffect(() => {
     if (folderShown === null) return undefined;
     const onPaste = (event: ClipboardEvent): void => {
       const target = event.target;
-      if (target instanceof HTMLElement && target.closest("input, textarea, [contenteditable]")) return;
+      if (document.querySelector("dialog[open]") || (target instanceof HTMLElement && target.closest("input, textarea, [contenteditable]"))) return;
       event.preventDefault();
-      pastedIntoFolder(app, session, folderShown, readPaste(event.clipboardData));
+      const pasted = readPaste(event.clipboardData);
+      if (pasted.kind !== "empty") pasteIntoFolder(app, session, folderShown, pasted);
     };
     document.addEventListener("paste", onPaste);
     return () => { document.removeEventListener("paste", onPaste); };

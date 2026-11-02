@@ -433,7 +433,7 @@ token to native solely for comparison and revocation, never into storage or logs
 | `hosts { hosts: PlatformHost[] }` | Native host handles and labels; never base URLs or tokens | Refresh host admission / connection state |
 | `menuCopy` | Copy was chosen in the menu `editMenu` showed | The page copies its mark's joined text through `copy` and clears the mark |
 | `menuPaste` | Paste was chosen in that menu | The page runs its menu paste: `readPasteboard`, the size limit, one paste to tmux without Enter, or an image upload |
-| `upload { id, progress, path?, error?, cancelled? }` | `id` is the one the web sent with `pickMedia` or `readPasteboard`; the web routes by it alone. `path`, `error` or `cancelled` ends the stream; `cancelled` is a dismissed picker | Update upload UI; the web decides where the path goes (a pasted image inserts it, a Files upload offers it) |
+| `upload { id, progress, path?, error?, code?, cancelled? }` | `id` is the one the web sent with `pickMedia`, `readPasteboard` or `pasteInto`; the web routes by it alone. `path`, `error` or `cancelled` ends the stream; `cancelled` is a dismissed picker. `code` is the daemon's refusal code (`denied`, `not_found`, `memory_backed`…) parsed from its `{"error": code}` body; the web words it with the table the browser uses, and `error` ("The upload failed (HTTP 403).") is only the fallback when the daemon sent no code | Update upload UI; the web decides where the path goes (a pasted image inserts it, a Files upload offers it) |
 
 There are no separate `network`, `lock` or `lifecycle.covered` messages in v2. A
 connectivity, lock, foreground or native-screen change publishes the whole `lifecycle`

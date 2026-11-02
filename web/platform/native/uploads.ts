@@ -3,6 +3,7 @@
 // so a stream is just the events with its id. A pick's stream ends with the upload, or with
 // native's `cancelled` event when the user dismisses the picker.
 import type { UploadEvent, Uploads } from "../types";
+import { uploadFailure } from "../uploadFailure";
 import type { Bridge, UploadMsg } from "./bridge";
 
 export interface NativeUploads extends Uploads {
@@ -17,7 +18,7 @@ interface Stream {
 
 function toEvent(msg: UploadMsg): UploadEvent | null {
   if (msg.cancelled) return null;
-  if (msg.error !== undefined) return { id: msg.id, error: msg.error };
+  if (msg.error !== undefined) return { id: msg.id, error: msg.code === undefined ? msg.error : uploadFailure(msg.code) };
   if (msg.path !== undefined) return { id: msg.id, path: msg.path };
   return { id: msg.id, progress: msg.progress };
 }
