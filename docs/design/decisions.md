@@ -4416,3 +4416,19 @@ Decided by Jimmy, 2026-10-31.
   nothing); `pane`, `perch`, `kite`, `beckon` (Jimmy preferred the muxi style); `omux`,
   `amux`, `muxy`, `tuxi`, `plexo` (taken, `amux` and `omux` by tmux-and-agent tools);
   a short alias beside `tether` (two names forever).
+
+## The web code field is input-otp
+
+Decided by Jimmy, 2026-10-31 ("the enroll entering code sucks ass... can we get a react library for it").
+
+- **What:** the web enrolment code field (`ui/primitives/CodeField.tsx`) renders its eight cells on
+  `input-otp`, through `preact/compat` (the Vite preset aliases `react`; `tsconfig.json` maps the
+  types). A pasted code keeps letters and digits only, so `PJHF-SVDD` fills all eight cells. Startup
+  JS grew about 3 KB gzipped.
+- **Why:** on a real iPhone the hand-made field (a near-invisible input over drawn cells, its value
+  rewritten on each keystroke) took one character and then nothing, and offered no Paste. WebKit
+  emulation didn't reproduce it; input-otp carries the fixes for iOS Safari's paste menu, caret and
+  autofill that the overlay kept missing.
+- **Rejected:** fixing the overlay by hand (the bug only shows on the device, and each fix is
+  another guess at Safari); a plain single text field (Jimmy asked for the library; the cells are
+  the spec's look).

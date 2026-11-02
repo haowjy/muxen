@@ -9,8 +9,15 @@ muxes, like oxen). It serves anyone who runs tmux; anything can extend it by not
 and before push notifications tie a bundle ID to Apple. Logged in `docs/design/decisions.md`.
 
 **Status (2026-10-31):** tab-chip merged into main (8a52964), then the swap landed as one commit,
-code and docs together. Remaining: the machine runbook (§1), the GitHub repo, the local folder,
-dotfiles, and current KB pages (kb-lead). This work item and `.meridian/` history keep the name
+code and docs together. Done since: GitHub repo is `haowjy/muxen`; the dev box (`pop-os`, SSH host `homebox` from the Mac)
+runs muxen: checkout moved to `~/gitrepos/muxen`, `cargo install`, `~/.config/muxen`, old state kept at
+`~/.local/state/tether.bak-2026-10-31`, `@tether-bell` cleared, old binaries in
+`~/.cargo/bin/old-tether/`, `muxen setup --background` (Serve on `/run/user/1000/muxen/serve.sock`).
+No dotfile on the dev box sourced the shell hooks. On 2026-11-02 the dev box's `old-tether/` binaries and
+`tether.bak-2026-10-31` state were deleted, and the Mac moved over: `tether teardown`, `cargo install` from main
+(729b867), old state, config, log and binary deleted (no backup; old tokens can't be used anyway), `muxen setup --background`.
+Remaining: the iPhone app (re-add both hosts, then delete the old app),
+the Mac's local folder, current KB pages (kb-lead; also: the Mac can now SSH to the dev box). This work item and `.meridian/` history keep the name
 `tether-mvp`; docs link into it by that path.
 
 How the swap was done: a case-aware replace (`TETHER`/`Tether`/`tether` → `MUXEN`/`Muxen`/`muxen`)

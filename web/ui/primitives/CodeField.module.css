@@ -18,18 +18,4 @@
 }
 .active { border-color: var(--color-accent); }
 .dash { flex: 0 0 var(--space-3); height: 2px; margin-inline: var(--space-1); border-radius: 1px; background: var(--color-text-muted); }
-/* Covers the cells; invisible text and caret, since the cells draw both. 16px or more: Safari zooms into a smaller focused field. */
-.input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: transparent;
-  caret-color: transparent;
-  font-size: var(--text-field);
-  opacity: 0.01;
-}
-.input:focus { outline: none; }
-.cells:has(.input:focus-visible) .active { outline: 2px solid var(--color-focus-ring); outline-offset: 1px; }
+.cells:has(input:focus-visible) .active { outline: 2px solid var(--color-focus-ring); outline-offset: 1px; }

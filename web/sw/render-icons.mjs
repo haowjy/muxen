@@ -1,4 +1,5 @@
-// Renders public/icons/icon.svg into the PNG and ICO files the manifest and iOS need:
+// Renders public/icons/icon.svg, muxen's one icon source, into the PNG and ICO files the
+// manifest and Safari need, and the iOS app's 1024 px icon (opaque, full-bleed: iOS masks it):
 //   pnpm exec node sw/render-icons.mjs
 // The maskable icon is full-bleed (the OS applies its own mask); the art sits inside the
 // central 80% safe zone already. Run it when the SVG changes and commit the output.
@@ -11,11 +12,13 @@ const PUBLIC = join(dirname(fileURLToPath(import.meta.url)), "..", "public");
 const svg = readFileSync(join(PUBLIC, "icons", "icon.svg"), "utf8");
 const fullBleed = svg.replace(' rx="112"', "");
 
+const IOS_ICON = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "ios", "Muxen", "Assets.xcassets", "AppIcon.appiconset", "icon-1024.png");
+
 const browser = await chromium.launch();
-async function png(markup, size) {
+async function png(markup, size, opaque = false) {
   const page = await browser.newPage({ viewport: { width: size, height: size } });
   await page.setContent(`<style>html,body{margin:0;background:transparent}svg{display:block;width:${String(size)}px;height:${String(size)}px}</style>${markup}`);
-  const bytes = await page.screenshot({ omitBackground: true });
+  const bytes = await page.screenshot({ omitBackground: !opaque });
   await page.close();
   return bytes;
 }
@@ -24,6 +27,7 @@ writeFileSync(join(PUBLIC, "icons", "icon-192.png"), await png(svg, 192));
 writeFileSync(join(PUBLIC, "icons", "icon-512.png"), await png(svg, 512));
 writeFileSync(join(PUBLIC, "icons", "icon-maskable-512.png"), await png(fullBleed, 512));
 writeFileSync(join(PUBLIC, "apple-touch-icon.png"), await png(fullBleed, 180));
+writeFileSync(IOS_ICON, await png(fullBleed, 1024, true));
 
 // favicon.ico: one 48 px PNG image in an ICO container.
 const ico = await png(svg, 48);
