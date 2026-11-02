@@ -79,6 +79,8 @@ export class TerminalView {
     this.rows = new RowRanges(() => deps.list());
     this.mark = new Mark({ layer: () => deps.list()?.element ?? null, rows: this.rows, editMenu: () => deps.editMenu(), tick: () => { deps.haptic("key"); } });
     this.selection = deps.editMenu() ? this.mark : new PageSelection(this.rows);
+    // Where the mark is the selection (the app) the rows are not selectable, so iOS's long press starts none of its own.
+    element.toggleAttribute("data-marking", this.selection === this.mark);
     this.wheel = new PinnedWheel({ model: () => deps.model(), cell: () => deps.list()?.cellSize() ?? null, send: (events) => { this.send(events); } });
     // The recognizer owns every touch on the surface (§7.6): none moves focus, and what a touch means is decided when it resolves.
     this.touch = new TouchControl({

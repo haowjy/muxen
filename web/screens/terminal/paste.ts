@@ -183,13 +183,13 @@ export class Pastes {
     const { app } = this.deps;
     const { platform } = app;
     // The app cannot upload a page's File: native reads the pasteboard's image and uploads it itself.
-    if (!platform.uploads.send && platform.uploads.follow) {
+    if (!platform.uploads.send) {
       this.pasteClipboard(target);
       return;
     }
     const tab = terminalTabOf(app.snapshot.workspace, target.id);
     const client = tab && app.hosts.byHostId(tab.host);
-    if (!platform.uploads.send || !client) {
+    if (!client) {
       app.notify("Paste images from Files → Upload");
       return;
     }

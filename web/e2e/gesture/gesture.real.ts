@@ -475,8 +475,8 @@ for (const version of VERSIONS) {
         await expect(boxes).not.toHaveCount(0);
         // The boxes' presence alone would miss a highlight that does not paint: the pixels under it must change.
         expect((await page.screenshot({ clip })).equals(bare)).toBe(false);
-        // The rows are not selectable here, so the long press starts no selection of the system's beside the mark.
-        expect(await page.evaluate(() => getSelection()?.toString())).toBe("");
+        // The rows are not selectable here, so WebKit's long press starts no selection beside the mark. Chromium's touch
+        // emulation never starts one, so only the computed style is checked; the WebKit long press is a phone check.
         expect(await page.evaluate(() => getComputedStyle(document.querySelector("[data-rows]") as Element).getPropertyValue("user-select"))).toBe("none");
         expect((await menus()).filter((rect) => rect !== null)).toHaveLength(round);
         await tapAway();

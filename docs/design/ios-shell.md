@@ -644,7 +644,7 @@ and fix this spec from them. The current Simulator cannot show the software keyb
 | Composition | Japanese romaji and Chinese pinyin into the terminal and the box (candidate Return must not send); dictate into the box (R10) |
 | Focus hook | A focus the page makes just after a tap raises the keyboard: switch tabs with it up (R11) |
 | Form bar | Focus the terminal input, the line box and a sheet field: no ⌃ ⌄ ✓ bar (R13) |
-| Hardware keys | With a box focused and with none: Esc, Ctrl-C, Ctrl-R, arrows, Tab, Option-keys reach tmux or the box as in Safari (R12) |
+| Hardware keys | With a box focused and with none: Esc, Ctrl-C, Ctrl-R, arrows, Tab, Option-keys reach tmux or the box as in Safari (R12). Right after launch and after unlock, before any tap, they already reach tmux |
 | One keyboard | The dock button raises and lowers the keyboard; a tap on the box takes typing; Hide closes either. Exactly one cursor is live: the terminal's solid block or the box's caret |
 | The tap | A tap on the terminal raises the keyboard; in a mouse app it is a click and raises nothing; with a mark up a tap elsewhere clears the mark and raises nothing; with the terminal's input holding the keyboard, a tap near the prompt moves the cursor |
 | Selection | A long press on a word marks it (muxen's highlight, no iOS selection beside it) and shows Copy / Paste, with the keyboard down and up; the keyboard stays as it was |

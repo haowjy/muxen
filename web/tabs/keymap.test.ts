@@ -93,7 +93,6 @@ describe("decideKey, owned input", () => {
   });
 });
 
-// The rules of the app's native KeyMapper (ios/MuxenKit), which these cases came from.
 describe("decideKey, owned input: punctuation chords", () => {
   const bytes = (...codes: number[]): KeyDecision => ({ kind: "bytes", bytes: btoa(String.fromCharCode(...codes)) });
   /** The US-layout physical keys the punctuation characters come from, so events carry the `code` a browser reports. */

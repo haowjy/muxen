@@ -1,6 +1,5 @@
 // Where a key-row key goes (terminal-interaction-design.md "The dock", the routing table). One
-// pure rule for both line editors: the browser's textarea and the app's native field take the same
-// decision. The key row also reads it to show which keys act on the box. No Preact, no window.
+// pure rule for the line field. The key row also reads it to show which keys act on the box. No Preact, no window.
 import type { Owner } from "../app/focus";
 import type { InputEvent } from "../platform/types";
 import type { KeyDecision } from "../tabs/keymap";

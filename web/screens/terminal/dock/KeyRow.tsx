@@ -1,7 +1,7 @@
 // The dock's key row (client-architecture.md §7.4): one fixed row of the keys a phone keyboard
 // lacks, in a horizontal scroller. A tap never moves focus or lowers the keyboard (DockButton),
 // and a key acts on `pointerup` inside it. Where a key goes (tmux, or the compose box that holds
-// the keyboard) is `routeKey's decision; ctrl and alt arm the next key.
+// the keyboard) is `routeKey`'s decision; ctrl and alt arm the next key.
 import { useEffect, useRef } from "preact/hooks";
 import { useApp } from "../../../app/context";
 import { DockButton } from "../../../ui/primitives/DockButton";
