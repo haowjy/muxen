@@ -96,8 +96,6 @@ export interface TestPlatform extends Platform {
   uploadScript: UploadScript;
   /** Every socket the app opened, newest last. */
   links: FakeLink[];
-  focusRequests: string[];
-  /** Every `input.setActiveTab` call, newest last. */
   clipboardWrites: string[];
   opened: string[];
   haptics: HapticKind[];
@@ -223,7 +221,6 @@ export function createTestPlatform(options: TestPlatformOptions = {}): TestPlatf
     uploadScript,
     fetch: daemonFetch(daemon),
     links: [],
-    focusRequests: [],
     clipboardWrites: [],
     opened: [],
     haptics: [],
@@ -233,7 +230,7 @@ export function createTestPlatform(options: TestPlatformOptions = {}): TestPlatf
     drafts: new Map(),
     installed: false,
 
-    boot: (): Promise<BootResult> => Promise.resolve({ hosts, workspace: options.workspace ?? null, viewport, preferences, lifecycle, focusMode: null, lineSnapshot: null }),
+    boot: (): Promise<BootResult> => Promise.resolve({ hosts, workspace: options.workspace ?? null, viewport, preferences, lifecycle }),
     subscribe(listener) {
       listeners.add(listener);
       return () => { listeners.delete(listener); };
@@ -285,17 +282,6 @@ export function createTestPlatform(options: TestPlatformOptions = {}): TestPlatf
         return link;
       },
       httpBase: () => "",
-    },
-    input: {
-      setFocus: (mode) => { platform.focusRequests.push(mode); },
-      setLine: () => Promise.resolve(0),
-      setLineCaret: () => undefined,
-      stepLineCaret: () => undefined,
-      insertLine: () => undefined,
-      submitLine: () => undefined,
-      selectAllLine: () => undefined,
-      setArmedModifier: () => undefined,
-      setActiveTab: () => {},
     },
     storage: {
       saveWorkspace: (ws) => { platform.savedWorkspaces.push(ws); },

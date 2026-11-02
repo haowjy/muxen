@@ -25,8 +25,8 @@ export interface Viewport {
   layout: "desktop" | "phone";
   /** `touch` (44 px targets) for a coarse primary pointer, else `compact`. */
   density: "compact" | "touch";
-  /** Which source feeds the terminal: xterm's textarea, muxen's owned input, or native. */
-  directInput: "xterm" | "owned" | "native";
+  /** Which source feeds the terminal: desktop's xterm textarea, or muxen's own input on a phone (the app is always the latter). */
+  directInput: "xterm" | "owned";
   scheme: "light" | "dark";
   /** CSS px of the window or web view. */
   width: number;
@@ -83,12 +83,6 @@ export interface MenuRect {
   height: number;
 }
 export type HapticKind = "key" | "modifier";
-export type FocusMode = "terminal" | "line" | "hidden" | "webText";
-
-/** UTF-16 offsets into a line, matching the native text field's NSRange. */
-export interface TextRange { start: number; end: number }
-/** Native's retained in-progress edit, adopted into `lineDrafts` after a web-content-process restart. */
-export interface NativeLineSnapshot { tab: TabKey; gen: number; text: string; selection: TextRange; marked: TextRange | null }
 
 /** Where a Files tab is: a folder or a file preview. The folder `~` is the host's home, until the listing names it. */
 export type FilesPlace = { kind: "dir"; path: string } | { kind: "file"; path: string };
@@ -154,28 +148,6 @@ export interface Transport {
   httpBase(handle: string): string;
 }
 
-export interface InputPlatform {
-  /** The focus mode the screen needs. Native: bridge `focus`. Browser: a no-op, because app/focus.ts already moved DOM focus. */
-  setFocus(mode: FocusMode): void;
-  /** The native text field's editing copy of the active tab's draft. Other platforms own their input element. */
-  /** Replace native's editing copy and bind it to a tab; native advances its own generation. */
-  setLine(text: string, caret: number, tab: TabKey): Promise<number>;
-  /** Move the native caret or selection to the mirror's UTF-16 offset. */
-  setLineCaret(index: number): void;
-  /** Move the native caret one character (UIKit's own step, so marked text and the 33 ms arrow repeat stay native's). */
-  stepLineCaret(step: -1 | 1): void;
-  /** Insert one line at the native caret. */
-  insertLine(text: string): void;
-  /** Submits the native line as its Return key does. */
-  submitLine(): void;
-  /** Select the native editing copy's full text. */
-  selectAllLine(): void;
-  /** Keep the native responder in step with the web-owned armed modifier. */
-  setArmedModifier(armed: "ctrl" | "alt" | null): void;
-  /** The tab that keyboard input batches target, whenever the active tab changes (null: none). Native: bridge `activeTab`. Browser: no-op. */
-  setActiveTab(tab: TabKey | null): void;
-}
-
 export type UploadEvent =
   | { id: string; progress: number }
   | { id: string; path: string }
@@ -224,10 +196,6 @@ export interface BootResult {
   viewport: Viewport;
   preferences: Preferences;
   lifecycle: Lifecycle;
-  /** Native's focus target, retained if the web content process had to restart. */
-  focusMode: FocusMode | null;
-  /** Present only when native restored the `line` target; reconciled after draft storage loads. */
-  lineSnapshot: NativeLineSnapshot | null;
 }
 
 /** The one change channel. The controller in app/ routes each event to its owner. */
@@ -236,9 +204,6 @@ export type PlatformEvent =
   | { type: "viewport"; viewport: Viewport }
   | { type: "lifecycle"; lifecycle: Lifecycle }
   | { type: "preferences"; preferences: Preferences }
-  | { type: "input"; tab: TabKey; events: InputEvent[] }
-  | { type: "lineEdit"; gen: number; text: string; tab: TabKey; selection: TextRange; marked: TextRange | null }
-  | { type: "lineReturn"; gen: number; text: string; tab: TabKey }
   | { type: "draftChanged"; key: TabKey }
   /** The app's edit menu over the terminal's mark: Copy or Paste was chosen (`Platform.editMenu`). */
   | { type: "menuCopy" }
@@ -253,7 +218,6 @@ export interface Platform {
   transport: Transport;
   /** Changes one preference; the platform applies it and answers with a `preferences` event (and a `viewport` event when the scheme changed). */
   setPreference<K extends Exclude<keyof Preferences, "relock">>(name: K, value: Preferences[K]): void;
-  input: InputPlatform;
   storage: PlatformStorage;
   uploads: Uploads;
   clipboard: Clipboard;

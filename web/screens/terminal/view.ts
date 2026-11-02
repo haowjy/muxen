@@ -32,8 +32,7 @@ interface ViewDeps {
   send(tab: string, events: InputEvent[]): void;
   haptic(kind: HapticKind): void;
   /** Desktop direct input is xterm's textarea: a touch there is a click, which focuses it. */
-  directInput(): "xterm" | "owned" | "native";
-  focusTerminal(): void;
+  directInput(): "xterm" | "owned";
   /** The shell's command line under the cursor (OSC 133), or null. */
   prompt(): PromptLine | null;
   /** Who holds the keyboard. */

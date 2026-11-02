@@ -39,37 +39,11 @@ interface TouchDeps {
   /** Typed input for the tab this view is showing. */
   send(events: InputEvent[]): void;
   /** Desktop's xterm owns its pointer; everything else is touch. */
-  directInput(): "xterm" | "owned" | "native";
-  /** Focuses the terminal's input: a touch tap on or beside the cursor row, native input only. */
-  focusTerminal(): void;
+  directInput(): "xterm" | "owned";
   /** The shell's command line under the cursor (OSC 133), or null. */
   prompt(): PromptLine | null;
   /** Who holds the keyboard. */
   owner(): Owner;
-}
-
-/** What a short press on the terminal does: exactly one of these. */
-export type TapAction = "focus" | "focusAndClick" | "click" | "moveCursor" | "none";
-
-/**
- * A tap, resolved (terminal-interaction-design.md, "One gesture owner"). It is aimed at a cell (`cell`, false in
- * history), and never raises or lowers the keyboard: a click for an application that asked for the mouse
- * (`mouse`), else the tap moves the prompt cursor while the terminal's own input holds the keyboard.
- *
- * Native input (`raises`) keeps its older rule: with the compose box typing a tap only gives typing back, and
- * with the keyboard down a tap near the cursor row (`nearCursor`) raises it.
- */
-export function tapAction(t: { owner: Owner; cell: boolean; nearCursor: boolean; mouse: boolean; raises: boolean }): TapAction {
-  if (!t.raises) {
-    if (!t.cell) return "none";
-    if (t.mouse) return "click";
-    return t.owner === "terminal" ? "moveCursor" : "none";
-  }
-  if (t.owner === "line") return "focus";
-  if (!t.cell) return "none";
-  if (t.owner === "terminal") return t.mouse ? "click" : "moveCursor";
-  if (t.mouse) return t.nearCursor ? "focusAndClick" : "click";
-  return t.nearCursor ? "focus" : "none";
 }
 
 /**
@@ -336,26 +310,20 @@ export class TouchControl {
     }
   }
 
-  /** A short press, resolved to the one thing it does (`tapAction`). */
+  /**
+   * A short press on a cell (none in history). It never raises or lowers the keyboard (terminal-interaction-design.md,
+   * "One gesture owner"): a click for an application that asked for the mouse, else a move of the prompt cursor
+   * while the terminal's own input holds the keyboard.
+   */
   private tap(x: number, y: number): void {
-    const surface = this.deps.list();
     const model = this.deps.model();
-    // A cell is a screen row under the finger, wherever the view is.
-    const cell = surface?.cellAt(x, y) ?? null;
-    const action = tapAction({
-      owner: this.deps.owner(),
-      cell: cell !== null,
-      nearCursor: cell !== null && surface !== null && Math.abs(cell.row - surface.cursor().row) <= 1,
-      mouse: model !== null && model.mouseMode() !== "none",
-      raises: this.deps.directInput() === "native",
-    });
-    if (action === "focus" || action === "focusAndClick") this.deps.focusTerminal();
+    const cell = this.deps.list()?.cellAt(x, y) ?? null;
     if (!model || !cell) return;
-    if (action === "click" || action === "focusAndClick") {
-      const mode = model.mouseMode();
-      const events = mode === "none" ? null : mouseInput("tap", cell.col, cell.row, mode, model.mouseEncoding());
+    const mode = model.mouseMode();
+    if (mode !== "none") {
+      const events = mouseInput("tap", cell.col, cell.row, mode, model.mouseEncoding());
       if (events) this.deps.send(events);
-    } else if (action === "moveCursor") this.moveCursorTo(cell.col, cell.row);
+    } else if (this.deps.owner() === "terminal") this.moveCursorTo(cell.col, cell.row);
   }
 
   /** On the prompt's input row, a tap moves the cursor there; the caller has checked that the terminal's own input held the keyboard. */

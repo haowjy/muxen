@@ -5,7 +5,7 @@
     "viewport": {
       "layout": "phone",
       "density": "touch",
-      "directInput": "native",
+      "directInput": "owned",
       "scheme": "dark",
       "width": 402,
       "stableHeight": 874,

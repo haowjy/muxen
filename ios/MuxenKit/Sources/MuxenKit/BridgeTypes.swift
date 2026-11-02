@@ -1,7 +1,7 @@
 import Foundation
 
 public enum BridgeContract {
-    public static let version = 9
+    public static let version = 10
 }
 
 /// Where the page asks for native's edit menu: client points, which are the web view's points.
@@ -43,7 +43,7 @@ public struct Viewport: Codable, Equatable, Sendable {
     public init(
         layout: String,
         density: String,
-        directInput: String = "native",
+        directInput: String = "owned",
         scheme: String,
         width: Double,
         stableHeight: Double,
@@ -175,47 +175,6 @@ public struct Lifecycle: Codable, Equatable, Sendable {
     }
 }
 
-public enum FocusMode: String, Codable, Equatable, Sendable {
-    case hidden, terminal, line, webText
-}
-
-public struct TextRange: Codable, Equatable, Sendable {
-    public var start: Int
-    public var end: Int
-
-    public init(start: Int, end: Int) {
-        self.start = start
-        self.end = end
-    }
-}
-
-public struct NativeLineSnapshot: Codable, Equatable, Sendable {
-    public var tab: TabKey
-    public var gen: Int
-    public var text: String
-    public var selection: TextRange
-    public var marked: TextRange?
-
-    public init(tab: TabKey, gen: Int, text: String, selection: TextRange, marked: TextRange?) {
-        self.tab = tab
-        self.gen = gen
-        self.text = text
-        self.selection = selection
-        self.marked = marked
-    }
-
-    private enum CodingKeys: String, CodingKey { case tab, gen, text, selection, marked }
-
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(tab, forKey: .tab)
-        try container.encode(gen, forKey: .gen)
-        try container.encode(text, forKey: .text)
-        try container.encode(selection, forKey: .selection)
-        try container.encode(marked, forKey: .marked)
-    }
-}
-
 public struct SessionRef: Codable, Equatable, Hashable, Sendable {
     public var server: String
     public var session: Int
@@ -270,21 +229,17 @@ public struct Boot: Codable, Equatable, Sendable {
     public var viewport: Viewport
     public var preferences: Preferences
     public var lifecycle: Lifecycle
-    public var focusMode: FocusMode
-    public var lineSnapshot: NativeLineSnapshot?
 
-    public init(bridgeVersion: Int = BridgeContract.version, hosts: [PlatformHost], workspace: JSONValue?, viewport: Viewport, preferences: Preferences, lifecycle: Lifecycle, focusMode: FocusMode, lineSnapshot: NativeLineSnapshot? = nil) {
+    public init(bridgeVersion: Int = BridgeContract.version, hosts: [PlatformHost], workspace: JSONValue?, viewport: Viewport, preferences: Preferences, lifecycle: Lifecycle) {
         self.bridgeVersion = bridgeVersion
         self.hosts = hosts
         self.workspace = workspace
         self.viewport = viewport
         self.preferences = preferences
         self.lifecycle = lifecycle
-        self.focusMode = focusMode
-        self.lineSnapshot = lineSnapshot
     }
 
-    private enum CodingKeys: String, CodingKey { case bridgeVersion, hosts, workspace, viewport, preferences, lifecycle, focusMode, lineSnapshot }
+    private enum CodingKeys: String, CodingKey { case bridgeVersion, hosts, workspace, viewport, preferences, lifecycle }
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
@@ -294,8 +249,6 @@ public struct Boot: Codable, Equatable, Sendable {
         try container.encode(viewport, forKey: .viewport)
         try container.encode(preferences, forKey: .preferences)
         try container.encode(lifecycle, forKey: .lifecycle)
-        try container.encode(focusMode, forKey: .focusMode)
-        if let lineSnapshot { try container.encode(lineSnapshot, forKey: .lineSnapshot) } else { try container.encodeNil(forKey: .lineSnapshot) }
     }
 }
 

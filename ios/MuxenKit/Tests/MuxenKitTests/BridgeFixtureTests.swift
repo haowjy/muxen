@@ -26,10 +26,6 @@ final class BridgeFixtureTests: XCTestCase {
                 if message.type == .ready {
                     let boot = try reply.decode(Boot.self)
                     XCTAssertEqual(boot.bridgeVersion, BridgeContract.version)
-                    XCTAssertEqual(boot.focusMode, .line)
-                    XCTAssertEqual(boot.lineSnapshot?.text, "echo hi")
-                    XCTAssertEqual(boot.lineSnapshot?.selection, TextRange(start: 7, end: 7))
-                    XCTAssertNil(boot.lineSnapshot?.marked)
                     XCTAssertEqual(try JSONValue.encode(boot), reply)
                 } else if message.type == .socket {
                     XCTAssertEqual(
@@ -50,7 +46,7 @@ final class BridgeFixtureTests: XCTestCase {
     }
 
     func testMessagesRejectMissingRequiredFields() throws {
-        let malformed = Data(#"{"type":"input","events":[]}"#.utf8)
+        let malformed = Data(#"{"type":"draftPut"}"#.utf8)
         XCTAssertThrowsError(try JSONDecoder().decode(BridgeMessage.self, from: malformed))
     }
 }

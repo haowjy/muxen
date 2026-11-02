@@ -1,8 +1,0 @@
-{
-  "direction": "webToNative",
-  "message": {
-    "type": "focus",
-    "mode": "line"
-  },
-  "reply": null
-}

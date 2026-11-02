@@ -4,7 +4,7 @@
     "type": "ready"
   },
   "reply": {
-    "bridgeVersion": 9,
+    "bridgeVersion": 10,
     "hosts": [
       {
         "handle": "host-01",
@@ -35,7 +35,7 @@
     "viewport": {
       "layout": "phone",
       "density": "touch",
-      "directInput": "native",
+      "directInput": "owned",
       "scheme": "dark",
       "width": 402,
       "stableHeight": 874,
@@ -59,23 +59,6 @@
       "online": true,
       "locked": false,
       "covered": false
-    },
-    "focusMode": "line",
-    "lineSnapshot": {
-      "tab": {
-        "host": "host-01",
-        "session": {
-          "server": "main:42-7",
-          "session": 2
-        }
-      },
-      "gen": 7,
-      "text": "echo hi",
-      "selection": {
-        "start": 7,
-        "end": 7
-      },
-      "marked": null
     }
   }
 }

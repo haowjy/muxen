@@ -39,8 +39,6 @@ export function createBrowserPlatform(): Platform {
         viewport: viewport.read(),
         preferences: preferences.read(),
         lifecycle: readLifecycle(),
-        focusMode: null,
-        lineSnapshot: null,
       };
     },
     subscribe(listener) {
@@ -52,18 +50,6 @@ export function createBrowserPlatform(): Platform {
       preferences.set(name, value);
       emit({ type: "preferences", preferences: preferences.read() });
       viewport.check();
-    },
-    // app/focus.ts already moved DOM focus in the same dispatch; there is no native side.
-    input: {
-      setFocus: () => undefined,
-      setLine: () => Promise.resolve(0),
-      setLineCaret: () => undefined,
-      stepLineCaret: () => undefined,
-      insertLine: () => undefined,
-      submitLine: () => undefined,
-      selectAllLine: () => undefined,
-      setArmedModifier: () => undefined,
-      setActiveTab: () => undefined,
     },
     storage: storage.storage,
     uploads: createBrowserUploads(),
