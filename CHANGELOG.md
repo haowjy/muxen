@@ -5,6 +5,7 @@ version section on release.
 
 ## [Unreleased]
 
+- A text selection on the phone stays with its text when a full-screen app such as Claude Code or OpenCode repaints it a few rows up or down. Dragging a selection to the bottom edge while Jump to latest is showing no longer stalls.
 - muxen has an icon: a terminal with ox horns, on the iPhone app (which had none) and the installed web app.
 - The enrolment code field takes a pasted code (with or without its dash) and typing on an iPhone, which stopped after the first character.
 - Touch: the terminal scrolls natively through tmux's history as one list, and a selection stays while you scroll. This covers the iPhone app (both inputs), phone Safari and the home-screen app. A fling is one continuous scroll; older lines load as you near the top, and dragging a selection's handle (or the app's mark) to the top or bottom edge scrolls on. Output that rewrites a selected row still closes the selection. After output heavier than the connection can carry, an "output skipped" row marks where lines were dropped, and older history stops loading above it until the next snapshot. In the app, a long press marks the word with muxen's own mark whether the keyboard is up or down, as in the web keyboard test below; phone Safari keeps iOS's own selection. On a desktop with a touchscreen (and an iPad with a trackpad), a finger no longer scrolls the terminal until desktop moves to the same list; the wheel and trackpad work as before.
