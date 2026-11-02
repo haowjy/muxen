@@ -19,9 +19,6 @@ export interface Anchor {
   /** Character offsets into the first row's text and the last row's. */
   start: number;
   end: number;
-  /** The `seq` of the first and last row. */
-  first: number;
-  last: number;
 }
 
 export class RowRanges {
@@ -58,14 +55,13 @@ export class RowRanges {
       texts: rows.map(({ element }) => element.textContent),
       start: textBefore(first.element, first.part.startContainer, first.part.startOffset),
       end: textBefore(last.element, last.part.endContainer, last.part.endOffset),
-      first: Number(first.element.dataset["seq"]),
-      last: Number(last.element.dataset["seq"]),
     };
   }
 
-  /** Whether any row in `seqs` lies in the anchor's rows: the text it marked was redrawn (J7). */
-  rewrites(anchor: Anchor, seqs: readonly number[]): boolean {
-    return seqs.some((seq) => seq >= anchor.first && seq <= anchor.last);
+  /** Whether the row `seq` lies between a range's first and last row: a redraw of it rewrites the text it marked (J7). */
+  covers(range: Range | null, seq: number): boolean {
+    const span = range && this.source()?.span(range);
+    return !!span && seq >= Number(span.first.dataset["seq"]) && seq <= Number(span.last.dataset["seq"]);
   }
 
   /**

@@ -54,10 +54,10 @@ export interface RowListOptions {
   fetch: FetcherDeps["fetch"];
   /** Ranges the list must not drop rows under (the selection, the mark). */
   held(): Range[];
-  /** A row is about to be redrawn with other text or style: called before it is, while a range in it still reads true. */
-  rewriting(): void;
-  /** Rows that were rewritten in a frame (J7), by their `seq`. */
-  rewritten(seqs: number[]): void;
+  /** The row `seq` is about to be redrawn with other text or style (J7): called before it is, while a range in it still reads true. */
+  rewriting(seq: number): void;
+  /** A frame is done: its redraws are all in (J7). */
+  rewritten(): void;
   /** Rows `first` to `last` (by `seq`) are about to leave the list: called before they go, while a range over them still reads true. */
   dropped(first: number, last: number): void;
   /** Content moved under the rows that stayed (a block dropped or prepended above): anything placed in content coordinates is stale. */
@@ -256,7 +256,6 @@ export class RowList {
 
   private apply(frame: Frame): void {
     this.lastFrame = frame;
-    const changed = new Set<number>();
     const screenRows = frame.screen.length;
     if (frame.reset || this.screen.length !== screenRows) this.clear();
     if (this.screen.length === 0) {
@@ -275,15 +274,15 @@ export class RowList {
         this.gapRow = null; // a frame that is no gap ends the run: the screens the user saw stay
         // The old screen's top rows are the lines that left: they take their final text, once drawn they never change.
         const left = Math.min(frame.frozen.length, old.length);
-        for (let i = 0; i < left; i++) this.redraw(old[i], frame.frozen[i], changed);
+        for (let i = 0; i < left; i++) this.redraw(old[i], frame.frozen[i]);
         for (const row of frame.frozen.slice(left)) this.append(row);
         this.screen = [...old.slice(left), ...frame.screen.slice(screenRows - left).map((row) => this.append(row))];
       }
     }
     // What remains of the screen takes the frame's text where it differs.
-    for (let i = 0; i < screenRows; i++) this.redraw(this.screen[i], frame.screen[i], changed);
+    for (let i = 0; i < screenRows; i++) this.redraw(this.screen[i], frame.screen[i]);
     this.trim();
-    this.finish(frame, changed);
+    this.finish(frame);
   }
 
   /** A new row at the end of the run. */
@@ -356,11 +355,10 @@ export class RowList {
     screen.drawn = row;
   }
 
-  private redraw(screen: ScreenRow | undefined, row: Row | undefined, changed: Set<number>): void {
+  private redraw(screen: ScreenRow | undefined, row: Row | undefined): void {
     if (!screen || !row || sameRow(screen.drawn, row)) return;
-    this.options.rewriting();
+    this.options.rewriting(Number(screen.element.dataset["seq"]));
     this.draw(screen, row);
-    changed.add(Number(screen.element.dataset["seq"]));
   }
 
   private clear(): void {
@@ -378,7 +376,7 @@ export class RowList {
   }
 
   /** The end of a frame: the pinned state, the cursor, following, and what was rewritten. */
-  private finish(frame: Frame, changed: Set<number>): void {
+  private finish(frame: Frame): void {
     for (const block of this.grown) this.sizeBlock(block);
     this.grown.clear();
     const pinned = this.model.pinned();
@@ -391,7 +389,7 @@ export class RowList {
       this.follow();
       this.placeCursor(frame);
     }
-    if (changed.size > 0) this.options.rewritten([...changed]);
+    this.options.rewritten();
   }
 
   private sizeBlock(block: Block): void {

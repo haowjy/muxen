@@ -102,11 +102,14 @@ export class TerminalView {
       const range = this.selection.range();
       return range ? [range] : [];
     },
-    rewriting: () => { this.anchored ??= this.rows.anchor(this.selection.range()); },
-    rewritten: (seqs) => {
+    rewriting: (seq) => {
+      const range = this.selection.range();
+      if (!this.anchored && this.rows.covers(range, seq)) this.anchored = this.rows.anchor(range);
+    },
+    rewritten: () => {
       const { anchored } = this;
       this.anchored = null;
-      if (!anchored || !this.rows.rewrites(anchored, seqs)) return;
+      if (!anchored) return;
       const followed = this.rows.follow(anchored);
       if (!followed) this.dismissSelection();
       else {
