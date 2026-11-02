@@ -240,7 +240,7 @@ export type PlatformEvent =
   | { type: "lineEdit"; gen: number; text: string; tab: TabKey; selection: TextRange; marked: TextRange | null }
   | { type: "lineReturn"; gen: number; text: string; tab: TabKey }
   | { type: "draftChanged"; key: TabKey }
-  /** The app's edit menu over the terminal's mark: Copy or Paste was chosen (`Platform.editMenu`), or Paste on iOS's own menu over a terminal selection. */
+  /** The app's edit menu over the terminal's mark: Copy or Paste was chosen (`Platform.editMenu`). */
   | { type: "menuCopy" }
   | { type: "menuPaste" }
   | { type: "storage"; state: "closing" | "closed" }

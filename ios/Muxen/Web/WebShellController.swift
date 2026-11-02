@@ -294,8 +294,6 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
 
         let result = MuxenWebView(frame: .zero, configuration: configuration)
         result.suppressesEditMenu = { [weak self] in self?.focus.selecting == true }
-        // With the keyboard down iOS's own menu over a selection gets a Paste. Off a terminal the page ignores it (`pasteFromMenu`).
-        result.addsPaste = { [weak self] in self?.keyboardCover.height == 0 }
         result.onMenuChoice = { [weak self] choice in self?.send(choice, fields: [:]) }
         // iOS's selection handles, and the page's own (they read `--color-accent`): --blue-7 in light, --blue-9 in dark.
         result.tintColor = UIColor { $0.userInterfaceStyle == .dark
@@ -776,13 +774,11 @@ private final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandlerWi
 
 /// Native's two edit menus over the terminal. The page's mark (keyboard up) is no selection, so WebKit offers
 /// nothing there and the page asks for `toggleMarkMenu`; native knows whether the menu is up, since iOS can dismiss it
-/// itself. With the keyboard down iOS's own selection menu gets a Paste, on a terminal or not: the page drops a Paste
-/// that has no terminal to go to.
+/// itself.
 /// While a `focus select` is on (the web no longer sends it; an older page can) WebKit's menu is emptied
 /// (`suppressesEditMenu`); web text fields keep the system menu.
 final class MuxenWebView: WKWebView, UIEditMenuInteractionDelegate {
     var suppressesEditMenu: () -> Bool = { false }
-    var addsPaste: () -> Bool = { false }
     var onMenuChoice: (BridgeMessageType) -> Void = { _ in }
     private lazy var markMenu = UIEditMenuInteraction(delegate: self)
     private var markRect = CGRect.zero
@@ -822,11 +818,6 @@ final class MuxenWebView: WKWebView, UIEditMenuInteractionDelegate {
     override func buildMenu(with builder: any UIMenuBuilder) {
         super.buildMenu(with: builder)
         if suppressesEditMenu() { builder.remove(menu: .autoFill) }
-        else if addsPaste() {
-            builder.insertChild(
-                UIMenu(options: .displayInline, children: [UIAction(title: "Paste") { [weak self] _ in self?.onMenuChoice(.menuPaste) }]),
-                atEndOfMenu: .standardEdit)
-        }
     }
 }
 

@@ -383,11 +383,10 @@ responder. Terminal's native responder stays the same object while its target ch
   `UIEditMenuInteraction` (Copy, Paste) there, and reports the choice as `menuCopy` or
   `menuPaste`. Native owns whether that menu is up (the interaction's `willPresent` and
   `willDismiss`, since iOS can dismiss it itself): `editMenu` with a rect shows it, or hides
-  it if it is up, and `null` hides it. With the keyboard down iOS's selection and menu are
-  WebKit's, and `buildMenu` adds a Paste item (sending `menuPaste`) whenever no keyboard
-  covers the web view, on a terminal or not: native keeps no terminal state for it, and the
-  page ignores a Paste when no terminal is shown (`pasteFromMenu`). The web view's `tintColor` is the accent (`--blue-7` light, `--blue-9`
-  dark), so iOS's handles match muxen's. `suppressesEditMenu` is on only while a `focus select` is, which the web no longer sends.
+  it if it is up, and `null` hides it. `MuxenWebView` adds nothing to WebKit's own menus: a
+  Paste item there would reach `pasteFromMenu`, which pastes into the shown terminal tab even
+  from a dialog open over it. The web view's `tintColor` is the accent (`--blue-7` light, `--blue-9`
+  dark), so iOS's handles match muxen's.
 - **Native coverage gates focus and input.** While the lock screen or native server
   sheet covers the app, `FocusController.set` records requested state rather than
   changing the responder; uncovering applies the latest requested destination. A queued
@@ -540,7 +539,7 @@ token to native solely for comparison and revocation, never into storage or logs
 | `lifecycle { lifecycle: Lifecycle }` | `visible`, `online`, `locked`, `covered` | One state for app foreground, connectivity, app lock and native coverage |
 | `hosts { hosts: PlatformHost[] }` | Native host handles and labels; never base URLs or tokens | Refresh host admission / connection state |
 | `menuCopy` | Copy was chosen in the menu `editMenu` showed | The page copies its mark's joined text through `copy` and clears the mark |
-| `menuPaste` | Paste was chosen in that menu, or in the Paste item `MuxenWebView` adds to iOS's own menu over a selection (keyboard down) | The page runs its menu paste: `readPasteboard`, the size limit, one paste to tmux without Enter, or an image upload |
+| `menuPaste` | Paste was chosen in that menu | The page runs its menu paste: `readPasteboard`, the size limit, one paste to tmux without Enter, or an image upload |
 | `upload { id, progress, path?, error?, cancelled? }` | `id` is the one the web sent with `pickMedia` or `readPasteboard`; the web routes by it alone. `path`, `error` or `cancelled` ends the stream; `cancelled` is a dismissed picker | Update upload UI; the web decides where the path goes (a pasted image inserts it, a Files upload offers it) |
 
 There are no separate `network`, `lock` or `lifecycle.covered` messages in v2. A

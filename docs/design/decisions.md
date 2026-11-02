@@ -4497,3 +4497,11 @@ deleted, and with it `Mark.caretAt`'s selectable-for-the-lookup toggle.
   taking the finger no longer clears it.
 - **Rejected:** keeping `user-select: none` and drawing the highlight as boxes from the range's rects (a second
   geometry to keep in step with scroll and history inserts, for a case the responder already rules out).
+
+## The Paste item on iOS's own menu is deleted (2026-11-02)
+
+The app's long press is the mark in both keyboard states, so the rows never take iOS's own selection and the
+`buildMenu` Paste item (added whenever no keyboard covered the web view) had no purpose. It also misdirected: its
+`menuPaste` reaches `pasteFromMenu`, which pastes into the shown terminal tab even while a dialog is open over it,
+so a Paste from a dialog's text menu went into tmux. `MuxenWebView.addsPaste` and the insert are deleted;
+`menuPaste` stays for the mark's menu. Supersedes the "Paste item on iOS's own menu (keyboard down)" entry above.
