@@ -9,7 +9,7 @@ import { refusalWords } from "../../net/refusalWords";
 import { readClipboard } from "./clipboard";
 
 export const QUEUE_LIMIT = 4;
-export const QUEUE_FULL = "Wait for the current uploads to finish";
+export const QUEUE_FULL = "Wait for the current uploads to finish.";
 
 /** The daemon's per-file limit (fs.md "Constants"): a larger file is refused before a byte is sent. */
 const MAX_BYTES = 128 * 1024 * 1024;
@@ -103,7 +103,7 @@ export function createBrowserUploads(): Uploads {
         finish(job, { id: job.id, error: refusalWords(code) });
       }
     };
-    xhr.onerror = () => { finish(job, { id: job.id, error: "Couldn't reach the server" }); };
+    xhr.onerror = () => { finish(job, { id: job.id, error: "Couldn't reach the server." }); };
     xhr.onabort = () => {
       if (jobs.includes(job)) finish(job, { id: job.id, error: "Upload cancelled" });
     };

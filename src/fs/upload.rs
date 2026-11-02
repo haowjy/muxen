@@ -19,7 +19,7 @@ use bytes::Bytes;
 use futures_util::{Stream, StreamExt as _};
 use rustix::io::Errno;
 use tokio::sync::OwnedSemaphorePermit;
-use tracing::debug;
+use tracing::{debug, info};
 
 use super::{FsError, Opened, Want, expand, open, open_absolute};
 use crate::blocking::Lane;
@@ -381,6 +381,9 @@ fn is_part(name: &OsStr) -> bool {
 /// an upload. Housekeeping: an error is only logged.
 pub fn reap(lane: &Lane, record: &Path) {
     if let Some(recorded) = take_record(record) {
+        // Logged before the spawn: a saturated lane drops the delete unrun, and the record is
+        // already gone, so this line is the only trace of the file left behind.
+        info!(path = %recorded.display(), "deleting an unfinished upload");
         lane.spawn(move || delete_part(&recorded));
     }
 }

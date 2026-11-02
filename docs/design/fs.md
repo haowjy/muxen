@@ -288,6 +288,9 @@ the fs lane and is not awaited: the path may be on a hung mount, and that must f
 fs thread, not hold up the start or an upload. The record is already gone, so the hang
 happens once. Nothing else is touched, and nothing in this cleanup fails an upload or the
 start: a missing or unreadable record, or a file it can't delete, is logged at `debug`.
+The path is logged at `info` before the delete is queued; if the fs lane is saturated
+(the hung-mount case) the delete is dropped unrun and that log line is the only trace of
+the file left behind.
 No folder is scanned.
 
 6. Answer `201 { path, size }`, `path` the absolute canonical path, which native

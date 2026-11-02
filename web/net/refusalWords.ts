@@ -13,7 +13,7 @@ const WORDS: Record<HttpError, string> = {
   bad_code: "That enrolment code didn't work.",
   denied: "Permission denied.",
   not_found: "It isn't there any more.",
-  not_a_directory: "That isn't a usable folder. For the uploads folder, check uploads_dir in config.toml.",
+  not_a_directory: "That isn't a folder.",
   not_a_file: "That isn't a regular file.",
   memory_backed: "That folder is on memory-backed storage.",
   too_large: "That file is over the 128 MiB limit.",
