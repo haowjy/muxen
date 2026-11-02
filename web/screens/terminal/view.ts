@@ -37,6 +37,8 @@ interface ViewDeps {
   prompt(): PromptLine | null;
   /** Who holds the keyboard. */
   owner(): Owner;
+  /** Focuses the terminal's input, which raises the keyboard; only inside a tap. */
+  raiseKeyboard(): void;
   /** The platform's edit menu, where it has one (the app). */
   editMenu(): ((rect: MenuRect | null) => void) | undefined;
   /** The view is above the newest line. */

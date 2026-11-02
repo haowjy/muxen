@@ -360,11 +360,9 @@ input.
 - **Compose box.** The line field is one logical line, placeholder “Type or dictate a
   line”, wrapping and growing from one to five visual lines, then scrolling inside.
   It remains visible while typing to tmux, idle without a caret; tapping it gives the
-  keyboard to the line. Browser/PWA uses a textarea; the app uses a native editor with
-  a web `LineMirror`, autocorrect, capitalization, spell checking, smart punctuation
-  and inline prediction disabled. The mirror draws caret, selection and marked
-  composition; tapping places the caret, the spacebar is a trackpad, and long press
-  offers Paste / Select all / Clear (no selection handles). Return or Send sends the
+  keyboard to the line. It is a textarea in the browser, the PWA and the app alike, with
+  autocorrect, capitalization, spell checking and smart punctuation off. Return (the
+  key reads "return") or Send sends the
   text then Enter to the active tab's shown window, clears it and keeps focus in the
   box. Empty Return sends Enter. An undelivered line returns with its reason; a
   disconnected tab keeps the draft and says “Not connected”. Each tab's draft survives
@@ -391,19 +389,17 @@ input.
 - **Focus cues.** Terminal target: solid terminal cursor; the idle box has no caret and
   shows its draft or placeholder. Line target: box ring and caret, visible Send, hollow
   terminal cursor, and Return labelled Send. There is exactly one active typing cursor.
-- **Terminal taps.** A tap on the terminal never raises or lowers the keyboard; the key
-  row's toggle does. It sends a click when the application asked for mouse reporting, moves
-  the prompt cursor on an OSC 133 input row only while terminal input already owns the
-  keyboard, and otherwise does nothing apart from closing a selection
+- **Terminal taps.** A tap on the terminal raises the keyboard: terminal input takes it,
+  from the box too, and the key row's toggle lowers it. In an application that asked for mouse
+  reporting the tap is a click and raises nothing. With terminal input already holding the
+  keyboard, a tap on an OSC 133 input row moves the prompt cursor. With a selection or mark up,
+  a tap elsewhere closes it and raises nothing
   ([terminal-interaction-design.md](terminal-interaction-design.md), "One gesture owner").
-  The app's native input keeps a rule of its own: with the box owning typing,
-  a tap gives typing back to the terminal, and with the keyboard down a tap on or beside the
-  cursor's row raises terminal input. Scroll and selection do not toggle the keyboard
-  (it is sticky, above).
+  The focus is made in the tap's own `touchend`, since iOS raises the keyboard only for a focus
+  made in the gesture. Scroll and selection do not toggle the keyboard (it is sticky, above).
 - **Safari's form accessory bar.** The phone browser/PWA may put its own ⌃ ⌄ Done bar
   between muxen's key row and the keyboard; the page cannot remove it. Done lowers the
-  keyboard and the toggle follows. The native terminal/line responder is not a WebKit
-  field; WebKit-owned sheet fields retain their ordinary form bar.
+  keyboard and the toggle follows. The app hides the bar (`WebKitAccessoryBar`).
 
 ## File upload and path insertion
 

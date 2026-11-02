@@ -4557,3 +4557,49 @@ means) is written once.
   built, and there is one surface and one row list for all tabs; nothing changes it after.
 - **Rejected:** keeping both selections alive and checking each at every site (two lifetimes and two looks that
   could disagree, and the arms had already drifted); choosing per touch (the platform does not change per touch).
+
+## Native input is deleted; the page's text boxes are the app's only keyboard (2026-11-02)
+
+Jimmy, on the ios-simplify plan: "a yes, finish the plan... delete as much code as possible", and on the leftover
+checks: "why... do we still need those tests... delete them". He then paused it ("wait... so but i wanted the current
+experience...? it was fine on my phone?"), turned the switch on, and used the page keyboard: "the web keyboard is
+okay for the most part". The deletion resumed on that.
+
+The hidden `UITextField` (`KeyboardInput`), `FocusController`, `KeyMapper`, the focus, line, modifier, input and
+activeTab messages (bridge v10), `LineMirror`, `nativeLine.ts`, the "Web keyboard (test)" switch and its key all
+go. The page's own boxes hold the keyboard, as in phone Safari. Hardware keys go through `Terminals.hardwareKey`.
+Native keeps keyboard geometry, the mark's edit menu, drafts, copy and the pasteboard, haptics (`key`, `modifier`),
+cover and lock, and the three WebKit hooks (focus policy, form-bar swap, scroll reset), now unconditional. The
+`^C`/`^D` warning haptic for hardware keys went with the native key path.
+
+**This supersedes:** the native-field rules ("one native `UITextField` owns the keyboard for both targets", the
+focus modes `hidden`/`terminal`/`line`/`webText`, `lineSet` generations, the 60 ms keyboard hold, the native
+`tapAction` `raises` half); "the rows stay selectable under the mark" (below, same day); and "a tap never raises the
+keyboard" (this day's earlier call, when the app was to match Safari).
+
+- **`directInput` stays**, as `"xterm" | "owned"`. It is the one axis "who handles keys": desktop's xterm textarea or
+  the page's boxes. It is not derivable from `density` (a touch laptop is coarse and still xterm) and the app says
+  `"owned"` always, so a boolean would only rename it across the bridge and its fixtures.
+- **Settings.** Nothing else in the web Settings or the native server list was test-only or dead: Appearance, text size,
+  Face ID relock, Servers, This device, the desktop-only Keyboard help and Clear local data are all live.
+
+### Three problems from Jimmy's trial, and their fixes
+
+1. **Two selections at once** (muxen's mark and iOS's own on the same rows). With the page path nothing holds first
+   responder away from WebKit, and the rows had been made selectable only so a CSS Custom Highlight would paint.
+   The mark now draws boxes in the scroller's content coordinates from `RowRanges.rectsOf`, placed and redrawn
+   with the handles, and the CSS highlight is gone. Where the platform has `editMenu` the rows are `user-select: none`
+   and `-webkit-touch-callout: none`; `Mark.caretAt` makes the scroller selectable only for the `caretRangeFromPoint`
+   call. The earlier rejection of boxes ("a second geometry to keep in step") held only while the native field ruled out
+   iOS's selection; the handles already needed that geometry.
+2. **The "Type or dictate a line" box deleted its own text.** Cause: `nativeLine.ts` stayed alive under the page path.
+   A restored `Boot.lineSnapshot` bound it to the tab, so every keystroke in the page box made it send `lineSet`, and
+   each reply wrote native's older copy back into the drafts (`editNative`): with a slow bridge the box shortened
+   and scrambled mid-typing. Reproduced at phone size with a fake bridge that delays `lineSet` replies 150 ms (the
+   box ended as `t i o xusv ea g`); with no latency or no snapshot it did not. Deleting the mirror leaves
+   `LineField.edit` as the one writer of the line's text.
+3. **A tap on the terminal raises the keyboard,** in the app and in phone Safari. In a mouse app (mouse tracking on) the
+   tap is a click and raises nothing. With a mark up, a tap elsewhere clears it and raises nothing. With the
+   terminal's input already holding the keyboard, a tap on the prompt row still moves the cursor. The focus is made in
+   the tap's own `touchend`: iOS shows the keyboard only for a focus made in the gesture. **Rejected:** Safari's earlier
+   rule (a tap never raises; the dock button does), which Jimmy found wrong in use ("the terminal itself").

@@ -165,6 +165,7 @@ for (const version of VERSIONS) {
       await finger.up();
       expect(await page.evaluate(() => getSelection()?.toString())).toBe("");
       expect(pane(s)).toBe(before);
+      await expect(page.getByRole("textbox", { name: "Terminal keyboard" })).not.toBeFocused(); // it closed the selection and raised nothing
     });
 
     test("a tap in an application with mouse mode sends a click at the cell", async ({ page }) => {
@@ -174,29 +175,34 @@ for (const version of VERSIONS) {
       await finger.down(at.x, at.y);
       await finger.up();
       await paneIncludes(mouse, "^[[<0;10;8M^[[<0;10;8m");
+      await expect(page.getByRole("textbox", { name: "Terminal keyboard" })).not.toBeFocused(); // a click, not a request for the keyboard
     });
 
-    test("a tap on the terminal never raises or lowers the keyboard", async ({ page }) => {
+    test("a tap on the terminal raises the keyboard inside its touchend, and the key row's toggle lowers it", async ({ page }) => {
       const shell = newSession();
       const finger = await open(page, shell);
       await paneIncludes(shell, /\$ /);
       const before = pane(shell);
       const keyboard = page.getByRole("textbox", { name: "Terminal keyboard" });
-      const far = await mid(page, shell, 8);
-      const near = await mid(page, shell, 1); // the row under the prompt
-      for (const at of [far, near]) {
-        await finger.down(at.x, at.y);
-        await finger.up();
-      }
-      await page.waitForTimeout(500);
-      expect(pane(shell)).toBe(before);
+      // The page's listener on the document runs after the surface's, in the same dispatch: what holds focus now is what the tap's own handler made.
+      await page.evaluate(() => {
+        document.addEventListener("touchend", () => { (window as unknown as { heldAtTouchEnd: string | null }).heldAtTouchEnd = document.activeElement?.getAttribute("aria-label") ?? null; });
+      });
       await expect(keyboard).not.toBeFocused();
-      await keyboard.focus();
-      for (const at of [far, near]) {
-        await finger.down(at.x, at.y);
-        await finger.up();
-      }
+      const far = await mid(page, shell, 8);
+      await finger.down(far.x, far.y);
+      await finger.up();
       await expect(keyboard).toBeFocused();
+      expect(await page.evaluate(() => (window as unknown as { heldAtTouchEnd: string | null }).heldAtTouchEnd)).toBe("Terminal keyboard");
+      // With it up, a tap keeps it there (the row under the prompt may move the cursor, which sends nothing at a shell's empty line).
+      const near = await mid(page, shell, 1);
+      await finger.down(near.x, near.y);
+      await finger.up();
+      await expect(keyboard).toBeFocused();
+      await page.getByRole("button", { name: "Hide keyboard" }).click();
+      await expect(keyboard).not.toBeFocused();
+      await page.waitForTimeout(300);
+      expect(pane(shell)).toBe(before);
     });
 
     test("a tap in vim with mouse on moves the cursor", async ({ page }) => {
@@ -478,6 +484,7 @@ for (const version of VERSIONS) {
         await expect(handles.last()).toBeHidden();
         await expect(boxes).toHaveCount(0);
         expect((await page.screenshot({ clip })).equals(bare)).toBe(true);
+        await expect(page.getByRole("textbox", { name: "Terminal keyboard" })).not.toBeFocused(); // a tap that clears the mark raises nothing
       }
       expect(pane(s)).toBe(before);
     });

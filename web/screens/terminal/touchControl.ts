@@ -13,7 +13,7 @@
 // - The app's hold is muxen's (`Mark`), keyboard up or down: WebKit's selection would take the keyboard down. The
 //   recognizer's hold marks the word, the finger extends it, a tap inside toggles the menu; the handles' touches
 //   are the mark's own and never get here.
-// Either way a tap elsewhere only clears the selection.
+// Either way a tap elsewhere only clears the selection and raises nothing.
 import type { Owner } from "../../app/focus";
 import type { InputEvent } from "../../platform/types";
 import type { PromptLine, TerminalModel } from "../../term";
@@ -44,6 +44,8 @@ interface TouchDeps {
   prompt(): PromptLine | null;
   /** Who holds the keyboard. */
   owner(): Owner;
+  /** Focuses the terminal's input, which raises the keyboard; only inside a tap. */
+  raiseKeyboard(): void;
 }
 
 /**
@@ -311,19 +313,21 @@ export class TouchControl {
   }
 
   /**
-   * A short press on a cell (none in history). It never raises or lowers the keyboard (terminal-interaction-design.md,
-   * "One gesture owner"): a click for an application that asked for the mouse, else a move of the prompt cursor
-   * while the terminal's own input holds the keyboard.
+   * A short press (terminal-interaction-design.md, "One gesture owner"): a click for an application that asked for the
+   * mouse, which raises nothing; else it raises the keyboard for the terminal's own input, or, with that input already
+   * holding it, moves the prompt cursor. This runs inside the `touchend` that ended the tap: iOS shows the keyboard
+   * only for a focus made there.
    */
   private tap(x: number, y: number): void {
     const model = this.deps.model();
+    if (!model) return;
     const cell = this.deps.list()?.cellAt(x, y) ?? null;
-    if (!model || !cell) return;
     const mode = model.mouseMode();
     if (mode !== "none") {
-      const events = mouseInput("tap", cell.col, cell.row, mode, model.mouseEncoding());
+      const events = cell && mouseInput("tap", cell.col, cell.row, mode, model.mouseEncoding());
       if (events) this.deps.send(events);
-    } else if (this.deps.owner() === "terminal") this.moveCursorTo(cell.col, cell.row);
+    } else if (this.deps.owner() !== "terminal") this.deps.raiseKeyboard();
+    else if (cell) this.moveCursorTo(cell.col, cell.row);
   }
 
   /** On the prompt's input row, a tap moves the cursor there; the caller has checked that the terminal's own input held the keyboard. */

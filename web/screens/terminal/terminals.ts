@@ -158,6 +158,7 @@ export class Terminals extends Store<TerminalsView> {
       directInput: () => this.viewport.directInput,
       prompt: () => this.promptLine,
       owner: () => this.app.focus.snapshot.owner,
+      raiseKeyboard: () => { this.app.focus.focusTarget("terminal", true); },
       onScrolled: (scrolled) => { this.update({ scrolled }); },
     });
     new ResizeObserver(() => { this.measure(); }).observe(this.element);
