@@ -12,8 +12,8 @@
 }
 /* The renderer's element, placed by terminals.ts. It is the stable box tmux is sized from: the
    status band and the empty state float over it and reserve nothing, so showing either never
-   resizes tmux. Desktop's xterm view owns every touch here (a recognizer decides tap, scroll
-   and hold), and iOS shows no callout or text selection of its own; every other input is overridden below. */
+   resizes tmux. This is desktop's xterm view: iOS shows no callout or text selection of its own;
+   every other input is overridden below. */
 .host {
   position: absolute;
   inset: var(--space-2) var(--space-3);
@@ -25,8 +25,9 @@
   -webkit-user-select: none;
   user-select: none;
 }
-/* Every input but desktop's xterm: the rows are the row list's page text and the long press is WebKit's, so iOS selects them
-   with its own handles and menu. Nothing on or above the host may cancel `touchstart` or set `user-select: none`,
+/* Every input but desktop's xterm: the rows are the row list's page text. In a browser the long press is WebKit's, so iOS
+   selects them with its own handles and menu; in the app the mark's highlight needs them selectable too, since WebKit
+   paints no CSS highlight on `user-select: none` text. Nothing on or above the host may cancel `touchstart` or set `user-select: none`,
    `-webkit-touch-callout: none` or `touch-action: none` (a pinned list's swipes are muxen's, below). The list scrolls
    natively: vertical pans are the browser's. */
 .host:not([data-direct-input="xterm"]) {

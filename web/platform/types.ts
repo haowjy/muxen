@@ -264,7 +264,7 @@ export interface Platform {
   /** Whether the platform's own back swipe may run (native: WebKit's left-edge swipe, which pops the page's history). Browser: no-op, since Safari owns the edge swipe. */
   setBackSwipe(enabled: boolean): void;
   restart(reason: "stuck" | "update"): void;
-  /** Shows the platform's edit menu (Copy, Paste) over `rect`, in the page's client px, or hides it with null. Choices come back as `menuCopy` and `menuPaste`. The app only: it is what lets the terminal mark text while the keyboard is up. */
+  /** Shows the platform's edit menu (Copy, Paste) over `rect`, in the page's client px, or hides it with null. Choices come back as `menuCopy` and `menuPaste`. The app only: it is what lets the terminal mark text, keyboard up or down. */
   editMenu?: (rect: MenuRect | null) => void;
   /** Opens the platform's own screen for adding, pairing and removing servers. Native only. */
   manageHosts?: () => void;

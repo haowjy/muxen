@@ -145,8 +145,8 @@ export class Terminals extends Store<TerminalsView> {
     });
     interceptClipboard(this.element, {
       onPaste: (pasted) => { this.pastes.paste(pasted); },
-      // The phone's selection is page text; desktop's is xterm's own.
-      selectionText: () => this.view.pageText() || (this.surface?.xterm?.selectionText() ?? ""),
+      // The phone's selection is the rows' text; desktop's is xterm's own.
+      selectionText: () => this.view.selectionText() || (this.surface?.xterm?.selectionText() ?? ""),
     });
     this.view = new TerminalView({
       element: this.element,

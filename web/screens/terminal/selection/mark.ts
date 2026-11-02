@@ -1,19 +1,20 @@
-// The keyboard-up mark (the app, `directInput: "owned"`; terminal-interaction-design.md "Phone selection"). The
-// recognizer's hold marks the word under the finger with a CSS Custom Highlight, which is not a DOM selection, so
-// focus and the keyboard stay. The finger, still down, extends it; two drawn handles adjust it; native's edit
-// menu (`Platform.editMenu`) sits over it. The mark is a range over the same rows `PageSelection` reads, and its
-// text is `PageSelection.textOf`: one join for Copy. Output never pauses: when rows under the mark redraw, the
-// view closes it with its handles (`PageSelection.rewrites`). The handles sit in the row list's scroller, so they
+// The mark: the app's selection of the terminal's text, keyboard up or down (terminal-interaction-design.md "Phone
+// selection"). The recognizer's hold marks the word under the finger with a CSS Custom Highlight, which is not a DOM
+// selection, so focus and the keyboard stay. The finger, still down, extends it; two drawn handles adjust it;
+// native's edit menu (`Platform.editMenu`) sits over it. It is a range over the row list's rows, and its text is
+// `RowRanges.textOf`: one join for Copy. Output never pauses: when rows under the mark redraw, the view closes it
+// with its handles (`RowRanges.rewrites`). The handles sit in the row list's scroller, so they
 // ride its native scroll; a finger or handle near the scroller's top or bottom edge scrolls it (the mark's own
 // autoscroll, which iOS gives its own selection but not a CSS highlight).
 import type { MenuRect } from "../../../platform/types";
-import { boxOf, near, type PageSelection } from "./pageSelection";
+import { boxOf, near, type RowRanges } from "./rowRanges";
+import type { Selection, TouchStart } from "./selection";
 import styles from "./Mark.module.css";
 
 interface MarkDeps {
   /** The row list's scroller: the handles are its children, placed in its content's coordinates. It clips, so a start knob that would lie above its visible top hangs below its line. */
   layer(): HTMLElement | null;
-  page: PageSelection;
+  rows: RowRanges;
   /** The platform's edit menu, or undefined where there is none (a browser): the mark is the app's. */
   editMenu(): ((rect: MenuRect | null) => void) | undefined;
   /** One light tick when the hold marks a word. */
@@ -46,7 +47,7 @@ interface Place {
 
 const segmenter = new Intl.Segmenter(undefined, { granularity: "word" });
 
-export class Mark {
+export class Mark implements Selection {
   /** `range` is what is marked; `word` is the word the hold began on, which a finger's drag extends from. */
   private state: { range: Range; word: Range } | null = null;
   private handles: Record<End, HTMLElement> | null = null;
@@ -65,13 +66,10 @@ export class Mark {
     return this.deps.editMenu() !== undefined;
   }
 
-  exists(): boolean {
-    return this.state !== null;
-  }
-
-  /** Whether the client point is on the marked text. */
-  contains(x: number, y: number): boolean {
-    return this.state !== null && near(this.deps.page.rectsOf(this.state.range), x, y, TAP_REACH);
+  /** A touch on the marked text toggles its menu; one elsewhere only closes the mark if it is a tap. */
+  touch(x: number, y: number): TouchStart {
+    if (!this.state) return "plain";
+    return near(this.deps.rows.rectsOf(this.state.range), x, y, TAP_REACH) ? "toggle" : "dismiss";
   }
 
   /** The marked range, or null. */
@@ -84,9 +82,9 @@ export class Mark {
     return target instanceof Node && this.handles !== null && ENDS.some((end) => this.handles?.[end].contains(target));
   }
 
-  /** Copy's text: the mark's range through the page selection's join. Empty with no mark. */
+  /** Copy's text: the mark's range through the rows' join. Empty with no mark. */
   text(): string {
-    return this.state ? this.deps.page.textOf(this.state.range) : "";
+    return this.state ? this.deps.rows.textOf(this.state.range) : "";
   }
 
   /** The hold: marks the word under the finger. False when the finger is on no text. */
@@ -128,7 +126,7 @@ export class Mark {
 
   /** A tap inside the mark. Native owns whether the menu is up (iOS can dismiss it itself): it shows over the mark or, if showing, hides. */
   toggleMenu(): void {
-    const box = this.state && boxOf(this.deps.page.rectsOf(this.state.range));
+    const box = this.state && boxOf(this.deps.rows.rectsOf(this.state.range));
     if (!box) return;
     this.menuShown = true;
     this.deps.editMenu()?.({ x: box.x, y: box.y, width: box.width, height: box.height });
@@ -186,7 +184,7 @@ export class Mark {
   private caretAt(x: number, y: number): Range | null {
     // eslint-disable-next-line @typescript-eslint/no-deprecated -- WebKit's own; the standard caretPositionFromPoint is later than iOS 17
     const at = document.caretRangeFromPoint(x, y);
-    return at && this.deps.page.holds(at.startContainer) ? at : null;
+    return at && this.deps.rows.holds(at.startContainer) ? at : null;
   }
 
   // The handles (selection-look.md). Each stands on the first or last rect's outer edge, and is dragged by
@@ -194,7 +192,7 @@ export class Mark {
   // the character being chosen.
 
   private placeHandles(range: Range): void {
-    const rects = this.deps.page.rectsOf(range).filter((r) => r.width > 0);
+    const rects = this.deps.rows.rectsOf(range).filter((r) => r.width > 0);
     const first = rects[0];
     const last = rects.at(-1);
     if (!first || !last) return;

@@ -472,9 +472,8 @@ triggers it when the bridge request arrives.
 |---|---|---|
 | Key row key down | light impact | web, via `haptic` (`key`), on pointer-down |
 | ctrl or alt armed or disarmed | medium impact | web, via `haptic` (`modifier`) |
-| ^C or ^D | warning notification | native for hardware keys; web requests `haptic` (`warning`) for the dock |
-| Tab switch | selection changed | web, via `haptic` |
-| Long-press fires (word selection begins) | rigid impact (native input); `key` light impact when the keyboard-up hold marks a word | web, via `haptic` |
+| ^C or ^D | warning notification | native, for hardware keys |
+| Long-press fires (word selection begins) | light impact (`key`) when the hold marks a word | web, via `haptic` |
 | Upload done / failed | success / error notification | native |
 
 ## The bridge
@@ -513,7 +512,7 @@ token to native solely for comparison and revocation, never into storage or logs
 | `draftList` | `DraftRecord[]` | List drafts |
 | `copy { text }` | `"ok"` | User-initiated terminal Copy always writes the system pasteboard |
 | `readPasteboard { tab: TabKey, id }` | `{ text }`, `{ uploading: id }`, `"empty"` or `"denied"` | Paste text, or upload an image to the tab's host under the web-chosen `id`. The first `upload` event follows this reply |
-| `haptic { kind }` | `null` | `key`, `modifier`, `rigid`, `selection` or the ^C/^D `warning` |
+| `haptic { kind }` | `null` | `key` or `modifier` (native's own ^C/^D `warning` is not a bridge kind) |
 | `pickMedia { id, host }` | `null` | Present the native media action sheet, then upload the pick to `host` under the web-chosen `id`. Needs no open tab |
 | `playVideo { host, path }` | `null` | Play an authenticated `/fs/raw` resource |
 | `setPreference { name, value }` | Every `Preferences` | Native keeps the choice (`appearance`, `textSize` or `relock`), applies it, and answers with all three; an unknown name or value is a refused request. The web shows the reply. Only the web's Settings changes a preference, so native sends no change event |

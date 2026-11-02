@@ -1,17 +1,19 @@
 // The touch shell (client-architecture.md §7.6): touches in, the sans-IO recognizer in the middle,
 // the terminal's side effects out. What it means is decided when a touch resolves.
 //
-// The rows are the row list's page text, and its scroll and the long press are WebKit's.
-// Touch events are shared with it: every listener but the handles' is passive
-// where it can be, `touchmove` is cancelled only for the mark and a pinned terminal's swipe
-// (which becomes wheel events), `touchend` is cancelled for a tap (so a tap is never a click or a blur), and
-// `touchcancel` is a finger a system gesture took. A swipe past the slop is the browser's
-// scroll: the recognizer only hides the mark's menu for it.
-// A touch on a live selection is WebKit's and never reaches the recognizer. After a touch, mouse events
-// on the surface stop for a while: iOS's imitation mouse-move over a link would redraw rows and end a selection.
-// In the app the hold is muxen's instead (`Mark`), keyboard up or down: WebKit's selection would take the
-// keyboard down. The recognizer's hold marks the word, the finger extends it, a tap inside toggles the menu and a
-// tap elsewhere clears it; the handles' touches are the mark's own and never get here.
+// The rows are the row list's page text, and its scroll is WebKit's. Touch events are shared with it: every
+// listener but the handles' is passive where it can be, `touchmove` is cancelled only for the mark and a pinned
+// terminal's swipe (which becomes wheel events), `touchend` is cancelled for a tap (so a tap is never a click or a
+// blur), and `touchcancel` is a finger a system gesture took. A swipe past the slop is the browser's scroll: the
+// recognizer only hides the mark's menu for it. After a touch, mouse events on the surface stop for a while: iOS's
+// imitation mouse-move over a link would redraw rows and end a selection.
+//
+// What a selection is, and who owns the long press, depends on the platform (`TerminalView` picks one `Selection`):
+// - A browser's hold is WebKit's. A touch on its live selection is WebKit's and never reaches the recognizer.
+// - The app's hold is muxen's (`Mark`), keyboard up or down: WebKit's selection would take the keyboard down. The
+//   recognizer's hold marks the word, the finger extends it, a tap inside toggles the menu; the handles' touches
+//   are the mark's own and never get here.
+// Either way a tap elsewhere only clears the selection.
 import type { Owner } from "../../app/focus";
 import type { HapticKind, InputEvent } from "../../platform/types";
 import type { PromptLine, TerminalModel } from "../../term";
@@ -21,7 +23,7 @@ import { charsAcross } from "../../touch/selection";
 import type { PinnedWheel } from "./pinnedWheel";
 import type { RowList } from "./rowList";
 import type { Mark } from "./selection/mark";
-import type { PageSelection } from "./selection/pageSelection";
+import type { Selection } from "./selection/selection";
 
 interface TouchDeps {
   element: HTMLElement;
@@ -30,8 +32,9 @@ interface TouchDeps {
   model(): TerminalModel | null;
   /** A pinned terminal's swipe as wheel events. */
   wheel: PinnedWheel;
-  page: PageSelection;
-  /** The app's keyboard-up mark. */
+  /** The terminal's selected text: the mark in the app, the browser's own otherwise. */
+  selection: Selection;
+  /** The mark: its hold, handles and menu, where `selection` is it (the app). */
   mark: Mark;
   /** Typed input for the tab this view is showing. */
   send(events: InputEvent[]): void;
@@ -194,20 +197,14 @@ export class TouchControl {
     // A mark handle's finger is the handle's: it starts no gesture here, and sets none of the flags below.
     const first = Array.from(event.changedTouches).find((touch) => inside(touch) && !this.deps.mark.owns(touch.target));
     if (this.fingers.size === 0 && first) {
-      // Per-gesture state is reset where a gesture starts, so a finger whose end never came leaves nothing set.
-      this.dismissing = false;
-      this.onMark = false;
-    }
-    if (this.fingers.size === 0 && first && this.deps.page.exists()) {
-      // A touch on the selection is WebKit's (handle drags and its menu); a touch elsewhere only closes it, if it is a tap.
-      if (this.deps.page.contains(first.clientX, first.clientY)) {
+      // A touch on the system's selection is WebKit's (handle drags and its menu); a touch elsewhere only closes the selection, if it is a tap.
+      const start = this.deps.selection.touch(first.clientX, first.clientY);
+      if (start === "handOver") {
         this.handedOver = true;
         return;
       }
-      this.dismissing = true;
-    } else if (this.fingers.size === 0 && first && this.deps.mark.exists()) {
-      if (this.deps.mark.contains(first.clientX, first.clientY)) this.onMark = true;
-      else this.dismissing = true;
+      this.dismissing = start === "dismiss";
+      this.onMark = start === "toggle";
     }
     // Only the surface's own fingers: one held on a dock key or a handle is not a second finger on the terminal.
     for (const touch of event.touches) {
@@ -299,8 +296,7 @@ export class TouchControl {
           break;
         }
         if (this.dismissing) {
-          this.deps.page.clear();
-          this.deps.mark.clear();
+          this.deps.selection.clear();
           break;
         }
         this.tap(action.x, action.y);

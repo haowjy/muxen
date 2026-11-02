@@ -1,6 +1,5 @@
-// How the shown tab is looked at by touch (client-architecture.md §7.6): the recognizer, the selection and
-// mark on the row list (which scrolls natively), and, for desktop's xterm view, the wheel past the buffer's top
-// onto the history rows. All of it is state of one tab on a surface every tab shares, so it lives in one object
+// How the shown tab is looked at by touch (client-architecture.md §7.6): the recognizer, the selection on the
+// row list (which scrolls natively), and, for desktop's xterm view, the wheel past the buffer's top onto the history rows. All of it is state of one tab on a surface every tab shares, so it lives in one object
 // that is told which tab is shown and drops everything when that changes or a snapshot repaints the
 // pane. Nothing here outlives the view it began on: a held drag or a selection never reaches another tab's pane.
 import type { Owner } from "../../app/focus";
@@ -14,6 +13,8 @@ import type { RowList } from "./rowList";
 import { ScrollControl } from "./scroll";
 import { Mark } from "./selection/mark";
 import { PageSelection } from "./selection/pageSelection";
+import { RowRanges } from "./selection/rowRanges";
+import type { Selection } from "./selection/selection";
 import { TouchControl } from "./touchControl";
 
 interface ViewDeps {
@@ -46,10 +47,10 @@ export class TerminalView {
   private tab: string | null = null;
   private readonly history: HistoryView;
   readonly scroll: ScrollControl;
-  /** The phone's own selection of the rows' text (owned input). */
-  private readonly page: PageSelection;
-  /** The app's keyboard-up mark over the same rows. */
+  private readonly rows: RowRanges;
   private readonly mark: Mark;
+  /** The selection of the rows' text: the mark where the platform has an edit menu (the app), the browser's own otherwise. */
+  private readonly selection: Selection;
   private readonly touch: TouchControl;
   private readonly wheel: PinnedWheel;
 
@@ -71,15 +72,16 @@ export class TerminalView {
       onScrolled: (scrolled) => { deps.onScrolled(scrolled); },
       surfaceHeight: () => element.clientHeight,
     });
-    this.page = new PageSelection({ list: () => deps.list() });
-    this.mark = new Mark({ layer: () => deps.list()?.element ?? null, page: this.page, editMenu: () => deps.editMenu(), tick: () => { deps.haptic("key"); } });
+    this.rows = new RowRanges(() => deps.list());
+    this.mark = new Mark({ layer: () => deps.list()?.element ?? null, rows: this.rows, editMenu: () => deps.editMenu(), tick: () => { deps.haptic("key"); } });
+    this.selection = deps.editMenu() ? this.mark : new PageSelection(this.rows);
     this.wheel = new PinnedWheel({ model: () => deps.model(), cell: () => deps.list()?.cellSize() ?? null, send: (events) => { this.send(events); } });
     // The recognizer owns every touch on the surface (§7.6): none moves focus, and what a touch means is decided when it resolves.
     this.touch = new TouchControl({
       ...deps,
       list: () => deps.list(),
       wheel: this.wheel,
-      page: this.page,
+      selection: this.selection,
       mark: this.mark,
       send: (events) => { this.send(events); },
     });
@@ -87,13 +89,13 @@ export class TerminalView {
     element.addEventListener("wheel", this.wheelPastTop, { capture: true, passive: false });
   }
 
-  /** Wires a new row list: output that rewrites or drops a selected row closes the selection (J7), and a scroll hides the mark's menu. */
+  /** Wires a new row list: output that rewrites or drops a selected row closes the selection (J7), a scroll hides the mark's menu. */
   attach(list: RowList): void {
     list.onRewritten((seqs) => {
-      if (this.page.rewrites(this.page.current(), seqs) || this.page.rewrites(this.mark.range(), seqs)) this.dismissSelection();
+      if (this.rows.rewrites(this.selection.range(), seqs)) this.dismissSelection();
     });
     list.onDropped((first, last) => {
-      if (this.page.drops(this.page.current(), first, last) || this.page.drops(this.mark.range(), first, last)) this.dismissSelection();
+      if (this.rows.drops(this.selection.range(), first, last)) this.dismissSelection();
     });
     list.onShifted(() => { this.mark.reposition(); });
     list.onUserScroll(() => {
@@ -104,7 +106,8 @@ export class TerminalView {
 
   /** The ranges the row list must not drop rows under. */
   heldRanges(): Range[] {
-    return [this.page.current(), this.mark.range()].filter((range) => range !== null);
+    const range = this.selection.range();
+    return range ? [range] : [];
   }
 
   /** The row list moved onto or off the newest line: the jump-to-latest control follows. */
@@ -139,22 +142,20 @@ export class TerminalView {
     this.wheel.stop();
   }
 
-  /** The page selection's text, soft wraps joined; empty with none. */
-  pageText(): string {
-    return this.page.text();
+  /** The selection's text, soft wraps joined; empty with none. */
+  selectionText(): string {
+    return this.selection.text();
   }
 
-  /** Closes the mark and returns its logical text: the edit menu's Copy. */
+  /** Closes the selection and returns its text: the edit menu's Copy. */
   takeSelection(): string {
-    const text = this.mark.text();
-    this.mark.clear();
+    const text = this.selection.text();
+    this.selection.clear();
     return text;
   }
 
-  /** Closes whichever selection is up: the page's, or the mark. */
   dismissSelection(): void {
-    this.page.clear();
-    this.mark.clear();
+    this.selection.clear();
   }
 
   private send(events: InputEvent[]): void {

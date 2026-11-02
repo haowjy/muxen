@@ -51,7 +51,7 @@ The Terminal destination. The design is client-architecture.md §5.4, §5.5, §5
   answers `/auth/info` and why the daemon runs with `--allow-login`. `pnpm e2e:real` runs it.
 - **Touch looking is one object per shown tab: `view.ts`.** `TerminalView` builds the recognizer
   shell (`touchControl.ts`), `pinnedWheel.ts` (a full-screen or mouse-mode app's swipe as wheel events or
-  arrows), the selection (`selection/`: the page's, and the mark) and, for desktop's xterm view only,
+  arrows), the selection (`selection/`: the browser's or the mark) and, for desktop's xterm view only,
   `scroll.ts` (the wheel past xterm's top onto the history rows) with `history.ts` (tmux's older rows as DOM,
   chunked with a run of overlap rows that the chunk is searched for, `anchor.ts`). `Terminals` tells it the
   shown tab; a tab change, a snapshot, `visibilitychange` and a lost touch all end in `reset()`, and its
@@ -67,8 +67,10 @@ The Terminal destination. The design is client-architecture.md §5.4, §5.5, §5
   once and redrawn only when its text changes, so a selection sits on rows that stay put; the rows it rewrites
   are reported (`onRewritten`) and the view closes a selection or mark between them (J7). Colours are the global
   `--term-*` variables, which follow the scheme. The host is selectable (`Terminal.module.css`, off for
-  `data-direct-input="xterm"`), the long press is WebKit's and the selection is the page's
-  (`selection/pageSelection.ts` reads, joins and clears it). `touchControl.ts` listens to touch events only:
+  `data-direct-input="xterm"`). The selection is one of two, picked once by `TerminalView` (`selection/selection.ts`):
+  in a browser the long press is WebKit's and the selection the page's (`selection/pageSelection.ts` reads and
+  clears it); in the app it is the mark (`selection/mark.ts`). `selection/rowRanges.ts` holds the range geometry
+  both use. `touchControl.ts` listens to touch events only:
   `touchstart` is never cancelled, `touchmove` only for the mark and a pinned terminal's swipe
   (`pinnedWheel.ts`: wheel events or arrows), `touchend` is for a tap, a touch on a live selection or on the
   mark's handles is not the recognizer's, a tap elsewhere only clears it, and mouse events stop at the host for
