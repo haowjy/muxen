@@ -6,7 +6,6 @@ import type { AppController } from "../../../app/controller";
 import { checkEdit, initialDrafts, pendingKey, reduce, type DraftsEffect, type DraftsEvent, type DraftsState, type EditResult } from "../../../drafts/state";
 import type { PasteResult } from "../../../net/host";
 import type { DraftRecord, TabKey } from "../../../platform/types";
-import { tabId } from "../../../platform/tabKey";
 import { Store } from "../../../ui/store";
 import { terminalsOf } from "../terminals";
 import { allTabs, type TerminalTab } from "../../../workspace/state";
@@ -70,17 +69,7 @@ export class LineDrafts extends Store<DraftsState> {
 
   /** The user edited the field. A refused edit changes nothing; the caller puts the field back and says why. */
   edit(key: TabKey, text: string): EditResult {
-    return this.editWithOpenTabs(key, text, this.openTabs());
-  }
-
-  /** A native edit can arrive after its tab closed; protect that just-edited draft from eviction. */
-  editNative(key: TabKey, text: string): EditResult {
-    const open = new Set(this.openTabs());
-    open.add(tabId(key));
-    return this.editWithOpenTabs(key, text, open);
-  }
-
-  private editWithOpenTabs(key: TabKey, text: string, open: ReadonlySet<string>): EditResult {
+    const open = this.openTabs();
     const result = checkEdit(this.snapshot, key, text, open);
     if (result !== "ok") return result;
     this.dispatch({ type: "edit", key, text, now: Date.now(), open });

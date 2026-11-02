@@ -6,15 +6,14 @@ public enum BridgeDirection: String, Codable, Sendable {
 }
 
 public enum BridgeMessageType: String, CaseIterable, Codable, Sendable {
-    case ready, socket, hostRejected, recreateWebView, saveWorkspace, focus, activeTab
-    case lineSet, lineCaret, lineCaretStep, lineInsert, lineSubmit, lineSelectAll, modifiers, lineEdit, lineReturn
+    case ready, socket, hostRejected, recreateWebView, saveWorkspace
     case draftGet, draftPut, draftDelete, draftList, copy, readPasteboard, pasteInto, haptic
     case pickMedia, playVideo, manageHosts, setPreference, openURL, backSwipe, editMenu, ack
-    case input, viewport, lifecycle, hosts, upload, menuCopy, menuPaste
+    case viewport, lifecycle, hosts, upload, menuCopy, menuPaste
 
     public var direction: BridgeDirection {
         switch self {
-        case .input, .lineEdit, .lineReturn, .viewport, .lifecycle, .hosts, .upload, .menuCopy, .menuPaste: .nativeToWeb
+        case .viewport, .lifecycle, .hosts, .upload, .menuCopy, .menuPaste: .nativeToWeb
         default: .webToNative
         }
     }
@@ -28,16 +27,6 @@ public enum BridgeMessageType: String, CaseIterable, Codable, Sendable {
         case .socket: ["host"]
         case .hostRejected: ["host", "token"]
         case .saveWorkspace: ["workspace"]
-        case .focus: ["mode"]
-        case .activeTab: ["tab"]
-        case .lineSet: ["text", "caret", "tab"]
-        case .lineCaret: ["index"]
-        case .lineCaretStep: ["step"]
-        case .lineInsert: ["text"]
-        case .lineSubmit, .lineSelectAll: []
-        case .modifiers: ["armed"]
-        case .lineEdit: ["gen", "text", "tab", "selection", "marked"]
-        case .lineReturn: ["gen", "text", "tab"]
         case .draftGet, .draftDelete: ["key"]
         case .readPasteboard: ["tab", "id"]
         case .pasteInto: ["host", "id", "dir"]
@@ -48,7 +37,6 @@ public enum BridgeMessageType: String, CaseIterable, Codable, Sendable {
         case .playVideo: ["host", "path"]
         case .openURL: ["url"]
         case .ack: ["id"]
-        case .input: ["tab", "events"]
         case .viewport: ["viewport"]
         case .lifecycle: ["lifecycle"]
         case .hosts: ["hosts"]

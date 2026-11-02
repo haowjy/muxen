@@ -29,7 +29,6 @@ struct AddHostRequest: Identifiable {
 @MainActor
 final class MuxenAppModel: ObservableObject {
     private static let preferencesKey = "muxen.preferences"
-    private static let webKeyboardKey = "muxen.webKeyboard"
 
     @Published private(set) var hosts: [HostEntry]
     @Published private(set) var isLocked: Bool
@@ -37,15 +36,6 @@ final class MuxenAppModel: ObservableObject {
     @Published private(set) var preferences: Preferences
     @Published private(set) var pendingAddRequest: AddHostRequest?
     @Published var showingServers = false
-    /// Test switch: the page's own text boxes hold the keyboard, as in phone Safari, instead of the native field.
-    /// Read when the web view is made; flipping it makes a new one.
-    @Published var webKeyboard: Bool {
-        didSet {
-            guard webKeyboard != oldValue else { return }
-            defaults.set(webKeyboard, forKey: Self.webKeyboardKey)
-            shell?.webKeyboardChanged()
-        }
-    }
     @Published var errorMessage: String?
 
     let hostStore = HostStore()
@@ -77,7 +67,6 @@ final class MuxenAppModel: ObservableObject {
 
     init() {
         preferences = Preferences.restore(from: defaults.data(forKey: Self.preferencesKey))
-        webKeyboard = defaults.bool(forKey: Self.webKeyboardKey)
         let storedHosts = hostStore.load()
         hosts = storedHosts
         let expectsTokenItem = defaults.object(forKey: expectedTokenItemKey) as? Bool ?? !storedHosts.isEmpty
@@ -110,8 +99,8 @@ final class MuxenAppModel: ObservableObject {
         controller.coverNativeScreen(isLocked || covered)
     }
 
-    func boot(viewport: Viewport, focusMode: FocusMode, lineSnapshot: NativeLineSnapshot?) -> Boot {
-        Boot(hosts: platformHosts, workspace: loadWorkspace(), viewport: viewport, preferences: preferences, lifecycle: lifecycle, focusMode: focusMode, lineSnapshot: lineSnapshot)
+    func boot(viewport: Viewport) -> Boot {
+        Boot(hosts: platformHosts, workspace: loadWorkspace(), viewport: viewport, preferences: preferences, lifecycle: lifecycle)
     }
 
     /// One choice from the web's Settings. The reply is every preference, so the web shows what native holds.
@@ -336,7 +325,6 @@ final class MuxenAppModel: ObservableObject {
                 shouldAutoUnlock = true
             }
             backgroundHadTokens = false
-            shell?.restoreFocus()
             publishLifecycle()
             if isLocked && shouldAutoUnlock {
                 shouldAutoUnlock = false

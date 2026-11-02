@@ -150,8 +150,8 @@ stopped daemon is explained. Returning from the background keeps the screen the 
 
 ## Tab row
 
-The tab row holds ‹ (Home), the workspace's tabs as pills in workspace order, All tabs (the tab list),
-and +; on the phone,
+The tab row holds ‹ (Home), the workspace's tabs as pills in workspace order, +,
+and All tabs (the tab list); on the phone,
 Show keyboard ends it while the keyboard is down. Every pill is filled; the active one is tinted with its
 status colour, its label and its circled × in that colour; other pills have a muted label and the
 attention dot when they have one (Jimmy, 2026-10-30, after Termius's tabs).
@@ -360,11 +360,9 @@ input.
 - **Compose box.** The line field is one logical line, placeholder “Type or dictate a
   line”, wrapping and growing from one to five visual lines, then scrolling inside.
   It remains visible while typing to tmux, idle without a caret; tapping it gives the
-  keyboard to the line. Browser/PWA uses a textarea; the app uses a native editor with
-  a web `LineMirror`, autocorrect, capitalization, spell checking, smart punctuation
-  and inline prediction disabled. The mirror draws caret, selection and marked
-  composition; tapping places the caret, the spacebar is a trackpad, and long press
-  offers Paste / Select all / Clear (no selection handles). Return or Send sends the
+  keyboard to the line. It is a textarea in the browser, the PWA and the app alike, with
+  autocorrect, capitalization, spell checking and smart punctuation off. Return (the
+  key reads "return") or Send sends the
   text then Enter to the active tab's shown window, clears it and keeps focus in the
   box. Empty Return sends Enter. An undelivered line returns with its reason; a
   disconnected tab keeps the draft and says “Not connected”. Each tab's draft survives
@@ -391,19 +389,17 @@ input.
 - **Focus cues.** Terminal target: solid terminal cursor; the idle box has no caret and
   shows its draft or placeholder. Line target: box ring and caret, visible Send, hollow
   terminal cursor, and Return labelled Send. There is exactly one active typing cursor.
-- **Terminal taps.** A tap on the terminal never raises or lowers the keyboard; the key
-  row's toggle does. It sends a click when the application asked for mouse reporting, moves
-  the prompt cursor on an OSC 133 input row only while terminal input already owns the
-  keyboard, and otherwise does nothing apart from closing a selection
+- **Terminal taps.** A tap on the terminal raises the keyboard: terminal input takes it,
+  from the box too, and the key row's toggle lowers it. In an application that asked for mouse
+  reporting the tap is a click and raises nothing. With terminal input already holding the
+  keyboard, a tap on an OSC 133 input row moves the prompt cursor. With a selection or mark up,
+  a tap elsewhere closes it and raises nothing
   ([terminal-interaction-design.md](terminal-interaction-design.md), "One gesture owner").
-  The app's native input keeps a rule of its own: with the box owning typing,
-  a tap gives typing back to the terminal, and with the keyboard down a tap on or beside the
-  cursor's row raises terminal input. Scroll and selection do not toggle the keyboard
-  (it is sticky, above).
+  The focus is made in the tap's own `touchend`, since iOS raises the keyboard only for a focus
+  made in the gesture. Scroll and selection do not toggle the keyboard (it is sticky, above).
 - **Safari's form accessory bar.** The phone browser/PWA may put its own ⌃ ⌄ Done bar
   between muxen's key row and the keyboard; the page cannot remove it. Done lowers the
-  keyboard and the toggle follows. The native terminal/line responder is not a WebKit
-  field; WebKit-owned sheet fields retain their ordinary form bar.
+  keyboard and the toggle follows. The app hides the bar (`WebKitAccessoryBar`).
 
 ## File upload and path insertion
 
@@ -415,7 +411,7 @@ When there is no eligible terminal tab, insertion is disabled with “Open a ter
 
 A Files tab showing a folder has a **Paste** button in its header, next to Upload. It reads the clipboard inside the tap (the app through `pasteInto`; a browser through the async Clipboard API, where it is allowed) and creates a new file in that folder: an image as a file named like any upload (`YYYYMMDD-HHMMSSZ-xxxx.<ext>`; the app re-encodes HEIC to JPEG as for a photo), text as `pasted-YYYYMMDD-HHMMSSZ.txt` holding exactly the text. On a desktop, Cmd/Ctrl-V does the same with the clipboard the paste event carries, whenever the folder is showing and no text box has focus (the path field keeps its own paste). A name is never reused: a clash gets `-2`, `-3`. The upload goes to the folder the tab shows, by its canonical path, through the same pipeline, limits and errors as an upload (unwritable folder, `memory_backed`, `too_large`, `busy`): a failure is a notice and leaves nothing behind. While it runs a notice says "Pasting…", then "Pasted <name>" (or "Couldn't paste: <reason>"; "Nothing to paste" for an empty clipboard). The listing reloads, and the new row is marked selected and scrolled into view, if it is in the pages loaded (a folder of more than 200 entries may sort it below them). The path is typed nowhere and no Insert path offer is made: Insert path on the file's preview stays the way to use it. The marking goes away on any navigation or refresh.
 
-Browser image paste into a focused terminal follows the same upload pipeline. Capture the exact target tab and the window it shows at paste start, upload supported image bytes into the configured uploads folder, then insert the quoted absolute canonical path into that same window through that tab, without Enter, even if the tab has since followed its session to another window. If the target is gone or disconnected when upload completes, keep the uploaded file available in Files and report the insertion failure; never redirect to a different active tab. Ordinary text paste remains terminal paste. Clipboard access depends on a user paste gesture and browser capabilities; unsupported image clipboard access gets an explanation and the Files upload route. This preserves the photo-paste MVP; actual clipboard handling remains a real-browser verification gate, not simulated by this mockup.
+Browser image paste into a focused terminal follows the same upload pipeline. Capture the exact target tab and the window it shows at paste start, upload supported image bytes into the configured uploads folder, then insert the quoted absolute canonical path into that same window through that tab, without Enter, even if the tab has since followed its session to another window. If the target is gone or disconnected when upload completes, keep the uploaded file available in Files and report the insertion failure; never redirect to a different active tab. Ordinary text paste remains terminal paste. In the app the page cannot upload a `File`: a paste event that carries an image (the line box's or the terminal input's) makes the page read the pasteboard through native instead (`readPasteboard`), the route the mark's Paste uses, so every image paste in the app is one path. Clipboard access depends on a user paste gesture and browser capabilities; unsupported image clipboard access gets an explanation and the Files upload route. This preserves the photo-paste MVP; actual clipboard handling remains a real-browser verification gate, not simulated by this mockup.
 
 ## Offline and updates
 

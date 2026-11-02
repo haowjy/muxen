@@ -6,28 +6,21 @@ import UIKit
 import WebKit
 
 @MainActor
-final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandlerWithReply, KeyboardInputDelegate, PHPickerViewControllerDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandlerWithReply, PHPickerViewControllerDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
     private let model: MuxenAppModel
     private let schemeHandler: AppSchemeHandler
     private let haptics = Haptics()
     private let uploader = Uploader()
-    private let terminalInput = KeyboardInput(frame: .zero)
-    private var focus: FocusController!
     private var webView: MuxenWebView!
     private var webViewConstraints: [NSLayoutConstraint] = []
     /// How much of the web view's bottom a docked keyboard covers, and how long it takes to get there.
     private var keyboardCover: (height: CGFloat, duration: Double) = (0, 0)
-    private var pendingKeyboardCover: DispatchWorkItem?
-    private var pendingInput: [InputEvent] = []
-    private var inputFlushQueued = false
-    private var lineReceiverReady = false
-    private var activeTab: TabKey?
     /// WebKit's left-edge back swipe pops the page's history, which is every Back in the web app. The page turns it
     /// off on a bare terminal tab. It starts off, and a new document starts off again, until the page has rendered a screen.
     private var backSwipe = false { didSet { webView?.allowsBackForwardNavigationGestures = backSwipe } }
     private var lastViewport: Viewport?
     private var pendingPick: PendingPick?
-    /// Web keyboard switch only: keeps the page's scroll offset at zero, and answers WebKit's "may this focus raise the keyboard".
+    /// Keeps the page's scroll offset at zero, and answers WebKit's "may this focus raise the keyboard".
     private var scrollGuard: NSKeyValueObservation?
     private let inputPolicy = AllowFocusPolicy()
     private lazy var messageHandlerProxy = WeakScriptMessageHandler(target: self)
@@ -49,23 +42,11 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         // A change of the effective appearance (the user's choice, or the system's under System) is a new scheme for the web.
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (self: Self, _) in self.publishViewportIfChanged() }
 
-        terminalInput.output = self
-        view.addSubview(terminalInput)
-        focus = FocusController(input: terminalInput)
-
-        terminalInput.translatesAutoresizingMaskIntoConstraints = false
         webViewConstraints = constraints(for: webView)
-        NSLayoutConstraint.activate(webViewConstraints + [
-            terminalInput.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            terminalInput.topAnchor.constraint(equalTo: view.topAnchor),
-            terminalInput.widthAnchor.constraint(equalToConstant: 0),
-            terminalInput.heightAnchor.constraint(equalToConstant: 0),
-        ])
+        NSLayoutConstraint.activate(webViewConstraints)
 
         NotificationCenter.default.addObserver(self, selector: #selector(keyboardWillChange(_:)), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(keyboardWillHide(_:)), name: UIResponder.keyboardWillHideNotification, object: nil)
-        focus.setWebKeyboard(model.webKeyboard)
-        focus.set(.hidden)
         model.attach(self)
         loadUI()
     }
@@ -95,8 +76,7 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         lockZoom()
-        if model.webKeyboard { WebKitAccessoryBar.hide(in: self.webView) }
-        focus.restoreAfterInterruption()
+        WebKitAccessoryBar.hide(in: self.webView)
     }
 
     deinit { NotificationCenter.default.removeObserver(self) }
@@ -132,26 +112,14 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         }
     }
 
+    /// A native screen over the page (lock, server list, Face ID) takes the keyboard down.
     func coverNativeScreen(_ covered: Bool) {
-        focus.coverNativeScreen(covered)
         if covered { view.endEditing(true) }
-    }
-
-    func restoreFocus() { focus.restoreAfterInterruption() }
-
-    /// The web keyboard switch flipped: the field takes or gives up the keyboard, and a new web view reports the other input.
-    func webKeyboardChanged() {
-        guard isViewLoaded else { return }
-        focus.setWebKeyboard(model.webKeyboard)
-        lastViewport = nil
-        recreateWebView()
     }
 
     func send(_ event: NativeEvent) {
         do {
             switch event {
-            case .input(let tab, let events):
-                send(.input, fields: ["tab": try .encode(tab), "events": try .encode(events)])
             case .viewport(let viewport):
                 send(.viewport, fields: ["viewport": try .encode(viewport)])
             case .lifecycle(let lifecycle):
@@ -167,37 +135,6 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
             }
         } catch {
             assertionFailure("Native bridge event is not JSON encodable: \(error)")
-        }
-    }
-
-    func keyboardInput(_ event: InputEvent) {
-        pendingInput.append(event)
-        guard !inputFlushQueued else { return }
-        inputFlushQueued = true
-        DispatchQueue.main.async { [weak self] in self?.flushInput() }
-    }
-
-    func keyboardInputWarning() { haptics.send("warning") }
-
-    func keyboardInputLineEdit(gen: Int, text: String, tab: TabKey, selection: NSRange, marked: NSRange?) {
-        guard focus.mode == .line, !focus.covered, !model.isLocked else { return }
-        flushInput()
-        sendLineEdit(gen: gen, text: text, tab: tab, selection: selection, marked: marked)
-    }
-
-    func keyboardInputLineReturn(gen: Int, text: String, tab: TabKey) -> Bool {
-        guard lineReceiverReady, focus.mode == .line, !focus.covered, !model.isLocked else { return false }
-        flushInput()
-        do {
-            send(.lineReturn, fields: [
-                "gen": .number(Double(gen)),
-                "text": .string(text),
-                "tab": try .encode(tab),
-            ])
-            return true
-        } catch {
-            assertionFailure("Native line return target is not JSON encodable: \(error)")
-            return false
         }
     }
 
@@ -255,7 +192,6 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { recreateWebView() }
 
     private func loadUI(fragment: String? = nil) {
-        lineReceiverReady = false
         var components = URLComponents()
         components.scheme = "muxen-app"
         components.host = "ui"
@@ -266,7 +202,6 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
     }
 
     private func recreateWebView() {
-        lineReceiverReady = false
         backSwipe = false
         let previous = webView!
         let fragment = previous.url?.fragment
@@ -288,7 +223,7 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         // Apple Intelligence put its Writing Tools button over muxen's Copy and Paste on a terminal selection.
         // muxen's text is a terminal and a few short fields, none of them prose.
         if #available(iOS 18.0, *) { configuration.writingToolsBehavior = .none }
-        if model.webKeyboard { configuration.allowsInlinePredictions = false }
+        configuration.allowsInlinePredictions = false
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         configuration.userContentController.addScriptMessageHandler(messageHandlerProxy, contentWorld: .page, name: "muxen")
 
@@ -313,12 +248,12 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         result.isInspectable = true
         #endif
         view.addSubview(result)
-        if model.webKeyboard { installWebKeyboard(on: result) }
+        installKeyboardHooks(on: result)
         return result
     }
 
-    /// The page's text boxes hold the keyboard (web keyboard switch). Page-side, nothing changes from phone Safari.
-    private func installWebKeyboard(on result: MuxenWebView) {
+    /// The page's text boxes hold the keyboard, as in phone Safari; these hooks cover what only the host can.
+    private func installKeyboardHooks(on result: MuxenWebView) {
         // WebKit raises the keyboard for a script's `focus()` only inside a tap; this lets the page do it
         // after unlock or a web view restart. Private API: if the property is gone, the keyboard stays down then.
         if result.responds(to: NSSelectorFromString("_setInputDelegate:")) {
@@ -349,11 +284,7 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         do {
             switch request.type {
             case .ready:
-                let focusMode = focus.modeForWeb
-                let lineSnapshot = focusMode == .line ? terminalInput.lineSnapshot() : nil
-                let boot = try jsonObject(model.boot(viewport: viewport(), focusMode: focusMode, lineSnapshot: lineSnapshot))
-                lineReceiverReady = true
-                reply(boot, nil)
+                reply(try jsonObject(model.boot(viewport: viewport())), nil)
             case .socket:
                 let host: String = try request.field("host")
                 reply(try jsonObject(model.socket(for: host)), nil)
@@ -363,21 +294,10 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
                 model.rejectedToken(for: host, token: token)
                 reply(NSNull(), nil)
             case .recreateWebView:
-                lineReceiverReady = false
                 reply(NSNull(), nil)
                 DispatchQueue.main.async { [weak self] in self?.recreateWebView() }
             case .saveWorkspace:
                 model.saveWorkspace(try request.field("workspace"))
-                reply(NSNull(), nil)
-            case .focus:
-                let mode: String = try request.field("mode")
-                guard let next = FocusController.Mode(rawValue: mode) else { throw BridgeError.malformed }
-                focus.set(next)
-                reply(NSNull(), nil)
-            case .activeTab:
-                let tab: JSONValue = try request.field("tab")
-                if case .null = tab { activeTab = nil }
-                else { activeTab = try tab.decode(TabKey.self) }
                 reply(NSNull(), nil)
             case .backSwipe:
                 backSwipe = try request.field("enabled")
@@ -399,39 +319,6 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
                 Task { @MainActor in
                     do { reply(try jsonObject(try await model.setPreference(name, to: value)), nil) } catch { reply(nil, "native request failed") }
                 }
-            case .lineSet:
-                let text: String = try request.field("text")
-                let caret: Int = try request.field("caret")
-                let tab: TabKey = try request.field("tab")
-                let snapshot = terminalInput.setLine(text: text, caret: caret, tab: tab)
-                reply(try jsonObject(snapshot.gen), nil)
-            case .lineCaret:
-                terminalInput.setLineCaret(try request.field("index"))
-                reply(NSNull(), nil)
-            case .lineCaretStep:
-                let step: Int = try request.field("step")
-                guard step == -1 || step == 1 else { throw BridgeError.malformed }
-                terminalInput.stepLineCaret(step)
-                reply(NSNull(), nil)
-            case .lineInsert:
-                let text: String = try request.field("text")
-                guard !text.contains(where: { $0.isNewline }) else { throw BridgeError.malformed }
-                terminalInput.insertLine(text)
-                reply(NSNull(), nil)
-            case .lineSubmit:
-                terminalInput.submitLine()
-                reply(NSNull(), nil)
-            case .lineSelectAll:
-                terminalInput.selectAllLine()
-                reply(NSNull(), nil)
-            case .modifiers:
-                let value: JSONValue = try request.field("armed")
-                let armed: String?
-                if case .null = value { armed = nil }
-                else if case .string(let name) = value, name == "ctrl" || name == "alt" { armed = name }
-                else { throw BridgeError.malformed }
-                terminalInput.setArmedModifier(armed)
-                reply(NSNull(), nil)
             case .draftGet:
                 reply(try jsonObject(model.drafts.get(request.field("key"))), nil)
             case .draftPut:
@@ -473,7 +360,7 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
                 reply(NSNull(), nil)
             case .ack:
                 reply(NSNull(), nil)
-            case .input, .lineEdit, .lineReturn, .viewport, .lifecycle, .hosts, .upload, .menuCopy, .menuPaste:
+            case .viewport, .lifecycle, .hosts, .upload, .menuCopy, .menuPaste:
                 throw BridgeError.malformed
             }
         } catch {
@@ -614,31 +501,6 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         return thumbnail.jpegData(compressionQuality: 0.9)
     }
 
-    private func flushInput() {
-        inputFlushQueued = false
-        let events = pendingInput
-        pendingInput.removeAll(keepingCapacity: true)
-        guard !events.isEmpty, !model.isLocked, !focus.covered, let activeTab else { return }
-        send(.input(tab: activeTab, events: events))
-    }
-
-    private func sendLineEdit(gen: Int, text: String, tab: TabKey, selection: NSRange, marked: NSRange?) {
-        let range = { (value: NSRange) in
-            JSONValue.object(["start": .number(Double(value.location)), "end": .number(Double(NSMaxRange(value)))])
-        }
-        do {
-            send(.lineEdit, fields: [
-                "gen": .number(Double(gen)),
-                "text": .string(text),
-                "tab": try .encode(tab),
-                "selection": range(selection),
-                "marked": marked.map(range) ?? .null,
-            ])
-        } catch {
-            assertionFailure("Native line edit target is not JSON encodable: \(error)")
-        }
-    }
-
     private func publishViewportIfChanged(force: Bool = false) {
         guard isViewLoaded else { return }
         let next = viewport()
@@ -662,7 +524,6 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         return Viewport(
             layout: min(width, stable) < 600 ? "phone" : "desktop",
             density: "touch",
-            directInput: model.webKeyboard ? "owned" : "native",
             scheme: traitCollection.userInterfaceStyle == .dark ? "dark" : "light",
             width: width,
             stableHeight: stable,
@@ -681,43 +542,22 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
               let screenFrame = info[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
         let frame = view.convert(screenFrame, from: nil)
         let docked = frame.maxY >= view.bounds.maxY - 1 && frame.minY < view.bounds.maxY
-        // `hidden` holds the field with an empty input view, so no keyboard covers anything.
-        let height = docked && focus.mode != .hidden ? view.bounds.maxY - frame.minY : 0
+        let height = docked ? view.bounds.maxY - frame.minY : 0
         setKeyboardCover(height, duration: info[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0)
     }
 
     @objc private func keyboardWillHide(_ notification: Notification) {
-        focus.systemKeyboardDidHide()
         setKeyboardCover(0, duration: notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0)
     }
 
     /// The page hears where the keyboard is going and how long it has left to get there.
-    ///
-    /// Sent at once when the native field owns the keyboard (`terminal`, `line`) or the keyboard is going
-    /// down: anything later and the keyboard visibly leads the dock. A keyboard coming up for anyone else is
-    /// held for `keyboardSettle` first. Handing first responder from the native field to WebKit with no
-    /// keyboard wanted (a tab switch to Files) posts a full-height frame and a zero one 20 to 50 ms later,
-    /// and no keyboard shows; sending both lurched the page up and back. The zero one cancels the held one.
     private func setKeyboardCover(_ height: CGFloat, duration: Double) {
-        pendingKeyboardCover?.cancel()
-        pendingKeyboardCover = nil
         let posted = CACurrentMediaTime()
-        let apply = { [weak self] in
-            guard let self, height != self.keyboardCover.height else { return }
-            self.keyboardCover = (height, max(0, duration - (CACurrentMediaTime() - posted)))
-            self.publishViewportIfChanged()
-            self.keyboardCover.duration = 0
-        }
-        if height == 0 || focus.mode == .terminal || focus.mode == .line || focus.webKeyboard {
-            apply()
-            return
-        }
-        let held = DispatchWorkItem(block: apply)
-        pendingKeyboardCover = held
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.keyboardSettle, execute: held)
+        guard height != keyboardCover.height else { return }
+        keyboardCover = (height, max(0, duration - (CACurrentMediaTime() - posted)))
+        publishViewportIfChanged()
+        keyboardCover.duration = 0
     }
-
-    private static let keyboardSettle: TimeInterval = 0.06
 
     private func jsonObject<T: Encodable>(_ value: T) throws -> Any {
         let data = try JSONEncoder().encode(value)
@@ -767,7 +607,6 @@ private struct PendingPick {
 }
 
 enum NativeEvent {
-    case input(tab: TabKey, events: [InputEvent])
     case viewport(Viewport)
     case lifecycle(Lifecycle)
     case hosts([PlatformHost])

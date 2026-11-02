@@ -6,7 +6,6 @@
 // direct input, and (in `Pastes`) paste.
 import type { AppController } from "../../app/controller";
 import type { HostClient } from "../../net/hosts";
-import { tabId } from "../../platform/tabKey";
 import type { InputEvent, TextSize, Viewport } from "../../platform/types";
 import { acceptsInsert, type ConnectionState } from "../../tabs/connection";
 import { TabDriver } from "../../tabs/driver";
@@ -21,8 +20,6 @@ import { Store } from "../../ui/store";
 import { terminalTheme } from "../../ui/theme";
 import { activeTab, allTabs, screenOf, shownTab, terminalTabOf } from "../../workspace/state";
 import { failureText } from "../sessions/createSession";
-import type { LineEditor } from "./dock/lineEditor";
-import { nativeLineEditor } from "./dock/lineEditor";
 import { interceptClipboard, Pastes } from "./paste";
 import styles from "./Terminal.module.css";
 import { RowList } from "./rowList";
@@ -104,7 +101,7 @@ export class Terminals extends Store<TerminalsView> {
   /** Keys typed for one tab and one window, which is the window the tab showed when they were typed. */
   private batch: { id: string; window: number | null; events: InputEvent[] } | null = null;
   private batchTimer: ReturnType<typeof setTimeout> | undefined;
-  /** muxen's own input on a phone browser; created the first time it is needed. */
+  /** muxen's own input on a phone; created the first time it is needed. */
   private owned: HTMLTextAreaElement | null = null;
   /** What remains visible above the keyboard, for the row list; null is all of it. */
   private visible: number | null = null;
@@ -118,8 +115,8 @@ export class Terminals extends Store<TerminalsView> {
   readonly pastes: Pastes;
   /** The armed ctrl or alt of the touch sources; it types through this surface. */
   readonly modifiers = new ArmedModifiers((events) => { this.type(events); });
-  /** The browser's compose-box editor, set by the mounted LineField; the app's is native. */
-  browserLine: LineEditor | null = null;
+  /** What the key row does to the compose box, set by the mounted LineField. */
+  lineEditor: { insert: (text: string) => void; step: (step: -1 | 1) => void } | null = null;
 
   constructor(private readonly app: AppController) {
     super({ tabs: {}, ready: false, scrolled: false });
@@ -159,9 +156,9 @@ export class Terminals extends Store<TerminalsView> {
       haptic: (kind) => { this.app.platform.haptic(kind); },
       editMenu: () => this.app.platform.editMenu,
       directInput: () => this.viewport.directInput,
-      focusTerminal: () => { this.app.focus.focusTarget("terminal", true); },
       prompt: () => this.promptLine,
       owner: () => this.app.focus.snapshot.owner,
+      raiseKeyboard: () => { this.app.focus.focusTarget("terminal", true); },
       onScrolled: (scrolled) => { this.update({ scrolled }); },
     });
     new ResizeObserver(() => { this.measure(); }).observe(this.element);
@@ -171,26 +168,13 @@ export class Terminals extends Store<TerminalsView> {
       // The app's edit menu over the mark.
       if (event.type === "menuCopy") this.pastes.copySelection();
       if (event.type === "menuPaste") this.pastes.pasteFromMenu();
-      // Native's responder: only the tab on screen still takes input.
-      if (event.type !== "input") return;
-      const id = tabId(event.tab);
-      if (id !== this.shownTerminalTab()) return;
-      if (this.viewport.directInput === "native") {
-        const line = this.app.focus.snapshot.owner === "line";
-        for (const input of event.events) {
-          // While the box owns typing, a character or key goes by the same rule as the key row's.
-          const key = "text" in input ? { text: input.text } : "key" in input ? { name: input.key } : null;
-          if (!line || !key) this.modifiers.input([input]);
-          else this.key(key);
-        }
-      } else this.drivers.get(id)?.input(event.events);
     });
     this.sizer.setViewport(this.viewport);
     this.sync();
   }
 
   /**
-   * A key from the key row, a hardware key or the native field while the dock holds the keyboard:
+   * A key from the key row, or a hardware key while the dock holds the keyboard:
    * route it against the live owner and armed state, then carry out the route (`ArmedModifiers.route`
    * sends the terminal ones).
    */
@@ -203,9 +187,8 @@ export class Terminals extends Store<TerminalsView> {
       return;
     }
     if (route.to === "terminal") return;
-    const editor = this.viewport.directInput === "native" ? nativeLineEditor(this.app.platform) : this.browserLine;
-    if (route.to === "line") editor?.insert(route.text);
-    else editor?.step(route.step);
+    if (route.to === "line") this.lineEditor?.insert(route.text);
+    else this.lineEditor?.step(route.step);
   }
 
   /** Places the surface in `slot`. The renderer is created once the surface has a size. */
@@ -552,7 +535,7 @@ export class Terminals extends Store<TerminalsView> {
     requestAnimationFrame(() => { this.measure(); });
   }
 
-  /** Desktop direct input is xterm's own textarea, held by the focus controller; a phone browser's is muxen's owned input; native brings its own. */
+  /** Desktop direct input is xterm's own textarea, held by the focus controller; a phone's is muxen's owned input. */
   private applyInput(): void {
     if (!this.surface) return;
     this.showView();
@@ -577,14 +560,14 @@ export class Terminals extends Store<TerminalsView> {
         : null,
     );
     if (this.registered) this.app.focus.withdraw("terminal", this.registered);
-    // Where muxen's own input (or native's) takes the keyboard, xterm's helper textarea is inert: out of the accessibility tree, so VoiceOver cannot land on it.
+    // Where muxen's own input takes the keyboard, xterm's helper textarea is inert: out of the accessibility tree, so VoiceOver cannot land on it.
     const helper = renderer?.inputElement();
     if (xterm) helper?.removeAttribute("aria-hidden");
     else helper?.setAttribute("aria-hidden", "true");
-    // On a phone browser the keys beside the text (below) go to tmux from here.
-    if (directInput === "owned") document.addEventListener("keydown", this.hardwareKey);
-    else document.removeEventListener("keydown", this.hardwareKey);
-    this.registered = xterm ? renderer?.inputElement() ?? null : directInput === "owned" ? this.ownedInput() : this.app.focus.nativeTerminal();
+    // On a phone the keys beside the text (below) go to tmux from here.
+    if (xterm) document.removeEventListener("keydown", this.hardwareKey);
+    else document.addEventListener("keydown", this.hardwareKey);
+    this.registered = xterm ? renderer?.inputElement() ?? null : this.ownedInput();
     this.drawCursor();
     if (!this.registered) return;
     this.app.focus.register("terminal", this.registered);

@@ -59,8 +59,8 @@ The Terminal destination. The design is client-architecture.md §5.4, §5.5, §5
   "Shown" is one rule: selected and not covered by a native screen (`shownTerminalTab`); the view resets when
   it changes. Mouse input comes from `term/mouse.ts` (`mouseInput` holds the per-mode policy) with the
   encoding `term/xterm.ts` saw in DECSET.
-- **One view on touch, keyed on `directInput`.** Every input but desktop's `"xterm"` (the app's `"native"`,
-  phone Safari and the PWA's `"owned"`) draws with the row list (`rowList.ts`): one native scroller of rows
+- **One view on touch, keyed on `directInput`.** Every input but desktop's `"xterm"` (the app, phone Safari
+  and the PWA are all `"owned"`) draws with the row list (`rowList.ts`): one native scroller of rows
   muxen draws from the model's frames (`term/model.ts`), the lines that left the screen plus the screen as the
   newest rows. The browser scrolls it, coasts it and autoscrolls a selection; muxen writes `scrollTop` only to
   follow output at latest (`follow`), from `editAbove` and from the mark's edge autoscroll. A row is created
@@ -77,8 +77,7 @@ The Terminal destination. The design is client-architecture.md §5.4, §5.5, §5
   mark's handles is not the recognizer's, a tap elsewhere only clears it, and mouse events stop at the host for
   800 ms after a touch. Nothing on or above the host may set `user-select: none`, `touch-action: none` (the
   pinned list excepted) or `-webkit-touch-callout: none`, or cancel `touchstart`: the long press would never
-  begin. The app's mark needs no exception: the native field keeps first responder, so WebKit's long press selects
-  nothing there, and the rows must stay `user-select: text` because WebKit paints no CSS highlight on `none` text. A tap never moves focus, except native input's older rule (`tapAction`'s `raises`). The list fetches
+  begin. The app's mark is the exception, and the only one: `data-marking` (set where the platform has `editMenu`) makes the rows `user-select: none` and `-webkit-touch-callout: none`, or iOS's long press would start its own selection beside the mark, and the mark paints itself as boxes (`Mark.paintBoxes`), since WebKit paints no CSS highlight on `none` text. `Mark.caretAt` makes the scroller selectable just for `caretRangeFromPoint`, which finds nothing in `none` text. A tap on the terminal raises the keyboard (`TouchControl.tap`, inside the `touchend`), except in a mouse app and with a mark up. The list fetches
   tmux's older rows through `historyFetcher.ts`, the procedure `history.ts` also runs: when the view is
   within four screens of its oldest row (its scroll events, or a swipe beginning, since a list shorter than its
   box never scrolls), and only below the 10,000-row cap, while not pinned, with no chunk waiting to land

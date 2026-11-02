@@ -15,8 +15,6 @@ import { FocusController } from "./focus";
 import { ListingFetcher } from "./listing";
 import { Persist } from "./persist";
 import { browserHistory, enrolCodeFromHash, Router, type Entry, type Overlay } from "./router";
-import { lineDraftsOf } from "../screens/terminal/dock/lineDrafts";
-import { startNativeLine } from "../screens/terminal/dock/nativeLine";
 
 const NOTICE_MS = 5_000;
 /** The update check on becoming visible runs at most this often. */
@@ -66,15 +64,12 @@ export class AppController extends Store<AppView> {
   private lastUpdateCheck = 0;
   /** The listing surface on screen when the last listing was asked for; null when none is. */
   private listingSurface: ListingSurface | null = null;
-  /** The active tab native was last told: undefined until the first dispatch. */
-  private sentActive: string | null | undefined;
   /** The screen and overlay state the focus controller was last told. */
   private sentScreen: { screen: Screen; overlay: boolean } | null = null;
   private sentBackSwipe: boolean | undefined;
   static async start(platform: Platform, options: StartOptions = {}): Promise<AppController> {
     const boot = await platform.boot();
     const app = new AppController(platform, boot, options);
-    startNativeLine(app, lineDraftsOf(app), boot.lineSnapshot);
     app.startPlatformEvents();
     return app;
   }
@@ -113,10 +108,7 @@ export class AppController extends Store<AppView> {
     this.linkOfferPending = enrolCode !== null;
     this.applyViewport = options.applyViewport ?? (() => undefined);
     this.applyPreferences = options.applyPreferences ?? (() => undefined);
-    const initialOwner = boot.viewport.directInput === "native" && (boot.focusMode === "line" || boot.focusMode === "terminal")
-      ? boot.focusMode
-      : "none";
-    this.focus = new FocusController(platform.input, () => this.snapshot.viewport, initialOwner, boot.focusMode);
+    this.focus = new FocusController(() => this.snapshot.viewport);
     this.hosts = new HostRegistry({
       transport: platform.transport,
       onStuck: () => {
@@ -171,11 +163,6 @@ export class AppController extends Store<AppView> {
     const tab = activeTab(state);
     const { entry } = this.router;
     if (tab && entry.route === "tab" && entry.tab !== tab.id) this.router.switchTab(tab.id, tab.kind === "files" ? tab.place : null);
-    const active = tab?.id ?? null;
-    if (active !== this.sentActive) {
-      this.sentActive = active;
-      this.platform.input.setActiveTab(tab?.kind === "terminal" ? tab.key : null);
-    }
     this.syncScreen();
     for (const effect of effects) this.run(effect);
     this.syncListing();
@@ -232,7 +219,7 @@ export class AppController extends Store<AppView> {
     this.update({ notice: null });
   }
 
-  /** Native line delivery must have its app-started owner before other subscribers drain startup events. */
+  /** The platform's events reach the controller only once it is built. */
   private startPlatformEvents(): void {
     this.platform.subscribe((event) => { this.platformEvent(event); });
   }
@@ -381,10 +368,6 @@ export class AppController extends Store<AppView> {
       case "update":
         this.update({ update: event.state });
         break;
-      case "lineEdit":
-      case "lineReturn":
-        break; // The app-started native line owner subscribes directly to the platform.
-      case "input":
       case "draftChanged":
       case "menuCopy":
       case "menuPaste":

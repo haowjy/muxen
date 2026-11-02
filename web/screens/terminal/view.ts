@@ -32,12 +32,13 @@ interface ViewDeps {
   send(tab: string, events: InputEvent[]): void;
   haptic(kind: HapticKind): void;
   /** Desktop direct input is xterm's textarea: a touch there is a click, which focuses it. */
-  directInput(): "xterm" | "owned" | "native";
-  focusTerminal(): void;
+  directInput(): "xterm" | "owned";
   /** The shell's command line under the cursor (OSC 133), or null. */
   prompt(): PromptLine | null;
   /** Who holds the keyboard. */
   owner(): Owner;
+  /** Focuses the terminal's input, which raises the keyboard; only inside a tap. */
+  raiseKeyboard(): void;
   /** The platform's edit menu, where it has one (the app). */
   editMenu(): ((rect: MenuRect | null) => void) | undefined;
   /** The view is above the newest line. */
@@ -78,6 +79,8 @@ export class TerminalView {
     this.rows = new RowRanges(() => deps.list());
     this.mark = new Mark({ layer: () => deps.list()?.element ?? null, rows: this.rows, editMenu: () => deps.editMenu(), tick: () => { deps.haptic("key"); } });
     this.selection = deps.editMenu() ? this.mark : new PageSelection(this.rows);
+    // Where the mark is the selection (the app) the rows are not selectable, so iOS's long press starts none of its own.
+    element.toggleAttribute("data-marking", this.selection === this.mark);
     this.wheel = new PinnedWheel({ model: () => deps.model(), cell: () => deps.list()?.cellSize() ?? null, send: (events) => { this.send(events); } });
     // The recognizer owns every touch on the surface (§7.6): none moves focus, and what a touch means is decided when it resolves.
     this.touch = new TouchControl({

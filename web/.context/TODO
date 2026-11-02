@@ -12,8 +12,8 @@ Must-do (client-architecture.md §11):
   terminal's short input batch remains necessary until input has its own result contract.
 - Phone dock (P3a): landscape and keyboard-up behaviour need the real-iPhone checklist
   (`.meridian/work/tether-mvp/g3-iphone-checklist.md`).
-- W5 (device): the native keyboard toggle (`focus terminal`/`hidden`), `keyboardInset`, rotation,
-  `select` and the long-press callout were built but not exercised: the Simulator takes no touch
+- W5 (device): the keyboard toggle, `keyboardInset`, rotation
+  and the long-press callout were built but not exercised: the Simulator takes no touch
   or key input from the agent shell. They are on `ios-shell.md`'s Device checklist and the
   checklist (18 to 29).
 

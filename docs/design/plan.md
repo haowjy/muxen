@@ -82,8 +82,8 @@ Jimmy's decisions, as they stand ([log](decisions.md#jimmys-decisions)):
 
 - **Device:** iPhone 17 Pro, iOS 26. The layout stays responsive, so rotation and a
   future iPad work.
-- **Client:** a native Swift app hosting the web UI in a WKWebView, with a native
-  first responder owning the keyboard ([ios-shell.md](ios-shell.md)). Installed from
+- **Client:** a native Swift app hosting the web UI in a WKWebView; typing goes to the
+  page's own text boxes, as in Safari ([ios-shell.md](ios-shell.md)). Installed from
   Xcode on Jimmy's paid team until TestFlight is set up.
 - **tmux:** 3.4 on the server; muxen supports 3.4 and newer. `window-size latest`, default prefix
   `C-b`, the laptop sometimes attached at the same time. A window takes the size of
@@ -370,8 +370,8 @@ kernel kills muxen before tmux or the agents), and
 The [client interaction contract](client/browser-behaviors.md) defines the layout for the
 iPhone app, phone browser/PWA and desktop. Every surface has two levels: Home lists the
 workspaces (a server's open tabs; one per server for now) and a row opens its last tab, and a tab
-fills the screen with the workspace's tab row: ‹ (back to Home), the tabs as pills, All tabs (the tab
-overview, which lists the workspace's tabs, over the tab), and +, which opens Open session and Open files. Desktop has the
+fills the screen with the workspace's tab row: ‹ (back to Home), the tabs as pills, + (Open session and Open files), and All tabs (the tab
+overview, which lists the workspace's tabs, over the tab). Desktop has the
 tab row at the top; there is no rail. On the phone it is the dock's bottom row, ending with the
 keyboard control (Show keyboard, Hide keyboard); with the keyboard up it stays put, control and all,
 and the one-line compose box and the text-only key row sit under it. The phone browser, PWA and native app share the web dock
@@ -392,38 +392,31 @@ every row fits, and is off while scrolled into history; platform safe areas are 
 
 ### Keyboard behaviour
 
-On touch, Show keyboard raises terminal input and Hide keyboard lowers either target.
-In the app, one native `UITextField` owns the keyboard for both targets: `terminal` sends
-keys to tmux; tapping the compose box selects `line`, where keys edit its draft. The
-browser and PWA use a textarea for the line. While the keyboard is up, tapping the terminal
-or esc returns typing to tmux without lowering the keyboard. With
-the keyboard down, a tap on or beside the cursor row raises terminal input, except while
-scrolled into history. Mouse-mode taps still send a click; OSC 133 prompt-row cursor
-placement may move the cursor while terminal input already has the keyboard. Scroll,
-selection and reconnects do not toggle it.
+On touch, Show keyboard raises terminal input and Hide keyboard lowers either target. The
+terminal's input and the compose box are both text boxes in the page, in the app and in phone
+Safari alike; tapping the box takes typing for the line, and tapping the terminal or esc returns
+it to tmux without lowering the keyboard. A tap on the terminal raises the keyboard (terminal
+input takes it) except in a mouse-mode app, where the tap is a click and raises nothing, and
+while a mark is up, where a tap elsewhere only clears the mark. With the terminal's input already
+holding the keyboard, OSC 133 prompt-row cursor placement may move the cursor. Scroll, selection
+and reconnects do not toggle it.
 
 The keyboard is sticky: only the keyboard control lowers it. Switching tabs, the + and
 long-press menus and reconnects leave it up; the tab overview and Home, which have no input,
-lower it (Jimmy, 2026-10-30). An
-interruption restores the native target, including `line`. Desktop click-to-focus is
-unchanged. Native mechanics are in [ios-shell.md](ios-shell.md#keyboard), touch rules in
+lower it (Jimmy, 2026-10-30). Desktop click-to-focus is unchanged. The page's mechanics are in
+[ios-shell.md](ios-shell.md#keyboard), touch rules in
 [terminal interaction](client/terminal-interaction-design.md).
 
 ### Autocorrect and text input
 
 - The terminal target never gets autocorrect, auto-capitalization, smart punctuation or
   predictions: keystrokes go as typed, so there is no text for iOS to correct after
-  it's sent. The app's hidden `KeyboardInput: UITextField` disables all prediction and
-  smart-edit traits in both targets and uses the locale's default keyboard layout so
-  IMEs and dictation remain available; in `terminal` it forwards committed text directly.
-- The line target uses that same native field in the app, with autocorrection,
-  autocapitalization, spell checking, smart punctuation and inline prediction off. The
-  web draws a non-editable mirror there; the browser/PWA keeps its textarea with
-  autocomplete, autocorrect, spellcheck and capitalization off, though Safari may still
-  show its system prediction strip. Native marked text, dictation, the spacebar caret
-  trackpad and selection are mirrored to the app's box. Return is Send in `line` and
-  Return in `terminal`; sending a line uses the existing paste-and-Enter path, while a
-  paste with line breaks goes to the terminal as one paste without Enter.
+  it's sent. Every text box carries the same keyboard settings (autocomplete, autocorrect,
+  spellcheck and capitalization off), applied by `applyFieldSettings`; Safari may still show its
+  system prediction strip. The app hides the form bar and inline predictions.
+- The line target is an ordinary textarea. Return reads "return" and sends the line using
+  the existing paste-and-Enter path, while a paste with line breaks goes to the terminal
+  as one paste without Enter.
 
 ### Suggestion strip
 
@@ -540,8 +533,7 @@ Core MVP. Spikes 5–8 prototype these before feature work.
 
 - **Arrows** are the key row's ← ↑ ↓ → ([The key row](#the-key-row)). A long-press on the terminal selects text and sends no mouse event, in
   mouse-mode apps too ([Select, copy and paste](#select-copy-and-paste)). (iOS's
-  long-press-space trackpad isn't available to the native input view, and isn't mapped in
-  the browser.)
+  long-press-space trackpad is not mapped for the terminal.)
 - **Tap to position** on the current prompt line: the column delta between cursor and
   tap, sent as ←/→. Only when the OSC 133 marks (or the prompt regex) show a shell
   prompt and the tap is inside the input region; single line only in the MVP.

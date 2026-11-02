@@ -1,11 +1,12 @@
 // The mark: the app's selection of the terminal's text, keyboard up or down (terminal-interaction-design.md "Phone
-// selection"). The recognizer's hold marks the word under the finger with a CSS Custom Highlight, which is not a DOM
-// selection, so focus and the keyboard stay. The finger, still down, extends it; two drawn handles adjust it;
+// selection"). The recognizer's hold marks the word under the finger and draws it as boxes in the scroller, which is
+// not a DOM selection, so focus and the keyboard stay and iOS's own selection never starts (the rows are
+// `user-select: none` where the mark is the selection). The finger, still down, extends it; two drawn handles adjust it;
 // native's edit menu (`Platform.editMenu`) sits over it. It is a range over the row list's rows, and its text is
 // `RowRanges.textOf`: one join for Copy. Output never pauses: when rows under the mark redraw, the view closes it
 // with its handles (`RowRanges.rewrites`). The handles sit in the row list's scroller, so they
 // ride its native scroll; a finger or handle near the scroller's top or bottom edge scrolls it (the mark's own
-// autoscroll, which iOS gives its own selection but not a CSS highlight).
+// autoscroll, which iOS gives its own selection but not the mark).
 import type { MenuRect } from "../../../platform/types";
 import { boxOf, near, type RowRanges } from "./rowRanges";
 import type { Selection, TouchStart } from "./selection";
@@ -51,6 +52,8 @@ export class Mark implements Selection {
   /** `range` is what is marked; `word` is the word the hold began on, which a finger's drag extends from. */
   private state: { range: Range; word: Range } | null = null;
   private handles: Record<End, HTMLElement> | null = null;
+  /** The highlight: one box a row part, in the scroller beside the handles, reused between syncs. */
+  private boxes: HTMLElement[] = [];
   private places: Record<End, Place> | null = null;
   /** A hold marked a word and the finger has not lifted. */
   private held = false;
@@ -177,10 +180,8 @@ export class Mark implements Selection {
    */
   private sync(): void {
     const { state } = this;
-    if (state) {
-      CSS.highlights.set("tsel", new Highlight(state.range));
-      this.placeHandles(state.range);
-    } else CSS.highlights.delete("tsel");
+    if (state) this.placeHandles(state.range);
+    else this.paintBoxes([]);
     const touched = this.held || this.grabbed !== null;
     for (const end of ENDS) {
       const handle = this.handles?.[end]; // made by the first placeHandles
@@ -210,8 +211,13 @@ export class Mark implements Selection {
 
   /** The caret position under a client point, if it lies in the rows' text. */
   private caretAt(x: number, y: number): Range | null {
+    // WebKit finds no caret in `user-select: none` text, which the rows are here: they are selectable for the lookup,
+    // and the style recalculation it forces ends before it returns.
+    const layer = this.deps.layer();
+    layer?.style.setProperty("-webkit-user-select", "text");
     // eslint-disable-next-line @typescript-eslint/no-deprecated -- WebKit's own; the standard caretPositionFromPoint is later than iOS 17
     const at = document.caretRangeFromPoint(x, y);
+    layer?.style.removeProperty("-webkit-user-select");
     return at && this.deps.rows.holds(at.startContainer) ? at : null;
   }
 
@@ -221,6 +227,7 @@ export class Mark implements Selection {
 
   private placeHandles(range: Range): void {
     const rects = this.deps.rows.rectsOf(range).filter((r) => r.width > 0);
+    this.paintBoxes(rects);
     const first = rects[0];
     const last = rects.at(-1);
     if (!first || !last) return;
@@ -240,6 +247,28 @@ export class Mark implements Selection {
       return { knob: { x, y: below ? rect.bottom + KNOB_OFFSET : rect.top - KNOB_OFFSET }, text: { x, y: rect.top + rect.height / 2 } };
     };
     this.places = { start: place("start", first.left, first), end: place("end", last.right, last) };
+  }
+
+  /** One box a rect, in the scroller's content coordinates, as the handles are placed; extra boxes are removed. */
+  private paintBoxes(rects: DOMRect[]): void {
+    const layer = this.deps.layer();
+    if (!layer) return;
+    const host = layer.getBoundingClientRect();
+    rects.forEach((rect, i) => {
+      let box = this.boxes[i];
+      if (!box) {
+        box = document.createElement("div");
+        box.className = styles["box"] ?? "";
+        box.dataset["markBox"] = ""; // the page's only sign of the mark besides its handles: e2e reads it
+        this.boxes[i] = box;
+      }
+      if (box.parentElement !== layer) layer.append(box);
+      box.style.left = `${String(rect.left - host.left + layer.scrollLeft)}px`;
+      box.style.top = `${String(rect.top - host.top + layer.scrollTop)}px`;
+      box.style.width = `${String(rect.width)}px`;
+      box.style.height = `${String(rect.height)}px`;
+    });
+    for (const box of this.boxes.splice(rects.length)) box.remove();
   }
 
   private ensureHandles(): Record<End, HTMLElement> {

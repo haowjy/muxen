@@ -14,7 +14,6 @@ import { TabRow } from "../../shell/TabRow";
 import { KeyRow } from "./KeyRow";
 import { LineField, type LocalNote } from "./LineField";
 import { lineDraftsOf } from "./lineDrafts";
-import { nativeLineOf } from "./nativeLine";
 import styles from "./Dock.module.css";
 
 /** A line unanswered this long shows "Sending…". */
@@ -48,7 +47,6 @@ function useNote(local: LocalNote | null, tabId: string | null): LocalNote | nul
 export function Dock({ active }: { active: boolean }) {
   const app = useApp();
   const terminals = terminalsOf(app);
-  const nativeLine = nativeLineOf(app);
   const workspace = useAppView((v) => v.workspace);
   const viewport = useAppView((v) => v.viewport);
   const owner = useStore(app.focus, (s) => s.owner);
@@ -61,9 +59,7 @@ export function Dock({ active }: { active: boolean }) {
   const [local, setLocal] = useState<LocalNote | null>(null);
 
   const tab = activeTerminal(workspace);
-  const native = viewport.directInput === "native";
-  const nativeNote = useStore(nativeLine, (state) => state.note);
-  const note = useNote(native ? nativeNote : local, tab?.id ?? null);
+  const note = useNote(local, tab?.id ?? null);
   // The one derived value: no input holds the keyboard (resting), or one does (typing).
   const typing = owner !== "none";
 

@@ -1,10 +1,8 @@
 // The focus controller (client-architecture.md §6.5): the only code that calls `.focus()` or
 // `.blur()` (lint rule 2). Elements that can hold focus register here; a dialog's initial
 // focus and its focus return run in the same dispatch that opened or closed it, because iOS
-// raises the keyboard only for a focus made during a user gesture. In native the controller
-// remains Swift's; the browser's `setFocus` is a no-op. Native's terminal has no DOM element
-// to focus: a stand-in registers as `terminal`, and focusing or blurring it asks native.
-import type { FocusMode, InputPlatform, Viewport } from "../platform/types";
+// raises the keyboard only for a focus made during a user gesture.
+import type { Viewport } from "../platform/types";
 import type { FocusPort, FocusTarget } from "../ui/focus";
 import { Store } from "../ui/store";
 import type { Screen } from "../workspace/state";
@@ -13,8 +11,7 @@ export type { FocusTarget };
 
 /**
  * Who holds the keyboard on touch (§6.5): the terminal's input, the dock's line field, or
- * nothing. Browser owners follow DOM focus; the native line mirror reports its target to this
- * same controller because it is deliberately not an editable DOM input.
+ * nothing. Owners follow DOM focus.
  */
 export type Owner = "terminal" | "line" | "none";
 
@@ -23,14 +20,6 @@ const KEEP_KEYBOARD_MS = 1_500;
 
 interface FocusView {
   owner: Owner;
-}
-
-/**
- * The mode native rests in for a screen: `webText` wherever a web field may take the keyboard.
- */
-function restingMode(screen: Screen, overlay: boolean, keyboardWasUp: boolean): FocusMode {
-  if (screen === "terminal" && !overlay) return keyboardWasUp ? "terminal" : "hidden";
-  return "webText";
 }
 
 export class FocusController extends Store<FocusView> implements FocusPort {
@@ -44,20 +33,11 @@ export class FocusController extends Store<FocusView> implements FocusPort {
   private readonly openers = new Map<HTMLDialogElement, Element | null>();
   /** The control the next dialog is opened from. */
   private opener: Element | null = null;
-  private standIn: HTMLElement | null = null;
-  private mode: FocusMode | null = null;
-  private screen: { screen: Screen; overlay: boolean } | null = null;
   /** The keyboard was up when the user switched tabs: the next screen's input of this kind takes it (`keepKeyboardOn`). */
   private keeping: FocusTarget | null = null;
 
-  constructor(
-    private readonly input: InputPlatform,
-    private readonly viewport: () => Viewport,
-    initialOwner: Owner = "none",
-    initialMode: FocusMode | null = null,
-  ) {
-    super({ owner: initialOwner });
-    this.mode = initialMode;
+  constructor(private readonly viewport: () => Viewport) {
+    super({ owner: "none" });
   }
 
   /** Starts watching the page's taps (`keepFocus`); returns the stop. */
@@ -73,7 +53,7 @@ export class FocusController extends Store<FocusView> implements FocusPort {
    * keeps focus where it is. The tap's handlers still run: only the focus change is cancelled.
    */
   private readonly keepFocus = (event: MouseEvent): void => {
-    if (this.viewport().directInput !== "owned" || !document.activeElement?.matches("input, textarea")) return;
+    if (this.viewport().directInput === "xterm" || !document.activeElement?.matches("input, textarea")) return;
     if (event.target instanceof Element && event.target.closest("input, textarea, select, label, [contenteditable]")) return;
     event.preventDefault();
   };
@@ -128,7 +108,6 @@ export class FocusController extends Store<FocusView> implements FocusPort {
   toggleKeyboard(): void {
     const { owner } = this.snapshot;
     if (owner === "none") this.focusTarget("terminal", true);
-    else if (owner === "line" && this.isNative) this.nativeLineBlur();
     else this.targets.get(owner)?.blur();
   }
 
@@ -136,20 +115,6 @@ export class FocusController extends Store<FocusView> implements FocusPort {
   toggleFilesKeyboard(up: boolean): void {
     if (up) this.targets.get("path")?.blur();
     else this.focusTarget("path", true);
-  }
-
-  /** The non-editable app mirror chose the line target. */
-  nativeLineFocus(): void {
-    if (!this.isNative || this.screen?.screen !== "terminal" || this.screen.overlay) return;
-    this.update({ owner: "line" });
-    this.send("line");
-  }
-
-  /** Leave the native line target without asking the DOM mirror to blur. */
-  nativeLineBlur(): void {
-    if (!this.isNative || this.snapshot.owner !== "line") return;
-    this.update({ owner: "none" });
-    this.rest();
   }
 
   /**
@@ -167,29 +132,7 @@ export class FocusController extends Store<FocusView> implements FocusPort {
   viewportChanged(before: Viewport, after: Viewport): void {
     const { owner } = this.snapshot;
     if (!before.keyboard || after.keyboard || owner === "none") return;
-    if (owner === "line" && this.isNative) this.nativeLineBlur();
-    else this.targets.get(owner)?.blur();
-  }
-
-  /**
-   * The `terminal` target in native, where Swift owns the keyboard and the page has no element for it. Focus and
-   * blur announce themselves like an element's, so owner tracking and dialog returns need no special case.
-   */
-  nativeTerminal(): HTMLElement {
-    if (!this.standIn) {
-      const element = document.createElement("div");
-      element.hidden = true;
-      const announce = (type: "focus" | "blur"): void => {
-        // A FocusEvent, so `relatedTarget` is null as a real element's blur has it: `undefined` would match an unregistered target and read as a hand-off.
-        element.dispatchEvent(new FocusEvent(type));
-        this.rest();
-      };
-      element.focus = () => { announce("focus"); };
-      element.blur = () => { announce("blur"); };
-      document.body.append(element);
-      this.standIn = element;
-    }
-    return this.standIn;
+    this.targets.get(owner)?.blur();
   }
 
   /**
@@ -242,17 +185,9 @@ export class FocusController extends Store<FocusView> implements FocusPort {
   closeDialog(dialog: HTMLDialogElement, fromTap = false): void {
     const opener = this.openers.get(dialog) ?? null;
     this.openers.delete(dialog);
-    const heldOwner = this.held;
     const held = this.held === null ? undefined : this.targets.get(this.held);
     this.held = null;
     if (dialog.open) dialog.close();
-    if (fromTap && heldOwner !== null && this.isNative) {
-      // The route still has its overlay until this tap returns. Restore now so native can
-      // raise its keyboard in the gesture; the route's next screenChanged keeps this owner.
-      this.update({ owner: heldOwner });
-      this.send(heldOwner);
-      return;
-    }
     if (fromTap && held?.isConnected) {
       held.focus();
       return;
@@ -260,34 +195,9 @@ export class FocusController extends Store<FocusView> implements FocusPort {
     if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
   }
 
-  /** Whenever the screen or overlay changes: native learns the mode the screen needs. */
+  /** Whenever the screen or overlay changes. Leaving the terminal screen lowers the keyboard (the dock is hidden there, which would drop it only later). */
   screenChanged(screen: Screen, overlay: boolean): void {
-    this.screen = { screen, overlay };
     const { owner } = this.snapshot;
-    // Leaving the terminal screen lowers the keyboard (the dock is hidden there, which would drop it only later).
-    if ((screen !== "terminal" || overlay) && owner !== "none" && this.keeping === null) {
-      if (owner === "line" && this.isNative) this.update({ owner: "none" });
-      else this.targets.get(owner)?.blur();
-    }
-    this.rest();
-  }
-
-  private rest(): void {
-    const mode = this.restingNow();
-    if (mode !== null && mode !== this.mode) this.send(mode);
-  }
-
-  private restingNow(): FocusMode | null {
-    if (!this.screen) return null;
-    if (this.isNative && this.screen.screen === "terminal" && !this.screen.overlay && this.snapshot.owner === "line") return "line";
-    return restingMode(this.screen.screen, this.screen.overlay, this.snapshot.owner !== "none");
-  }
-
-  private get isNative(): boolean { return this.viewport().directInput === "native"; }
-
-  private send(mode: FocusMode | null): void {
-    if (mode === null) return;
-    this.mode = mode;
-    this.input.setFocus(mode);
+    if ((screen !== "terminal" || overlay) && owner !== "none" && this.keeping === null) this.targets.get(owner)?.blur();
   }
 }

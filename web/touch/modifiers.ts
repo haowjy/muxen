@@ -31,7 +31,7 @@ const bytesOf = (...bytes: number[]): { bytes: string } => ({ bytes: btoa(String
 
 /**
  * What a held Ctrl and/or Alt makes of one typed character: the one rule for a hardware chord
- * (`decideKey`) and an armed key-row modifier (`apply`), the same as the app's native `KeyMapper`.
+ * (`decideKey`) and an armed key-row modifier (`apply`).
  * Space, letters and digits take a `C-`/`M-` name; Ctrl on a punctuation key is its control byte
  * (Ctrl+[ is ESC); Alt on one is ESC then the character (Alt+. in bash); Ctrl+Alt adds the ESC.
  * Shift matters only for a letter, where it makes the name uppercase. `null`: not a chord.
@@ -57,7 +57,7 @@ export function apply(armed: Armed, events: InputEvent[]): { events: InputEvent[
   if (armed === null || first === undefined) return { events, armed };
   let event: InputEvent | null = null;
   // A capital typed on the soft keyboard is a shifted letter, but an armed ctrl still sends Ctrl-C for it: the hardware chord
-  // keeps Shift (`C-C`, as KeyMapper does), and an app reading extended keys would not take `C-C` for Ctrl-C.
+  // keeps Shift (`C-C`), and an app reading extended keys would not take `C-C` for Ctrl-C.
   if ("text" in first) {
     const shift = armed === "alt" && first.text !== first.text.toLowerCase();
     event = chord({ ctrl: armed === "ctrl", alt: armed === "alt", shift }, first.text);

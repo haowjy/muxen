@@ -1,17 +1,14 @@
-// The dock's line field is an editable browser control or a renderer for the app's native editor.
-import { useEffect, useMemo, useRef } from "preact/hooks";
-import { useApp, useAppView } from "../../../app/context";
-import type { TextRange } from "../../../platform/types";
+// The dock's line field: a plain text box the page owns.
+import { useEffect, useRef } from "preact/hooks";
+import { useApp } from "../../../app/context";
 import { DockButton } from "../../../ui/primitives/DockButton";
 import { LineInput } from "../../../ui/primitives/LineInput";
 import { useStore } from "../../../ui/store";
 import type { TerminalTab } from "../../../workspace/state";
 import { readPaste } from "../paste";
 import { terminalsOf } from "../terminals";
-import { browserLineEditor } from "./lineEditor";
-import { LineMirror } from "./LineMirror";
+import { stepGrapheme } from "./caret";
 import { lineDraftsOf } from "./lineDrafts";
-import { nativeLineOf } from "./nativeLine";
 import styles from "./Dock.module.css";
 
 export type LocalNote = { tone: "error" | "info"; text: string };
@@ -30,29 +27,35 @@ export function LineField({ tab, label, onNote }: LineFieldProps) {
   const app = useApp();
   const terminals = terminalsOf(app);
   const drafts = lineDraftsOf(app);
-  const nativeLine = nativeLineOf(app);
   const { modifiers } = terminals;
   const text = useStore(drafts, (state) => (tab ? (state.drafts[tab.id]?.text ?? "") : ""));
-  const draftsReady = useStore(drafts, (state) => state.ready);
-  const native = useAppView((view) => view.viewport.directInput === "native");
   const owner = useStore(app.focus, (state) => state.owner);
-  const nativeState = useStore(nativeLine, (state) => state);
   const inputText = useRef(text);
-  const currentTab = useRef(tab);
-  const currentOwner = useRef(owner);
   const suppressImeReturn = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  // Whether the textarea's IME is composing: the caret step and Send wait for it (the browser's twin of native's marked text).
+  // Whether the textarea's IME is composing: the caret step and Send wait for it.
   const composing = useRef(false);
-  const editor = useMemo(() => browserLineEditor(inputRef, composing), []);
   // The key row edits this box through the controller.
   useEffect(() => {
-    terminals.browserLine = editor;
-    return () => { terminals.browserLine = null; };
-  }, [terminals, editor]);
+    terminals.lineEditor = {
+      insert: (value) => {
+        const el = inputRef.current;
+        if (!el) return;
+        el.setRangeText(value, el.selectionStart, el.selectionEnd, "end");
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      },
+      step: (step) => {
+        const el = inputRef.current;
+        // Moving the selection mid-composition commits or garbles it: the keyboard's until it commits.
+        if (!el || composing.current) return;
+        const { selectionStart: start, selectionEnd: end, value } = el;
+        const to = start !== end ? (step < 0 ? start : end) : stepGrapheme(value, start, step);
+        el.setSelectionRange(to, to);
+      },
+    };
+    return () => { terminals.lineEditor = null; };
+  }, [terminals]);
   inputText.current = text;
-  currentTab.current = tab;
-  currentOwner.current = owner;
 
   const edit = (value: string, element: HTMLTextAreaElement): void => {
     if (!tab) return;
@@ -74,62 +77,17 @@ export function LineField({ tab, label, onNote }: LineFieldProps) {
     onNote(result === "notConnected" ? { tone: "error", text: "Not connected" } : null);
   };
 
-  // Acts as Return does, and takes no focus: the box keeps the keyboard (DockButton). In the app native holds the text, so it submits.
+  // Acts as Return does, and takes no focus: the box keeps the keyboard (DockButton).
   const sendButton = owner === "line" && (
     <DockButton
       kind="control"
       class={styles.send}
       disabled={!tab}
-      onClick={() => {
-        if (native) app.platform.input.submitLine();
-        else if (tab && !composing.current) send(tab, inputText.current);
-      }}
+      onClick={() => { if (tab && !composing.current) send(tab, inputText.current); }}
     >
       Send
     </DockButton>
   );
-
-  if (native) {
-    const bound = nativeState.tabId === tab?.id;
-    const value = bound ? nativeState.text : text;
-    const selection: TextRange = bound ? nativeState.selection : { start: value.length, end: value.length };
-    return (
-      <>
-      <LineMirror
-        label={label}
-        placeholder={tab ? "Type or dictate a line" : "Open a window to type"}
-        value={value}
-        selection={selection}
-        marked={bound ? nativeState.marked : null}
-        active={owner === "line"}
-        disabled={!tab || !draftsReady}
-        onCaret={(index) => {
-          if (!tab) return;
-          if (owner !== "line") {
-            nativeLine.open(tab, text, index);
-            app.focus.nativeLineFocus();
-          } else nativeLine.caret(tab, text, index);
-        }}
-        onSelectAll={() => { if (tab) nativeLine.selectAll(tab, value); }}
-        onClear={() => { if (tab) nativeLine.clear(tab); }}
-        onPaste={() => {
-          terminals.pastes.pasteFromMenu((pasted, pasteTarget) => {
-            const stillTargetingLine = currentOwner.current === "line" && currentTab.current?.id === pasteTarget.id && nativeLine.isBound(pasteTarget.id);
-            if (hasInnerBreak(pasted)) {
-              terminals.pastes.paste({ kind: "text", text: pasted }, pasteTarget);
-              app.notify("Pasted text has several lines: sent to the terminal as one paste, without Enter");
-            } else {
-              if (!stillTargetingLine) return false;
-              app.platform.input.insertLine(withoutTrailingBreak(pasted));
-            }
-            return true;
-          });
-        }}
-      />
-      {sendButton}
-      </>
-    );
-  }
 
   return (
     <>

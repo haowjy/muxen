@@ -3,7 +3,7 @@ import UIKit
 import WebKit
 
 /// Takes the form accessory bar (⌃ ⌄ ✓) off the keyboard for web fields.
-/// Used only while the web keyboard switch is on (`MuxenAppModel.webKeyboard`).
+/// Applied to every web view the app makes.
 ///
 /// The bar belongs to the web view's content view, and UIKit has no public switch for it. If
 /// WebKit changes its internal view, the system's own chrome stays: nothing here is load-bearing

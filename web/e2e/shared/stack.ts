@@ -1,6 +1,6 @@
 // The real-daemon stack the `*.real.ts` specs share: a real muxen daemon on a private tmux,
 // with the app served by Vite's dev server through the dev proxy (client-architecture.md
-// §5.11). Everything is isolated under one directory, `<tmpdir>/e2e-<port>/<name>`: the
+// §5.11). Everything is isolated under one directory, `<tmpdir>/e2e-<port>/<name>` (`/tmp` on macOS): the
 // daemon's runtime, state and config, the tmux socket, and the ports. It never touches the
 // installed service, Tailscale, or a real tmux server. Run it with `pnpm e2e:real`.
 //
@@ -16,7 +16,9 @@ import path from "node:path";
 import type { Duplex } from "node:stream";
 
 // Keyed on the port the e2e run was given, so runs on different ports never share a directory.
-const ROOT = path.join(os.tmpdir(), `e2e-${process.env["MUXEN_E2E_PORT"] ?? "5199"}`);
+// On macOS it sits under /tmp, not the per-user TMPDIR (/var/folders/…/T/): tmux's socket path
+// repeats the stack name, and under TMPDIR it passes the 104-byte limit on Unix socket paths.
+const ROOT = path.join(process.platform === "darwin" ? "/tmp" : os.tmpdir(), `e2e-${process.env["MUXEN_E2E_PORT"] ?? "5199"}`);
 const WEB = path.resolve(import.meta.dirname, "../..");
 const DAEMON = path.resolve(WEB, "../target/debug/muxen");
 

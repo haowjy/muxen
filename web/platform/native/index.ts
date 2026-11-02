@@ -1,5 +1,5 @@
 // Assembles the native Platform (client-architecture.md §5, ios-shell.md "The bridge"). Only
-// main.tsx imports this. Native owns the responder, tokens, drafts, uploads and the
+// main.tsx imports this. Native owns tokens, drafts, uploads and the
 // pasteboard; this adapter forwards to the bridge and turns its events into PlatformEvents.
 import { Bridge, installReceiver, webkitPost, type Post } from "./bridge";
 import { createNativeTransport } from "./transport";
@@ -24,14 +24,11 @@ export function createNativePlatform(post: Post = webkitPost): Platform {
     bridge.setPreference(name, value).then((preferences) => { emit({ type: "preferences", preferences }); }, () => undefined);
   };
 
-  // Install before `ready`; its reply snapshots the current line before the app owner subscribes.
+  // Install before `ready`, so no event is missed.
   installReceiver((msg) => {
     switch (msg.type) {
       case "upload": uploads.receive(msg); break;
       // Before `ready` replies the page isn't listening, and the reply is newer than these.
-      case "input": if (booted) emit({ type: "input", tab: msg.tab, events: msg.events }); break;
-      case "lineEdit": emit(msg); break;
-      case "lineReturn": emit(msg); break;
       default: if (booted) emit(msg); // hosts, viewport, lifecycle
     }
   });
@@ -48,17 +45,6 @@ export function createNativePlatform(post: Post = webkitPost): Platform {
     },
     transport: createNativeTransport(bridge),
     setPreference: choose,
-    input: {
-      setFocus: (mode) => { bridge.setFocus(mode); },
-      setLine: (text, caret, tab) => bridge.setLine(text, caret, tab),
-      setLineCaret: (index) => { bridge.lineCaret(index); },
-      stepLineCaret: (step) => { bridge.lineCaretStep(step); },
-      insertLine: (text) => { bridge.lineInsert(text); },
-      submitLine: () => { bridge.lineSubmit(); },
-      selectAllLine: () => { bridge.lineSelectAll(); },
-      setArmedModifier: (armed) => { bridge.modifiers(armed); },
-      setActiveTab: (tab) => { bridge.activeTab(tab); },
-    },
     storage: {
       saveWorkspace(ws) {
         const scheduled = pending !== null;

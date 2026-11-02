@@ -1,9 +1,9 @@
 // The dock's key row (client-architecture.md §7.4): one fixed row of the keys a phone keyboard
 // lacks, in a horizontal scroller. A tap never moves focus or lowers the keyboard (DockButton),
 // and a key acts on `pointerup` inside it. Where a key goes (tmux, or the compose box that holds
-// the keyboard) is `routeKey`'s decision, the same for both line editors; ctrl and alt arm the next key.
-import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
-import { useApp, useAppView } from "../../../app/context";
+// the keyboard) is `routeKey`'s decision; ctrl and alt arm the next key.
+import { useEffect, useRef } from "preact/hooks";
+import { useApp } from "../../../app/context";
 import { DockButton } from "../../../ui/primitives/DockButton";
 import { useStore } from "../../../ui/store";
 import { routeKey, type RowKey } from "../../../touch/keyRoute";
@@ -51,11 +51,6 @@ export function KeyRow() {
   const { modifiers } = terminals;
   const armed = useStore(modifiers, (s) => s.armed);
   const owner = useStore(app.focus, (s) => s.owner);
-  const native = useAppView((view) => view.viewport.directInput === "native");
-
-  useLayoutEffect(() => {
-    if (native && owner === "line") app.platform.input.setArmedModifier(armed);
-  }, [app, armed, native, owner]);
 
   // `terminals.key` routes against the live owner and armed state, not this render's: a held key fires from the render it was pressed in.
   const send = (spec: Spec): void => {
