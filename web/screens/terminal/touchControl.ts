@@ -15,7 +15,7 @@
 //   are the mark's own and never get here.
 // Either way a tap elsewhere only clears the selection.
 import type { Owner } from "../../app/focus";
-import type { HapticKind, InputEvent } from "../../platform/types";
+import type { InputEvent } from "../../platform/types";
 import type { PromptLine, TerminalModel } from "../../term";
 import { mouseInput } from "../../term/mouse";
 import { GestureRecognizer, type GestureAction } from "../../touch/gesture";
@@ -23,7 +23,7 @@ import { charsAcross } from "../../touch/selection";
 import type { PinnedWheel } from "./pinnedWheel";
 import type { RowList } from "./rowList";
 import type { Mark } from "./selection/mark";
-import type { Selection } from "./selection/selection";
+import type { Selection, TouchStart } from "./selection/selection";
 
 interface TouchDeps {
   element: HTMLElement;
@@ -38,7 +38,6 @@ interface TouchDeps {
   mark: Mark;
   /** Typed input for the tab this view is showing. */
   send(events: InputEvent[]): void;
-  haptic(kind: HapticKind): void;
   /** Desktop's xterm owns its pointer; everything else is touch. */
   directInput(): "xterm" | "owned" | "native";
   /** Focuses the terminal's input: a touch tap on or beside the cursor row, native input only. */
@@ -73,6 +72,26 @@ export function tapAction(t: { owner: Owner; cell: boolean; nearCursor: boolean;
   return t.nearCursor ? "focus" : "none";
 }
 
+/**
+ * What one gesture knows, replaced whole when its first finger lands, so a finger whose end never came leaves
+ * nothing set for the next gesture.
+ */
+interface Gesture {
+  /** What the selection made of the first touch: a tap closes it, or toggles the mark's menu. */
+  start: Exclude<TouchStart, "handOver">;
+  /** Where the first finger went down: a wheel event's cell. */
+  origin: { x: number; y: number };
+  /** The touch that stopped a coasting scroll is that, and not a tap. */
+  stoppedCoast: boolean;
+  scrolling: boolean;
+  /** The scroll in progress is a pinned terminal's: its swipes are wheel events. */
+  pinned: boolean;
+  /** A hold marked a word and the finger has not lifted. */
+  marking: boolean;
+}
+
+const IDLE: Gesture = { start: "plain", origin: { x: 0, y: 0 }, stoppedCoast: false, scrolling: false, pinned: false, marking: false };
+
 /** How long after a touch the surface takes no mouse events. */
 const MOUSE_AFTER_TOUCH_MS = 800;
 const MOUSE_EVENTS = ["mousedown", "mouseup", "mousemove", "mouseover", "mouseout", "click", "dblclick"] as const;
@@ -85,21 +104,9 @@ export class TouchControl {
   private readonly spent = new Set<number>();
   /** Where each touch began: the node that gets the rest of its events, and carries our listeners until it ends. */
   private readonly targets = new Map<number, EventTarget>();
-  /** Where the first finger went down: a wheel event's cell. */
-  private origin = { x: 0, y: 0 };
-  private scrolling = false;
-  /** The scroll in progress is a pinned terminal's: its swipes are wheel events. */
-  private pinned = false;
-  /** The touch that stopped a coasting scroll is that, and not a tap. */
-  private stoppedCoast = false;
-  /** The touch began on a live selection, so it is WebKit's until every finger lifts. */
-  private handedOver = false;
-  /** A selection or mark was up when the touch began, so a tap closes it and does nothing else. */
-  private dismissing = false;
-  /** The touch began on the mark's text, so a tap there toggles its menu. */
-  private onMark = false;
-  /** A hold marked a word and the finger has not lifted. */
-  private marking = false;
+  /** The touches handed to WebKit (they began on its selection): the gesture is its until none is left. */
+  private readonly handed = new Set<number>();
+  private gesture: Gesture = IDLE;
   private lastTouchAt = -Infinity;
 
   constructor(private readonly deps: TouchDeps) {
@@ -117,6 +124,11 @@ export class TouchControl {
     element.addEventListener("contextmenu", (event) => { if (!this.touch) event.preventDefault(); });
   }
 
+  /** A touch is on the browser's selection, and so WebKit's. */
+  private get handedOver(): boolean {
+    return this.handed.size > 0;
+  }
+
   /** Touch events, and a long press that is WebKit's: every input but desktop's xterm, which takes the mouse. */
   private get touch(): boolean {
     return this.deps.directInput() !== "xterm";
@@ -132,9 +144,7 @@ export class TouchControl {
   /** Ends any gesture in progress: a selection still being dragged goes with it. */
   cancel(): void {
     clearTimeout(this.timer);
-    this.handedOver = false;
-    this.dismissing = false;
-    this.onMark = false;
+    this.handed.clear();
     this.fingers.clear();
     this.spent.clear();
     this.run(this.recognizer.cancel());
@@ -178,6 +188,7 @@ export class TouchControl {
     for (const touch of event.touches) listed.add(touch.identifier);
     if (event.type === "touchend") for (const touch of event.changedTouches) listed.add(touch.identifier);
     for (const id of this.targets.keys()) if (!listed.has(id)) this.unfollow(id);
+    for (const id of this.handed) if (!listed.has(id)) this.handed.delete(id);
     for (const id of this.fingers) {
       if (!listed.has(id)) {
         this.cancel();
@@ -194,25 +205,19 @@ export class TouchControl {
     // Every finger on the surface holds the list, the mark's handles included: output must not slide the text under a drag.
     for (const touch of event.changedTouches) if (inside(touch)) this.follow(touch);
     if (this.handedOver) return;
-    // A mark handle's finger is the handle's: it starts no gesture here, and sets none of the flags below.
-    const first = Array.from(event.changedTouches).find((touch) => inside(touch) && !this.deps.mark.owns(touch.target));
-    if (this.fingers.size === 0 && first) {
-      // A touch on the system's selection is WebKit's (handle drags and its menu); a touch elsewhere only closes the selection, if it is a tap.
-      const start = this.deps.selection.touch(first.clientX, first.clientY);
-      if (start === "handOver") {
-        this.handedOver = true;
-        return;
-      }
-      this.dismissing = start === "dismiss";
-      this.onMark = start === "toggle";
-    }
-    // Only the surface's own fingers: one held on a dock key or a handle is not a second finger on the terminal.
+    // Only the surface's own fingers: one held on a dock key or a mark handle is not a finger on the terminal, and starts no gesture here.
     for (const touch of event.touches) {
       if (this.fingers.has(touch.identifier) || !inside(touch) || this.deps.mark.owns(touch.target)) continue;
       if (this.fingers.size === 0) {
-        this.stoppedCoast = (this.deps.list()?.coasting ?? false) || this.deps.wheel.coasting;
+        const start = this.deps.selection.touch(touch.clientX, touch.clientY);
+        if (start === "handOver") {
+          // A touch on the selection is WebKit's (handle drags and its menu); a touch elsewhere only closes the selection, if it is a tap.
+          this.handed.add(touch.identifier);
+          return;
+        }
+        const stoppedCoast = (this.deps.list()?.coasting ?? false) || this.deps.wheel.coasting;
         this.deps.wheel.stop();
-        this.origin = { x: touch.clientX, y: touch.clientY };
+        this.gesture = { ...IDLE, start, stoppedCoast, origin: { x: touch.clientX, y: touch.clientY } };
       }
       this.fingers.add(touch.identifier);
       this.run(this.recognizer.down(touch.identifier, touch.clientX, touch.clientY, performance.now()));
@@ -231,7 +236,7 @@ export class TouchControl {
     this.schedule();
     // Only a pinned terminal's swipe and the mark are muxen's: any other move is WebKit's, and the list scrolls
     // natively (`touch-action: pan-y` keeps a second finger from pinching the page).
-    if ((this.pinned && this.recognizer.scrolling) || this.marking) event.preventDefault();
+    if ((this.gesture.pinned && this.recognizer.scrolling) || this.gesture.marking) event.preventDefault();
   };
 
   private readonly touchEnd = (event: TouchEvent): void => {
@@ -243,7 +248,7 @@ export class TouchControl {
     if (!this.touch) return;
     this.reap(event);
     if (this.handedOver) {
-      if (event.touches.length === 0) this.handedOver = false;
+      for (const touch of event.changedTouches) this.handed.delete(touch.identifier);
       return;
     }
     let ours = false;
@@ -251,7 +256,7 @@ export class TouchControl {
       if (!this.fingers.delete(touch.identifier)) continue;
       ours = true;
       const actions = this.recognizer.up(touch.identifier, performance.now());
-      if (this.marking || actions.some((action) => action.type === "tap")) event.preventDefault();
+      if (this.gesture.marking || actions.some((action) => action.type === "tap")) event.preventDefault();
       this.run(actions);
     }
     if (!ours) return;
@@ -263,7 +268,7 @@ export class TouchControl {
     for (const touch of event.changedTouches) this.unfollow(touch.identifier);
     if (!this.touch) return;
     // A handed-over touch is not a counted finger, and its cancel is how a long press WebKit took ends.
-    if (event.touches.length === 0) this.handedOver = false;
+    for (const touch of event.changedTouches) this.handed.delete(touch.identifier);
     if (Array.from(event.changedTouches).some((touch) => this.fingers.has(touch.identifier))) this.cancel();
   };
 
@@ -288,56 +293,51 @@ export class TouchControl {
   }
 
   private handle(action: GestureAction): void {
+    const gesture = this.gesture;
     switch (action.type) {
       case "tap": {
-        if (this.stoppedCoast) break;
-        if (this.onMark) {
-          this.deps.mark.toggleMenu();
-          break;
-        }
-        if (this.dismissing) {
-          this.deps.selection.clear();
-          break;
-        }
-        this.tap(action.x, action.y);
+        if (gesture.stoppedCoast) break;
+        if (gesture.start === "toggle") this.deps.mark.toggleMenu();
+        else if (gesture.start === "dismiss") this.deps.selection.clear();
+        else this.tap(action.x, action.y);
         break;
       }
       case "scroll":
-        if (!this.scrolling) {
-          this.scrolling = true;
-          const anchor = this.deps.list()?.cellAt(this.origin.x, this.origin.y) ?? null;
+        if (!gesture.scrolling) {
+          gesture.scrolling = true;
+          const anchor = this.deps.list()?.cellAt(gesture.origin.x, gesture.origin.y) ?? null;
           // The list scrolls natively and a selection survives it; the mark's menu hides until a tap inside it.
           this.deps.mark.hideMenu();
           this.deps.list()?.wantOlder(); // a list too short to scroll sends no scroll event
-          this.pinned = this.deps.wheel.active;
-          if (this.pinned) this.deps.wheel.begin(anchor);
+          gesture.pinned = this.deps.wheel.active;
+          if (gesture.pinned) this.deps.wheel.begin(anchor);
         }
-        if (this.pinned) this.deps.wheel.by(action.dy);
+        if (gesture.pinned) this.deps.wheel.by(action.dy);
         break;
       case "scrollEnd":
-        this.scrolling = false;
-        if (this.pinned) this.deps.wheel.release(action.velocity);
-        this.pinned = false;
+        gesture.scrolling = false;
+        if (gesture.pinned) this.deps.wheel.release(action.velocity);
+        gesture.pinned = false;
         break;
       case "longPress":
         // In the app the hold is the mark; a browser has no edit menu, so its long press stays WebKit's.
-        this.marking = this.deps.mark.available && this.deps.mark.begin(action.x, action.y);
+        gesture.marking = this.deps.mark.available && this.deps.mark.begin(action.x, action.y);
         break;
       case "selectMove":
-        if (this.marking) this.deps.mark.extend(action.x, action.y);
+        if (gesture.marking) this.deps.mark.extend(action.x, action.y);
         break;
       case "selectEnd":
-        if (this.marking) {
-          this.marking = false;
+        if (gesture.marking) {
+          gesture.marking = false;
           this.deps.mark.lift();
         }
         break;
       case "cancel":
-        this.scrolling = false;
+        gesture.scrolling = false;
         // A system gesture took the finger: the mark is made and has its handles, so it ends as a lift does. Clearing it would
         // lose a selection nobody dismissed; a redraw (J7), a tap elsewhere or a reset still close it.
-        if (this.marking) this.deps.mark.lift();
-        this.marking = false;
+        if (gesture.marking) this.deps.mark.lift();
+        gesture.marking = false;
         break;
     }
   }
