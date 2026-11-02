@@ -28,7 +28,7 @@ export interface UploadMsg {
   progress: number;
   path?: string;
   error?: string;
-  /** The daemon's refusal code when native got one; the page words it (`uploadFailure`), and `error` is the fallback. */
+  /** The daemon's refusal code when native got one; the page words it (`refusalWords`), and `error` is the fallback. */
   code?: string;
   cancelled?: true;
 }

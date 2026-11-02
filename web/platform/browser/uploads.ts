@@ -5,7 +5,7 @@
 // The daemon takes one upload at a time (fs.md "Constants"), so the page sends one file at a
 // time and holds at most four, the one in flight included. A fifth is refused.
 import type { Pasted, UploadEvent, Uploads } from "../types";
-import { uploadFailure } from "../uploadFailure";
+import { refusalWords } from "../../net/refusalWords";
 import { readClipboard } from "./clipboard";
 
 export const QUEUE_LIMIT = 4;
@@ -100,7 +100,7 @@ export function createBrowserUploads(): Uploads {
         setTimeout(() => { if (jobs.includes(job)) attempt(job, retries - 1); }, 1000);
       } else {
         const code = typeof body["error"] === "string" ? body["error"] : `http_${String(xhr.status)}`;
-        finish(job, { id: job.id, error: uploadFailure(code) });
+        finish(job, { id: job.id, error: refusalWords(code) });
       }
     };
     xhr.onerror = () => { finish(job, { id: job.id, error: "Couldn't reach the server" }); };
@@ -121,7 +121,7 @@ export function createBrowserUploads(): Uploads {
       const id = `u${String(++counter)}`;
       group.open++;
       if (file.size > MAX_BYTES || jobs.length >= QUEUE_LIMIT) {
-        group.channel.push({ id, error: file.size > MAX_BYTES ? uploadFailure("too_large") : QUEUE_FULL });
+        group.channel.push({ id, error: file.size > MAX_BYTES ? refusalWords("too_large") : QUEUE_FULL });
         if (--group.open === 0) group.channel.end();
         continue;
       }

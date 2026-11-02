@@ -1,4 +1,5 @@
 import { HttpRefusal } from "../net/http";
+import { refusalWords } from "../net/refusalWords";
 import type { Entry, FsApi, Listing } from "./api";
 import { samePlace, type FilesPlace } from "../platform/types";
 import { hostProblem, type HostProblem } from "../ui/hostProblem";
@@ -269,15 +270,8 @@ export function describeError(error: HttpRefusal, host: string): string {
   };
   switch (error.code) {
     case "network": return problem("unreachable");
-    case "denied": return "Permission denied.";
-    case "not_found": return "It isn't there any more.";
-    case "not_a_directory": return "That's a file, not a folder.";
-    case "not_a_file": return "That isn't a regular file.";
-    case "busy": return `${host} is busy. Try again in a moment.`;
-    case "config_unavailable": return "muxen can't read config.toml on the server. Fix it there.";
     case "incompatible": return problem("incompatible");
     case "auth_required": case "forbidden": case "http_401": return problem("unauthorized");
-    case "bad_request": return "The server refused that path.";
-    default: return `Something went wrong on ${host} (${error.code}).`;
+    default: return refusalWords(error.code);
   }
 }

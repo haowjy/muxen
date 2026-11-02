@@ -4594,7 +4594,7 @@ to one folder: an upload may name the folder it lands in.
 Review of the paste-into-a-folder change found the app showing "The upload failed (HTTP 403)" for every refusal, and
 two web routes for one action.
 
-- **Words for refusals live in one web table** (`platform/uploadFailure.ts`). The browser reads the daemon's
+- **Words for refusals live in one web table** (`net/refusalWords.ts`, keyed by the generated `HttpError`, shared with the file manager's `describeError`). The browser reads the daemon's
   `{"error": code}` body; native parses the same body and sends the code in the `upload` event; the page words it.
   Rejected: words in Swift (a second table to keep in step with the daemon's codes).
 - **One paste path.** `uploads.paste(handle, dir, signal, pasted?)` serves the button and desktop Cmd/Ctrl-V; `send`
