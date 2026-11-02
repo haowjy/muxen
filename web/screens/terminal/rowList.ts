@@ -433,7 +433,7 @@ export class RowList {
     this.caretRow = row;
     if (!row || !cell) return;
     row.dataset["caret"] = cursor.shape;
-    row.style.setProperty("--caret-x", `${String(cursor.col * cell.width)}px`);
+    row.style.setProperty("--caret-x", `${String(cursor.cell * cell.width)}px`);
     row.style.setProperty("--caret-w", `${String(cell.width * cursor.width)}px`);
   }
 

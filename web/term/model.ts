@@ -18,7 +18,8 @@ export interface Frame {
   frozen: Row[];
   /** The whole screen, top to bottom. */
   screen: Row[];
-  cursor: { row: number; col: number; width: 1 | 2; shape: CursorShape; visible: boolean };
+  /** `col` is the logical column (`cols` while a wrap pends; input code counts from it); `cell` is the column the cursor is drawn on. */
+  cursor: { row: number; col: number; cell: number; width: 1 | 2; shape: CursorShape; visible: boolean };
 }
 
 /** xterm's scrollback, which bounds how many lines one frame can carry. */
@@ -182,13 +183,17 @@ export class TerminalModel {
   frame(): Frame {
     this.collect();
     const buffer = this.term.buffer.active;
-    const cell = buffer.getLine(buffer.baseY + buffer.cursorY)?.getCell(buffer.cursorX);
+    const line = buffer.getLine(buffer.baseY + buffer.cursorY);
+    // After the last column is filled xterm parks the cursor at `cols` (the wrap pends), and a wide character's second
+    // cell is a continuation with width 0: the drawn cursor sits on the cell that has the glyph, as xterm's own renderers do.
+    let cell = Math.min(buffer.cursorX, this.term.cols - 1);
+    if (cell > 0 && line?.getCell(cell)?.getWidth() === 0) cell--;
     const frame: Frame = {
       reset: this.resetPending,
       gap: this.gap,
       frozen: this.pending,
       screen: readRows(buffer, buffer.baseY, buffer.baseY + this.term.rows),
-      cursor: { row: buffer.cursorY, col: buffer.cursorX, width: cell?.getWidth() === 2 ? 2 : 1, shape: this.cursorShape, visible: this.cursorVisible },
+      cursor: { row: buffer.cursorY, col: buffer.cursorX, cell, width: line?.getCell(cell)?.getWidth() === 2 ? 2 : 1, shape: this.cursorShape, visible: this.cursorVisible },
     };
     this.pending = [];
     this.gap = false;
