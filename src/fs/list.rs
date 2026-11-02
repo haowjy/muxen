@@ -15,7 +15,7 @@ use crate::proto::fs::{Entry, EntryKind, Listing};
 /// Entries in one page.
 pub const PAGE: usize = 200;
 /// A scan stops at this many entries read...
-pub(super) const SCAN_ENTRIES: usize = 5000;
+const SCAN_ENTRIES: usize = 5000;
 /// ...or this many bytes of names kept.
 const SCAN_NAMES: usize = 1 << 20;
 

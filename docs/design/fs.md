@@ -254,7 +254,7 @@ the cap against `Content-Length` up front, when sent, and against the running co
    base32 characters, and the extension of `name`, lowercased, if it is 1 to 8 ASCII
    alphanumerics, else `bin`. Nothing else of `name` is used, so it can't carry a
    path, a shell metacharacter or a hidden name into the folder.
-4. Delete the part file a dead daemon left (see below), record the new part file's path, then create `.muxen-upload-<random>.part` relative to the directory's descriptor with
+4. Clear the record of a part file a dead daemon left and delete that file (see below), record the new part file's path, then create `.muxen-upload-<random>.part` relative to the directory's descriptor with
    `O_CREAT | O_EXCL | O_NOFOLLOW`, mode 0600 (never executable). Write each body chunk
    on the fs lane. Every 2 MiB, `fdatasync` and
    `posix_fadvise(DONTNEED)` what was written, so the upload's dirty pages stay small
@@ -273,16 +273,22 @@ the cap against `Content-Length` up front, when sent, and against the running co
    lost to a power cut is re-sent.
 
 If cleanup cannot get a thread from the fs lane, or the daemon dies mid-upload, a `.part`
-file is left behind. The one upload slot means at most one part file exists at a time, so
-the daemon records it: **`upload-part` in the state directory holds the in-flight part
-file's absolute path**, written before the part file is created and deleted when it lands
-or is removed. At startup, and again at step 4 of the next upload, the daemon reads the
-record, deletes the file it names if that is still a regular file whose name is
-`.muxen-upload-*.part`, and deletes the record. Nothing else is touched, and nothing in
-this cleanup fails an upload or the start: a missing or unreadable record, or a file it
-can't delete, is logged at `debug`. A request dropped mid-upload deletes its part file
-but leaves the record; a record of a deleted file is harmless and cleared by the next
-cleanup. No folder is scanned.
+file is left behind. At most one part file exists at a time, so the daemon records it:
+**`upload-part` in the state directory holds the in-flight part file's absolute path**,
+written before the part file is created. The upload slot is held exactly while a part
+file may exist: it moves into the part file and is released only after the part file is
+renamed or deleted and the record cleared, so a request that went away can't free the
+slot while its cleanup still runs. A record that can't be written fails the upload `500
+internal`.
+
+At startup, and again at step 4 of the next upload, the daemon reads the record and
+deletes it (both in the state directory, inline), then deletes the file the record named
+if that is still a regular file whose name is `.muxen-upload-*.part`. That delete runs on
+the fs lane and is not awaited: the path may be on a hung mount, and that must fill an
+fs thread, not hold up the start or an upload. The record is already gone, so the hang
+happens once. Nothing else is touched, and nothing in this cleanup fails an upload or the
+start: a missing or unreadable record, or a file it can't delete, is logged at `debug`.
+No folder is scanned.
 
 6. Answer `201 { path, size }`, `path` the absolute canonical path, which native
    inserts, quoted, into the tab ([ios-shell.md](ios-shell.md#files-and-sharing)).

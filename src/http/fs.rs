@@ -162,7 +162,7 @@ async fn upload(
         return respond("", Err(FsError::TooLarge));
     }
     let uploaded = async {
-        let _slot = ctx.fs.upload()?;
+        let slot = ctx.fs.upload()?;
         let app = ctx.clone();
         let dest = query.dir.clone();
         let dir = ctx
@@ -178,6 +178,7 @@ async fn upload(
         let body = body.into_data_stream();
         upload::receive(
             &ctx.fs.lane,
+            slot,
             dir,
             &ctx.app.upload_record,
             naming,

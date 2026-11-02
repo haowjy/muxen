@@ -82,13 +82,14 @@ pub(crate) async fn open(
     let serve = assemble_serve_front(parts.serve).map_err(OpenError::Other)?;
     let state_dir = config::state_dir().map_err(|error| OpenError::Other(Box::new(error)))?;
     let upload_record = state_dir.join("upload-part");
-    fs::upload::reap(&upload_record);
     let store = Store::open(state_dir).map_err(|error| OpenError::Other(Box::new(error)))?;
     let home = config::home().map_err(|error| OpenError::Other(Box::new(error)))?;
     let host_id = store
         .host_id()
         .map_err(|error| OpenError::Other(Box::new(error)))?;
     let lanes = Lanes::default();
+    // Not awaited: the recorded folder may sit on a hung mount.
+    fs::upload::reap(&lanes.fs, &upload_record);
     let api = LocalApi::system();
     #[cfg(target_os = "macos")]
     let auth_target = serve.target.clone();

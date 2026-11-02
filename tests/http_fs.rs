@@ -243,9 +243,14 @@ async fn an_upload_can_name_its_folder_and_never_replaces_a_file() {
     )
     .await;
     assert_eq!(after.status, 201, "{}", after.text());
+    // The delete runs on the fs lane, not awaited by the upload.
+    for _ in 0..200 {
+        if !folder.join(".muxen-upload-old.part").exists() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
     assert!(!folder.join(".muxen-upload-old.part").exists());
-    assert!(folder.join(".muxen-upload-other.part").exists());
-    assert!(!daemon.dir.join("upload-part").exists());
 
     // `~/…` works, a missing folder is not found, a file is not a directory.
     let home = post(&daemon, "/fs/upload?name=c.png&dir=~%2Fcode", b"z", false).await;

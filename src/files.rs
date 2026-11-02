@@ -104,7 +104,8 @@ impl From<File> for Dir {
 /// A file being written in a directory, under a temporary name until it lands. Not
 /// deleted on drop: a drop can happen on the runtime thread, and a delete can block on
 /// the disk. Each landing deletes it on its own failure; otherwise call `discard`, on a
-/// lane. One left by a crash is removed by the next `create` of its name.
+/// lane. One left by a crash is removed by the next `create` of its name (the paste files)
+/// or, for an upload's random-named part file, through the upload record (`upload::reap`).
 #[derive(Debug)]
 pub struct Temp {
     dir: Dir,

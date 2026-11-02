@@ -4576,8 +4576,10 @@ to one folder: an upload may name the folder it lands in.
 - **Stale part files.** A crash leaves a `.muxen-upload-*.part` file in whatever folder the upload was writing.
   Rule: one upload slot means one live part file at most, so the daemon records its absolute path in `upload-part` in
   its state directory before creating it, and deletes the record when the part lands or is removed. At startup and
-  before each upload it deletes the recorded file (if still a regular file named like a part file) and the record.
-  Nothing scans a folder, and the cleanup never fails an upload or the start. (A first version swept the upload's own
+  before each upload it deletes the record, then the recorded file (if still a regular file named like a part file) on
+  the fs lane, not awaited: the path may be on a hung mount, which must fill an fs thread and nothing else. The upload
+  slot moves into the part file and is released after the cleanup clears the record, so a cleanup that outlives its
+  request can't race the next upload. Nothing scans a folder, and the cleanup never fails an upload or the start. (A first version swept the upload's own
   folder on every upload. That left a hidden file for good in any folder nobody uploaded to again, and it could fail
   an upload on an entry it couldn't delete.) This replaces the startup sweep of `uploads_dir`, which covered one folder.
 - **Rejected:** sweeping the upload's own folder on every upload (leaves a stale file in any folder never uploaded

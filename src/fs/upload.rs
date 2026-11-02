@@ -4,7 +4,7 @@
 //! name's extension is used. A part file is deleted on any failure. The daemon keeps the
 //! path of the one in-flight part file in a record file (`upload-part` in its state
 //! directory); a part file a dead daemon left is deleted from that record, at startup or by
-//! the next upload.
+//! the next upload. The upload slot is held exactly while a part file may exist.
 
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
@@ -18,6 +18,7 @@ use std::time::{Duration, SystemTime};
 use bytes::Bytes;
 use futures_util::{Stream, StreamExt as _};
 use rustix::io::Errno;
+use tokio::sync::OwnedSemaphorePermit;
 use tracing::debug;
 
 use super::{FsError, Opened, Want, expand, open, open_absolute};
@@ -119,9 +120,11 @@ impl Naming<'_> {
 
 /// Writes `body` into a part file in `dir` and renames it to its final name. `limit` is
 /// the size cap; `record` is the in-flight record file. Takes one fs thread per chunk
-/// written; the caller holds the upload slot.
+/// written. `slot` is the upload slot: it moves into the part file and is released only
+/// once the part file is gone and its record cleared.
 pub async fn receive<S, E>(
     lane: &Lane,
+    slot: OwnedSemaphorePermit,
     dir: Opened,
     record: &Path,
     naming: Naming<'_>,
@@ -136,7 +139,7 @@ where
     let create_path = dir_path.clone();
     let (dir, part_lane, record) = (Dir::from(dir.file), lane.clone(), record.to_owned());
     let part = lane
-        .run(move || Part::create(&dir, &create_path, part_lane, record))
+        .run(move || Part::create(&dir, &create_path, part_lane, record, slot))
         .await??;
     let file = part.file.clone();
     match copy(lane, file, limit, body).await {
@@ -237,6 +240,9 @@ fn write_error(error: io::Error) -> FsError {
 /// `.muxen-upload-<random>.part` in the destination folder, deleted unless it landed. The
 /// delete runs on the fs lane, since the folder may sit on the slow disk; one that gets
 /// no thread in time is left to the next `create`'s `reap`.
+///
+/// Holds the upload slot until its cleanup (delete, then clear the record) has run on the
+/// lane, so a slot holder never races a cleanup still in flight.
 struct Part {
     /// `None` once it landed or was deleted.
     temp: Option<Temp>,
@@ -244,21 +250,29 @@ struct Part {
     lane: Lane,
     /// Names this part file while it exists; cleared when it landed or was deleted.
     record: PathBuf,
+    /// `None` once its cleanup took it.
+    slot: Option<OwnedSemaphorePermit>,
 }
 
 impl Part {
     /// Deletes what a previous part file left, records this one's path, then creates it.
     /// Recording first means a crash between the two leaves a record of nothing. Safe to
-    /// reap: the caller holds the one upload slot, so no part file is live.
-    fn create(dir: &Dir, dir_path: &str, lane: Lane, record: PathBuf) -> Result<Self, FsError> {
-        reap(&record);
+    /// reap: the slot is held, and every cleanup releases it only after clearing the
+    /// record, so no part file is live.
+    fn create(
+        dir: &Dir,
+        dir_path: &str,
+        lane: Lane,
+        record: PathBuf,
+        slot: OwnedSemaphorePermit,
+    ) -> Result<Self, FsError> {
+        reap(&lane, &record);
         let name = format!(
             "{PART_PREFIX}{}{PART_SUFFIX}",
             random(16).map_err(write_error)?
         );
         let path = Path::new(dir_path).join(&name);
-        std::fs::write(&record, path.as_os_str().as_encoded_bytes())
-            .map_err(|error| FsError::Internal(io::Error::other(error)))?;
+        std::fs::write(&record, path.as_os_str().as_encoded_bytes()).map_err(FsError::Internal)?;
         let temp = Temp::create(dir, name.as_ref(), 0o600).map_err(|error| {
             forget(&record);
             write_error(error)
@@ -268,17 +282,19 @@ impl Part {
             temp: Some(temp),
             lane,
             record,
+            slot: Some(slot),
         })
     }
 
     /// Renames the part file to a free final name. A failure deletes it.
     async fn land(mut self, names: Vec<io::Result<String>>) -> Result<String, FsError> {
         let temp = self.temp.take();
-        let record = self.record.clone();
+        let (record, slot) = (self.record.clone(), self.slot.take());
         let landed = self.lane.run(move || {
             let gone = || io::Error::from(io::ErrorKind::NotFound);
             let landed = temp.ok_or_else(gone)?.land(names);
             forget(&record);
+            drop(slot);
             landed
         });
         landed.await?.map_err(FsError::Internal)
@@ -287,12 +303,13 @@ impl Part {
     /// Deletes the part file before the response goes out.
     async fn remove(mut self) {
         if let Some(temp) = self.temp.take() {
-            let record = self.record.clone();
+            let (record, slot) = (self.record.clone(), self.slot.take());
             let _ = self
                 .lane
                 .run(move || {
                     temp.discard();
                     forget(&record);
+                    drop(slot);
                 })
                 .await;
         }
@@ -300,12 +317,17 @@ impl Part {
 }
 
 impl Drop for Part {
-    /// A request dropped mid-upload (the client went away) still deletes its part file. It
-    /// leaves the record: by the time this runs the next upload may have written its own,
-    /// and a record of a deleted file is cleared by the next `reap`.
+    /// A request dropped mid-upload (the client went away) still deletes its part file and
+    /// clears the record, then frees the slot. A lane too busy to run it leaves both to
+    /// the next `reap`; the slot is freed with the dropped closure.
     fn drop(&mut self) {
         if let Some(temp) = self.temp.take() {
-            self.lane.spawn(move || temp.discard());
+            let (record, slot) = (self.record.clone(), self.slot.take());
+            self.lane.spawn(move || {
+                temp.discard();
+                forget(&record);
+                drop(slot);
+            });
         }
     }
 }
@@ -353,27 +375,42 @@ fn is_part(name: &OsStr) -> bool {
     name.starts_with(PART_PREFIX.as_bytes()) && name.ends_with(PART_SUFFIX.as_bytes())
 }
 
-/// Deletes the part file `record` names, if it is still a regular file named like a part
-/// file, then the record. Housekeeping: nothing here fails an upload or the daemon's
-/// start, and an error is only logged. Blocks.
-pub fn reap(record: &Path) {
+/// Takes the unfinished-upload record (reads it, then deletes it, both in the state
+/// directory) and deletes the part file it names on the fs lane, not awaited: the path may
+/// sit on a hung mount, and that must fill an fs thread, not hold up the daemon's start or
+/// an upload. Housekeeping: an error is only logged.
+pub fn reap(lane: &Lane, record: &Path) {
+    if let Some(recorded) = take_record(record) {
+        lane.spawn(move || delete_part(&recorded));
+    }
+}
+
+fn take_record(record: &Path) -> Option<PathBuf> {
     let recorded = match std::fs::read(record) {
         Ok(bytes) => PathBuf::from(OsString::from_vec(bytes)),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return,
-        Err(error) => return debug!(%error, "can't read the unfinished-upload record"),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return None,
+        Err(error) => {
+            debug!(%error, "can't read the unfinished-upload record");
+            return None;
+        }
     };
+    forget(record);
+    Some(recorded)
+}
+
+/// Deletes `recorded` if it is still a regular file named like a part file. Blocks.
+fn delete_part(recorded: &Path) {
     let part = recorded.is_absolute()
         && recorded.file_name().is_some_and(is_part)
-        && std::fs::symlink_metadata(&recorded).is_ok_and(|meta| meta.is_file());
+        && std::fs::symlink_metadata(recorded).is_ok_and(|meta| meta.is_file());
     if part {
-        match std::fs::remove_file(&recorded) {
+        match std::fs::remove_file(recorded) {
             Ok(()) => debug!(path = %recorded.display(), "deleted an unfinished upload"),
             Err(error) => {
                 debug!(%error, path = %recorded.display(), "can't delete an unfinished upload")
             }
         }
     }
-    forget(record);
 }
 
 /// Deletes the record; an error is only logged.
@@ -402,6 +439,12 @@ mod tests {
     /// The record file's path in a fresh state folder, which the test keeps alive.
     fn record(state: &Tree) -> PathBuf {
         state.path("upload-part")
+    }
+
+    fn slot() -> OwnedSemaphorePermit {
+        Arc::new(tokio::sync::Semaphore::new(1))
+            .try_acquire_owned()
+            .expect("a permit")
     }
 
     fn names(tree: &Tree) -> Vec<String> {
@@ -459,6 +502,7 @@ mod tests {
         let chunks = vec![vec![0; 70_000], vec![0; 70_000]];
         let refused = receive(
             &lane,
+            slot(),
             dir(&tree),
             &record(&state),
             Naming::Upload("a.png"),
@@ -478,6 +522,7 @@ mod tests {
         let started = tokio::time::Instant::now();
         let refused = receive(
             &lane,
+            slot(),
             dir(&tree),
             &record(&state),
             Naming::Upload("a.png"),
@@ -509,7 +554,16 @@ mod tests {
         let lane = Lanes::default().fs;
         let text = body(vec![b"hello\n".to_vec()]);
         let (dir, record) = (dir(&tree), record(&state));
-        let saved = receive(&lane, dir, &record, Naming::PastedText, MAX_UPLOAD, text).await;
+        let saved = receive(
+            &lane,
+            slot(),
+            dir,
+            &record,
+            Naming::PastedText,
+            MAX_UPLOAD,
+            text,
+        )
+        .await;
         let saved = saved.expect("saved");
         assert_eq!(saved.size, 6);
         assert_eq!(std::fs::read(&saved.path).expect("read"), b"hello\n");
@@ -529,7 +583,7 @@ mod tests {
 
         let reaps = |name: &str| {
             std::fs::write(&record, tree.str(name)).expect("a record");
-            reap(&record);
+            delete_part(&take_record(&record).expect("a record"));
             assert!(!record.exists(), "{name}: the record is cleared");
         };
         reaps("keep.part");
@@ -553,6 +607,6 @@ mod tests {
                 "keep.part"
             ]
         );
-        reap(&record); // no record: nothing to do
+        assert!(take_record(&record).is_none()); // no record: nothing to do
     }
 }
