@@ -40,6 +40,8 @@ interface TouchDeps {
   directInput(): "xterm" | "owned" | "native";
   /** Focuses the terminal's input: a touch tap on or beside the cursor row, native input only. */
   focusTerminal(): void;
+  /** Native only: the keyboard is down and a tap closed iOS's selection, so the field takes the responder back for hardware keys. */
+  reclaimFocus(): void;
   /** The shell's command line under the cursor (OSC 133), or null. */
   prompt(): PromptLine | null;
   /** Who holds the keyboard. */
@@ -301,6 +303,7 @@ export class TouchControl {
         if (this.dismissing) {
           this.deps.page.clear();
           this.deps.mark.clear();
+          this.deps.reclaimFocus();
           break;
         }
         this.tap(action.x, action.y);

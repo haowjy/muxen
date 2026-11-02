@@ -160,6 +160,7 @@ export class Terminals extends Store<TerminalsView> {
       editMenu: () => this.app.platform.editMenu,
       directInput: () => this.viewport.directInput,
       focusTerminal: () => { this.app.focus.focusTarget("terminal", true); },
+      reclaimFocus: () => { this.app.focus.reclaimNative(); },
       prompt: () => this.promptLine,
       owner: () => this.app.focus.snapshot.owner,
       onScrolled: (scrolled) => { this.update({ scrolled }); },
@@ -584,7 +585,8 @@ export class Terminals extends Store<TerminalsView> {
     if (xterm) helper?.removeAttribute("aria-hidden");
     else helper?.setAttribute("aria-hidden", "true");
     // On a phone browser the keys beside the text (below) go to tmux from here.
-    if (directInput === "owned") document.addEventListener("keydown", this.hardwareKey);
+    // In the app, keys reach the page only while WebKit holds the responder (iOS's selection with the keyboard down).
+    if (directInput !== "xterm") document.addEventListener("keydown", this.hardwareKey);
     else document.removeEventListener("keydown", this.hardwareKey);
     this.registered = xterm ? renderer?.inputElement() ?? null : directInput === "owned" ? this.ownedInput() : this.app.focus.nativeTerminal();
     this.drawCursor();

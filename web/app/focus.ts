@@ -272,6 +272,14 @@ export class FocusController extends Store<FocusView> implements FocusPort {
     this.rest();
   }
 
+  /**
+   * Native, keyboard down: iOS's selection moved the responder to WebKit, and its closing leaves none, so hardware
+   * keys would go nowhere. Asks again for the resting `hidden`; the controller applies it even when it is the mode.
+   */
+  reclaimNative(): void {
+    if (this.isNative && this.snapshot.owner === "none" && this.restingNow() === "hidden") this.input.setFocus("hidden");
+  }
+
   private rest(): void {
     const mode = this.restingNow();
     if (mode !== null && mode !== this.mode) this.send(mode);

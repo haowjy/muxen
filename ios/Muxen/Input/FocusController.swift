@@ -19,7 +19,9 @@ final class FocusController {
     /// is asked, and the web's `focus` requests change nothing.
     private(set) var webKeyboard = false
 
-    var canResignInput: Bool { mode == .webText }
+    /// `hidden` lets WebKit take first responder: iOS's own selection on the rows needs it, and a field that refuses
+    /// to resign blocks the long press. `terminal` and `line` keep the field, since the keyboard is up for it.
+    var canResignInput: Bool { mode == .webText || mode == .hidden }
     var covered: Bool { isCovered }
     /// A page that loads fresh has no selection, so it gets the target alone.
     var modeForWeb: Mode { isCovered ? (stateBeforeCover ?? mode) : mode }

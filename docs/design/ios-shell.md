@@ -258,7 +258,9 @@ Standard user-driven paste remains required. The line mirror's Paste menu asks t
 
 > Key delivery remains required. Custom application shortcuts below are deferred; do not add a shortcut system to the minimal client.
 
-- `pressesBegan`/`pressesEnded` on `KeyboardInput` handle hardware keys. In `terminal`,
+- `pressesBegan`/`pressesEnded` on `KeyboardInput` handle hardware keys while it is first responder
+  (any mode but `webText`, and `hidden` until iOS's selection moves the responder to WebKit; the page
+  then routes the keys, see "Focus"). In `terminal`,
   the mapped special keys and chords go to tmux and plain printing keys arrive through
   `UITextField`. In `line`, printable keys, ←/→, Backspace and ⌘V edit the buffer;
   Return sends it; Esc returns focus to the terminal, while Tab, ↑/↓ and Ctrl chords go
@@ -344,7 +346,7 @@ responder. Terminal's native responder stays the same object while its target ch
 
 | State | First responder | Keyboard | Entered by |
 |---|---|---|---|
-| `hidden` | `KeyboardInput`, with an empty `inputView` | down | `focus hidden`: the keyboard toggle while `terminal` or `line` owns it; a screen that needs the keyboard down |
+| `hidden` | `KeyboardInput`, with an empty `inputView`; WebKit while iOS's selection is up | down | `focus hidden`: the keyboard toggle while `terminal` or `line` owns it; a screen that needs the keyboard down |
 | `terminal` | `KeyboardInput` | up | `focus terminal`: toggle from `hidden`; a tap on the cursor row or the row above/below while down; a terminal tap or esc from `line` while up; restore after interruption |
 | `line` | `KeyboardInput` | up, Return labelled Send | `focus line`: tap the dock box; restore after interruption |
 | `webText` | WebKit content view | WebKit's | a sheet or Files screen needs its own field; overlay / destination opens |
@@ -355,11 +357,16 @@ responder. Terminal's native responder stays the same object while its target ch
   in `terminal` keeps the keyboard up and switches to editing. The box appears only while
   the keyboard is up; a terminal tap or esc in `line` returns
   to `terminal` without hiding it.
-- **Hidden keeps native ownership.** `hidden` sets `KeyboardInput.inputView` to the
-  empty view and reloads it. Hardware keys still arrive and route to the terminal; a page
-  tap cannot steal first responder.
-- **The guard.** Outside `webText`, `canResignFirstResponder` refuses WebKit's attempt
-  to take the responder.
+- **Hidden rests on the native field, and lets WebKit take over.** `hidden` sets
+  `KeyboardInput.inputView` to the empty view and reloads it; the field is first responder and
+  hardware keys arrive and route to the terminal. A field that refused to resign blocked iOS's
+  long-press selection (WebKit never became responder), so in `hidden` it resigns when WebKit asks.
+  While WebKit holds the responder, hardware keys reach the page as `keydown`, and the page's one
+  hardware-key listener (`Terminals.hardwareKey`) sends them to tmux. A tap that closes the selection
+  sends `focus hidden` again (`FocusController.reclaimNative`), and the field takes the responder back;
+  `focus terminal` from the keyboard toggle or a tap near the cursor takes it the same way.
+- **The guard.** In `terminal` and `line`, `canResignFirstResponder` refuses WebKit's attempt to take
+  the responder: the keyboard is up for the field. `hidden` and `webText` allow it.
 - **Fields off Terminal.** Before a sheet or another destination's editable field is
   used, the web asks for `webText`, which resigns `KeyboardInput`; WebKit then owns the
   sheet field and its ordinary keyboard chrome. On close the held Terminal target is
