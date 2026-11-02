@@ -5,6 +5,7 @@ version section on release.
 
 ## [Unreleased]
 
+- In the iPhone app, pasting an image into the terminal's input or the line box uploads it and types its path, as the mark's Paste does.
 - In the iPhone app, typing goes through the page's own text boxes, as in phone Safari: the app's hidden text field is gone, and the Return key reads "return". A tap on the terminal now raises the keyboard (not in a mouse app, where it is a click, and not while text is marked, where it only clears the mark). The "Web keyboard (test)" switch is gone from the server list. The mark draws its own highlight, so iOS's selection no longer appears beside it, and the line box no longer loses what you type.
 - A text selection on the phone stays with its text when a full-screen app such as Claude Code or OpenCode repaints it a few rows up or down. Dragging a selection to the bottom edge while Jump to latest is showing no longer stalls.
 - muxen has an icon: a terminal with ox horns, on the iPhone app (which had none) and the installed web app.
