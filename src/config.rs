@@ -12,7 +12,7 @@ use thiserror::Error;
 use crate::tmux::{Endpoint, Socket};
 
 pub const DEFAULT_MEMORY_BUDGET_MIB: u64 = 72;
-const DEFAULT_UPLOADS: &str = "~/muxen-uploads";
+const DEFAULT_UPLOADS: &str = "~/.muxen-uploads";
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]

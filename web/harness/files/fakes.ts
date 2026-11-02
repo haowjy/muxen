@@ -37,7 +37,7 @@ fn main() -> io::Result<()> {
 
 export const HOME = "/home/jimmy";
 export const REPO = `${HOME}/muxen`;
-export const UPLOADS = `${HOME}/muxen-uploads`;
+export const UPLOADS = `${HOME}/.muxen-uploads`;
 /** A folder outside $HOME, with a file in it. */
 export const ETC = "/etc";
 

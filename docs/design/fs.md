@@ -35,7 +35,7 @@ auth is [auth.md](auth.md). Decisions and the alternatives rejected are in
 
 ## The uploads folder
 
-An upload that names no folder goes to `uploads_dir` in `config.toml` (default `~/muxen-uploads`), absolute or
+An upload that names no folder goes to `uploads_dir` in `config.toml` (default `~/.muxen-uploads`), absolute or
 starting with `~/`. A missing absolute path is created by the next upload; one that is
 neither absolute nor `~/` makes every upload answer `409 not_a_directory`. There are no
 favorites and no route that writes `config.toml`: Jimmy edits it by hand

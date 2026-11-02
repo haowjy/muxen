@@ -4582,3 +4582,12 @@ to one folder: an upload may name the folder it lands in.
   cross-filesystem rename fails, and no-replace needs one filesystem); `O_TMPFILE` (Linux only); a favorites list or
   a config key naming the allowed folders (Jimmy chose none, [no favorites](#no-favorites-2026-10-30)); a new route
   for text (the same body, slot and limits; only the name differs, so `text=1`).
+
+## The default uploads folder is hidden (2026-11-02)
+
+Jimmy, on the terminal's pasted images: "I think this is really nice feature... but I think it should go into a hidden
+thing like ~/.muxen-uploads/<>". The default `uploads_dir` is `~/.muxen-uploads`. An explicit `uploads_dir` in
+`config.toml` still wins, and a Paste into a folder names its own destination.
+
+- **Rejected:** migrating `~/muxen-uploads` (one user, pre-release: existing uploads stay where they are).
+

@@ -5,6 +5,7 @@ version section on release.
 
 ## [Unreleased]
 
+- Uploads from the terminal's pasted images now go to `~/.muxen-uploads`, a hidden folder, instead of `~/muxen-uploads`. Uploads you already have stay in `~/muxen-uploads`; nothing is moved. An `uploads_dir` set in `config.toml` is unchanged.
 - A text selection on the phone stays with its text when a full-screen app such as Claude Code or OpenCode repaints it a few rows up or down. Dragging a selection to the bottom edge while Jump to latest is showing no longer stalls.
 - muxen has an icon: a terminal with ox horns, on the iPhone app (which had none) and the installed web app.
 - The enrolment code field takes a pasted code (with or without its dash) and typing on an iPhone, which stopped after the first character.

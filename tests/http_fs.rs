@@ -115,7 +115,7 @@ async fn uploads_land_one_at_a_time_and_leave_no_part_file() {
     let body = uploaded.json();
     let path = body["path"].as_str().expect("a path");
     assert_eq!(body["size"], jpeg.len());
-    let uploads = daemon.home("muxen-uploads");
+    let uploads = daemon.home(".muxen-uploads");
     assert!(
         path.starts_with(uploads.to_str().expect("UTF-8")) && path.ends_with(".jpeg"),
         "{path}"
@@ -197,7 +197,7 @@ async fn an_upload_can_name_its_folder_and_never_replaces_a_file() {
     );
     assert_eq!(std::fs::read(&path).expect("the file"), png);
     assert!(
-        !daemon.home("muxen-uploads").exists(),
+        !daemon.home(".muxen-uploads").exists(),
         "the default folder wasn't used"
     );
 

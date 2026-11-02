@@ -266,7 +266,7 @@ and the note on `TMUX_TMPDIR` under systemd, are in [running.md](../running.md).
 | `[tmux] program` | `tmux` | the tmux executable; an absolute path if the unit's `PATH` doesn't find it |
 | `[tmux] socket_name` | none | `tmux -L <name>` |
 | `[tmux] socket_path` | none | `tmux -S <path>`; not together with `socket_name` |
-| `uploads_dir` | `~/muxen-uploads` | the uploads folder; read on every upload request ([fs.md](fs.md#the-uploads-folder)) |
+| `uploads_dir` | `~/.muxen-uploads` | the uploads folder; read on every upload request ([fs.md](fs.md#the-uploads-folder)) |
 | `[complete] history` | the most recently modified of `~/.zsh_history`, `~/.bash_history`, fish's history | the one history file the suggestion strip reads; set it when the shell's `$HISTFILE` is elsewhere ([complete.md](complete.md#history)) |
 | `[complete] path` | the daemon's own `PATH` | the `PATH` the command index scans and carapace runs with; set it to the interactive shell's `PATH`, since the systemd user manager's lacks what rc files add ([complete.md](complete.md#commands-on-path)) |
 | `[complete] carapace` | `carapace` on that `PATH` | the carapace binary; absent or failing means no flag chips ([complete.md](complete.md#carapace)) |
@@ -627,7 +627,7 @@ at `~`; existing tabs are restored by selecting them.
 the terminal can; a device token already runs commands in tmux, so a boundary would
 guard against nothing but Jimmy. There are no favorites: the path field heads every
 Files tab and works like a browser's address bar, so going somewhere is typing its path.
-The default uploads folder (`uploads_dir`, default `~/muxen-uploads`) is set in `config.toml`;
+The default uploads folder (`uploads_dir`, default `~/.muxen-uploads`) is set in `config.toml`;
 Paste in a folder writes there instead, and any folder the daemon's user can write is allowed.
 No file watcher: listings are read on open, on pull-to-refresh, and after muxen's own
 file operations. Typed into, the path field completes the next existing folder from
