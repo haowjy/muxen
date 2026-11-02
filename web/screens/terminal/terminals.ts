@@ -160,17 +160,13 @@ export class Terminals extends Store<TerminalsView> {
       editMenu: () => this.app.platform.editMenu,
       directInput: () => this.viewport.directInput,
       focusTerminal: () => { this.app.focus.focusTarget("terminal", true); },
-      reclaimFocus: () => { this.app.focus.reclaimNative(); },
       prompt: () => this.promptLine,
       owner: () => this.app.focus.snapshot.owner,
       onScrolled: (scrolled) => { this.update({ scrolled }); },
     });
     new ResizeObserver(() => { this.measure(); }).observe(this.element);
     app.subscribe(() => { this.sync(); });
-    app.focus.subscribe(() => {
-      this.drawCursor();
-      this.drawMarking();
-    });
+    app.focus.subscribe(() => { this.drawCursor(); });
     app.platform.subscribe((event) => {
       // The app's edit menu over the mark, or over iOS's own selection.
       if (event.type === "menuCopy") this.pastes.copySelection();
@@ -588,8 +584,7 @@ export class Terminals extends Store<TerminalsView> {
     if (xterm) helper?.removeAttribute("aria-hidden");
     else helper?.setAttribute("aria-hidden", "true");
     // On a phone browser the keys beside the text (below) go to tmux from here.
-    // In the app, keys reach the page only while WebKit holds the responder (iOS's selection with the keyboard down).
-    if (directInput !== "xterm") document.addEventListener("keydown", this.hardwareKey);
+    if (directInput === "owned") document.addEventListener("keydown", this.hardwareKey);
     else document.removeEventListener("keydown", this.hardwareKey);
     this.registered = xterm ? renderer?.inputElement() ?? null : directInput === "owned" ? this.ownedInput() : this.app.focus.nativeTerminal();
     this.drawCursor();
@@ -633,12 +628,6 @@ export class Terminals extends Store<TerminalsView> {
     const solid = this.viewport.directInput !== "xterm" && this.app.focus.snapshot.owner === "terminal";
     if (solid) this.element.dataset["cursor"] = "solid";
     else delete this.element.dataset["cursor"];
-  }
-
-  /** The hold is muxen's (the mark) whenever it can mark: WebKit's own long press must not start under it and cancel the touch. */
-  private drawMarking(): void {
-    if (this.view.markable) this.element.dataset["marking"] = "true";
-    else delete this.element.dataset["marking"];
   }
 
   /**

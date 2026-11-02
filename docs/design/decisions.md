@@ -4464,3 +4464,23 @@ clears while I hold it". Source: `.meridian/work/tether-mvp/ios-simplify/redesig
   after `editAbove` (keeps the stale-coordinate state); switching the mode to `webText` to get past the
   guard (a second responder owner and a wrong logical mode); reclaiming the responder only on the dismissing
   tap (misses J7, reset, paste, font change, resize).
+
+## The mark in both keyboard states (2026-11-02)
+
+With the keyboard down, iOS's own long-press selection felt slow. Asked whether to use muxen's mark in both
+states, Jimmy said: "i guess we should make it more consistent".
+
+- **In the app the hold is the mark with the keyboard up or down.** `Mark.available` (the platform has
+  `editMenu`) is the one check: `TerminalView` sets `data-marking` once, and the touch code starts the mark by it
+  alone. A browser has no edit menu, so no mark; it keeps WebKit's selection.
+- **Supersedes** the keyboard-down half of the 2026-11-02 "Keyboard down, WebKit takes the responder" entry
+  (`hidden` lets WebKit take the responder; hardware keys through `Terminals.hardwareKey` in the app; the
+  `selectionchange` reclaim and `TerminalView.markable`) and the step-0 choice that the keyboard-down state uses
+  iOS's own selection. The native field refuses WebKit's responder request in every mode but `webText` again, as
+  the 2026-10-30 "select is a flag" entry had it; `Terminals.hardwareKey` is the phone browser's only; the
+  reclaim and `markable` are deleted. The rest of that entry (`data-marking`, `touchcancel` ends the mark as a
+  lift, the cursor row, the reset order) stands.
+- **Tap rules, keyboard down with a mark up:** a tap inside toggles the menu; a tap elsewhere clears the mark and
+  does nothing else (no keyboard raise). With no mark a tap is as before.
+- **Rejected:** keeping iOS's selection with the keyboard down (the slowness is Jimmy's complaint; two
+  selections with two looks and two lifetimes); a setting for it (a mode for one person's taste).

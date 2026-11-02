@@ -9,7 +9,7 @@
 // scroll: the recognizer only hides the mark's menu for it.
 // A touch on a live selection is WebKit's and never reaches the recognizer. After a touch, mouse events
 // on the surface stop for a while: iOS's imitation mouse-move over a link would redraw rows and end a selection.
-// With the keyboard up in the app the hold is muxen's instead (`Mark`): WebKit's selection would take the
+// In the app the hold is muxen's instead (`Mark`), keyboard up or down: WebKit's selection would take the
 // keyboard down. The recognizer's hold marks the word, the finger extends it, a tap inside toggles the menu and a
 // tap elsewhere clears it; the handles' touches are the mark's own and never get here.
 import type { Owner } from "../../app/focus";
@@ -40,8 +40,6 @@ interface TouchDeps {
   directInput(): "xterm" | "owned" | "native";
   /** Focuses the terminal's input: a touch tap on or beside the cursor row, native input only. */
   focusTerminal(): void;
-  /** The hold may start the mark: a keyboard owner holds and the platform has the edit menu. */
-  markable(): boolean;
   /** The shell's command line under the cursor (OSC 133), or null. */
   prompt(): PromptLine | null;
   /** Who holds the keyboard. */
@@ -149,7 +147,7 @@ export class TouchControl {
     const target = touch.target;
     this.targets.set(touch.identifier, target);
     this.deps.list()?.hold(true);
-    const cancellable = this.deps.wheel.active || this.deps.markable();
+    const cancellable = this.deps.wheel.active || this.deps.mark.available;
     target.addEventListener("touchmove", this.touchMove as EventListener, { passive: !cancellable });
     target.addEventListener("touchend", this.touchEnd as EventListener, { passive: false });
     target.addEventListener("touchcancel", this.touchCancelled as EventListener);
@@ -326,8 +324,8 @@ export class TouchControl {
         this.pinned = false;
         break;
       case "longPress":
-        // Keyboard down, or in a browser: WebKit's, iOS selects the word under the finger. Keyboard up in the app: the mark.
-        this.marking = this.deps.markable() && this.deps.mark.begin(action.x, action.y);
+        // In the app the hold is the mark; a browser has no edit menu, so its long press stays WebKit's.
+        this.marking = this.deps.mark.available && this.deps.mark.begin(action.x, action.y);
         break;
       case "selectMove":
         if (this.marking) this.deps.mark.extend(action.x, action.y);
