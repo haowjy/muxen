@@ -1,6 +1,12 @@
 import Foundation
 import MuxenKit
 
+/// A folder to upload into instead of `uploads_dir`. `text`: the body is pasted text (fs.md "POST /fs/upload").
+struct UploadDestination {
+    let dir: String
+    let text: Bool
+}
+
 final class Uploader: NSObject, URLSessionDataDelegate, URLSessionTaskDelegate {
     private static let maxQueuedUploads = 4
 
@@ -9,6 +15,7 @@ final class Uploader: NSObject, URLSessionDataDelegate, URLSessionTaskDelegate {
         let host: HostEntry
         let data: Data
         let fileName: String
+        let destination: UploadDestination?
         let token: String
         let rejectedToken: (String) -> Void
         let progress: (Double) -> Void
@@ -17,11 +24,12 @@ final class Uploader: NSObject, URLSessionDataDelegate, URLSessionTaskDelegate {
         var statusCode: Int?
         var retry = 0
 
-        init(id: String, host: HostEntry, data: Data, fileName: String, token: String, rejectedToken: @escaping (String) -> Void, progress: @escaping (Double) -> Void, completion: @escaping (Result<String, Error>) -> Void) {
+        init(id: String, host: HostEntry, data: Data, fileName: String, destination: UploadDestination?, token: String, rejectedToken: @escaping (String) -> Void, progress: @escaping (Double) -> Void, completion: @escaping (Result<String, Error>) -> Void) {
             self.id = id
             self.host = host
             self.data = data
             self.fileName = fileName
+            self.destination = destination
             self.token = token
             self.rejectedToken = rejectedToken
             self.progress = progress
@@ -39,9 +47,9 @@ final class Uploader: NSObject, URLSessionDataDelegate, URLSessionTaskDelegate {
     private var activeJob: Job?
     private var queuedJobs: [Job] = []
 
-    func upload(id: String, host: HostEntry, data: Data, fileName: String, token: String, rejectedToken: @escaping (String) -> Void, progress: @escaping (Double) -> Void, completion: @escaping (Result<String, Error>) -> Void) -> Bool {
+    func upload(id: String, host: HostEntry, data: Data, fileName: String, destination: UploadDestination? = nil, token: String, rejectedToken: @escaping (String) -> Void, progress: @escaping (Double) -> Void, completion: @escaping (Result<String, Error>) -> Void) -> Bool {
         guard activeJob == nil || queuedJobs.count < Self.maxQueuedUploads else { return false }
-        let job = Job(id: id, host: host, data: data, fileName: fileName, token: token, rejectedToken: rejectedToken, progress: progress, completion: completion)
+        let job = Job(id: id, host: host, data: data, fileName: fileName, destination: destination, token: token, rejectedToken: rejectedToken, progress: progress, completion: completion)
         if activeJob == nil {
             activeJob = job
             attempt(job)
@@ -96,12 +104,20 @@ final class Uploader: NSObject, URLSessionDataDelegate, URLSessionTaskDelegate {
             return
         }
         components.path = "/fs/upload"
-        components.queryItems = [URLQueryItem(name: "name", value: job.fileName)]
+        // Encoded by hand: URLComponents leaves `+` bare in a value, and the daemon reads it as a space.
+        let unreserved = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
+        let encode = { (value: String) in value.addingPercentEncoding(withAllowedCharacters: unreserved) ?? "" }
+        var query = [URLQueryItem(name: "name", value: encode(job.fileName))]
+        if let destination = job.destination {
+            query.append(URLQueryItem(name: "dir", value: encode(destination.dir)))
+            if destination.text { query.append(URLQueryItem(name: "text", value: "1")) }
+        }
+        components.percentEncodedQueryItems = query
         guard let url = components.url else { fail(job, with: UploadFailure.invalidHost); return }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Bearer \(job.token)", forHTTPHeaderField: "Authorization")
-        request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
+        request.setValue(job.destination?.text == true ? "text/plain; charset=utf-8" : "image/jpeg", forHTTPHeaderField: "Content-Type")
         request.setValue(String(job.data.count), forHTTPHeaderField: "Content-Length")
         job.responseData.removeAll(keepingCapacity: true)
         job.statusCode = nil

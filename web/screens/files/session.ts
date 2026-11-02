@@ -5,9 +5,12 @@
 import type { AppController } from "../../app/controller";
 import type { FsApi } from "../../files/api";
 import { FileBrowser } from "../../files/browser";
+import { baseName } from "../../files/paths";
 import { Recent } from "../../files/recent";
 import { UploadTracker } from "../../files/uploads";
 import type { HostClient } from "../../net/hosts";
+import type { UploadEvent } from "../../platform/types";
+import type { Pasted } from "../terminal/paste";
 import { insertTargetOf } from "../../workspace/state";
 
 export interface FilesSession {
@@ -60,4 +63,47 @@ export function filesSession(app: AppController, host: HostClient): FilesSession
 export function startUpload(app: AppController, session: FilesSession): void {
   const target = insertTargetOf(app.snapshot.workspace);
   void session.uploads.track(app.platform.uploads.pick(session.handle, new AbortController().signal), target);
+}
+
+/**
+ * Paste, inside the tap: the platform reads the clipboard (an image, else text) into the folder `dir` shown.
+ * The path goes nowhere; Insert path on the file stays the way to use it.
+ */
+export function pasteIntoFolder(app: AppController, session: FilesSession, dir: string): void {
+  void app.platform.uploads.paste(session.handle, dir, new AbortController().signal).then((result) => {
+    if (result === "empty") app.notify("Nothing to paste");
+    else if (result === "denied") app.notify("Couldn't paste: clipboard access was refused");
+    else return followPaste(app, session, result);
+    return undefined;
+  });
+}
+
+/**
+ * A desktop paste event's contents into the folder `dir` shown. Where the page can't upload
+ * what it holds (the app), the platform reads the clipboard itself.
+ */
+export function pastedIntoFolder(app: AppController, session: FilesSession, dir: string, pasted: Pasted): void {
+  const { uploads } = app.platform;
+  if (pasted.kind === "empty") return;
+  if (!uploads.send) {
+    pasteIntoFolder(app, session, dir);
+    return;
+  }
+  const signal = new AbortController().signal;
+  const events = pasted.kind === "image"
+    ? uploads.send(session.handle, pasted.file, signal, { dir })
+    : uploads.send(session.handle, new File([pasted.text], "pasted.txt", { type: "text/plain" }), signal, { dir, text: true });
+  void followPaste(app, session, events);
+}
+
+/** A notice when the file lands (naming it) or fails; the listing shows it. */
+async function followPaste(app: AppController, session: FilesSession, events: AsyncIterable<UploadEvent>): Promise<void> {
+  app.notify("Pasting…");
+  for await (const event of events) {
+    if ("error" in event) app.notify(`Couldn't paste: ${event.error}`);
+    else if ("path" in event) {
+      app.notify(`Pasted ${baseName(event.path)}`);
+      await session.browser.uploaded(event.path);
+    }
+  }
 }

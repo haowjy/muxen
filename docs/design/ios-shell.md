@@ -511,6 +511,7 @@ token to native solely for comparison and revocation, never into storage or logs
 | `draftDelete { key: TabKey }` | `null` | Delete one draft |
 | `draftList` | `DraftRecord[]` | List drafts |
 | `copy { text }` | `"ok"` | User-initiated terminal Copy always writes the system pasteboard |
+| `pasteInto { host, id, dir }` | `{ uploading: id }` or `"empty"` | Files' Paste: native reads the pasteboard and uploads an image (JPEG, as a picked photo) or its text (`text=1`) into `dir` on `host`, under the web-chosen `id`, reporting with `upload` events as `readPasteboard` does. It never answers `text` |
 | `readPasteboard { tab: TabKey, id }` | `{ text }`, `{ uploading: id }`, `"empty"` or `"denied"` | Paste text, or upload an image to the tab's host under the web-chosen `id`. The first `upload` event follows this reply |
 | `haptic { kind }` | `null` | `key` or `modifier` (native's own ^C/^D `warning` is not a bridge kind) |
 | `pickMedia { id, host }` | `null` | Present the native media action sheet, then upload the pick to `host` under the web-chosen `id`. Needs no open tab |

@@ -1,6 +1,6 @@
 import {
   Check, ChevronDown, ChevronLeft, ChevronRight, CircleX, Equal, ExternalLink, File, Film, Folder, House, Image, Keyboard,
-  KeyboardOff, List, Plus, RotateCw, Search, Server, Settings, Terminal, TriangleAlert, Upload, X, type LucideIcon,
+  ClipboardPaste, KeyboardOff, List, Plus, RotateCw, Search, Server, Settings, Terminal, TriangleAlert, Upload, X, type LucideIcon,
 } from "lucide-preact";
 
 /** muxen's icon names, each a Lucide icon. */
@@ -25,6 +25,7 @@ const ICONS = {
   refresh: RotateCw,
   settings: Settings,
   upload: Upload,
+  paste: ClipboardPaste,
   check: Check,
   alert: TriangleAlert,
   image: Image,

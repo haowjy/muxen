@@ -47,6 +47,8 @@ export interface DirListProps {
   truncated: boolean;
   hidden: boolean;
   loading: boolean;
+  /** The entry just added by an upload or a paste: marked, and scrolled into view. */
+  fresh?: string | null;
   onOpen: (place: FilesPlace) => void;
   onMore: () => void;
   onToggleHidden: () => void;
@@ -54,7 +56,7 @@ export interface DirListProps {
   parent?: { name: string; onOpen: () => void };
 }
 
-export function DirList({ path, entries, total, truncated, hidden, loading, onOpen, onMore, onToggleHidden, parent }: DirListProps) {
+export function DirList({ path, entries, total, truncated, hidden, loading, fresh, onOpen, onMore, onToggleHidden, parent }: DirListProps) {
   const more = entries.length < total;
   const sentinel = useRef<HTMLDivElement>(null);
   const latest = useRef(onMore);
@@ -68,8 +70,11 @@ export function DirList({ path, entries, total, truncated, hidden, loading, onOp
     return () => { observer.disconnect(); };
   }, [more, entries.length]);
 
+  const wrap = useRef<HTMLDivElement>(null);
+  useEffect(() => { wrap.current?.querySelector("[data-fresh]")?.scrollIntoView({ block: "nearest" }); }, [fresh, entries]);
+
   return (
-    <div class={styles.wrap} aria-busy={loading}>
+    <div ref={wrap} class={styles.wrap} aria-busy={loading}>
       {entries.length === 0 && (
         <>
           {parent && <UpRow label={parent.name} name={parent.name} onOpen={parent.onOpen} />}
@@ -84,6 +89,7 @@ export function DirList({ path, entries, total, truncated, hidden, loading, onOp
             return (
               <Row
                 key={entry.name}
+                {...(entry.name === fresh && { selected: true, "data-fresh": "" })}
                 roving
                 class={styles.item}
                 icon={iconFor(entry)}

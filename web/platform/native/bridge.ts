@@ -22,6 +22,8 @@ export type SocketReply = { url: string; token: string } | { locked: true } | { 
 
 export type LineRange = TextRange;
 export type PasteboardReply = { text: string } | { uploading: string } | "empty" | "denied";
+/** Native uploads what it finds (image or text) itself, so it never answers `text`. */
+export type PasteIntoReply = { uploading: string } | "empty" | "denied";
 
 /** `id` is the one the page sent with `pickMedia` or `readPasteboard`. `cancelled` ends a pick whose picker was dismissed. */
 export interface UploadMsg {
@@ -195,6 +197,11 @@ export class Bridge {
   /** A pasted image uploads under `id`, to the tab's host; native reports it with `upload` events. */
   readPasteboard(tab: TabKey, id: string): Promise<PasteboardReply> {
     return this.post({ type: "readPasteboard", tab, id }) as Promise<PasteboardReply>;
+  }
+
+  /** Native reads the pasteboard and uploads an image or text into `dir` on `host`, reporting it under `id`. */
+  pasteInto(host: string, id: string, dir: string): Promise<PasteIntoReply> {
+    return this.post({ type: "pasteInto", host, id, dir }) as Promise<PasteIntoReply>;
   }
 
   haptic(kind: string): void {

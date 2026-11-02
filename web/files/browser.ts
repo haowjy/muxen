@@ -38,6 +38,8 @@ export interface FilesView {
   /** Why the place couldn't load; the screen offers to try again. */
   error: HttpRefusal | null;
   hidden: boolean;
+  /** The path of the file just added to the folder shown (an upload or a paste): the list marks it and scrolls to it. Any navigation clears it. */
+  fresh: string | null;
 }
 
 export interface BrowserOptions {
@@ -86,7 +88,7 @@ export class FileBrowser extends Store<FilesView> {
   private asked: Promise<string> | null = null;
 
   constructor(opts: BrowserOptions) {
-    super({ place: { kind: "dir", path: HOME }, home: opts.home ?? null, pages: null, loading: true, error: null, hidden: opts.hidden });
+    super({ place: { kind: "dir", path: HOME }, home: opts.home ?? null, pages: null, loading: true, error: null, hidden: opts.hidden, fresh: null });
     this.api = opts.api;
     this.folders = new Folders(opts.api);
   }
@@ -184,7 +186,9 @@ export class FileBrowser extends Store<FilesView> {
     this.folders.drop(parentOf(path));
     this.probed.delete(path);
     const { place } = this.snapshot;
-    if (place.kind === "dir" && place.path === parentOf(path)) await this.reload();
+    if (place.kind !== "dir" || place.path !== parentOf(path)) return;
+    await this.reload();
+    if (this.snapshot.place.kind === "dir" && this.snapshot.place.path === parentOf(path)) this.update({ fresh: path });
   }
 
   private openFile(path: string): Promise<void> {
@@ -234,7 +238,7 @@ export class FileBrowser extends Store<FilesView> {
   /** A navigation that needs no answer. */
   private go(patch: Partial<FilesView>): void {
     this.seq++;
-    this.update(patch);
+    this.update({ fresh: null, ...patch });
   }
 
   /** A navigation: shows `patch`, then `apply`s the answer of `work` unless another navigation began meanwhile. */

@@ -14,7 +14,8 @@ import { shorten } from "../../files/format";
 import { DirList, MissingFolder } from "./FolderList";
 import { PathField } from "./PathField";
 import { Preview } from "./Preview";
-import { scrollKey, startUpload, type FilesSession } from "./session";
+import { readPaste } from "../terminal/paste";
+import { pastedIntoFolder, pasteIntoFolder, scrollKey, startUpload, type FilesSession } from "./session";
 import { UploadPanel } from "./UploadPanel";
 import styles from "./FilesScreen.module.css";
 
@@ -42,6 +43,20 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
     void browser.follow(wanted, (settled) => { if (wantsNow.current === token) app.resolvedPlace(wanted, settled); });
     return () => { wantsNow.current = null; };
   }, [app, browser, wanted]);
+
+  // Cmd/Ctrl-V with the folder showing and no text box focused (the path field keeps its own paste).
+  const folderShown = place.kind === "dir" && pages?.path === place.path && !error ? pages.path : null;
+  useEffect(() => {
+    if (folderShown === null) return undefined;
+    const onPaste = (event: ClipboardEvent): void => {
+      const target = event.target;
+      if (target instanceof HTMLElement && target.closest("input, textarea, [contenteditable]")) return;
+      event.preventDefault();
+      pastedIntoFolder(app, session, folderShown, readPaste(event.clipboardData));
+    };
+    document.addEventListener("paste", onPaste);
+    return () => { document.removeEventListener("paste", onPaste); };
+  }, [app, session, folderShown]);
 
   const open = (to: FilesPlace): void => { app.openPlace(to); };
   const up = parentPlace(view);
@@ -92,6 +107,7 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
         {place.kind !== "file" && (
           <div class={styles.actions}>
             <IconButton icon="refresh" label="Refresh" disabled={loading} onClick={() => { void browser.reload(); }} />
+            {folderShown !== null && <Button icon="paste" onClick={() => { pasteIntoFolder(app, session, folderShown); }}>Paste</Button>}
             <Button icon="upload" onClick={() => { startUpload(app, session); }}>Upload</Button>
           </div>
         )}
@@ -114,6 +130,7 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
             truncated={pages.truncated}
             hidden={view.hidden}
             loading={loading}
+            fresh={view.fresh !== null && parentOf(view.fresh) === pages.path ? baseName(view.fresh) : null}
             onOpen={open}
             onMore={() => { void browser.more(); }}
             onToggleHidden={() => { void browser.toggleHidden(); }}

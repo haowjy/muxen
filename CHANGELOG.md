@@ -5,6 +5,7 @@ version section on release.
 
 ## [Unreleased]
 
+- Files can paste into the folder it shows. A **Paste** button in a folder's header (and Cmd/Ctrl-V on a desktop) puts an image from the clipboard into that folder as a new file named like an upload, and text as `pasted-<date>-<time>.txt` holding exactly that text. A name is never reused: a clash gets `-2`. It shows "Pasted <name>" and marks the new row. Uploads can now go to any folder you can write, not only `uploads_dir`. A pasted image from a browser's clipboard also keeps its type (`.png`), where it was saved as `.bin`. A crashed upload's `.muxen-upload-*.part` file is deleted by the next upload into the same folder; the startup sweep of `uploads_dir` is gone. An upload into a folder you can't write answers `403 denied`, not `500`.
 - Uploads from the terminal's pasted images now go to `~/.muxen-uploads`, a hidden folder, instead of `~/muxen-uploads`. Uploads you already have stay in `~/muxen-uploads`; nothing is moved. An `uploads_dir` set in `config.toml` is unchanged.
 - A text selection on the phone stays with its text when a full-screen app such as Claude Code or OpenCode repaints it a few rows up or down. Dragging a selection to the bottom edge while Jump to latest is showing no longer stalls.
 - muxen has an icon: a terminal with ox horns, on the iPhone app (which had none) and the installed web app.

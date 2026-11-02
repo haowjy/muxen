@@ -4,7 +4,7 @@
 //
 // The daemon takes one upload at a time (fs.md "Constants"), so the page sends one file at a
 // time and holds at most four, the one in flight included. A fifth is refused.
-import type { UploadEvent, Uploads } from "../types";
+import type { Clipboard, UploadEvent, UploadTo, Uploads } from "../types";
 
 export const QUEUE_LIMIT = 4;
 export const QUEUE_FULL = "Wait for the current uploads to finish";
@@ -19,7 +19,9 @@ const REFUSALS: Record<string, string> = {
   too_large: "That file is over the 128 MiB limit",
   busy: "The server is busy. Try again in a moment",
   no_space: "The server is out of disk space",
-  not_a_directory: "The uploads folder isn't usable. Check uploads_dir in config.toml",
+  not_a_directory: "That isn't a usable folder. For the uploads folder, check uploads_dir in config.toml",
+  denied: "That folder isn't writable",
+  not_found: "That folder no longer exists",
   memory_backed: "The uploads folder is on memory-backed storage",
 };
 
@@ -64,6 +66,8 @@ class Channel implements AsyncIterable<UploadEvent> {
 interface Job {
   id: string;
   file: File;
+  /** Absent: `uploads_dir`. */
+  to: UploadTo | undefined;
   channel: Channel;
   /** Set while the request is in flight. */
   abort: (() => void) | null;
@@ -76,7 +80,8 @@ interface Group {
   open: number;
 }
 
-export function createBrowserUploads(): Uploads {
+/** `read` is the browser's clipboard read, which `paste` calls inside the tap. */
+export function createBrowserUploads(read: () => ReturnType<Clipboard["read"]>): Uploads {
   /** Queued and in flight, in order; the head is in flight. */
   const jobs: Job[] = [];
   let counter = 0;
@@ -91,7 +96,8 @@ export function createBrowserUploads(): Uploads {
   const attempt = (job: Job, retries: number): void => {
     const xhr = new XMLHttpRequest();
     job.abort = () => { xhr.abort(); };
-    xhr.open("POST", `/fs/upload?name=${encodeURIComponent(job.file.name)}`);
+    const to = job.to ? `&dir=${encodeURIComponent(job.to.dir)}${job.to.text ? "&text=1" : ""}` : "";
+    xhr.open("POST", `/fs/upload?name=${encodeURIComponent(job.file.name)}${to}`);
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) job.channel.push({ id: job.id, progress: e.total === 0 ? 1 : e.loaded / e.total });
     };
@@ -119,7 +125,7 @@ export function createBrowserUploads(): Uploads {
   };
 
   /** Queues `files` into `group`; a file past the limit is refused at once. */
-  const enqueue = (files: File[], group: Group): void => {
+  const enqueue = (files: File[], group: Group, to?: UploadTo): void => {
     for (const file of files) {
       const id = `u${String(++counter)}`;
       group.open++;
@@ -128,7 +134,7 @@ export function createBrowserUploads(): Uploads {
         if (--group.open === 0) group.channel.end();
         continue;
       }
-      jobs.push({ id, file, channel: group.channel, abort: null, group });
+      jobs.push({ id, file, to, channel: group.channel, abort: null, group });
       group.channel.push({ id, progress: 0 });
     }
     pump();
@@ -150,6 +156,13 @@ export function createBrowserUploads(): Uploads {
   let input: HTMLInputElement | null = null;
   /** A picker opened and not yet answered: a new pick supersedes it. */
   let awaiting: { group: Group; stop(): void } | null = null;
+
+  const send = (_handle: string, file: File, signal: AbortSignal, to?: UploadTo): AsyncIterable<UploadEvent> => {
+    const group: Group = { channel: new Channel(), open: 0 };
+    cancelOn(signal, group);
+    enqueue([file], group, to);
+    return group.channel;
+  };
 
   return {
     pick(_handle, signal) {
@@ -186,11 +199,14 @@ export function createBrowserUploads(): Uploads {
       return group.channel;
     },
 
-    send(_handle, file, signal) {
-      const group: Group = { channel: new Channel(), open: 0 };
-      cancelOn(signal, group);
-      enqueue([file], group);
-      return group.channel;
+    send,
+
+    async paste(handle, dir, signal) {
+      const pasted = await read();
+      if (pasted === "empty" || pasted === "denied") return pasted;
+      if ("image" in pasted) return send(handle, pasted.image, signal, { dir });
+      if ("text" in pasted) return send(handle, new File([pasted.text], "pasted.txt", { type: "text/plain" }), signal, { dir, text: true });
+      return "denied"; // the browser never answers `uploading`
     },
   };
 }

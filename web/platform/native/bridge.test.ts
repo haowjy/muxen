@@ -43,6 +43,7 @@ const calls: Record<string, (b: Bridge, m: Fixture["message"]) => unknown> = {
   haptic: (b, m) => { b.haptic(m["kind"] as string); },
   backSwipe: (b, m) => { b.backSwipe(m["enabled"] as boolean); },
   editMenu: (b, m) => { b.editMenu(m["rect"] as never); },
+  pasteInto: (b, m) => b.pasteInto(m["host"] as string, m["id"] as string, m["dir"] as string),
   pickMedia: (b, m) => { b.pickMedia(m["id"] as string, m["host"] as string); },
   playVideo: (b, m) => { b.playVideo(m["host"] as string, m["path"] as string); },
   setPreference: (b, m) => b.setPreference(m["name"] as "appearance", m["value"] as never),

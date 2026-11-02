@@ -6,7 +6,7 @@ import { createBrowserUploads } from "./uploads";
 import { createBrowserPreferences } from "./preferences";
 import { createBrowserViewport } from "./viewport";
 import { readLifecycle, watchLifecycle } from "./lifecycle";
-import { clipboard } from "./clipboard";
+import { clipboard, readClipboard } from "./clipboard";
 import { canOpenApp, openInApp, openURL } from "./links";
 import { createPwa } from "./pwa";
 import { restart } from "./restart";
@@ -66,7 +66,7 @@ export function createBrowserPlatform(): Platform {
       setActiveTab: () => undefined,
     },
     storage: storage.storage,
-    uploads: createBrowserUploads(),
+    uploads: createBrowserUploads(readClipboard),
     clipboard,
     openURL,
     ...(canOpenApp() && { openInApp }),

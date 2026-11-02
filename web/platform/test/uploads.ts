@@ -25,6 +25,14 @@ export class UploadScript {
     };
   }
 
+  /** Every folder a `paste` named. It starts the same stream as a pick. */
+  pastes: string[] = [];
+
+  paste(dir: string): AsyncIterable<UploadEvent> {
+    this.pastes.push(dir);
+    return this.pick();
+  }
+
   push(event: UploadEvent): void {
     if (this.waiting) {
       const resolve = this.waiting;

@@ -58,6 +58,11 @@ export function createNativeUploads(bridge: Bridge): NativeUploads {
       bridge.pickMedia(id, handle); // synchronously, inside the tap
       return events;
     },
+    async paste(handle, dir, signal) {
+      const id = crypto.randomUUID();
+      const reply = await bridge.pasteInto(handle, id, dir).catch(() => "denied" as const);
+      return typeof reply === "string" ? reply : open(reply.uploading, signal);
+    },
     follow: open,
     receive(msg) {
       const stream = streams.get(msg.id);

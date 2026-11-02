@@ -1,0 +1,12 @@
+{
+  "direction": "webToNative",
+  "message": {
+    "type": "pasteInto",
+    "host": "host-01",
+    "id": "upload-03",
+    "dir": "/home/jimmy/notes"
+  },
+  "reply": {
+    "uploading": "upload-03"
+  }
+}

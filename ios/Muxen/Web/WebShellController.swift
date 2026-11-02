@@ -452,6 +452,9 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
                 let tab: TabKey = try request.field("tab")
                 let result = readPasteboard(host: tab.host, id: try request.field("id"))
                 reply(try jsonObject(result), nil)
+            case .pasteInto:
+                let result = pasteInto(host: try request.field("host"), id: try request.field("id"), dir: try request.field("dir"))
+                reply(try jsonObject(result), nil)
             case .haptic:
                 haptics.send(try request.field("kind"))
                 reply(NSNull(), nil)
@@ -484,6 +487,19 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
             return .object(["uploading": .string(id)])
         }
         if let text = UIPasteboard.general.string { return .object(["text": .string(text)]) }
+        return .string("empty")
+    }
+
+    /// Files' Paste: an image (as JPEG) or the text on the pasteboard becomes a new file in `dir`.
+    private func pasteInto(host: String, id: String, dir: String) -> JSONValue {
+        if let image = UIPasteboard.general.image {
+            upload(image, id: id, host: host, destination: UploadDestination(dir: dir, text: false))
+            return .object(["uploading": .string(id)])
+        }
+        if let text = UIPasteboard.general.string, !text.isEmpty {
+            upload(Data(text.utf8), id: id, host: host, fileName: "pasted.txt", destination: UploadDestination(dir: dir, text: true))
+            return .object(["uploading": .string(id)])
+        }
         return .string("empty")
     }
 
@@ -535,17 +551,24 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
 
     private func cancel(_ pick: PendingPick) { sendUpload(id: pick.id, progress: 1, cancelled: true) }
 
-    private func upload(_ image: UIImage, id: String, host hostID: String) {
-        guard let data = Self.jpegData(image),
-              let host = model.hosts.first(where: { $0.id == hostID }) else {
+    private func upload(_ image: UIImage, id: String, host hostID: String, destination: UploadDestination? = nil) {
+        guard let data = Self.jpegData(image) else {
             sendUpload(id: id, progress: 1, error: "Couldn't prepare this image.")
             return
         }
-        guard case .token(let token) = model.token(for: hostID) else {
-            sendUpload(id: id, progress: 1, error: "Unlock muxen to upload this image.")
+        upload(data, id: id, host: hostID, fileName: "image.jpg", destination: destination)
+    }
+
+    private func upload(_ data: Data, id: String, host hostID: String, fileName: String, destination: UploadDestination?) {
+        guard let host = model.hosts.first(where: { $0.id == hostID }) else {
+            sendUpload(id: id, progress: 1, error: "Couldn't find this server.")
             return
         }
-        let accepted = uploader.upload(id: id, host: host, data: data, fileName: "image.jpg", token: token, rejectedToken: { [weak model = self.model] rejectedToken in
+        guard case .token(let token) = model.token(for: hostID) else {
+            sendUpload(id: id, progress: 1, error: "Unlock muxen to upload.")
+            return
+        }
+        let accepted = uploader.upload(id: id, host: host, data: data, fileName: fileName, destination: destination, token: token, rejectedToken: { [weak model = self.model] rejectedToken in
             model?.rejectedToken(for: host.id, token: rejectedToken)
         }, progress: { [weak self] progress in
             self?.sendUpload(id: id, progress: progress)

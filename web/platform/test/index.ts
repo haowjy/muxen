@@ -92,7 +92,7 @@ export interface TestPlatform extends Platform {
   setViewport(patch: Partial<Viewport>): void;
   setLifecycle(patch: Partial<Lifecycle>): void;
   setUpdate(state: UpdateState): void;
-  /** What `uploads.pick` streams: a spec pushes progress, a path or an error, then ends the pick. */
+  /** What `uploads.pick` and `uploads.paste` stream: a spec pushes progress, a path or an error, then ends the pick. */
   uploadScript: UploadScript;
   /** Every socket the app opened, newest last. */
   links: FakeLink[];
@@ -320,7 +320,7 @@ export function createTestPlatform(options: TestPlatformOptions = {}): TestPlatf
         return Promise.resolve();
       },
     },
-    uploads: { pick: () => uploadScript.pick() },
+    uploads: { pick: () => uploadScript.pick(), paste: (_handle, dir) => Promise.resolve(uploadScript.paste(dir)) },
     clipboard: {
       writeText: (text) => {
         platform.clipboardWrites.push(text);
