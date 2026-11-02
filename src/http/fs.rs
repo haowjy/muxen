@@ -176,7 +176,15 @@ async fn upload(
             Naming::Upload(&query.name)
         };
         let body = body.into_data_stream();
-        upload::receive(&ctx.fs.lane, dir, naming, MAX_UPLOAD, body).await
+        upload::receive(
+            &ctx.fs.lane,
+            dir,
+            &ctx.app.upload_record,
+            naming,
+            MAX_UPLOAD,
+            body,
+        )
+        .await
     }
     .await;
     match uploaded {
@@ -184,7 +192,7 @@ async fn upload(
             info!(path = %uploaded.path, size = uploaded.size, "uploaded a file");
             (StatusCode::CREATED, Json(uploaded)).into_response()
         }
-        Err(refused) => respond("", Err(refused)),
+        Err(refused) => respond(query.dir.as_deref().unwrap_or(""), Err(refused)),
     }
 }
 

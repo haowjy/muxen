@@ -254,7 +254,7 @@ the cap against `Content-Length` up front, when sent, and against the running co
    base32 characters, and the extension of `name`, lowercased, if it is 1 to 8 ASCII
    alphanumerics, else `bin`. Nothing else of `name` is used, so it can't carry a
    path, a shell metacharacter or a hidden name into the folder.
-4. Delete the folder's stale part files (see below), then create `.muxen-upload-<random>.part` relative to the directory's descriptor with
+4. Delete the part file a dead daemon left (see below), record the new part file's path, then create `.muxen-upload-<random>.part` relative to the directory's descriptor with
    `O_CREAT | O_EXCL | O_NOFOLLOW`, mode 0600 (never executable). Write each body chunk
    on the fs lane. Every 2 MiB, `fdatasync` and
    `posix_fadvise(DONTNEED)` what was written, so the upload's dirty pages stay small
@@ -273,11 +273,17 @@ the cap against `Content-Length` up front, when sent, and against the running co
    lost to a power cut is re-sent.
 
 If cleanup cannot get a thread from the fs lane, or the daemon dies mid-upload, a `.part`
-file is left behind. **Every upload, to any folder, first deletes the `.muxen-upload-*.part`
-files in its own folder** (step 4), looking at no more than the 5,000 entries a listing
-scan reads. That is safe because the upload slot is held and the daemon holds the runtime
-lock, so no live part file exists in any folder. There is no startup sweep: a folder
-nobody uploads to again keeps its one stale file, hidden by its dot, until someone does.
+file is left behind. The one upload slot means at most one part file exists at a time, so
+the daemon records it: **`upload-part` in the state directory holds the in-flight part
+file's absolute path**, written before the part file is created and deleted when it lands
+or is removed. At startup, and again at step 4 of the next upload, the daemon reads the
+record, deletes the file it names if that is still a regular file whose name is
+`.muxen-upload-*.part`, and deletes the record. Nothing else is touched, and nothing in
+this cleanup fails an upload or the start: a missing or unreadable record, or a file it
+can't delete, is logged at `debug`. A request dropped mid-upload deletes its part file
+but leaves the record; a record of a deleted file is harmless and cleared by the next
+cleanup. No folder is scanned.
+
 6. Answer `201 { path, size }`, `path` the absolute canonical path, which native
    inserts, quoted, into the tab ([ios-shell.md](ios-shell.md#files-and-sharing)).
 
@@ -370,7 +376,7 @@ without a disk.
 | `fs/list.rs` | the scan; pure sort and page |
 | `fs/raw.rs` | pure `parse_range` and `If-Range`; the chunk producer; ETags come from `files::Stamp` |
 | `fs/mime.rs` | the extension table |
-| `fs/upload.rs` | pure name generation; part file, flush, rename, the folder's stale-part sweep |
+| `fs/upload.rs` | pure name generation; part file, flush, rename, the in-flight record and its cleanup |
 
 Wire types go in `src/proto/fs.rs` and are generated for TypeScript like the WebSocket
 messages ([daemon-core.md §5.5](daemon-core.md#55-type-generation)); Swift hand-writes

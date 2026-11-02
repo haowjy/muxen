@@ -223,8 +223,18 @@ async fn an_upload_can_name_its_folder_and_never_replaces_a_file() {
     assert_eq!(std::fs::read(&paths[0]).expect("read"), b"one\n");
     assert_eq!(std::fs::read(&paths[1]).expect("read"), b"two\n");
 
-    // A stale part file is swept by the next upload into its folder.
+    // The part file a dead daemon recorded is deleted by the next upload, wherever it is;
+    // another part-named file in the folder is not ours to delete.
     std::fs::write(folder.join(".muxen-upload-old.part"), b"x").expect("written");
+    std::fs::write(folder.join(".muxen-upload-other.part"), b"y").expect("written");
+    std::fs::write(
+        daemon.dir.join("upload-part"),
+        folder
+            .join(".muxen-upload-old.part")
+            .as_os_str()
+            .as_encoded_bytes(),
+    )
+    .expect("a record");
     let after = post(
         &daemon,
         &format!("/fs/upload?name=b.png&{}", dir(&folder)),
@@ -234,6 +244,8 @@ async fn an_upload_can_name_its_folder_and_never_replaces_a_file() {
     .await;
     assert_eq!(after.status, 201, "{}", after.text());
     assert!(!folder.join(".muxen-upload-old.part").exists());
+    assert!(folder.join(".muxen-upload-other.part").exists());
+    assert!(!daemon.dir.join("upload-part").exists());
 
     // `~/…` works, a missing folder is not found, a file is not a directory.
     let home = post(&daemon, "/fs/upload?name=c.png&dir=~%2Fcode", b"z", false).await;

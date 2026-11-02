@@ -90,29 +90,6 @@ impl Dir {
         }
     }
 
-    /// Unlinks the entries whose names `matches`, looking at no more than `limit` entries.
-    /// Returns how many it removed. Blocks.
-    pub fn remove_matching(
-        &self,
-        limit: usize,
-        matches: impl Fn(&[u8]) -> bool,
-    ) -> io::Result<usize> {
-        let mut entries = rustix::fs::Dir::read_from(&*self.0)?;
-        let mut removed = 0;
-        for _ in 0..limit {
-            let Some(entry) = entries.read() else { break };
-            let name = entry?.file_name().to_owned();
-            if matches(name.to_bytes()) {
-                match rustix::fs::unlinkat(&*self.0, &*name, AtFlags::empty()) {
-                    Ok(()) => removed += 1,
-                    Err(Errno::NOENT) => {}
-                    Err(errno) => return Err(errno.into()),
-                }
-            }
-        }
-        Ok(removed)
-    }
-
     fn sync(&self) -> io::Result<()> {
         self.0.sync_all()
     }
@@ -127,7 +104,7 @@ impl From<File> for Dir {
 /// A file being written in a directory, under a temporary name until it lands. Not
 /// deleted on drop: a drop can happen on the runtime thread, and a delete can block on
 /// the disk. Each landing deletes it on its own failure; otherwise call `discard`, on a
-/// lane. One left by a crash is removed by the next `create` of its name, or swept.
+/// lane. One left by a crash is removed by the next `create` of its name.
 #[derive(Debug)]
 pub struct Temp {
     dir: Dir,

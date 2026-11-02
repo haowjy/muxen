@@ -4574,11 +4574,15 @@ to one folder: an upload may name the folder it lands in.
   a device token runs any command in tmux as Jimmy, so a boundary guards nothing but Jimmy. `dir` adds writes under
   the same argument: any folder the daemon's user can write.
 - **Stale part files.** A crash leaves a `.muxen-upload-*.part` file in whatever folder the upload was writing.
-  Rule: every upload first deletes the part files in its own folder (at most the 5,000 entries a listing scan reads).
-  The upload slot and the runtime lock mean none is live. This replaces the startup sweep of `uploads_dir`, which
-  would have covered only one folder.
-- **Rejected:** a startup sweep that also covers other folders (it needs a record of every folder ever written to:
-  state for a crash that leaves one hidden file); a part file in `uploads_dir` renamed into the folder (a
+  Rule: one upload slot means one live part file at most, so the daemon records its absolute path in `upload-part` in
+  its state directory before creating it, and deletes the record when the part lands or is removed. At startup and
+  before each upload it deletes the recorded file (if still a regular file named like a part file) and the record.
+  Nothing scans a folder, and the cleanup never fails an upload or the start. (A first version swept the upload's own
+  folder on every upload. That left a hidden file for good in any folder nobody uploaded to again, and it could fail
+  an upload on an entry it couldn't delete.) This replaces the startup sweep of `uploads_dir`, which covered one folder.
+- **Rejected:** sweeping the upload's own folder on every upload (leaves a stale file in any folder never uploaded
+  to again; scans up to 5,000 entries per upload; can fail the upload on an entry it can't unlink); a recorded *folder*
+  rather than the exact part file (it would still scan, and could delete a lookalike file that isn't ours); a part file in `uploads_dir` renamed into the folder (a
   cross-filesystem rename fails, and no-replace needs one filesystem); `O_TMPFILE` (Linux only); a favorites list or
   a config key naming the allowed folders (Jimmy chose none, [no favorites](#no-favorites-2026-10-30)); a new route
   for text (the same body, slot and limits; only the name differs, so `text=1`).

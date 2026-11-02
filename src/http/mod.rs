@@ -43,6 +43,8 @@ pub struct App {
     pub hub: HubHandle,
     pub host: HostInfo,
     pub paste_dir: PathBuf,
+    /// Where an upload records its in-flight part file (`fs::upload::reap`).
+    pub upload_record: PathBuf,
     pub config: ConfigFile,
     pub home: PathBuf,
     pub complete: crate::complete::Settings,

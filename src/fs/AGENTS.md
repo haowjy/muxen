@@ -23,7 +23,7 @@ Rules the code relies on, which are easy to break:
 - An upload's `dir` opens through `fs::open` like a read; without it, uploads read `config.toml`'s `uploads_dir` on every request (`upload::open_dir`); a file
   that exists and doesn't parse fails them with `config_unavailable`. Nothing in the
   daemon writes `config.toml`: Jimmy edits it by hand.
-- Every upload first deletes `.muxen-upload-*.part` files in its own folder (`Part::create`); there is no startup sweep. That is safe only because the upload slot is held and the runtime lock keeps a second daemon out.
+- The in-flight part file is recorded in `upload-part` (state dir); `upload::reap` deletes the recorded file at startup and before each upload, never failing either. No folder is scanned. That is safe only because the upload slot is held and the runtime lock keeps a second daemon out.
 - Every file written whole goes through `files::Temp` (`src/files.rs`): an upload's part file (`land`, never replacing), auth's files. Linux uploads reject
   tmpfs/ramfs with `memory_backed` from the opened destination descriptor before the
   part file exists. `Temp` isn't deleted

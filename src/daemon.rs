@@ -81,6 +81,8 @@ pub(crate) async fn open(
     let parts = runtime.into_parts();
     let serve = assemble_serve_front(parts.serve).map_err(OpenError::Other)?;
     let state_dir = config::state_dir().map_err(|error| OpenError::Other(Box::new(error)))?;
+    let upload_record = state_dir.join("upload-part");
+    fs::upload::reap(&upload_record);
     let store = Store::open(state_dir).map_err(|error| OpenError::Other(Box::new(error)))?;
     let home = config::home().map_err(|error| OpenError::Other(Box::new(error)))?;
     let host_id = store
@@ -109,6 +111,7 @@ pub(crate) async fn open(
         local: parts.local,
         local_path: parts.local_path,
         paste_dir: parts.paste_dir,
+        upload_record,
         serve,
         auth,
         host_id,
@@ -126,6 +129,7 @@ pub(crate) struct Opened {
     local: tokio::net::UnixListener,
     local_path: PathBuf,
     paste_dir: PathBuf,
+    upload_record: PathBuf,
     serve: ServeAssembly,
     auth: Auth,
     host_id: String,
@@ -154,6 +158,7 @@ impl Opened {
             local,
             local_path,
             paste_dir,
+            upload_record,
             serve,
             auth,
             host_id,
@@ -184,6 +189,7 @@ impl Opened {
             hub,
             host: HostInfo { id: host_id, name },
             paste_dir,
+            upload_record,
             config: file,
             complete: complete::Settings::new(&config.complete, Environment::current(&home)),
             caps: tier.caps,

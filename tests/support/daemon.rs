@@ -258,6 +258,7 @@ pub async fn start_loopback(name: &str) -> Daemon {
             name: "test".to_owned(),
         },
         paste_dir,
+        upload_record: dir.join("upload-part"),
         config: ConfigFile::resolve(Some(&config)).expect("a config path"),
         complete: complete::Settings::new(
             &Default::default(),
@@ -412,6 +413,7 @@ async fn start_as_with_allowlist(
             name: "test".to_owned(),
         },
         paste_dir,
+        upload_record: dir.join("upload-part"),
         config: ConfigFile::resolve(Some(&config)).expect("a config path"),
         // No history, no PATH, no carapace: only paths complete.
         complete: complete::Settings::new(

@@ -1,13 +1,17 @@
 //! `POST /fs/upload` (fs.md): the body streams into a 0600 part file (`files::Temp`) in
 //! the destination folder (`uploads_dir` unless the request names one), flushed every
 //! 2 MiB, then renamed without replacing to a name the daemon chooses. Only the client
-//! name's extension is used. A part file is deleted on any failure, and leftovers from a
-//! daemon that died are swept from the folder by the next upload into it.
+//! name's extension is used. A part file is deleted on any failure. The daemon keeps the
+//! path of the one in-flight part file in a record file (`upload-part` in its state
+//! directory); a part file a dead daemon left is deleted from that record, at startup or by
+//! the next upload.
 
+use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io;
+use std::os::unix::ffi::OsStringExt as _;
 use std::os::unix::fs::{DirBuilderExt as _, FileExt as _};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -16,7 +20,6 @@ use futures_util::{Stream, StreamExt as _};
 use rustix::io::Errno;
 use tracing::debug;
 
-use super::list::SCAN_ENTRIES;
 use super::{FsError, Opened, Want, expand, open, open_absolute};
 use crate::blocking::Lane;
 use crate::config::ConfigFile;
@@ -115,10 +118,12 @@ impl Naming<'_> {
 }
 
 /// Writes `body` into a part file in `dir` and renames it to its final name. `limit` is
-/// the size cap. Takes one fs thread per chunk written; the caller holds the upload slot.
+/// the size cap; `record` is the in-flight record file. Takes one fs thread per chunk
+/// written; the caller holds the upload slot.
 pub async fn receive<S, E>(
     lane: &Lane,
     dir: Opened,
+    record: &Path,
     naming: Naming<'_>,
     limit: u64,
     body: S,
@@ -128,9 +133,10 @@ where
     E: std::fmt::Display,
 {
     let dir_path = dir.path.clone();
-    let (dir, part_lane) = (Dir::from(dir.file), lane.clone());
+    let create_path = dir_path.clone();
+    let (dir, part_lane, record) = (Dir::from(dir.file), lane.clone(), record.to_owned());
     let part = lane
-        .run(move || Part::create(&dir, part_lane).map_err(write_error))
+        .run(move || Part::create(&dir, &create_path, part_lane, record))
         .await??;
     let file = part.file.clone();
     match copy(lane, file, limit, body).await {
@@ -230,38 +236,47 @@ fn write_error(error: io::Error) -> FsError {
 
 /// `.muxen-upload-<random>.part` in the destination folder, deleted unless it landed. The
 /// delete runs on the fs lane, since the folder may sit on the slow disk; one that gets
-/// no thread in time leaves the file to the next upload into the folder, which sweeps.
+/// no thread in time is left to the next `create`'s `reap`.
 struct Part {
     /// `None` once it landed or was deleted.
     temp: Option<Temp>,
     file: Arc<File>,
     lane: Lane,
+    /// Names this part file while it exists; cleared when it landed or was deleted.
+    record: PathBuf,
 }
 
 impl Part {
-    /// Sweeps the folder's stale part files, then creates this one. Sweeping is safe
-    /// here: the caller holds the one upload slot and the daemon the runtime lock, so no
-    /// live part file is in any folder.
-    fn create(dir: &Dir, lane: Lane) -> io::Result<Self> {
-        let swept = dir.remove_matching(SCAN_ENTRIES, is_part)?;
-        if swept > 0 {
-            debug!(swept, "deleted unfinished uploads from the folder");
-        }
-        let name = format!("{PART_PREFIX}{}{PART_SUFFIX}", random(16)?);
-        let temp = Temp::create(dir, name.as_ref(), 0o600)?;
+    /// Deletes what a previous part file left, records this one's path, then creates it.
+    /// Recording first means a crash between the two leaves a record of nothing. Safe to
+    /// reap: the caller holds the one upload slot, so no part file is live.
+    fn create(dir: &Dir, dir_path: &str, lane: Lane, record: PathBuf) -> Result<Self, FsError> {
+        reap(&record);
+        let name = format!(
+            "{PART_PREFIX}{}{PART_SUFFIX}",
+            random(16).map_err(write_error)?
+        );
+        let path = Path::new(dir_path).join(&name);
+        std::fs::write(&record, path.as_os_str().as_encoded_bytes())
+            .map_err(|error| FsError::Internal(io::Error::other(error)))?;
+        let temp = Temp::create(dir, name.as_ref(), 0o600).map_err(write_error)?;
         Ok(Self {
             file: temp.file().clone(),
             temp: Some(temp),
             lane,
+            record,
         })
     }
 
     /// Renames the part file to a free final name. A failure deletes it.
     async fn land(mut self, names: Vec<io::Result<String>>) -> Result<String, FsError> {
         let temp = self.temp.take();
+        let record = self.record.clone();
         let landed = self.lane.run(move || {
             let gone = || io::Error::from(io::ErrorKind::NotFound);
-            temp.ok_or_else(gone)?.land(names)
+            let landed = temp.ok_or_else(gone)?.land(names);
+            forget(&record);
+            landed
         });
         landed.await?.map_err(FsError::Internal)
     }
@@ -269,13 +284,22 @@ impl Part {
     /// Deletes the part file before the response goes out.
     async fn remove(mut self) {
         if let Some(temp) = self.temp.take() {
-            let _ = self.lane.run(move || temp.discard()).await;
+            let record = self.record.clone();
+            let _ = self
+                .lane
+                .run(move || {
+                    temp.discard();
+                    forget(&record);
+                })
+                .await;
         }
     }
 }
 
 impl Drop for Part {
-    /// A request dropped mid-upload (the client went away) still deletes its part file.
+    /// A request dropped mid-upload (the client went away) still deletes its part file. It
+    /// leaves the record: by the time this runs the next upload may have written its own,
+    /// and a record of a deleted file is cleared by the next `reap`.
     fn drop(&mut self) {
         if let Some(temp) = self.temp.take() {
             self.lane.spawn(move || temp.discard());
@@ -321,8 +345,41 @@ fn random(n: usize) -> io::Result<String> {
         .collect())
 }
 
-fn is_part(name: &[u8]) -> bool {
+fn is_part(name: &OsStr) -> bool {
+    let name = name.as_encoded_bytes();
     name.starts_with(PART_PREFIX.as_bytes()) && name.ends_with(PART_SUFFIX.as_bytes())
+}
+
+/// Deletes the part file `record` names, if it is still a regular file named like a part
+/// file, then the record. Housekeeping: nothing here fails an upload or the daemon's
+/// start, and an error is only logged. Blocks.
+pub fn reap(record: &Path) {
+    let recorded = match std::fs::read(record) {
+        Ok(bytes) => PathBuf::from(OsString::from_vec(bytes)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return,
+        Err(error) => return debug!(%error, "can't read the unfinished-upload record"),
+    };
+    let part = recorded.is_absolute()
+        && recorded.file_name().is_some_and(is_part)
+        && std::fs::symlink_metadata(&recorded).is_ok_and(|meta| meta.is_file());
+    if part {
+        match std::fs::remove_file(&recorded) {
+            Ok(()) => debug!(path = %recorded.display(), "deleted an unfinished upload"),
+            Err(error) => {
+                debug!(%error, path = %recorded.display(), "can't delete an unfinished upload")
+            }
+        }
+    }
+    forget(record);
+}
+
+/// Deletes the record; an error is only logged.
+fn forget(record: &Path) {
+    match std::fs::remove_file(record) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => debug!(%error, "can't clear the unfinished-upload record"),
+    }
 }
 
 #[cfg(test)]
@@ -337,6 +394,11 @@ mod tests {
 
     fn dir(tree: &Tree) -> Opened {
         open_absolute(&tree.str(""), Want::Dir).expect("the folder")
+    }
+
+    /// The record file's path in a fresh state folder, which the test keeps alive.
+    fn record(state: &Tree) -> PathBuf {
+        state.path("upload-part")
     }
 
     fn names(tree: &Tree) -> Vec<String> {
@@ -389,12 +451,13 @@ mod tests {
 
     #[tokio::test]
     async fn over_the_cap_the_part_file_is_deleted() {
-        let tree = Tree::new("upload-cap");
+        let (tree, state) = (Tree::new("upload-cap"), Tree::new("upload-cap-state"));
         let lane = Lanes::default().fs;
         let chunks = vec![vec![0; 70_000], vec![0; 70_000]];
         let refused = receive(
             &lane,
             dir(&tree),
+            &record(&state),
             Naming::Upload("a.png"),
             100_000,
             body(chunks),
@@ -406,13 +469,14 @@ mod tests {
 
     #[tokio::test(start_paused = true)]
     async fn an_idle_body_is_aborted_and_its_part_file_deleted() {
-        let tree = Tree::new("upload-idle");
+        let (tree, state) = (Tree::new("upload-idle"), Tree::new("upload-idle-state"));
         let lane = Lanes::default().fs;
         let stalled = body(vec![vec![0; 10]]).chain(stream::pending());
         let started = tokio::time::Instant::now();
         let refused = receive(
             &lane,
             dir(&tree),
+            &record(&state),
             Naming::Upload("a.png"),
             MAX_UPLOAD,
             stalled,
@@ -437,18 +501,55 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn pasted_text_lands_exactly_and_the_upload_sweeps_stale_parts() {
-        let tree = Tree::new("upload-text");
+    async fn pasted_text_lands_exactly_and_clears_the_record() {
+        let (tree, state) = (Tree::new("upload-text"), Tree::new("upload-text-state"));
         let lane = Lanes::default().fs;
-        tree.write(".muxen-upload-zzzz.part", b"left by a crash");
-        tree.write("keep.part", b"not ours");
         let text = body(vec![b"hello\n".to_vec()]);
-        let saved = receive(&lane, dir(&tree), Naming::PastedText, MAX_UPLOAD, text).await;
+        let (dir, record) = (dir(&tree), record(&state));
+        let saved = receive(&lane, dir, &record, Naming::PastedText, MAX_UPLOAD, text).await;
         let saved = saved.expect("saved");
         assert_eq!(saved.size, 6);
         assert_eq!(std::fs::read(&saved.path).expect("read"), b"hello\n");
         assert!(saved.path.contains("/pasted-") && saved.path.ends_with(".txt"));
-        assert_eq!(names(&tree).len(), 2, "{:?}", names(&tree));
-        assert!(names(&tree).contains(&"keep.part".to_owned()));
+        assert_eq!(names(&tree).len(), 1, "{:?}", names(&tree));
+        assert!(!record.exists());
+    }
+
+    #[test]
+    fn reap_deletes_only_the_recorded_part_file() {
+        let (tree, state) = (Tree::new("reap"), Tree::new("reap-state"));
+        let record = record(&state);
+        tree.write(".muxen-upload-aaaa.part", b"left by a crash");
+        tree.write(".muxen-upload-bbbb.part", b"another folder's, not recorded");
+        tree.write("keep.part", b"not a part file's name");
+        tree.mkdir(".muxen-upload-cccc.part");
+
+        let reaps = |name: &str| {
+            std::fs::write(&record, tree.str(name)).expect("a record");
+            reap(&record);
+            assert!(!record.exists(), "{name}: the record is cleared");
+        };
+        reaps("keep.part");
+        reaps(".muxen-upload-cccc.part");
+        reaps("missing/.muxen-upload-dddd.part");
+        assert_eq!(
+            names(&tree),
+            [
+                ".muxen-upload-aaaa.part",
+                ".muxen-upload-bbbb.part",
+                ".muxen-upload-cccc.part",
+                "keep.part"
+            ]
+        );
+        reaps(".muxen-upload-aaaa.part");
+        assert_eq!(
+            names(&tree),
+            [
+                ".muxen-upload-bbbb.part",
+                ".muxen-upload-cccc.part",
+                "keep.part"
+            ]
+        );
+        reap(&record); // no record: nothing to do
     }
 }
