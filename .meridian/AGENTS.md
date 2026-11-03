@@ -1,9 +1,10 @@
-# Repository-local Meridian context
+# Meridian context
 
-`kb/` holds cross-cutting knowledge; `work/` holds active plans and handoffs;
-`archive/work/` holds completed work artifacts. Product specs and mockups remain
-canonical in `docs/design/`; link to them rather than maintain duplicate specs.
+Work notes and the KB for this project are not in this repository. They live in
+`git@github.com:haowjy/docs.git` under `muxen/` (`muxen/work`, `muxen/kb`,
+`muxen/archive/work`); Meridian clones that repo to `~/.meridian/git/haowjy-docs`.
+Product specs and mockups remain canonical in `docs/design/`; link to them rather than
+duplicate them.
 
-Commit reviewed notes with the change they describe. Keep credentials, raw captures,
-transcripts and machine-local runtime data out of git; use ignored `scratch/` or
-Meridian's user-state directory. Read [README.md](README.md) for machine setup.
+Keep credentials, raw probe captures, transcripts and machine-local runtime data out
+of both repositories. Read [README.md](README.md) for machine setup.

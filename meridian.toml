@@ -85,29 +85,17 @@ agent = "tech-lead"
 # [work.artifacts]
 # sync = "project"
 
-# -- Repository-local context (tracked with this checkout) -------------------
+# -- Context: work and KB live in haowjy/docs under muxen/ -----------------
 [context.work]
-source = "local"
-path = ".meridian/work"
-archive = ".meridian/archive/work"
+source = "git"
+remote = "git@github.com:haowjy/docs.git"
+path = "muxen/work"
+archive = "muxen/archive/work"
 
 [context.kb]
-source = "local"
-path = ".meridian/kb"
+source = "git"
+remote = "git@github.com:haowjy/docs.git"
+path = "muxen/kb"
 
-# -- Workspace root examples -------------------------------------------------
-# Named workspace entries live in meridian.toml / meridian.local.toml.
-
-# [workspace.docs]
-# path = "./docs"
-
-# -- Environment variables passed to spawned harnesses -----------------------
-# Flat key-value string map. Applied to every spawn from this project.
-# Keys from meridian.local.toml override meridian.toml; project overrides user.
-
-# [env]
-# OPENCODE_ENABLE_EXA = "1"
-
-# managed by meridian — do not edit
 [project]
 id = "steep-lamp-cloud"

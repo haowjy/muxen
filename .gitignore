@@ -18,3 +18,13 @@ node_modules/
 web/dist/
 web/test-results/
 web/playwright-report/
+.DS_Store
+target/
+.swiftpm/
+.build/
+DerivedData/
+xcuserdata/
+probes/
+*.pem
+*.key
+.env

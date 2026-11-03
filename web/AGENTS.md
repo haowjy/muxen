@@ -1,6 +1,6 @@
 # web/
 
-The client's design is `.meridian/work/tether-mvp/design/client-architecture.md`; read §3
+The client's design is `tether-mvp/design/client-architecture.md` in the Meridian work dir (haowjy/docs `muxen/work/`); read §3
 (layout and lint rules), §6 (state owners) and §11 (lanes and the hand-off protocol) before
 adding a file. [README.md](README.md) has the commands.
 

@@ -6,3 +6,10 @@
 **/*.log
 **/*.har
 **/.env
+# Work and KB live in git@github.com:haowjy/docs.git under muxen/ (see README.md).
+/work/
+/kb/
+/archive/
+**/probes/
+*.pem
+*.key
