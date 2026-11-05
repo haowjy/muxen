@@ -41,8 +41,10 @@ interface FileRowProps {
   selected: boolean;
   fresh: boolean;
   upName: string;
-  /** The latest handlers, and the time ages count from, read when a row draws or is tapped: a row is not redrawn for a new closure. */
-  act: { current: { onOpen: (place: FilesPlace) => void; onUp: (() => void) | undefined; now: number } };
+  /** The time ages count from: taken again whenever the rows are rebuilt (a new page, a refresh). */
+  now: number;
+  /** The latest handlers, read when a row is tapped: a row is not redrawn for a new closure. */
+  act: { current: { onOpen: (place: FilesPlace) => void; onUp: (() => void) | undefined } };
 }
 
 /**
@@ -53,10 +55,10 @@ interface FileRowProps {
 class FileRow extends Component<FileRowProps> {
   override shouldComponentUpdate(next: FileRowProps): boolean {
     const p = this.props;
-    return next.row !== p.row || next.id !== p.id || next.selected !== p.selected || next.fresh !== p.fresh || next.upName !== p.upName;
+    return next.row !== p.row || next.id !== p.id || next.selected !== p.selected || next.fresh !== p.fresh || next.upName !== p.upName || next.now !== p.now;
   }
 
-  override render({ row, id, selected, fresh, upName, act }: FileRowProps) {
+  override render({ row, id, selected, fresh, upName, now, act }: FileRowProps) {
     const { entry, place } = row;
     if (!entry) {
       return (
@@ -68,7 +70,6 @@ class FileRow extends Component<FileRowProps> {
     }
     const dir = entry.kind === "dir";
     const why = whyNot(entry);
-    const { now } = act.current;
     return (
       <div
         id={id}
@@ -99,13 +100,14 @@ class FileRow extends Component<FileRowProps> {
 
 /** The rows of a listbox, as options: the caller's container holds the focus and names the selected one by `optionId(selected)`. */
 export function RowList({ rows, selected, optionId, fresh, onOpen, onUp }: RowListProps) {
-  const act = useRef({ onOpen, onUp, now: Date.now() });
-  act.current = { onOpen, onUp, now: act.current.now };
+  const act = useRef({ onOpen, onUp });
+  act.current = { onOpen, onUp };
+  const now = useMemo(() => Date.now(), [rows]);
   const upName = baseName(rows[0]?.kind === "up" ? (rows[0].place?.path ?? "") : "") || "/";
   return (
     <>
       {rows.map((row) => (
-        <FileRow key={row.key} row={row} id={optionId(row.key)} selected={row.key === selected} fresh={row.entry !== null && row.entry.name === fresh} upName={upName} act={act} />
+        <FileRow key={row.key} row={row} id={optionId(row.key)} selected={row.key === selected} fresh={row.entry !== null && row.entry.name === fresh} upName={upName} now={now} act={act} />
       ))}
     </>
   );
