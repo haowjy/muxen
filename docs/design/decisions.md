@@ -4804,6 +4804,20 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
   `pane_current_path` sent to the client; out of scope); a Download link the page builds itself (environment
   checks belong in `platform/`, and the app's web view would show a dead button).
 
+### A row's menu: Open, Open in new tab, Copy path, Download, Insert
+
+- **Decided:** 2026-11-05, Jimmy (C's row menu; "Download for any file", "Insert path should let him choose
+  the terminal").
+- **What:** right-click (desktop), Shift+F10 or the menu key, and a held touch (phone) open one menu on a
+  row: Open (Go into folder), Open in new tab, Copy path, Download with the size (files), then the Insert
+  section the Insert ▾ button shows. A long-press does not select the row, as a tap doesn't; a right-click
+  does. The gesture is one listener on the listbox, which finds the row under the press, so rows stay
+  unaware of it. It is the existing Menu primitive at the press point.
+- **Rejected:** C's phone bottom sheet with the file's name over it (a second menu form beside the tab row's
+  popover; deferred with the sheet question for every menu); C's "Insert into <default>" plus "Insert into
+  another terminal" submenu (a submenu is a second level on a phone, and the tab list is short); a ⋯ button
+  on each row (a hover target on desktop, a second tap target on the phone's 48px rows).
+
 ### The code frame: numbered lines, a Wrap lines switch, Copy text; a big Download for what muxen can't show
 
 - **Decided:** 2026-11-05, Jimmy ("make text display prettier", JSON and plain text especially; "Download for

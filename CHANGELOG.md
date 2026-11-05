@@ -5,6 +5,7 @@ version section on release.
 
 ## [Unreleased]
 
+- A row in Files has a menu: right-click it on a desktop (or Shift+F10), hold it on the phone. It offers Open, Open in new tab, Copy path, Download for a file, and the terminal tabs to insert its path into.
 - Text and code files in Files read better: line numbers that stay put as long lines scroll, the code edge to edge, a Wrap lines switch and Copy text (it says when it copied only the first 1 MB). On the phone the language, line count and size sit above the code. Markdown is set at a comfortable width. A file muxen can't show says what it is and offers a big Download.
 - A file in Files has one header line: Back to its folder, its name and size, then Copy path, Download and Insert into terminal. Copy path copies the full path and shows a check where you clicked. Download saves any file through the browser (not yet in the iPhone app). Insert into terminal lists this server's terminal tabs, the last one you used first; Cmd/Ctrl+I inserts into that one. An upload's Insert offer is the same menu.
 - Files puts each folder on one header line: the path, then its controls. A desktop keeps Upload, Paste and Refresh as icons beside a ⋯ menu; on the phone they move into ⋯, beside Copy path and Show hidden files (Cmd/Ctrl+Shift+. on a desktop). The path reads as plain text; click or tap it and the last folder is selected, so Delete goes to the folder above (Enter there, or Esc/Cancel to stay). On a desktop `/` jumps to the path.

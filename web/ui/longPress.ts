@@ -13,6 +13,8 @@ export interface MenuAsk<E extends HTMLElement> {
   anchor: E;
   x: number;
   y: number;
+  /** A held touch, not a right click. */
+  touch: boolean;
 }
 
 export interface LongPress<E extends HTMLElement> {
@@ -40,7 +42,7 @@ export function useLongPress<E extends HTMLElement>(onMenu: (ask: MenuAsk<E>) =>
       if (e.pointerType !== "touch") return;
       const anchor = e.currentTarget;
       const { clientX: x, clientY: y } = e;
-      hold.current = { x, y, timer: setTimeout(() => { hold.current = null; opened.current = true; latest.current({ anchor, x, y }); }, LONG_PRESS_MS) };
+      hold.current = { x, y, timer: setTimeout(() => { hold.current = null; opened.current = true; latest.current({ anchor, x, y, touch: true }); }, LONG_PRESS_MS) };
     },
     onPointerMove: (e) => { if (hold.current && Math.hypot(e.clientX - hold.current.x, e.clientY - hold.current.y) > SLOP) stop(); },
     onPointerUp: stop,
@@ -48,7 +50,7 @@ export function useLongPress<E extends HTMLElement>(onMenu: (ask: MenuAsk<E>) =>
     onContextMenu: (e) => {
       e.preventDefault();
       stop();
-      if (!opened.current) latest.current({ anchor: e.currentTarget, x: e.clientX, y: e.clientY });
+      if (!opened.current) latest.current({ anchor: e.currentTarget, x: e.clientX, y: e.clientY, touch: false });
     },
     swallowClick: () => {
       const was = opened.current;

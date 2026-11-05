@@ -12,9 +12,10 @@ import { FolderActions } from "./FolderActions";
 import { EmptyState } from "../../ui/primitives/EmptyState";
 import { Spinner } from "../../ui/primitives/Spinner";
 import { shorten } from "../../files/format";
-import { DirList, MissingFolder } from "./FolderList";
+import { DirList, MissingFolder, type RowMenuAsk } from "./FolderList";
 import { PathField } from "./PathField";
 import { FileView } from "./FileView";
+import { RowMenu } from "./RowMenu";
 import { readPaste } from "../terminal/paste";
 import { pasteIntoFolder, scrollKey, type FilesSession } from "./session";
 import { UploadPanel } from "./UploadPanel";
@@ -36,6 +37,7 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
   const scroller = useRef<HTMLDivElement>(null);
   // While the path field is being typed in, the path field's matches are the list.
   const [finding, setFinding] = useState(false);
+  const [rowMenu, setRowMenu] = useState<RowMenuAsk | null>(null);
 
   // The one cancellation for answers that land late: this effect's token is current only while the pane still wants this place.
   // A resolve or a Markdown link answer that finds another token (or none) is dropped.
@@ -74,6 +76,8 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
   useLayoutEffect(() => {
     if (folder !== null && scroller.current) scroller.current.scrollTop = session.scroll.get(scrollKey(tab.id, folder)) ?? 0;
   }, [folder, session.scroll, tab.id, listingVisible]);
+  // A row's menu belongs to the folder it was asked in.
+  useEffect(() => { setRowMenu(null); }, [folder]);
 
   const onLink = (target: LinkTarget): void => {
     if (target.kind === "external") app.platform.openURL(target.url);
@@ -138,6 +142,7 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
             onKeyNavigate={() => { app.focus.keepKeyboardOn("list"); }}
             onMore={() => { void browser.more(); }}
             onToggleHidden={() => { void browser.toggleHidden(); }}
+            onRowMenu={setRowMenu}
             {...(up?.kind === "dir" && { onUp: () => { app.toPlace(up); } })}
           />
         </div>
@@ -148,6 +153,7 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
         </FileView>
       )}
       {place.kind === "dir" && body && !finding && <div class={styles.scroll}>{body}</div>}
+      {rowMenu && listingVisible && <RowMenu session={session} {...rowMenu} onClose={() => { setRowMenu(null); }} />}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { Component } from "preact";
+import { Component, type TargetedMouseEvent } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { Entry, Listing } from "../../files/api";
 import { formatAge, formatSize, formatTime } from "../../files/format";
@@ -10,6 +10,7 @@ import { Button } from "../../ui/primitives/Button";
 import { EmptyState } from "../../ui/primitives/EmptyState";
 import { Icon } from "../../ui/primitives/Icon";
 import { useFocusRef } from "../../ui/focus";
+import { useLongPress } from "../../ui/longPress";
 import { Spinner } from "../../ui/primitives/Spinner";
 import type { OutlineView } from "./session";
 import { fileIcon } from "./fileIcon";
@@ -110,6 +111,13 @@ export function RowList({ rows, selected, optionId, fresh, onOpen, onUp }: RowLi
   );
 }
 
+/** A row's menu, asked for at a point; `list` is the listbox, where focus goes back when the menu closes. */
+export interface RowMenuAsk {
+  row: OutlineRow;
+  at: { x: number; y: number };
+  list: HTMLElement;
+}
+
 interface FolderListboxProps {
   rows: readonly OutlineRow[];
   selected: string | null;
@@ -120,11 +128,29 @@ interface FolderListboxProps {
   onKeyNavigate: () => void;
   /** The first row: up to the enclosing folder. Absent at `/`. */
   onUp?: (() => void) | undefined;
+  /** A row's menu was asked for (right click, a held touch, Shift+F10 or the menu key), at this point. */
+  onRowMenu?: ((ask: RowMenuAsk) => void) | undefined;
 }
 
 /** A folder's rows as the page's one focusable listbox, which stays when the folder has no rows, so the keys work there too. */
-function FolderListbox({ rows, selected, fresh, onSelect, onOpen, onKeyNavigate, onUp }: FolderListboxProps) {
+function FolderListbox({ rows, selected, fresh, onSelect, onOpen, onKeyNavigate, onUp, onRowMenu }: FolderListboxProps) {
   const ref = useFocusRef("list");
+  /** The row a menu is for: one that opens something, never `..`. */
+  const menuRow = (el: Element | null): OutlineRow | null => {
+    const id = el?.closest("[role=option]")?.id;
+    const row = id === undefined ? undefined : rows.find((r) => box.optionId(r.key) === id);
+    return row && row.kind !== "up" && row.place ? row : null;
+  };
+  /** A pointer or a key selects the row the menu is for; a held touch leaves the phone's list unselected, as a tap does. */
+  const ask = (row: OutlineRow, at: RowMenuAsk["at"], list: HTMLElement, select = true): void => {
+    if (select) onSelect(row.key);
+    onRowMenu?.({ row, at, list });
+  };
+  // One gesture for the whole list, found by the row under the press: rows are redrawn only for their own changes.
+  const press = useLongPress<HTMLDivElement>(({ anchor, x, y, touch }) => {
+    const row = menuRow(document.elementFromPoint(x, y));
+    if (row) ask(row, { x, y }, anchor, !touch);
+  });
   const goUp = onUp && (() => { onKeyNavigate(); onUp(); });
   const box = useListbox({
     rows,
@@ -139,7 +165,36 @@ function FolderListbox({ rows, selected, fresh, onSelect, onOpen, onKeyNavigate,
     ...(goUp && { onUp: goUp }),
   });
   return (
-    <div ref={ref} role="listbox" aria-label="Contents" tabIndex={0} aria-activedescendant={box.activeId} class={styles.list} onKeyDown={box.onKeyDown}>
+    <div
+      ref={ref}
+      role="listbox"
+      aria-label="Contents"
+      tabIndex={0}
+      aria-activedescendant={box.activeId}
+      class={styles.list}
+      onKeyDown={(e) => {
+        if (onRowMenu && (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10"))) {
+          const row = rows.find((r) => r.key === selected);
+          const el = row ? document.getElementById(box.optionId(row.key)) : null;
+          if (row && el && menuRow(el)) {
+            e.preventDefault();
+            const rect = el.getBoundingClientRect();
+            ask(row, { x: rect.left + 40, y: rect.bottom }, e.currentTarget);
+          }
+          return;
+        }
+        box.onKeyDown(e);
+      }}
+      {...(onRowMenu && {
+        onPointerDown: press.onPointerDown,
+        onPointerMove: press.onPointerMove,
+        onPointerUp: press.onPointerUp,
+        onPointerCancel: press.onPointerCancel,
+        onContextMenu: (e: TargetedMouseEvent<HTMLDivElement>) => { if (menuRow(e.target as Element)) press.onContextMenu(e); },
+        // The click that ends a held touch that opened the menu opens nothing.
+        onClickCapture: (e: MouseEvent) => { if (press.swallowClick()) { e.stopPropagation(); e.preventDefault(); } },
+      })}
+    >
       <RowList rows={rows} selected={selected} optionId={box.optionId} fresh={fresh} onOpen={onOpen} {...(onUp && { onUp })} />
     </div>
   );
@@ -174,10 +229,11 @@ export interface DirListProps {
   onToggleHidden: () => void;
   /** The first row: up to the enclosing folder. Absent at `/`. */
   onUp?: () => void;
+  onRowMenu?: (ask: RowMenuAsk) => void;
 }
 
 /** The folder's rows as the outline draws them with nothing expanded: one flat list. */
-export function DirList({ pages, hidden, loading, fresh, onOpen, view: initial, onView, onKeyNavigate, onMore, onToggleHidden, onUp }: DirListProps) {
+export function DirList({ pages, hidden, loading, fresh, onOpen, view: initial, onView, onKeyNavigate, onMore, onToggleHidden, onUp, onRowMenu }: DirListProps) {
   const { entries, total, truncated } = pages;
   const [view, setView] = useState(initial);
   const parent = onUp ? (pages.parent ?? null) : null;
@@ -207,7 +263,7 @@ export function DirList({ pages, hidden, loading, fresh, onOpen, view: initial, 
 
   return (
     <div ref={wrap} class={styles.wrap} aria-busy={loading}>
-      <FolderListbox rows={rows} selected={selected} fresh={fresh} onSelect={select} onOpen={onOpen} onKeyNavigate={onKeyNavigate} onUp={onUp} />
+      <FolderListbox rows={rows} selected={selected} fresh={fresh} onSelect={select} onOpen={onOpen} onKeyNavigate={onKeyNavigate} onUp={onUp} onRowMenu={onRowMenu} />
       {entries.length === 0 && <EmptyState icon="folder" title="This folder is empty">{hidden ? undefined : "Hidden files are not shown."}</EmptyState>}
       {more && (
         <div ref={sentinel} class={styles.more}>
