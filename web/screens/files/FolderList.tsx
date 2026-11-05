@@ -1,7 +1,9 @@
+import type { VNode } from "preact";
 import { useEffect, useRef } from "preact/hooks";
-import type { Entry } from "../../files/api";
-import { entryPlace } from "../../files/browser";
+import type { Entry, Listing } from "../../files/api";
 import { formatSize } from "../../files/format";
+import { outline, UP } from "../../files/outline";
+import { baseName } from "../../files/paths";
 import type { FilesPlace } from "../../platform/types";
 import { Button } from "../../ui/primitives/Button";
 import { EmptyState } from "../../ui/primitives/EmptyState";
@@ -40,11 +42,11 @@ export function MissingFolder({ parent }: { parent?: { name: string; onOpen: () 
   );
 }
 
+const NOTHING: ReadonlySet<string> = new Set();
+
 export interface DirListProps {
-  path: string;
-  entries: Entry[];
-  total: number;
-  truncated: boolean;
+  /** The pages held of the folder shown. */
+  pages: Listing;
   hidden: boolean;
   loading: boolean;
   /** The entry just added by an upload or a paste: marked, and scrolled into view. */
@@ -53,10 +55,15 @@ export interface DirListProps {
   onMore: () => void;
   onToggleHidden: () => void;
   /** The first row: up to the enclosing folder. Absent at `/`. */
-  parent?: { name: string; onOpen: () => void };
+  onUp?: () => void;
 }
 
-export function DirList({ path, entries, total, truncated, hidden, loading, fresh, onOpen, onMore, onToggleHidden, parent }: DirListProps) {
+/** The folder's rows as the outline draws them with nothing expanded: one flat list. */
+export function DirList({ pages, hidden, loading, fresh, onOpen, onMore, onToggleHidden, onUp }: DirListProps) {
+  const { entries, total, truncated } = pages;
+  const rows = outline({ root: pages.path, parent: onUp ? (pages.parent ?? null) : null, expanded: NOTHING, held: (path) => (path === pages.path ? pages : null), filter: "", selection: null }).rows;
+  const upName = baseName(pages.parent ?? "");
+  const up = (roving: boolean): VNode => <UpRow key={UP} {...(roving && { roving })} label={upName} name={upName} onOpen={() => { onUp?.(); }} />;
   const more = entries.length < total;
   const sentinel = useRef<HTMLDivElement>(null);
   const latest = useRef(onMore);
@@ -77,18 +84,18 @@ export function DirList({ path, entries, total, truncated, hidden, loading, fres
     <div ref={wrap} class={styles.wrap} aria-busy={loading}>
       {entries.length === 0 && (
         <>
-          {parent && <UpRow label={parent.name} name={parent.name} onOpen={parent.onOpen} />}
+          {onUp && up(false)}
           <EmptyState icon="folder" title="This folder is empty">{hidden ? undefined : "Hidden files are not shown."}</EmptyState>
         </>
       )}
       {entries.length > 0 && (
         <RovingList label="Contents" class={styles.list}>
-          {parent && <UpRow roving label={parent.name} name={parent.name} onOpen={parent.onOpen} />}
-          {entries.map((entry) => {
-            const place = entryPlace(path, entry);
+          {rows.map((row) => {
+            if (!row.entry) return up(true);
+            const { entry, place } = row;
             return (
               <Row
-                key={entry.name}
+                key={row.key}
                 {...(entry.name === fresh && { selected: true, "data-fresh": "" })}
                 roving
                 class={styles.item}

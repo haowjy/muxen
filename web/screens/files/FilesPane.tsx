@@ -130,17 +130,14 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
           onScroll={(e) => { session.scroll.set(scrollKey(tab.id, pages.path), e.currentTarget.scrollTop); }}
         >
           <DirList
-            path={pages.path}
-            entries={pages.entries}
-            total={pages.total}
-            truncated={pages.truncated}
+            pages={pages}
             hidden={view.hidden}
             loading={loading}
             fresh={view.fresh !== null && parentOf(view.fresh) === pages.path ? baseName(view.fresh) : null}
             onOpen={open}
             onMore={() => { void browser.more(); }}
             onToggleHidden={() => { void browser.toggleHidden(); }}
-            {...(up?.kind === "dir" && { parent: { name: baseName(up.path), onOpen: () => { app.toPlace(up); } } })}
+            {...(up?.kind === "dir" && { onUp: () => { app.toPlace(up); } })}
           />
         </div>
       )}
