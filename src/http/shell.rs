@@ -58,7 +58,7 @@ pub(super) fn is_shell_path(path: &str) -> bool {
 }
 
 pub(super) async fn fallback(request: Request) -> Response {
-    if ["/auth", "/ws", "/fs", "/complete", "/debug"]
+    if ["/auth", "/ws", "/fs", "/complete", "/settings", "/debug"]
         .iter()
         .any(|prefix| {
             let path = request.uri().path();

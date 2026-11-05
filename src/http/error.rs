@@ -1,6 +1,6 @@
 //! Every HTTP refusal (fs.md "Errors", auth.md "Endpoints"): an `HttpError` in the JSON
 //! error body, with its status and the headers `busy` and `bad_range` carry. Built from
-//! a code, a JSON body axum refused, an `FsError` or an `AuthError`.
+//! a code, a JSON body axum refused, an `FsError`, a `SaveError` or an `AuthError`.
 
 use axum::Json;
 use axum::extract::rejection::JsonRejection;
@@ -8,6 +8,7 @@ use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 
 use crate::auth::AuthError;
+use crate::config::{ConfigError, SaveError};
 use crate::fs::FsError;
 use crate::proto::{CloseCode, ErrorBody, ErrorNode, HttpError};
 
@@ -17,6 +18,7 @@ pub(super) struct Refusal {
     error: HttpError,
     reason: Option<String>,
     node: Option<ErrorNode>,
+    detail: Option<String>,
     /// A 416's file size, for `Content-Range: bytes */<size>`.
     size: Option<u64>,
 }
@@ -30,7 +32,7 @@ impl From<HttpError> for Refusal {
             AuthRequired | NotEnrolled => StatusCode::UNAUTHORIZED,
             Forbidden | BadOrigin | NodeRefused | BadCode | Denied => StatusCode::FORBIDDEN,
             NotFound => StatusCode::NOT_FOUND,
-            NotADirectory | NotAFile | MemoryBacked => StatusCode::CONFLICT,
+            NotADirectory | NotAFile | MemoryBacked | ConfigReadOnly => StatusCode::CONFLICT,
             TooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             BadRange => StatusCode::RANGE_NOT_SATISFIABLE,
             Busy | AuthUnavailable | IdentityUnavailable | ConfigUnavailable => {
@@ -44,6 +46,7 @@ impl From<HttpError> for Refusal {
             error,
             reason: None,
             node: None,
+            detail: None,
             size: None,
         }
     }
@@ -65,7 +68,44 @@ impl From<JsonRejection> for Refusal {
             error,
             reason: None,
             node: None,
+            detail: None,
             size: None,
+        }
+    }
+}
+
+impl From<crate::blocking::Busy> for HttpError {
+    fn from(crate::blocking::Busy: crate::blocking::Busy) -> Self {
+        Self::Busy
+    }
+}
+
+/// `config_unavailable`, saying where the file went wrong.
+impl From<&ConfigError> for Refusal {
+    fn from(error: &ConfigError) -> Self {
+        let detail = match error {
+            ConfigError::Parse { line, column, .. } => format!("line {line}, column {column}"),
+            ConfigError::TwoSockets { .. } => {
+                "tmux.socket_name and tmux.socket_path are both set".to_owned()
+            }
+            ConfigError::Io { source, .. } => source.kind().to_string(),
+            other => other.to_string(),
+        };
+        Self {
+            detail: Some(detail),
+            ..Self::from(HttpError::ConfigUnavailable)
+        }
+    }
+}
+
+impl From<&SaveError> for Refusal {
+    fn from(refused: &SaveError) -> Self {
+        match refused {
+            SaveError::BadRequest => Self::from(HttpError::BadRequest),
+            SaveError::Busy => Self::from(HttpError::Busy),
+            SaveError::ReadOnly(_) => Self::from(HttpError::ConfigReadOnly),
+            SaveError::Unavailable(error) => Self::from(error),
+            SaveError::Internal(_) => Self::from(HttpError::Internal),
         }
     }
 }
@@ -95,7 +135,6 @@ impl From<&FsError> for HttpError {
             FsError::TooLarge => Self::TooLarge,
             FsError::BadRange { .. } => Self::BadRange,
             FsError::Busy => Self::Busy,
-            FsError::ConfigUnavailable(_) => Self::ConfigUnavailable,
             FsError::NoSpace => Self::NoSpace,
             FsError::Internal(_) => Self::Internal,
         }
@@ -162,6 +201,7 @@ impl IntoResponse for Refusal {
                 error: self.error,
                 reason: self.reason,
                 node: self.node,
+                detail: self.detail,
             }),
         )
             .into_response();

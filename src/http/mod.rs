@@ -30,6 +30,7 @@ mod front;
 mod fs;
 mod node_auth;
 mod server;
+mod settings;
 mod shell;
 mod ws;
 
@@ -73,6 +74,7 @@ fn router(ctx: Arc<Ctx>) -> Router {
         .route("/ws", get(ws::upgrade))
         .merge(fs::routes())
         .merge(complete::routes())
+        .merge(settings::routes())
         .route_layer(from_fn_with_state(ctx.clone(), device_check));
     let node_routes = Router::new()
         .route("/auth/node/session", get(node_auth::session))

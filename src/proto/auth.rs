@@ -87,6 +87,7 @@ mod fixtures {
                     error: HttpError::BadCode,
                     reason: None,
                     node: None,
+                    detail: None,
                 })
                 .expect("ErrorBody serializes"),
             ),
@@ -98,6 +99,7 @@ mod fixtures {
                     node: Some(ErrorNode {
                         name: "jimmy-iphone".into(),
                     }),
+                    detail: None,
                 })
                 .expect("ErrorBody serializes"),
             ),

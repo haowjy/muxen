@@ -1,0 +1,99 @@
+//! `/settings` over a real socket (fs.md "Server settings"): the running values with the
+//! daemon's defaults, a save that writes `config.toml` and applies at once, refusals that
+//! write nothing, and a reload that reports what waits for a restart.
+
+#[path = "support/daemon.rs"]
+mod daemon;
+
+use daemon::{Daemon, Reply, send, start};
+use serde_json::{Value, json};
+
+async fn request(daemon: &Daemon, method: &str, path: &str, body: &str) -> Reply {
+    let device = daemon.device();
+    let mut headers: Vec<(&str, &str)> = device
+        .iter()
+        .map(|(k, v)| (k.as_str(), v.as_str()))
+        .collect();
+    headers.push(("Content-Type", "application/json"));
+    send(daemon.port, method, path, &headers, body.as_bytes()).await
+}
+
+fn json(reply: &Reply) -> Value {
+    serde_json::from_slice(&reply.body).expect("JSON")
+}
+
+#[tokio::test]
+async fn settings_save_at_once_and_a_reload_reports_what_waits() {
+    let daemon = start("settings").await;
+    let read = request(&daemon, "GET", "/settings", "").await;
+    assert_eq!(read.status, 200, "{}", read.text());
+    assert_eq!(
+        json(&read),
+        json!({
+            "searchSkip": null,
+            "uploadsDir": null,
+            "fileChanged": false,
+            "defaults": { "searchSkip": ["node_modules"], "uploadsDir": "~/.muxen-uploads" }
+        })
+    );
+
+    let saved = request(
+        &daemon,
+        "POST",
+        "/settings",
+        r#"{"searchSkip":["dist","dist","*.egg-info"]}"#,
+    )
+    .await;
+    assert_eq!(saved.status, 200, "{}", saved.text());
+    assert_eq!(json(&saved)["searchSkip"], json!(["dist", "*.egg-info"]));
+    assert_eq!(json(&saved)["uploadsDir"], Value::Null);
+    let text = std::fs::read_to_string(&daemon.config).expect("written");
+    assert_eq!(text, "search_skip = [\"dist\", \"*.egg-info\"]\n");
+
+    for body in [
+        r#"{"searchSkip":["a/b"]}"#,
+        r#"{"searchSkip":["*"]}"#,
+        r#"{"uploadsDir":"relative"}"#,
+        r#"{"favorites":[]}"#,
+    ] {
+        let refused = request(&daemon, "POST", "/settings", body).await;
+        // An unknown field is JSON axum refuses: `bad_request` with its 422.
+        assert!([400, 422].contains(&refused.status), "{body}");
+        assert_eq!(refused.text(), r#"{"error":"bad_request"}"#, "{body}");
+    }
+    assert_eq!(std::fs::read_to_string(&daemon.config).expect("read"), text);
+
+    // A hand edit shows as changed until a reload, which reports a restart-only key.
+    std::fs::write(
+        &daemon.config,
+        "search_skip = []\nmemory_budget_mib = 60\n[tmux]\nsocket_name = \"x\"\n",
+    )
+    .expect("edited");
+    let read = request(&daemon, "GET", "/settings", "").await;
+    assert_eq!(json(&read)["fileChanged"], json!(true));
+    assert_eq!(json(&read)["searchSkip"], json!(["dist", "*.egg-info"]));
+    let reloaded = request(&daemon, "POST", "/settings/reload", "").await;
+    assert_eq!(reloaded.status, 200, "{}", reloaded.text());
+    let reloaded = json(&reloaded);
+    assert_eq!(
+        reloaded["restartNeeded"],
+        json!(["memory_budget_mib", "tmux.socket_name"])
+    );
+    assert_eq!(reloaded["settings"]["searchSkip"], json!([]));
+    assert_eq!(reloaded["settings"]["fileChanged"], json!(false));
+
+    // A file that doesn't parse is never written, and says where.
+    std::fs::write(&daemon.config, "search_skip = [\"a\"\n").expect("broken");
+    let refused = request(&daemon, "POST", "/settings", r#"{"uploadsDir":"~/up"}"#).await;
+    assert_eq!(
+        (refused.status, refused.text()),
+        (
+            503,
+            r#"{"error":"config_unavailable","detail":"line 1, column 19"}"#
+        )
+    );
+    assert_eq!(
+        std::fs::read_to_string(&daemon.config).expect("read"),
+        "search_skip = [\"a\"\n"
+    );
+}

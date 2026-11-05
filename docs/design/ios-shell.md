@@ -99,7 +99,7 @@ origin:
 - **`muxen-app://ui/`**: web assets from the app bundle's `WebUI/` folder. The page and
   its scripts live here.
 - **`muxen-app://h-{host_id}/…`**: a proxy to that host's daemon (`/fs/*`,
-  `/complete`) over HTTPS, with `Authorization: Bearer`
+  `/complete`, `/settings`) over HTTPS, with `Authorization: Bearer`
   ([auth.md](auth.md#carrying-the-token)). Each host gets its own origin, different
   from the UI's, so the UI's `script-src 'self'` can never cover a daemon response.
   The handler forwards the method (`GET`, `POST`, and `PUT` in v2) and the body;
@@ -126,7 +126,8 @@ origin:
     ([daemon-core.md §5.2](daemon-core.md#52-handshake-and-versions)). The app's
     version is `DaemonProtocol.version` (`MuxenKit/AuthTypes.swift`), which moves with
     `PROTOCOL_VERSION` (2 since tabs follow a session); enrolment checks it too.
-  - Only `/fs/*`, `/complete`, and exact `GET /auth/info` are permitted. The
+  - Only `/fs/*`, `/complete`, `/settings`, `POST /settings/reload` and exact `GET /auth/info`
+    are permitted. The
     percent-encoded path and trailing slash are forwarded unchanged. `OPTIONS` is
     answered locally before the compatibility gate; a disallowed route never reaches
     the daemon.

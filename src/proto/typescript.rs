@@ -1,5 +1,5 @@
 //! Renders the protocol's TypeScript types into `web/proto/generated/messages.ts`
-//! (daemon-core.md §5.5): the WebSocket messages, the `/fs/*` and `/complete` bodies,
+//! (daemon-core.md §5.5): the WebSocket messages, the `/fs/*`, `/settings` and `/complete` bodies,
 //! and the error body every route shares. The test fails while the committed file is stale;
 //! `UPDATE_PROTO_TYPES=1 cargo test --lib proto::typescript` rewrites it.
 
@@ -12,6 +12,7 @@ use ts_rs::{Config, TS, TypeVisitor};
 
 use super::complete::{Chip, ChipSource, CompleteRequest, Completion};
 use super::fs::{Entry, EntryKind, Listing, Match, Search, Stopped, Uploaded};
+use super::settings::{Reloaded, ServerSettings, SettingsChange, SettingsDefaults};
 use super::*;
 
 const PATH: &str = "web/proto/generated/messages.ts";
@@ -54,6 +55,10 @@ fn declarations(config: &Config) -> Vec<(TypeId, String)> {
         declare::<Match>(config),
         declare::<Stopped>(config),
         declare::<Uploaded>(config),
+        declare::<ServerSettings>(config),
+        declare::<SettingsDefaults>(config),
+        declare::<SettingsChange>(config),
+        declare::<Reloaded>(config),
         declare::<CompleteRequest>(config),
         declare::<Completion>(config),
         declare::<Chip>(config),

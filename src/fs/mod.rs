@@ -8,7 +8,6 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use crate::blocking::Busy;
-use crate::config::ConfigError;
 
 pub mod list;
 pub mod mime;
@@ -45,8 +44,6 @@ pub enum FsError {
     BadRange { size: u64 },
     #[error("busy")]
     Busy,
-    #[error(transparent)]
-    ConfigUnavailable(#[from] ConfigError),
     #[error("no space left")]
     NoSpace,
     /// Logged, never sent.

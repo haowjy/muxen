@@ -46,8 +46,6 @@ pub struct Daemon {
     /// Canonical.
     pub home: PathBuf,
     pub config: PathBuf,
-    /// The daemon's running config, for reloads.
-    pub live: Arc<LiveConfig>,
     pub serve_socket: PathBuf,
     pub local_socket: PathBuf,
     server: JoinHandle<std::io::Result<()>>,
@@ -268,7 +266,7 @@ pub async fn start_loopback(name: &str) -> Daemon {
         },
         paste_dir,
         upload_record: dir.join("upload-part"),
-        config: live.clone(),
+        config: live,
         complete: complete::Settings::new(
             &Default::default(),
             complete::Environment {
@@ -302,7 +300,6 @@ pub async fn start_loopback(name: &str) -> Daemon {
         dir,
         home,
         config,
-        live,
         serve_socket,
         local_socket,
         server,
@@ -425,7 +422,7 @@ async fn start_as_with_allowlist(
         },
         paste_dir,
         upload_record: dir.join("upload-part"),
-        config: live.clone(),
+        config: live,
         // No history, no PATH, no carapace: only paths complete.
         complete: complete::Settings::new(
             &Default::default(),
@@ -461,7 +458,6 @@ async fn start_as_with_allowlist(
         dir,
         home,
         config,
-        live,
         serve_socket,
         local_socket,
         server,

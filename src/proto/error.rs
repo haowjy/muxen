@@ -18,6 +18,11 @@ pub struct ErrorBody {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub node: Option<ErrorNode>,
+    /// Present for `config_unavailable` from `/settings`: why the file can't be used, as
+    /// "line 3, column 7" for a parse error. Never the file's text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub detail: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -50,6 +55,8 @@ pub enum HttpError {
     NotAFile,
     /// Upload target is backed by tmpfs or ramfs.
     MemoryBacked,
+    /// `config.toml`, or a directory on its way, is a dangling link or can't be written.
+    ConfigReadOnly,
     TooLarge,
     BadRange,
     /// Retry after the `Retry-After` header's seconds.
@@ -58,6 +65,7 @@ pub enum HttpError {
     AuthUnavailable,
     /// LocalAPI could not resolve the current Tailscale identity.
     IdentityUnavailable,
+    /// `config.toml` can't be read or doesn't parse; `detail` says where.
     ConfigUnavailable,
     NoSpace,
     /// Logged, never described.

@@ -324,7 +324,8 @@ async fn config_edits_apply_at_a_reload_and_a_broken_one_changes_nothing() {
     // A hand edit waits for a reload.
     std::fs::write(&daemon.config, "uploads_dir = \"~/up\"\nsearch_skip = []\n").expect("edited");
     assert!(landed().await.contains("/.muxen-uploads/"));
-    assert!(daemon.live.reload().expect("parses").is_empty());
+    let reloaded = post(&daemon, "/settings/reload", b"", false).await;
+    assert_eq!(reloaded.status, 200, "{}", reloaded.text());
     assert!(landed().await.contains("/up/"));
     assert!(entered().await);
 
@@ -334,7 +335,14 @@ async fn config_edits_apply_at_a_reload_and_a_broken_one_changes_nothing() {
         "uploads_dir = \"~/elsewhere\"\nsearch_skip = [\n",
     )
     .expect("broken");
-    assert!(daemon.live.reload().is_err());
+    let refused = post(&daemon, "/settings/reload", b"", false).await;
+    assert_eq!(
+        (refused.status, refused.text()),
+        (
+            503,
+            r#"{"error":"config_unavailable","detail":"line 2, column 16"}"#
+        )
+    );
     assert!(landed().await.contains("/up/"));
     assert!(entered().await);
 }

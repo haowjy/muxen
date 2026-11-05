@@ -8,6 +8,7 @@ mod error;
 pub mod frames;
 pub mod fs;
 mod messages;
+pub mod settings;
 #[cfg(test)]
 mod typescript;
 

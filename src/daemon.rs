@@ -307,8 +307,12 @@ fn assemble_serve_front(front: crate::runtime::ServeFront) -> Result<ServeAssemb
 
 /// Warns of an `uploads_dir` that fs ignores.
 fn warn_if_uploads_dir_unusable(config: &Config, home: &Path) {
-    if fs::expand(&config.uploads_dir, home).is_none() {
-        warn!(entry = %config.uploads_dir, "uploads_dir in config.toml isn't absolute or ~/: uploads are refused");
+    let uploads_dir = config
+        .uploads_dir
+        .as_deref()
+        .unwrap_or(config::DEFAULT_UPLOADS_DIR);
+    if fs::expand(uploads_dir, home).is_none() {
+        warn!(entry = %uploads_dir, "uploads_dir in config.toml isn't absolute or ~/: uploads are refused");
     }
 }
 

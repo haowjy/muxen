@@ -223,7 +223,7 @@ async fn upload(
     let uploaded = async {
         let slot = ctx.fs.upload()?;
         let (home, dest) = (ctx.app.home.clone(), query.dir.clone());
-        let uploads_dir = ctx.app.config.keys().uploads_dir;
+        let uploads_dir = ctx.app.config.keys().uploads_dir().to_owned();
         let dir = ctx
             .fs
             .lane
@@ -278,9 +278,6 @@ fn respond(asked: &str, result: Result<Response, FsError>) -> Response {
     match &refused {
         FsError::Denied => {
             warn!(path = asked, %code, "refused a file request");
-        }
-        FsError::ConfigUnavailable(cause) => {
-            error!(%cause, "can't read config.toml: every file request fails");
         }
         FsError::Internal(cause) => error!(%cause, path = asked, "a file request failed"),
         _ => debug!(path = asked, %code, "refused a file request"),

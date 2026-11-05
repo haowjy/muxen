@@ -269,7 +269,9 @@ final class AppSchemeHandler: NSObject, WKURLSchemeHandler, URLSessionDataDelega
 
     /// The daemon routes the page may reach through the proxy, and the one `path` falls within; nil refuses it.
     private static func route(path: String, method: String) -> String? {
-        let routes = method == "GET" ? ["/auth/info", "/complete", "/fs/"] : ["/complete", "/fs/"]
+        let routes = method == "GET"
+            ? ["/auth/info", "/complete", "/fs/", "/settings"]
+            : ["/complete", "/fs/", "/settings", "/settings/reload"]
         return routes.first { HostRequest.path(path, isWithin: $0) }
     }
 }

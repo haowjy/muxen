@@ -14,11 +14,14 @@ use crate::files::Stamp;
 use crate::tmux::{Endpoint, Socket};
 
 mod live;
+mod write;
 
 pub use live::{LiveConfig, LiveKeys};
+pub use write::{SaveError, save, validated};
 
 pub const DEFAULT_MEMORY_BUDGET_MIB: u64 = 72;
-const DEFAULT_UPLOADS: &str = "~/.muxen-uploads";
+/// Where uploads land when `uploads_dir` is absent.
+pub const DEFAULT_UPLOADS_DIR: &str = "~/.muxen-uploads";
 /// Folders Search lists but doesn't enter when `search_skip` is absent.
 pub const DEFAULT_SEARCH_SKIP: [&str; 1] = ["node_modules"];
 
@@ -30,8 +33,8 @@ pub struct Config {
     /// The daemon's memory budget, in MiB; daemon-core.md §6 derives its caps from it.
     pub memory_budget_mib: u64,
     pub tmux: Tmux,
-    /// Where uploads land.
-    pub uploads_dir: String,
+    /// Where uploads land; `None`: `DEFAULT_UPLOADS_DIR`.
+    pub uploads_dir: Option<String>,
     /// Folder name patterns Search lists but doesn't enter; `None`: `DEFAULT_SEARCH_SKIP`.
     pub search_skip: Option<Vec<String>>,
     pub complete: Complete,
@@ -67,7 +70,7 @@ impl Default for Config {
             name: None,
             memory_budget_mib: DEFAULT_MEMORY_BUDGET_MIB,
             tmux: Tmux::default(),
-            uploads_dir: DEFAULT_UPLOADS.to_owned(),
+            uploads_dir: None,
             search_skip: None,
             complete: Complete::default(),
         }

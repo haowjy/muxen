@@ -1,5 +1,5 @@
 //! The file API's limits (fs.md "Constants", "Limits and the memory ceiling"): 1 scan,
-//! 1 search, 2 raw responses, 1 upload, waited for in the fs lane's queue (`crate::blocking`), so a
+//! 1 search, 2 raw responses, 1 upload, 1 settings read or write, waited for in the fs lane's queue (`crate::blocking`), so a
 //! slow disk stalls the file manager without holding memory or starving auth and pastes
 //! of threads. Blocking calls run on `lane`.
 
@@ -8,12 +8,13 @@ use std::sync::Arc;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 use super::FsError;
-use crate::blocking::{Lane, PermitPool};
+use crate::blocking::{Busy, Lane, PermitPool};
 
 const SCANS: usize = 1;
 const SEARCHES: usize = 1;
 const RAW_RESPONSES: usize = 2;
 const UPLOADS: usize = 1;
+const SETTINGS: usize = 1;
 
 /// Daemon-wide, shared by every fs request.
 #[derive(Debug)]
@@ -24,6 +25,7 @@ pub struct Slots {
     search: PermitPool,
     raw: PermitPool,
     upload: Arc<Semaphore>,
+    settings: PermitPool,
 }
 
 impl Slots {
@@ -33,6 +35,7 @@ impl Slots {
             search: lane.permits(SEARCHES),
             raw: lane.permits(RAW_RESPONSES),
             upload: Arc::new(Semaphore::new(UPLOADS)),
+            settings: lane.permits(SETTINGS),
             lane,
         }
     }
@@ -51,6 +54,12 @@ impl Slots {
     /// A raw-response slot, held by the response's producer until it ends.
     pub async fn raw(&self) -> Result<OwnedSemaphorePermit, FsError> {
         Ok(self.raw.acquire().await?)
+    }
+
+    /// The settings slot (`/settings`, fs.md "Server settings"): one read, save or reload
+    /// at a time, so a save stuck on a hung disk holds one fs thread.
+    pub async fn settings(&self) -> Result<OwnedSemaphorePermit, Busy> {
+        self.settings.acquire().await
     }
 
     /// The upload slot, or `busy` at once: native sends one upload at a time.

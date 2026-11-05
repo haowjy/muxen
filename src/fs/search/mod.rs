@@ -16,7 +16,7 @@ use rustix::io::Errno;
 
 use super::list::{self, Filter};
 use super::{MAX_PATH, Opened};
-use crate::config::{DEFAULT_SEARCH_SKIP, LiveConfig};
+use crate::config::LiveConfig;
 use crate::proto::fs::{EntryKind, Match, Search, Stopped};
 
 mod matcher;
@@ -49,12 +49,9 @@ pub const CAPS: Caps = Caps {
     queue: 1 << 20,
 };
 
-/// The running config's `search_skip`, else the default patterns.
+/// The running config's `search_skip`.
 pub fn skip(config: &LiveConfig) -> Skip {
-    match config.keys().search_skip {
-        Some(patterns) => Skip::new(&patterns),
-        None => Skip::new(&DEFAULT_SEARCH_SKIP.map(str::to_owned)),
-    }
+    Skip::new(&config.keys().search_skip())
 }
 
 /// The matches below `root` for `pattern`, best first. Only an error on the root itself

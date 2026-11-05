@@ -190,13 +190,18 @@ reason?: string,
 /**
  * Present for `not_enrolled`, so the browser can name the node to enrol.
  */
-node?: ErrorNode, };
+node?: ErrorNode,
+/**
+ * Present for `config_unavailable` from `/settings`: why the file can't be used, as
+ * "line 3, column 7" for a parse error. Never the file's text.
+ */
+detail?: string, };
 
 /**
  * Every code an HTTP route answers with. Each has one status (`src/http/error.rs`),
  * except `bad_request` for a body that isn't the route's JSON, which takes axum's.
  */
-export type HttpError = "bad_request" | "auth_required" | "forbidden" | "bad_origin" | "node_refused" | "not_enrolled" | "bad_code" | "denied" | "not_found" | "not_a_directory" | "not_a_file" | "memory_backed" | "too_large" | "bad_range" | "busy" | "auth_unavailable" | "identity_unavailable" | "config_unavailable" | "no_space" | "internal";
+export type HttpError = "bad_request" | "auth_required" | "forbidden" | "bad_origin" | "node_refused" | "not_enrolled" | "bad_code" | "denied" | "not_found" | "not_a_directory" | "not_a_file" | "memory_backed" | "config_read_only" | "too_large" | "bad_range" | "busy" | "auth_unavailable" | "identity_unavailable" | "config_unavailable" | "no_space" | "internal";
 
 /**
  * `GET /fs/list/{*path}`.
@@ -323,6 +328,40 @@ export type Uploaded = {
  * Absolute and canonical: native types it, quoted, into the tab.
  */
 path: string, size: number, };
+
+/**
+ * `GET /settings`, and `POST /settings`' answer: the running config's values, `null`
+ * where the file has no key and the default applies.
+ */
+export type ServerSettings = {
+/**
+ * `[]` skips nothing; `null` is the default.
+ */
+searchSkip: Array<string> | null, uploadsDir: string | null,
+/**
+ * The file differs from what is running: edited by hand since it was loaded.
+ */
+fileChanged: boolean, defaults: SettingsDefaults, };
+
+/**
+ * The daemon's own defaults, so the client keeps no copy.
+ */
+export type SettingsDefaults = { searchSkip: Array<string>, uploadsDir: string, };
+
+/**
+ * `POST /settings`: a field left out is unchanged, `null` removes the key, a value sets
+ * it.
+ */
+export type SettingsChange = { searchSkip?: Array<string> | null, uploadsDir?: string | null, };
+
+/**
+ * `POST /settings/reload`.
+ */
+export type Reloaded = { settings: ServerSettings,
+/**
+ * Keys that changed in the file but apply only at a restart, as `tmux.socket_name`.
+ */
+restartNeeded: Array<string>, };
 
 export type CompleteRequest = {
 /**

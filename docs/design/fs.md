@@ -490,7 +490,7 @@ The auth middleware also uses this body for `forbidden`, `auth_required`,
 | 413 | `too_large` | an upload over the cap |
 | 416 | `bad_range` | a range starting past the end |
 | 503 | `busy` | no slot within the wait, too many waiting, or the upload slot taken; `Retry-After: 1` |
-| 503 | `config_unavailable` | `config.toml` exists but can't be read or parsed |
+| 503 | `config_unavailable` | `/settings`: `config.toml` exists but can't be read or parsed; `detail` says where (`line 3, column 7`) |
 | 503 | `identity_unavailable` | LocalAPI could not establish the current Tailscale identity |
 | 507 | `no_space` | `ENOSPC` or `EDQUOT` during an upload |
 | 500 | `internal` | any other I/O error, including an upload's rename on a filesystem with no no-replace support; the cause is logged, never sent |
@@ -559,8 +559,11 @@ without a disk.
 | `fs/raw.rs` | pure `parse_range` and `If-Range`; the chunk producer; ETags come from `files::Stamp` |
 | `fs/mime.rs` | the extension table |
 | `fs/upload.rs` | pure name generation; part file, flush, rename, the in-flight record and its cleanup |
+| `config/live.rs` | the running config's live keys, the reload, "changed since loaded" |
+| `config/write.rs` | Settings' save: validation, the lock, `toml_edit`, the temp file and rename |
+| `http/settings.rs` | `/settings` and `/settings/reload` |
 
-Wire types go in `src/proto/fs.rs` and are generated for TypeScript like the WebSocket
+Wire types go in `src/proto/fs.rs` (`src/proto/settings.rs` for `/settings`) and are generated for TypeScript like the WebSocket
 messages ([daemon-core.md §5.5](daemon-core.md#55-type-generation)); Swift hand-writes
 only the upload response. New dependency: axum's `query` feature. Tests run `fs::open` against a temp tree with symlinks, `..`, a FIFO and a non-UTF-8
 name, and swap a component for a symlink between canonicalize and open to exercise
