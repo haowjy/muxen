@@ -164,7 +164,7 @@ final class MediaController: NSObject, PHPickerViewControllerDelegate, UIImagePi
         let request: URLRequest, token: String
         switch model.request(on: hostID, path: "/fs/upload", query: Uploader.query(name: fileName, destination: destination)) {
         case .ready(let ready, let readyToken): (request, token) = (ready, readyToken)
-        case .noHost: sendUpload(id: id, progress: 1, error: "Couldn't find this server."); return
+        case .noHost: sendUpload(id: id, progress: 1, error: "This server isn't saved in the app."); return
         case .locked, .notEnrolled: sendUpload(id: id, progress: 1, error: "Unlock muxen to upload."); return
         }
         let accepted = uploader.upload(id: id, request: request, data: data, text: destination?.text == true, token: token, rejectedToken: { [weak model = self.model] rejectedToken in
@@ -207,15 +207,16 @@ final class MediaController: NSObject, PHPickerViewControllerDelegate, UIImagePi
         guard let page = URLComponents(string: value), page.scheme == "muxen-app",
               let pageHost = page.host, pageHost.hasPrefix("h-"),
               page.percentEncodedPath.hasPrefix("/fs/raw/"), page.query == nil, page.fragment == nil else {
-            fail("Couldn't find this file's server.", nil)
+            fail("This file's server isn't saved in the app.", nil)
             return
         }
         let hostID = String(pageHost.dropFirst(2))
         let request: URLRequest, token: String
         switch model.request(on: hostID, path: page.percentEncodedPath) {
         case .ready(let ready, let readyToken): (request, token) = (ready, readyToken)
-        case .noHost: fail("Couldn't find this file's server.", nil); return
-        case .locked, .notEnrolled: fail("Unlock muxen to download.", nil); return
+        case .noHost: fail("This file's server isn't saved in the app.", nil); return
+        case .locked: fail("muxen is locked.", nil); return
+        case .notEnrolled: fail("This iPhone has no token for that server.", "not_enrolled"); return
         }
         // One download runs at a time, and its sheet can't go up over another screen.
         guard presenter?.presentedViewController == nil, !downloader.isBusy else {

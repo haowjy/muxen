@@ -137,8 +137,9 @@ enum DownloadFailure: LocalizedError {
         }
     }
 
+    /// The daemon's code, or `http_<status>` when the body had none, as the browser names it: the page words either.
     var code: String? {
-        if case .server(_, let code) = self { code } else { nil }
+        if case .server(let status, let code) = self { code ?? "http_\(status)" } else { nil }
     }
 
     var errorDescription: String? {
@@ -146,8 +147,8 @@ enum DownloadFailure: LocalizedError {
         case .cancelled: "The download was cancelled."
         case .stalled: "Nothing arrived for 30 seconds, so the download stopped."
         case .offline: "The connection to the server was lost."
-        case .notSaved: "Couldn't save the file on this iPhone."
-        case .server(let status, _): "The download failed (HTTP \(status))."
+        case .notSaved: "This iPhone couldn't store it."
+        case .server(let status, _): "The server answered HTTP \(status)."
         }
     }
 }

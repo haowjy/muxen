@@ -139,13 +139,14 @@ enum UploadFailure: LocalizedError {
     /// The HTTP status and the daemon's error code, if the body had one. The page words the code.
     case server(Int, code: String?)
 
+    /// The daemon's code, or `http_<status>` when the body had none, as the browser names it: the page words either.
     var code: String? {
-        if case .server(_, let code) = self { code } else { nil }
+        if case .server(let status, let code) = self { code ?? "http_\(status)" } else { nil }
     }
 
     var errorDescription: String? {
         switch self {
-        case .server(let status, _): "The upload failed (HTTP \(status))."
+        case .server(let status, _): "The server answered HTTP \(status)."
         }
     }
 }

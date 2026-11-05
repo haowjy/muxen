@@ -446,7 +446,7 @@ token to native solely for comparison and revocation, never into storage or logs
 | `hosts { hosts: PlatformHost[] }` | Native host handles and labels; never base URLs or tokens | Refresh host admission / connection state |
 | `menuCopy` | Copy was chosen in the menu `editMenu` showed | The page copies its mark's joined text through `copy` and clears the mark |
 | `menuPaste` | Paste was chosen in that menu | The page runs its menu paste: `readPasteboard`, the size limit, one paste to tmux without Enter, or an image upload |
-| `upload { id, progress, path?, error?, code?, cancelled? }` | `id` is the one the web sent with `pickMedia`, `readPasteboard` or `pasteInto`; the web routes by it alone. `path`, `error` or `cancelled` ends the stream; `cancelled` is a dismissed picker. `code` is the daemon's refusal code (`denied`, `not_found`, `memory_backed`…) parsed from its `{"error": code}` body; the web words it with the table the browser uses, and `error` ("The upload failed (HTTP 403).") is only the fallback when the daemon sent no code | Update upload UI; the web decides where the path goes (a pasted image inserts it, a Files upload offers it) |
+| `upload { id, progress, path?, error?, code?, cancelled? }` | `id` is the one the web sent with `pickMedia`, `readPasteboard` or `pasteInto`; the web routes by it alone. `path`, `error` or `cancelled` ends the stream; `cancelled` is a dismissed picker. `code` is the daemon's refusal code (`denied`, `not_found`, `memory_backed`…) parsed from its `{"error": code}` body; the web words it with the table the browser uses. With no body it is `http_<status>`, as in the browser; `error` ("The server answered HTTP 403.") is the fallback | Update upload UI; the web decides where the path goes (a pasted image inserts it, a Files upload offers it) |
 
 There are no separate `network`, `lock` or `lifecycle.covered` messages in v2. A
 connectivity, lock, foreground or native-screen change publishes the whole `lifecycle`
@@ -560,7 +560,7 @@ wildcard development profile has none (Distribution).
    `Authorization: Bearer` ([auth.md](auth.md#carrying-the-token)), through the resolver every
    native request to a daemon uses ("Where the web UI comes from"). The page has listed the folder through the
    handler, so the compatibility gate has already run. Locked, or no token: the reply is an error
-   ("Unlock muxen to download."), with no request.
+   ("muxen is locked.", or `not_enrolled`), with no request.
 2. `Downloader` streams the body to one temporary file (`URLSessionDownloadTask`, an ephemeral session,
    no cache), never a whole-file buffer. Its request timeout is 30 s between bytes, the daemon's raw
    stall deadline ([fs.md](fs.md#constants)): a fetch that stalls longer fails as stalled. One download
@@ -571,7 +571,7 @@ wildcard development profile has none (Distribution).
    far and the size ("4.2 MB of 40 MB") and Cancel; a small file goes straight to the sheet. Cancel
    ends the request and replies `null`.
 4. A non-200 answer is an error: its `{"error": code}` body (read only when under 4 KiB) gives `code`,
-   and a `401` on the token it carried revokes that token, as the uploader's does. The file is
+   `http_<status>` when there is none, as the browser names it; and a `401` on the token it carried revokes that token, as the uploader's does. The file is
    renamed to `name` reduced to one path component, then the share sheet
    (`UIActivityViewController`) offers it: Save to Files, AirDrop, another app.
 5. When the sheet closes, however it closes, native deletes the file and replies. If the sheet can't
@@ -590,7 +590,8 @@ The lock screen is a SwiftUI overlay, under any modal, so a lock takes the scree
 transition has ended, and ends it as its own close would: the upload stream ends, the player
 pauses, the sheet's reply goes out.
 
-The web shows an error reply in Files' notice ("Couldn't download {name}: {words}"); `null` says
+The web shows an error reply in Files' notice ("Couldn't download {name}: {words}"), so native's own
+`error` words name the cause ("This file's server isn't saved in the app."), never the failure again; `null` says
 nothing. The file never enters the web view, so nothing it holds can run as the app.
 
 **Clipboard (v2).** User-initiated `copy` writes `UIPasteboard` and is never gated by

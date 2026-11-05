@@ -76,7 +76,7 @@ export function createNativePlatform(post: Post = webkitPost): Platform {
     shortcuts: "apple",
     openURL: (url) => { bridge.openURL(url); },
     download: async (url, name) => {
-      const failure = await bridge.download(url, name).catch((): DownloadFailure => ({ error: "The app couldn't start the download." }));
+      const failure = await bridge.download(url, name).catch((): DownloadFailure => ({ error: "The app didn't take the request." }));
       if (failure === null) return null;
       return failure.code === undefined ? failure.error : refusalWords(failure.code);
     },

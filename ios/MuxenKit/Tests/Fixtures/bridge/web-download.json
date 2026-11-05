@@ -6,7 +6,7 @@
     "name": "build log.tar.gz"
   },
   "reply": {
-    "error": "The download failed (HTTP 404).",
+    "error": "The server answered HTTP 404.",
     "code": "not_found"
   }
 }
