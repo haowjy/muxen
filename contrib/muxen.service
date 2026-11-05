@@ -15,6 +15,9 @@ StartLimitIntervalSec=0
 [Service]
 Type=notify
 ExecStart=%h/.cargo/bin/muxen serve
+# `systemctl --user reload muxen` re-reads config.toml: uploads_dir and search_skip apply
+# at once, a file that doesn't parse changes nothing, other keys wait for a restart.
+ExecReload=/bin/kill -HUP $MAINPID
 # SIGTERM goes to muxen alone, which closes its sockets with 4004 and its tmux
 # control clients itself. Signalled directly, a control client exits as if detached,
 # and a phone could be told "detached" instead of reconnecting.

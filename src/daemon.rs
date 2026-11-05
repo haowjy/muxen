@@ -2,6 +2,7 @@
 
 use std::error::Error;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 
 #[cfg(target_os = "macos")]
@@ -14,7 +15,7 @@ use crate::auth::publish;
 use crate::auth::{Auth, Store};
 use crate::blocking::Lanes;
 use crate::complete::{self, Environment};
-use crate::config::{self, Config, ConfigFile};
+use crate::config::{self, Config, LiveConfig};
 use crate::fs;
 use crate::http::{self, App, Front, Listener};
 use crate::hub::{self, Endpoints};
@@ -40,18 +41,13 @@ pub(crate) enum OpenError {
 const HUB_WAIT: Duration = Duration::from_secs(2);
 
 /// Run the daemon behind its configured fronts.
-pub fn serve(
-    config: Config,
-    file: ConfigFile,
-    allow_login: Vec<String>,
-    publish: bool,
-) -> Result<()> {
+pub fn serve(config: LiveConfig, allow_login: Vec<String>, publish: bool) -> Result<()> {
     if publish && !cfg!(target_os = "macos") {
         return Err(config::ConfigError::PublishOnLinux.into());
     }
     init_tracing(LevelFilter::INFO);
     crate::blocking::runtime()?.block_on(async move {
-        let opened = match open(config, file, allow_login, publish).await {
+        let opened = match open(config, allow_login, publish).await {
             Ok(opened) => opened,
             Err(OpenError::AlreadyRunning) => {
                 return Err(Box::new(crate::runtime::RuntimeError::AlreadyRunning).into());
@@ -64,12 +60,11 @@ pub fn serve(
 
 /// Resolve the budget, secure the runtime directory, lock the instance, and bind fronts.
 pub(crate) async fn open(
-    config: Config,
-    file: ConfigFile,
+    config: LiveConfig,
     allow_login: Vec<String>,
     publish: bool,
 ) -> std::result::Result<Opened, OpenError> {
-    let tier = crate::budget::resolve(config.memory_budget_mib)
+    let tier = crate::budget::resolve(config.started().memory_budget_mib)
         .map_err(|error| OpenError::Other(Box::new(error)))?;
     let runtime_dir = config::runtime_dir().map_err(|error| OpenError::Other(Box::new(error)))?;
     let runtime = open_runtime(runtime_dir, publish)
@@ -105,8 +100,7 @@ pub(crate) async fn open(
     );
 
     Ok(Opened {
-        config,
-        file,
+        config: Arc::new(config),
         tier,
         _lock: parts._lock,
         local: parts.local,
@@ -123,8 +117,7 @@ pub(crate) async fn open(
 
 /// The daemon has its budget, instance lock, listeners, and auth state before serving.
 pub(crate) struct Opened {
-    config: Config,
-    file: ConfigFile,
+    config: Arc<LiveConfig>,
     tier: &'static crate::budget::Tier,
     _lock: std::fs::File,
     local: tokio::net::UnixListener,
@@ -152,8 +145,7 @@ impl Opened {
     /// Serve until shutdown.
     pub(crate) async fn run(self) -> Result<()> {
         let Opened {
-            config,
-            file,
+            config: live,
             tier,
             _lock,
             local,
@@ -169,13 +161,27 @@ impl Opened {
         let mut fronts = serve.fronts;
         fronts.push((Listener::Unix(local), Front::Local));
 
+        let config = live.started();
         let name = config.name.clone().unwrap_or_else(|| "muxen".to_owned());
         let endpoint = config.endpoint();
         let program_version = crate::tmux::oneshot::program_version(&endpoint.program).await;
         let mut shutdown = signal(SignalKind::terminate())?;
         let mut interrupt = signal(SignalKind::interrupt())?;
 
-        warn_if_uploads_dir_unusable(&config, &home);
+        warn_if_uploads_dir_unusable(config, &home);
+        // `systemctl --user reload muxen` (the unit's `ExecReload`). Registered before
+        // serving: SIGHUP's default would end the daemon.
+        let mut hangup = signal(SignalKind::hangup())?;
+        let (reload_live, reload_lane) = (live.clone(), lanes.fs.clone());
+        tokio::spawn(async move {
+            while hangup.recv().await.is_some() {
+                let live = reload_live.clone();
+                // The outcome is logged by `reload`.
+                if reload_lane.run(move || drop(live.reload())).await.is_err() {
+                    warn!("config.toml not reloaded: the file lane is busy");
+                }
+            }
+        });
         let (hub, mut hub_task) = hub::spawn(
             Endpoints {
                 main: endpoint.clone(),
@@ -191,7 +197,7 @@ impl Opened {
             host: HostInfo { id: host_id, name },
             paste_dir,
             upload_record,
-            config: file,
+            config: live.clone(),
             complete: complete::Settings::new(&config.complete, Environment::current(&home)),
             caps: tier.caps,
             home,

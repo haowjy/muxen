@@ -130,6 +130,8 @@ are ignored.
 ```toml
 name = "devbox"          # the host's name in the app; default: the MagicDNS name
 memory_budget_mib = 72   # default memory budget; minimum 42; sets the daemon's caps
+uploads_dir = "~/.muxen-uploads"   # where uploads and pasted images land
+search_skip = ["node_modules"]     # folder names (or * and ? globs) Search lists but doesn't enter
 
 [tmux]
 program = "tmux"         # an absolute path if the unit's PATH doesn't find it
@@ -141,6 +143,11 @@ program = "tmux"         # an absolute path if the unit's PATH doesn't find it
 # path = "/home/you/.local/bin:/usr/local/bin:/usr/bin"   # default: the daemon's own PATH; set it to your shell's
 # carapace = "/home/you/.local/bin/carapace"   # default: carapace on that PATH
 ```
+
+muxen reads the file when it starts. After a hand edit, `systemctl --user reload muxen`
+(on a Mac, `kill -HUP` muxen's pid) applies `uploads_dir` and `search_skip` at once; the
+other keys wait for a restart, and a file that doesn't parse changes nothing (the log says
+where).
 
 With neither socket key, muxen uses tmux's default socket, which tmux finds through
 `TMUX_TMPDIR`. A foreground run inherits it. A systemd user unit doesn't see variables

@@ -1,20 +1,28 @@
 //! `config.toml` and the XDG paths (plan.md "Long-term": unknown keys are ignored, so
 //! an older daemon reads a newer config). A missing default file means every default.
-//! The daemon reads the file once at startup, except `uploads_dir`, which
-//! fs re-reads through the same `ConfigFile` on every upload (fs.md "The uploads folder").
+//! The daemon reads the file at startup and again only on a reload (`LiveConfig`, fs.md
+//! "The uploads folder"), which applies `uploads_dir` and `search_skip`.
 
 use std::env;
+use std::io::Read as _;
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 use thiserror::Error;
 
+use crate::files::Stamp;
 use crate::tmux::{Endpoint, Socket};
+
+mod live;
+
+pub use live::{LiveConfig, LiveKeys};
 
 pub const DEFAULT_MEMORY_BUDGET_MIB: u64 = 72;
 const DEFAULT_UPLOADS: &str = "~/.muxen-uploads";
+/// Folders Search lists but doesn't enter when `search_skip` is absent.
+pub const DEFAULT_SEARCH_SKIP: [&str; 1] = ["node_modules"];
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(default)]
 pub struct Config {
     /// The host's name in the app; default: the machine's MagicDNS name.
@@ -24,11 +32,13 @@ pub struct Config {
     pub tmux: Tmux,
     /// Where uploads land.
     pub uploads_dir: String,
+    /// Folder name patterns Search lists but doesn't enter; `None`: `DEFAULT_SEARCH_SKIP`.
+    pub search_skip: Option<Vec<String>>,
     pub complete: Complete,
 }
 
 /// `[complete]` (complete.md): what the daemon can't see of the interactive shell.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(default)]
 pub struct Complete {
     /// The history file, absolute or `~/`; default: the most recently modified of
@@ -41,7 +51,7 @@ pub struct Complete {
 }
 
 /// Which tmux server is `main`. muxen never starts it.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(default)]
 pub struct Tmux {
     pub program: PathBuf,
@@ -58,6 +68,7 @@ impl Default for Config {
             memory_budget_mib: DEFAULT_MEMORY_BUDGET_MIB,
             tmux: Tmux::default(),
             uploads_dir: DEFAULT_UPLOADS.to_owned(),
+            search_skip: None,
             complete: Complete::default(),
         }
     }
@@ -81,8 +92,12 @@ pub enum ConfigError {
         source: std::io::Error,
     },
     /// Only the position: the file isn't logged (fs.md "Logging").
-    #[error("{} doesn't parse (line {line})", path.display())]
-    Parse { path: PathBuf, line: usize },
+    #[error("{} doesn't parse (line {line}, column {column})", path.display())]
+    Parse {
+        path: PathBuf,
+        line: usize,
+        column: usize,
+    },
     #[error("{}: set tmux.socket_name or tmux.socket_path, not both", path.display())]
     TwoSockets { path: PathBuf },
     #[error("neither $HOME nor ${0} is set")]
@@ -93,7 +108,7 @@ pub enum ConfigError {
     PublishOnLinux,
 }
 
-/// Where `config.toml` is: resolved once at startup, read again by each fs request.
+/// Where `config.toml` is: resolved once at startup, read again by each reload.
 #[derive(Debug, Clone)]
 pub struct ConfigFile {
     pub path: PathBuf,
@@ -117,26 +132,48 @@ impl ConfigFile {
     }
 
     pub fn load(&self) -> Result<Config, ConfigError> {
+        self.read().map(|(config, _)| config)
+    }
+
+    /// The config, and the stamp of the file it was read from (`None`: no file, the
+    /// defaults).
+    pub fn read(&self) -> Result<(Config, Option<Stamp>), ConfigError> {
         let path = &self.path;
-        match std::fs::read_to_string(path) {
-            Ok(text) => Config::parse(path, &text),
+        let io = |source| ConfigError::Io {
+            path: path.clone(),
+            source,
+        };
+        let mut file = match std::fs::File::open(path) {
+            Ok(file) => file,
             Err(error) if !self.required && error.kind() == std::io::ErrorKind::NotFound => {
-                Ok(Config::default())
+                return Ok((Config::default(), None));
             }
-            Err(source) => Err(ConfigError::Io {
-                path: path.clone(),
-                source,
-            }),
-        }
+            Err(source) => return Err(io(source)),
+        };
+        let stamp = Stamp::of(&file.metadata().map_err(io)?);
+        let mut text = String::new();
+        file.read_to_string(&mut text).map_err(io)?;
+        Ok((Config::parse(path, &text)?, Some(stamp)))
+    }
+
+    /// The stamp of the file now; `None` if it is missing or can't be seen. Blocks.
+    pub fn stamp(&self) -> Option<Stamp> {
+        std::fs::metadata(&self.path)
+            .ok()
+            .map(|meta| Stamp::of(&meta))
     }
 }
 
 impl Config {
     /// The text of the file at `path`, as `load` would take it.
     pub fn parse(path: &Path, text: &str) -> Result<Self, ConfigError> {
-        let config: Self = toml::from_str(text).map_err(|error| ConfigError::Parse {
-            path: path.to_owned(),
-            line: crate::files::toml_line(text, &error),
+        let config: Self = toml::from_str(text).map_err(|error| {
+            let (line, column) = crate::files::toml_position(text, &error);
+            ConfigError::Parse {
+                path: path.to_owned(),
+                line,
+                column,
+            }
         })?;
         if config.tmux.socket_name.is_some() && config.tmux.socket_path.is_some() {
             return Err(ConfigError::TwoSockets {

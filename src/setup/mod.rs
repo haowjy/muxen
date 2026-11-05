@@ -185,7 +185,9 @@ async fn setup_foreground_async(
     // before `daemon::open`, whose budget warnings would otherwise be dropped.
     daemon::init_tracing(tracing_subscriber::filter::LevelFilter::WARN);
     let file = ConfigFile::resolve(config_path.as_deref())?;
-    let config = file.load()?;
+    let (config, stamp) = file.read()?;
+    let live = config::LiveConfig::new(file, config, stamp);
+    let config = live.started();
     let user = systemd::username()?;
     let program = config.tmux.program.as_path();
     let setup_path = std::env::var_os("PATH").unwrap_or_default();
@@ -211,9 +213,9 @@ async fn setup_foreground_async(
         &warnings,
     )?;
 
-    let notes = no_tmux_server_note(&config).into_iter().collect();
+    let notes = no_tmux_server_note(config).into_iter().collect();
     let mut changes = Vec::new();
-    let opened = match daemon::open(config, file, Vec::new(), false).await {
+    let opened = match daemon::open(live, Vec::new(), false).await {
         Ok(opened) => opened,
         Err(daemon::OpenError::AlreadyRunning) => {
             let message = if systemd::service_active() {

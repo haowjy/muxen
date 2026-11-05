@@ -220,12 +220,12 @@ async fn upload(
     }
     let uploaded = async {
         let slot = ctx.fs.upload()?;
-        let app = ctx.clone();
-        let dest = query.dir.clone();
+        let (home, dest) = (ctx.app.home.clone(), query.dir.clone());
+        let uploads_dir = ctx.app.config.keys().uploads_dir;
         let dir = ctx
             .fs
             .lane
-            .run(move || upload::open_dir(&app.app.config, &app.app.home, dest.as_deref()))
+            .run(move || upload::open_dir(&uploads_dir, &home, dest.as_deref()))
             .await??;
         let naming = if query.text == 1 {
             Naming::PastedText

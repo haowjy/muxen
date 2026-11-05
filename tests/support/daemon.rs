@@ -21,7 +21,7 @@ use muxen::auth::{Auth, Store};
 use muxen::blocking::Lanes;
 use muxen::budget::DEFAULT_CAPS;
 use muxen::complete;
-use muxen::config::ConfigFile;
+use muxen::config::{ConfigFile, LiveConfig};
 use muxen::http::{self, App, Front, Listener};
 use muxen::hub::{self, Endpoints};
 use muxen::proto::HostInfo;
@@ -46,6 +46,8 @@ pub struct Daemon {
     /// Canonical.
     pub home: PathBuf,
     pub config: PathBuf,
+    /// The daemon's running config, for reloads.
+    pub live: Arc<LiveConfig>,
     pub serve_socket: PathBuf,
     pub local_socket: PathBuf,
     server: JoinHandle<std::io::Result<()>>,
@@ -128,6 +130,12 @@ impl Daemon {
     pub fn home(&self, relative: &str) -> PathBuf {
         self.home.join(relative)
     }
+}
+
+fn live_config(path: &Path) -> Arc<LiveConfig> {
+    let file = ConfigFile::resolve(Some(path)).expect("a config path");
+    let (config, stamp) = file.read().expect("a config");
+    Arc::new(LiveConfig::new(file, config, stamp))
 }
 
 pub async fn start(name: &str) -> Daemon {
@@ -229,6 +237,7 @@ pub async fn start_loopback(name: &str) -> Daemon {
     let home = std::fs::canonicalize(home).expect("canonical");
     let config = dir.join("config.toml");
     std::fs::write(&config, "").expect("a config");
+    let live = live_config(&config);
     let endpoint = Endpoint {
         program: PathBuf::from("tmux"),
         socket: Socket::Name(format!("muxen-http-test-{}", std::process::id())),
@@ -259,7 +268,7 @@ pub async fn start_loopback(name: &str) -> Daemon {
         },
         paste_dir,
         upload_record: dir.join("upload-part"),
-        config: ConfigFile::resolve(Some(&config)).expect("a config path"),
+        config: live.clone(),
         complete: complete::Settings::new(
             &Default::default(),
             complete::Environment {
@@ -293,6 +302,7 @@ pub async fn start_loopback(name: &str) -> Daemon {
         dir,
         home,
         config,
+        live,
         serve_socket,
         local_socket,
         server,
@@ -383,6 +393,7 @@ async fn start_as_with_allowlist(
     let home = std::fs::canonicalize(home).expect("canonical");
     let config = dir.join("config.toml");
     std::fs::write(&config, "").expect("a config");
+    let live = live_config(&config);
     let endpoint = Endpoint {
         program: PathBuf::from("tmux"),
         socket: Socket::Name(format!("muxen-http-test-{}", std::process::id())),
@@ -414,7 +425,7 @@ async fn start_as_with_allowlist(
         },
         paste_dir,
         upload_record: dir.join("upload-part"),
-        config: ConfigFile::resolve(Some(&config)).expect("a config path"),
+        config: live.clone(),
         // No history, no PATH, no carapace: only paths complete.
         complete: complete::Settings::new(
             &Default::default(),
@@ -450,6 +461,7 @@ async fn start_as_with_allowlist(
         dir,
         home,
         config,
+        live,
         serve_socket,
         local_socket,
         server,

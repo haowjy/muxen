@@ -536,8 +536,8 @@ which is why they have a row and why the flush interval is 2 MiB, not larger.
 - **Reads** (listings, raw ranges) at `debug` only: one video is dozens of requests. A search
   logs its root, entries read and `stopped` at `debug`; never `q`.
 - **Never** file contents, upload bytes, the client's upload `name` beyond its
-  extension, or `config.toml`'s text (a parse error logs the line number, as auth
-  does).
+  extension, or `config.toml`'s text (a parse error logs the line and column; auth
+  logs the line).
 
 ## Module shape
 
@@ -547,7 +547,7 @@ without a disk.
 
 | File | Contents |
 |---|---|
-| `fs/mod.rs` | the `uploads_dir` read, `FsError` with its status and code |
+| `fs/mod.rs` | `FsError` with its status and code, `expand` for `~/` |
 | `fs/open.rs` | `fs::open`, `fs::check_dir`, the platform descriptor-path lookup |
 | `fs/slots.rs` | scan, search, raw-response and upload permits, with waits counted against the fs lane |
 | `fs/list.rs` | the scan; pure sort and page |

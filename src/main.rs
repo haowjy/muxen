@@ -11,7 +11,7 @@ use muxen::auth::identity;
 use muxen::auth::identity::ServeTarget;
 use muxen::auth::localapi::LocalApi;
 use muxen::auth::{DeviceKind, Store};
-use muxen::config::{self, Config, ConfigError, ConfigFile};
+use muxen::config::{self, ConfigError, ConfigFile, LiveConfig};
 use muxen::daemon;
 
 type Result<T, E = Box<dyn Error>> = std::result::Result<T, E>;
@@ -85,7 +85,7 @@ fn main() -> ExitCode {
             publish,
         } => {
             let result = load_config(config_path.as_deref())
-                .and_then(|(config, file)| daemon::serve(config, file, allow_login, publish));
+                .and_then(|config| daemon::serve(config, allow_login, publish));
             let error_exit = result
                 .as_ref()
                 .err()
@@ -110,10 +110,10 @@ fn main() -> ExitCode {
     }
 }
 
-fn load_config(path: Option<&std::path::Path>) -> Result<(Config, ConfigFile)> {
+fn load_config(path: Option<&std::path::Path>) -> Result<LiveConfig> {
     let file = ConfigFile::resolve(path)?;
-    let config = file.load()?;
-    Ok((config, file))
+    let (config, stamp) = file.read()?;
+    Ok(LiveConfig::new(file, config, stamp))
 }
 
 fn serve_error_exit(cause: &(dyn Error + 'static)) -> ExitCode {

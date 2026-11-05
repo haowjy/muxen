@@ -57,12 +57,16 @@ pub fn lock(state_dir: &Path) -> io::Result<File> {
     Ok(file)
 }
 
-/// The 1-based line of a toml parse error, 0 if it has no position: what a log may say
-/// of it, since its message quotes the file.
-pub fn toml_line(text: &str, error: &toml::de::Error) -> usize {
-    error.span().map_or(0, |span| {
-        text.get(..span.start)
-            .map_or(0, |head| head.matches('\n').count() + 1)
+/// The 1-based line and column (in characters) of a toml parse error, `(0, 0)` if it has no
+/// position: what a log may say of it, since its message quotes the file.
+pub fn toml_position(text: &str, error: &toml::de::Error) -> (usize, usize) {
+    let head = error.span().and_then(|span| text.get(..span.start));
+    head.map_or((0, 0), |head| {
+        let line_start = head.rfind('\n').map_or(0, |at| at + 1);
+        (
+            head.matches('\n').count() + 1,
+            head[line_start..].chars().count() + 1,
+        )
     })
 }
 

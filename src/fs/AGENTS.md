@@ -26,9 +26,9 @@ Rules the code relies on, which are easy to break:
   descriptors with the root's), and the search permit moves into the lane closure with the
   walk, so an aborted search can't overlap the next. The matcher lives only here: the client
   draws `hits` and never matches.
-- An upload's `dir` opens through `fs::open` like a read; without it, uploads read `config.toml`'s `uploads_dir` on every request (`upload::open_dir`); a file
-  that exists and doesn't parse fails them with `config_unavailable`. Nothing in the
-  daemon writes `config.toml`: Jimmy edits it by hand.
+- An upload's `dir` opens through `fs::open` like a read; without it, uploads land in the
+  running config's `uploads_dir` (`App::config`, `src/config/live.rs`). Nothing here reads
+  `config.toml`: it is read at startup and on a reload only.
 - The in-flight part file is recorded in `upload-part` (state dir); `upload::reap` takes the record inline (state dir only) and deletes the file it named on the fs lane, not awaited, at startup and before each upload, never failing either. User folders are touched only from lane work, never inline or under the slot. No folder is scanned. That is safe only because the upload slot lives in `Part` until its cleanup has cleared the record, and the runtime lock keeps a second daemon out.
 - Every file written whole goes through `files::Temp` (`src/files.rs`): an upload's part file (`land`, never replacing), auth's files. Linux uploads reject
   tmpfs/ramfs with `memory_backed` from the opened destination descriptor before the
@@ -42,7 +42,7 @@ Rules the code relies on, which are easy to break:
   the upload's `fdatasync`. A part file is deleted on every failure, including a
   request dropped mid-body (`Part`'s `Drop`).
 - Logs carry paths, sizes and codes, never file contents, upload bytes, the client's
-  upload name, or `config.toml`'s text: a parse error is logged by line number, never
+  upload name, or `config.toml`'s text: a parse error is logged by line and column, never
   by the parser's message, which quotes the text.
 
 Tests: `open.rs` (links, FIFOs, the swapped component), `list.rs`, `search/matcher.rs`

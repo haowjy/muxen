@@ -508,7 +508,7 @@ fn parse(path: &Path, text: &str) -> Result<AuthFile, StoreError> {
 
     let raw: Raw = toml::from_str(text).map_err(|error| StoreError::Parse {
         path: path.to_owned(),
-        line: files::toml_line(text, &error),
+        line: files::toml_position(text, &error).0,
     })?;
     let mut devices = Vec::with_capacity(raw.devices.len());
     let mut refused_devices = Vec::new();

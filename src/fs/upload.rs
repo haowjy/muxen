@@ -23,7 +23,6 @@ use tracing::{debug, info};
 
 use super::{FsError, Opened, Want, expand, open, open_absolute};
 use crate::blocking::Lane;
-use crate::config::ConfigFile;
 use crate::files::{Dir, Temp};
 use crate::proto::fs::Uploaded;
 
@@ -45,12 +44,12 @@ const RENAME_TRIES: usize = 16;
 const BASE32: &[u8; 32] = b"abcdefghijklmnopqrstuvwxyz234567";
 
 /// The folder an upload lands in: `dest` (`~`, `~/…` or absolute; it must exist), else
-/// `uploads_dir`, created 0700 if missing and then opened after creating it, so a folder
+/// `uploads_dir` (the running config's), created 0700 if missing and then opened after creating it, so a folder
 /// that didn't exist a moment ago still counts. Blocks.
-pub fn open_dir(file: &ConfigFile, home: &Path, dest: Option<&str>) -> Result<Opened, FsError> {
+pub fn open_dir(uploads_dir: &str, home: &Path, dest: Option<&str>) -> Result<Opened, FsError> {
     let opened = match dest {
         Some(dest) => open(dest, home, Want::Dir)?,
-        None => open_uploads_dir(file, home)?,
+        None => open_uploads_dir(uploads_dir, home)?,
     };
     if memory_backed(&opened.file)? {
         return Err(FsError::MemoryBacked);
@@ -58,9 +57,8 @@ pub fn open_dir(file: &ConfigFile, home: &Path, dest: Option<&str>) -> Result<Op
     Ok(opened)
 }
 
-fn open_uploads_dir(file: &ConfigFile, home: &Path) -> Result<Opened, FsError> {
-    let config = file.load()?;
-    let dir = expand(&config.uploads_dir, home).ok_or(FsError::NotADirectory)?;
+fn open_uploads_dir(uploads_dir: &str, home: &Path) -> Result<Opened, FsError> {
+    let dir = expand(uploads_dir, home).ok_or(FsError::NotADirectory)?;
     // A failure shows up in the open below.
     let _ = std::fs::DirBuilder::new()
         .recursive(true)

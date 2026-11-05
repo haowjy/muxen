@@ -17,7 +17,7 @@ use tracing::{error, warn};
 use crate::auth::{Auth, AuthError, NodeLane, Session};
 use crate::blocking::{Lanes, PermitPool};
 use crate::budget::Caps;
-use crate::config::ConfigFile;
+use crate::config::LiveConfig;
 use crate::fs::Slots;
 use crate::hub::HubHandle;
 use crate::proto::{CloseCode, HostInfo, HttpError};
@@ -45,7 +45,8 @@ pub struct App {
     pub paste_dir: PathBuf,
     /// Where an upload records its in-flight part file (`fs::upload::reap`).
     pub upload_record: PathBuf,
-    pub config: ConfigFile,
+    /// The running config (`config.toml` as last loaded or saved).
+    pub config: Arc<LiveConfig>,
     pub home: PathBuf,
     pub complete: crate::complete::Settings,
     pub caps: Caps,

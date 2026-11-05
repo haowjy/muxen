@@ -321,6 +321,7 @@ there is no cgroup or hard memory/CPU cap.
   and repaint from snapshots.
 
 **systemd user unit** (`contrib/muxen.service`): `Type=notify`, `KillMode=mixed`,
+`ExecReload=/bin/kill -HUP $MAINPID` (a reload of `config.toml`, [fs.md](fs.md#the-uploads-folder)),
 `Restart=on-failure` with a backoff (`RestartSec=2`, `RestartSteps=5`,
 `RestartMaxDelaySec=60`, `StartLimitIntervalSec=0`), `RestartPreventExitStatus=78`,
 `MemoryMax=72M`, `CPUQuota=50%`, `CPUQuotaPeriodSec=10ms`, `CPUWeight=20`, `Nice=10`,

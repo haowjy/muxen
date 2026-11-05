@@ -1,7 +1,6 @@
 //! The file routes over a real socket (fs.md "Routes", "Errors"): ranges and their
 //! headers as the native player sees them, uploads one at a time with their part file
-//! cleaned up, Settings writes that keep a hand-written `config.toml`, and a broken
-//! config failing the config routes closed.
+//! cleaned up, and `config.toml` edits applying only at a reload.
 
 use std::time::Duration;
 
@@ -300,22 +299,25 @@ async fn an_upload_can_name_its_folder_and_never_replaces_a_file() {
 }
 
 #[tokio::test]
-async fn a_broken_config_fails_uploads_closed() {
-    let daemon = start("fs-broken").await;
-    std::fs::create_dir_all(daemon.home("code")).expect("a dir");
-    std::fs::write(&daemon.config, "uploads_dir = \"~/up\n").expect("written");
-    let code = url("/fs/list/", &daemon.home("code"));
-    // Listing and reading don't consult the config.
-    assert_eq!(get(&daemon, &code, &[]).await.status, 200);
-    let upload = post(&daemon, "/fs/upload?name=a.png", b"x", false).await;
-    assert_eq!(
-        (upload.status, upload.text()),
-        (503, r#"{"error":"config_unavailable"}"#)
-    );
-    // A fixed file applies to the next request.
-    std::fs::write(&daemon.config, "uploads_dir = \"~/up\"\n").expect("fixed");
-    let upload = post(&daemon, "/fs/upload?name=a.png", b"x", false).await;
-    assert_eq!(upload.status, 201, "{}", upload.text());
+async fn config_edits_apply_at_a_reload_and_a_broken_one_changes_nothing() {
+    let daemon = start("fs-reload").await;
+    let landed = async || {
+        let upload = post(&daemon, "/fs/upload?name=a.png", b"x", false).await;
+        assert_eq!(upload.status, 201, "{}", upload.text());
+        upload.text().to_owned()
+    };
+    assert!(landed().await.contains("/.muxen-uploads/"));
+
+    // A hand edit waits for a reload.
+    std::fs::write(&daemon.config, "uploads_dir = \"~/up\"\n").expect("edited");
+    assert!(landed().await.contains("/.muxen-uploads/"));
+    assert!(daemon.live.reload().expect("parses").is_empty());
+    assert!(landed().await.contains("/up/"));
+
+    // One that doesn't parse changes nothing.
+    std::fs::write(&daemon.config, "uploads_dir = \"~/elsewhere\n").expect("broken");
+    assert!(daemon.live.reload().is_err());
+    assert!(landed().await.contains("/up/"));
 }
 
 /// Writes `request` and reads until the server closes or a second passes.
