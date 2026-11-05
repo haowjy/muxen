@@ -3619,6 +3619,17 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 - **Why:** Jimmy wanted Settings higher and more vertical space for the content.
 - **Rejected:** large titles and a separate back/header row.
 
+### One header row on every screen
+
+- **Decided:** 2026-11-05, ux lead, for Jimmy's "consistency" ask.
+- **What:** Home, the tab overview, Settings and Open session share one header, `ScreenBar`: back
+  icon (desktop; docked screens keep it in the bottom bar), title left-aligned in the column,
+  controls at the end, a rule under it.
+- **Why:** three headers had drifted: the overview centred its title behind a text "‹ muxen"
+  button, Settings had no rule, Home its own bar.
+- **Rejected:** keeping the overview's named text back button (the icon's label still names where
+  Back goes).
+
 ### A launch opens where you left off, and the address names it
 
 - **Decided:** 2026-11-05, Jimmy ("we should record more information in the …/#/tab address... we

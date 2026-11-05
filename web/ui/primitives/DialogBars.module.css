@@ -7,15 +7,3 @@
   padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
 }
 .title .heading { flex: 1; }
-.page {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  box-sizing: border-box;
-  width: min(var(--page-width), 100%);
-  min-height: calc(var(--header-height) + var(--safe-top));
-  margin: 0 auto;
-  padding: var(--safe-top) var(--space-2) 0;
-}
-/* Docked, Back is at the bottom: the title starts the row at the page's gutter. */
-.page[data-docked] { padding-left: var(--space-gutter); }

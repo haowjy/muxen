@@ -18,8 +18,10 @@
 /* The top padding is the focus ring's room (2px outline + 2px offset): a scrolling body clips what is drawn outside it. */
 .body { flex: 1; overflow-y: auto; padding: var(--space-1) var(--space-4) var(--space-4); min-height: 0; scroll-padding: var(--space-1); }
 
-/* A full-screen page: its header row (PageBar), then a body in the centred column. */
+/* A full-screen page: its header row (ScreenBar), then a body in the centred column. It sits in the top layer, outside the shell, so it keeps the top safe area itself. */
 .page {
+  box-sizing: border-box;
+  padding-top: var(--safe-top);
   width: 100%;
   max-width: none;
   max-height: none;

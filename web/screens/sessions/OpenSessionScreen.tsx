@@ -13,7 +13,8 @@ import type { SessionListing, TmuxListing } from "../../proto/generated/messages
 import { BellDot } from "../../ui/primitives/BellDot";
 import { Button } from "../../ui/primitives/Button";
 import { Dialog } from "../../ui/primitives/Dialog";
-import { PageBack, PageBar } from "../../ui/primitives/DialogBars";
+import { PageBack } from "../../ui/primitives/DialogBars";
+import { ScreenBar } from "../../ui/primitives/ScreenBar";
 import { EmptyState } from "../../ui/primitives/EmptyState";
 import { Row } from "../../ui/primitives/Row";
 import { Spinner } from "../../ui/primitives/Spinner";
@@ -29,7 +30,7 @@ export function OpenSessionScreen() {
   const host = useAppView((v) => v.hosts.find((h) => h.hostId === workspace?.host));
   const docked = useDocked();
   return (
-    <Dialog open={open} title="Open session" variant="page" onClose={close} header={<PageBar back="Back" onBack={close} title="Open session" docked={docked} />} footer={docked && <PageBack back="Back" onBack={close} />}>
+    <Dialog open={open} title="Open session" variant="page" onClose={close} header={<ScreenBar back="Back" onBack={close} title="Open session" docked={docked} />} footer={docked && <PageBack back="Back" onBack={close} />}>
       {open && workspace && host && <Body host={host} workspace={workspace} />}
     </Dialog>
   );

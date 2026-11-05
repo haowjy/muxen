@@ -10,6 +10,7 @@ import { shorten } from "../../files/format";
 import { bellsUnavailable } from "../../sessions/bells";
 import { ago, findSession } from "../../sessions/groups";
 import { BottomBar } from "../../ui/primitives/BottomBar";
+import { ScreenBar } from "../../ui/primitives/ScreenBar";
 import { Button } from "../../ui/primitives/Button";
 import { DockButton } from "../../ui/primitives/DockButton";
 import { Icon } from "../../ui/primitives/Icon";
@@ -105,12 +106,7 @@ function WorkspacePage({ workspace, over }: { workspace: Workspace; over: boolea
 
   return (
     <div class={styles.page}>
-      <header class={styles.header}>
-        <div class={styles.bar} data-docked={docked ? "" : undefined}>
-          {!docked && <Button variant="quiet" icon="back" aria-label={`Back to ${back}`} onClick={goBack}>{back}</Button>}
-          <h1 class={styles.title}>{name}</h1>
-        </div>
-      </header>
+      <ScreenBar title={name} back={`Back to ${back}`} onBack={goBack} docked={docked} />
       <div class={styles.body}>
         <div class={styles.column}>
           {bellsUnavailable(bells, workspace.host) && <p class={styles.note}>Bell tracking unavailable on this host</p>}

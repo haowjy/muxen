@@ -1,0 +1,5 @@
+.screen { flex: none; border-bottom: 1px solid var(--color-border); padding: 0 var(--space-gutter); }
+.bar { display: flex; align-items: center; gap: var(--space-2); width: min(var(--page-width), 100%); min-height: var(--header-height); margin: 0 auto; }
+/* The back icon's glyph lines up with the column's edge, as the title does on a screen without one. */
+.back { margin-left: calc(-1 * var(--space-2)); }
+.title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-heading); font-weight: var(--weight-bold); }

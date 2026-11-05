@@ -92,8 +92,10 @@ between the key row and keyboard. Standalone PWA mode has no Safari toolbar.
 - Menus and the tab overview use the current theme's raised surface. A toast floats above the dock
   without covering its controls.
 - Home is a centered column on desktop, with width `min(720px, 100% - 2 gutters)`.
-  Phone screens use a single 44 pt header row, a back icon where the screen has a parent,
-  and a 17 pt title; no large titles.
+  Every screen and full-screen page (Home, the tab overview, Settings, Open session) has the
+  same 44 pt header row, `ScreenBar`: a back icon where the screen has a parent (in the bottom bar
+  instead where tabs have the dock), the 17 pt title left-aligned in the column, the screen's own
+  controls at the end, and a rule under it. No large titles, no centred titles.
 - A terminal tab's session name is bold and its current window name regular, separated
   by spacing, including for a one-window session; a phone pill shows the session alone. Truncate the window name first. A Files
   tab is labelled by its folder or open file, and a tab at the host's home reads "~". Icon-only controls have accessible

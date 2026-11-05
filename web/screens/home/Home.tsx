@@ -11,6 +11,7 @@ import { Button } from "../../ui/primitives/Button";
 import { DockButton } from "../../ui/primitives/DockButton";
 import { Icon } from "../../ui/primitives/Icon";
 import { IconButton } from "../../ui/primitives/IconButton";
+import { ScreenBar } from "../../ui/primitives/ScreenBar";
 import { useStore } from "../../ui/store";
 import { workspaceOfHost, type Workspace, type WorkspaceState } from "../../workspace/state";
 import { HostBanner } from "../shell/HostBanner";
@@ -57,12 +58,9 @@ export function Home() {
 
   return (
     <div class={styles.home}>
-      <header class={styles.header}>
-        <div class={styles.bar}>
-          <h1 class={styles.title}>muxen</h1>
-          {!docked && <IconButton icon="settings" label="Settings" onClick={(e) => { openSettings(e.currentTarget); }} />}
-        </div>
-      </header>
+      <ScreenBar title="muxen">
+        {!docked && <IconButton icon="settings" label="Settings" onClick={(e) => { openSettings(e.currentTarget); }} />}
+      </ScreenBar>
       <div class={styles.body}>
         <div class={styles.column}>
           {hosts.map((h) => <Row key={h.entry.handle} host={h} />)}

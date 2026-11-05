@@ -12,7 +12,7 @@ interface DialogProps {
   title: string;
   /** Where it sits: centred (`dialog`), or filling the screen (`page`). What its top row holds is `header`'s. Focus returns to the control `app.openOverlay` was given, else the one focused at opening; a field marked `data-initial-focus=""` takes focus on opening with a fine pointer. */
   variant?: "dialog" | "page";
-  /** The top row: a `TitleBar` or `PageBar`, or null for none. `title` is the dialog's accessible name. */
+  /** The top row: a `TitleBar` or `ScreenBar`, or null for none. `title` is the dialog's accessible name. */
   header: ComponentChildren;
   /** Under the body: a docked page's `PageBack`. */
   footer?: ComponentChildren;
