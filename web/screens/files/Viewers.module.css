@@ -30,26 +30,42 @@
 }
 /* A focusable scroller as wide as its viewer: the ring sits inside. */
 .code:focus-visible { outline-offset: -2px; }
-/* Each line: its number in a gutter that stays put while the line scrolls, then the text. The numbers are
-   generated content, so a copy or a selection never takes them. */
-.code :global(.line) { display: flex; min-width: max-content; min-height: 1.7em; counter-increment: line; }
-.code :global(.line)::before {
-  content: counter(line);
+/* Numbers. Unwrapped, every line is one row, so one sticky gutter holds them all and stays put while the lines
+   scroll sideways: a sticky number per line made each scroll of a 1 MiB file cost ~25 ms (review p538). Wrapped,
+   nothing scrolls sideways and a line can be several rows, so each line carries its own number. Both are
+   generated content: a copy or a selection never takes them. */
+.code { display: flex; align-items: flex-start; }
+.gutter {
   position: sticky;
   left: 0;
   flex: none;
   width: 6ch;
   padding-right: 2.5ch;
   text-align: right;
+  white-space: pre;
   color: color-mix(in oklch, var(--color-text-muted) 60%, transparent);
   background: var(--color-bg-sunken);
   user-select: none;
 }
-.code :global(.text) { padding-right: var(--space-7); white-space: pre; }
-.wrap :global(.line) { min-width: 0; }
-.wrap :global(.text) { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.gutter::before { content: attr(data-lines); }
+.code code { flex: 1 0 auto; }
+.code :global(.line) { display: block; min-height: 1.7em; padding-right: var(--space-7); white-space: pre; }
+.wrap .gutter { display: none; }
+.wrap code { flex: 1 1 0; min-width: 0; }
+.wrap :global(.line) { padding-left: 8.5ch; white-space: pre-wrap; overflow-wrap: anywhere; counter-increment: line; }
+.wrap :global(.line)::before {
+  content: counter(line);
+  display: inline-block;
+  width: 6ch;
+  margin: 0 2.5ch 0 -8.5ch;
+  text-align: right;
+  color: color-mix(in oklch, var(--color-text-muted) 60%, transparent);
+  user-select: none;
+}
 :root[data-layout="phone"] .code { padding-top: var(--space-1); font-size: 12px; }
-:root[data-layout="phone"] .code :global(.line)::before { width: 4.5ch; padding-right: 2ch; }
+:root[data-layout="phone"] .gutter { width: 4.5ch; padding-right: 2ch; }
+:root[data-layout="phone"] .wrap :global(.line) { padding-left: 6.5ch; }
+:root[data-layout="phone"] .wrap :global(.line)::before { width: 4.5ch; margin: 0 2ch 0 -6.5ch; }
 /* Code runs edge to edge on the sunken surface, under the header's one rule. */
 .sunken { flex: 1; background: var(--color-bg-sunken); }
 /* The phone's facts above the code; a desktop's header has the size. */

@@ -72,11 +72,14 @@ function Facts({ file, source, plain }: { file: FileRef; source: string; plain: 
 /** Source and text, numbered, edge to edge; coloured by Shiki when the extension is on the allowlist and the file is small. */
 export function CodeViewer({ text, file, wrap, plain, describe }: { text: Loaded<TextPreview>; file: FileRef; wrap: boolean; plain: boolean; describe: (e: HttpRefusal) => string }) {
   const ref = useRef<HTMLElement>(null);
+  const gutter = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     const code = ref.current;
     if (!code || text.kind !== "done") return undefined;
     const source = text.value.text;
     code.replaceChildren(plainLines(source));
+    // The unwrapped gutter's numbers, one per line, as generated content: a copy or a selection never takes them.
+    gutter.current?.setAttribute("data-lines", Array.from({ length: code.childElementCount }, (_, i) => String(i + 1)).join("\n"));
     const lang = plain ? null : languageFor(file.name);
     if (!lang || source.length > HIGHLIGHT_MAX) return undefined;
     let live = true;
@@ -90,7 +93,7 @@ export function CodeViewer({ text, file, wrap, plain, describe }: { text: Loaded
       <Facts file={file} source={text.value.text} plain={plain} />
       <Truncated preview={text.value} />
       {text.value.text === "" && <p class={styles.note}>This file is empty.</p>}
-      <pre class={cx(styles.code, wrap && styles.wrap)} tabIndex={0} aria-label={`Contents of ${file.name}`}><code ref={ref} /></pre>
+      <pre class={cx(styles.code, wrap && styles.wrap)} tabIndex={0} aria-label={`Contents of ${file.name}`}><span ref={gutter} class={styles.gutter} aria-hidden="true" /><code ref={ref} /></pre>
     </div>
   );
 }

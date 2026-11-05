@@ -4861,3 +4861,10 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
 - **Rejected:** numbers as text in each line (a copy would take them); a separate gutter column (it drifts
   from wrapped lines); a JSON pretty-printer (changes what the file says; the frame and colours were the
   ask); Shiki's own line-number transformer (a second render path beside the plain one).
+- **The gutter's cost (review p538):** a sticky number on every line made each scroll of a 1 MiB file
+  (17,189 lines) cost about 25 ms in desktop Chromium (20 scrolls: ~450 ms, against 10 ms before numbers).
+  Unwrapped, every line is one row, so one sticky gutter holds all the numbers (generated content from a
+  `data-lines` attribute) and the lines are plain blocks again: 20 scrolls in 11 ms. Wrapped, nothing
+  scrolls sideways and a line may take several rows, so each line carries its own non-sticky counter in its
+  padding: 17 ms. Rejected: sticky numbers below a line cap (two looks for one file kind); one gutter in
+  wrap mode too (it drifts from wrapped lines, as above).
