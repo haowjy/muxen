@@ -113,8 +113,8 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
     func coverNativeScreen(_ covered: Bool) {
         guard covered else { return }
         view.endEditing(true)
-        // A downloaded file must not stay offered over the lock screen.
-        if model.isLocked { media.endDownload() }
+        // The lock screen is a SwiftUI overlay, under any modal: nothing may stay up over it.
+        if model.isLocked { media.lock() }
     }
 
     func send(_ event: NativeEvent) {

@@ -574,9 +574,21 @@ wildcard development profile has none (Distribution).
    and a `401` on the token it carried revokes that token, as the uploader's does. The file is
    renamed to `name` reduced to one path component, then the share sheet
    (`UIActivityViewController`) offers it: Save to Files, AirDrop, another app.
-5. When the sheet closes, however it closes, native deletes the file and replies. A lock (the app
-   relocking on foreground) cancels a running download, dismisses its alert or sheet, and deletes the
-   file: a sheet must not stay up over the lock screen.
+5. When the sheet closes, however it closes, native deletes the file and replies. If the sheet can't
+   go up (another screen is over the page), native deletes the file and replies an error ("Close
+   what's open, then download again."). A lock (the app relocking on foreground) cancels a running
+   download, dismisses its alert or sheet, and deletes the file: a sheet must not stay up over the
+   lock screen.
+
+**Native screens over the page.** The image menu and pickers, the video player, and Download's alert
+and sheet go up one way, `MediaController.show`. UIKit drops a present made while another screen is
+up or still moving, and a dismiss made while one is still appearing; each request it dropped would
+leave the page waiting for a reply. So `show` waits for a running transition to end, then refuses
+while another screen is up or the app is locked, and the refusal ends the request: the image's
+upload stream ends, Download deletes its file and replies the error above, a video doesn't open.
+The lock screen is a SwiftUI overlay, under any modal, so a lock takes the screen down once its own
+transition has ended, and ends it as its own close would: the upload stream ends, the player
+pauses, the sheet's reply goes out.
 
 The web shows an error reply in Files' notice ("Couldn't download {name}: {words}"); `null` says
 nothing. The file never enters the web view, so nothing it holds can run as the app.
@@ -695,7 +707,7 @@ and fix this spec from them. The current Simulator cannot show the software keyb
 | Appearance | System follows device changes; explicit Light and Dark survive them and agree in native chrome (lock screen, the server sheet, the keyboard) and web content, including after a relaunch and with the app locked at launch |
 | Text size | Each size resizes the shown tmux window once (`tmux display -p '#{window_width}'` changes with each size) and survives a relaunch |
 | Face ID relock | For each of 5 min, 1 hour and At launch: a background trip shorter than the interval returns with no prompt; one longer asks for Face ID first thing on foreground. At launch never asks on foreground, however long the trip, and asks once after a process restart. Changing the setting takes effect at the next background trip. Choosing a longer interval or At launch asks for Face ID first, and cancelling leaves the old choice selected |
-| Download | A text file, a 100 MB file (the alert counts up; Cancel stops it) and a file the daemon refuses: Save to Files keeps the name, AirDrop and Open in work, the error reads in words, and `tmp/Downloads/` is empty after each sheet closes. Lock during a download: the alert or sheet goes |
+| Download | A text file, a 100 MB file (the alert counts up; Cancel stops it) and a file the daemon refuses: Save to Files keeps the name, AirDrop and Open in work, the error reads in words, and `tmp/Downloads/` is empty after each sheet closes. Lock during a download, and during the sheet's opening animation: the alert or sheet goes. Lock with the video player or the image menu up: it goes. Background the app during a 100 MB download until iOS suspends it, then return: the notice says why, and `tmp/Downloads/` is empty |
 | Paste | The mark menu's Paste with text and with an image, with "Allow Paste" set to Ask and Allow; the line box's paste of one line and of several lines, and of an image (it goes to the terminal) |
 | Keychain unlock ([auth.md](auth.md#recovery)) | One item holds the token map; one read prompts once and subsequent requests use memory only. Check each relock setting on either side of its threshold and At launch across foreground and process restart. Reset tokens deletes the item and leaves every saved host not enrolled; after adding an alternate Face ID appearance, record the read's exact `OSStatus` |
 | Keychain update | With an existing token item and a successful unlock, add or remove a host; `SecItemUpdate` reuses the unlock's `LAContext`, raises no second Face ID prompt and leaves the UI responsive |

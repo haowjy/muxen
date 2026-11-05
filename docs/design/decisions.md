@@ -5053,3 +5053,20 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
   - Each session keeping its own copy of the check: four copies had already drifted to one.
   - Loading video through an `AVAssetResourceLoaderDelegate` on a custom scheme so native's own session
     fetches it: a Range-serving proxy in the app to police a redirect the daemon never sends.
+
+## The app's native screens go up one way, and a lock takes any of them down (2026-11-05)
+
+- **Decided:** 2026-11-05, on the phase 4 review (p555, findings 1 and 2).
+- **What:** each present in the web shell checked, or didn't check, for the others on its own. Download's
+  share sheet could be dropped (a video opened during the download, or Cancel tapped as it finished), and
+  then the page never got its reply and the file stayed; a lock during the sheet's opening animation
+  could leave it over the lock screen; the video player stayed over the lock screen. Now every screen
+  (image menu, pickers, player, Download's alert and sheet) goes up through `MediaController.show`, which
+  waits for a running transition, then refuses while another screen is up or the app is locked, and the
+  refusal ends the request. A lock takes the screen down after its transition and runs what its own close
+  would have.
+- **Rejected:**
+  - Guarding only the share sheet, as the review's minimum: the player over the lock screen is the same
+    fault, and the next screen would repeat it.
+  - Queueing a refused screen until the one up closes: a share sheet popping up after a video, minutes
+    later, is a surprise; the notice says what happened and Download is one tap again.

@@ -5,7 +5,8 @@ import PhotosUI
 import UIKit
 
 /// Media over the page (ios-shell.md "Files and sharing"): picking and uploading images, the video player, and Files'
-/// Download with its progress alert and share sheet. `presenter` is the web shell, which these screens cover.
+/// Download with its progress alert and share sheet. `presenter` is the web shell, which these screens cover; every
+/// screen goes up through `show`, and a lock takes it down (`lock`).
 @MainActor
 final class MediaController: NSObject, PHPickerViewControllerDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
     private let model: MuxenAppModel
@@ -14,8 +15,10 @@ final class MediaController: NSObject, PHPickerViewControllerDelegate, UIImagePi
     private let send: (NativeEvent) -> Void
     private let uploader = Uploader()
     private let downloader = Downloader()
-    /// What a download shows over the page: its progress alert, then the share sheet. A lock dismisses it.
-    private weak var downloadScreen: UIViewController?
+    /// The screen `show` put over the page, and what ends it when a lock takes it down: a dismiss in code runs none
+    /// of the screen's own handlers.
+    private weak var screen: UIViewController?
+    private var screenEnded: () -> Void = {}
     private var pendingPick: PendingPick?
 
     init(model: MuxenAppModel, presenter: UIViewController, send: @escaping (NativeEvent) -> Void) {
@@ -46,11 +49,56 @@ final class MediaController: NSObject, PHPickerViewControllerDelegate, UIImagePi
         return .string("empty")
     }
 
+    /// Puts `screen` over the page once any transition there has finished: UIKit drops a present made while another
+    /// screen is up or moving, and the page would wait forever on a screen that never came. If another screen is up or
+    /// the app is locked, `refused` runs instead. `ended` runs if a lock takes the screen down.
+    private func show(_ screen: UIViewController, ended: @escaping () -> Void = {}, refused: @escaping () -> Void = {}, then: (() -> Void)? = nil) {
+        afterTransition { [weak self] in
+            guard let self, let presenter = self.presenter, presenter.presentedViewController == nil, !self.model.isLocked else {
+                refused()
+                return
+            }
+            screen.popoverPresentationController?.sourceView = presenter.view
+            screen.popoverPresentationController?.sourceRect = CGRect(x: presenter.view.bounds.midX, y: presenter.view.bounds.midY, width: 1, height: 1)
+            self.screen = screen
+            self.screenEnded = ended
+            presenter.present(screen, animated: true, completion: then)
+        }
+    }
+
+    /// Takes `screen` down if it is still up, once any transition has finished (a dismiss during a present is dropped).
+    /// `next` runs when it has gone.
+    private func takeDown(_ screen: UIViewController, animated: Bool = true, then next: @escaping () -> Void = {}) {
+        afterTransition {
+            guard screen.presentingViewController != nil else { next(); return }
+            screen.dismiss(animated: animated, completion: next)
+        }
+    }
+
+    /// Runs `next` once the screen over the page, if any, has finished appearing or going.
+    private func afterTransition(_ next: @escaping () -> Void) {
+        guard let shown = presenter?.presentedViewController, shown.isBeingPresented || shown.isBeingDismissed,
+              let coordinator = shown.transitionCoordinator else { next(); return }
+        coordinator.animate(alongsideTransition: nil) { [weak self] _ in
+            // UIKit settles the presentation after the coordinator's completion; the next turn sees it settled.
+            DispatchQueue.main.async { self?.afterTransition(next) }
+        }
+    }
+
+    /// A lock's end to media (ios-shell.md "Files and sharing"): a download stops, and the screen over the page goes, so
+    /// nothing stays up over the lock screen. A screen already going on its own runs its own handler instead.
+    func lock() {
+        downloader.cancel()
+        guard let screen else { return }
+        let ended = screenEnded
+        afterTransition {
+            guard screen.presentingViewController != nil else { return }
+            screen.dismiss(animated: false, completion: ended)
+        }
+    }
+
     func showMediaPicker(host: String, id: String) {
-        guard let presenter else { return }
         let target = PendingPick(host: host, id: id)
-        // UIKit drops a present while another is up (a double tap on Upload); end the stream instead of leaving it open.
-        guard presenter.presentedViewController == nil else { cancel(target); return }
         let alert = UIAlertController(title: "Add image", message: nil, preferredStyle: .actionSheet)
         alert.addAction(UIAlertAction(title: "Photo Library", style: .default) { [weak self] _ in self?.presentPhotoLibrary(target) })
         if UIImagePickerController.isSourceTypeAvailable(.camera) {
@@ -61,9 +109,8 @@ final class MediaController: NSObject, PHPickerViewControllerDelegate, UIImagePi
             self?.upload(image, id: id, host: host)
         })
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { [weak self] _ in self?.cancel(target) })
-        alert.popoverPresentationController?.sourceView = presenter.view
-        alert.popoverPresentationController?.sourceRect = CGRect(x: presenter.view.bounds.midX, y: presenter.view.bounds.midY, width: 1, height: 1)
-        presenter.present(alert, animated: true)
+        // A refused menu (a double tap on Upload) ends the stream instead of leaving it open.
+        show(alert, ended: { [weak self] in self?.cancel(target) }, refused: { [weak self] in self?.cancel(target) })
     }
 
     private func presentPhotoLibrary(_ target: PendingPick) {
@@ -72,8 +119,7 @@ final class MediaController: NSObject, PHPickerViewControllerDelegate, UIImagePi
         configuration.selectionLimit = 1
         let picker = PHPickerViewController(configuration: configuration)
         picker.delegate = self
-        pendingPick = target
-        presenter?.present(picker, animated: true)
+        showPicker(picker, for: target)
     }
 
     private func presentCamera(_ target: PendingPick) {
@@ -81,8 +127,19 @@ final class MediaController: NSObject, PHPickerViewControllerDelegate, UIImagePi
         picker.sourceType = .camera
         picker.mediaTypes = ["public.image"]
         picker.delegate = self
+        showPicker(picker, for: target)
+    }
+
+    private func showPicker(_ picker: UIViewController, for target: PendingPick) {
         pendingPick = target
-        presenter?.present(picker, animated: true)
+        show(picker, ended: { [weak self] in self?.endPick() }, refused: { [weak self] in self?.endPick() })
+    }
+
+    /// The pick in progress ends with nothing picked: its stream ends.
+    private func endPick() {
+        guard let pick = pendingPick else { return }
+        pendingPick = nil
+        cancel(pick)
     }
 
     /// Every `upload` event is deferred one turn: a paste's reply to the page goes out first, so its
@@ -131,10 +188,12 @@ final class MediaController: NSObject, PHPickerViewControllerDelegate, UIImagePi
         guard case .ready(let request, _) = model.request(on: host, path: "/fs/raw/" + segments.joined(separator: "/")),
               let url = request.url else { return }
         let asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": request.allHTTPHeaderFields ?? [:]])
-        let player = AVPlayer(playerItem: AVPlayerItem(asset: asset))
         let controller = AVPlayerViewController()
-        controller.player = player
-        presenter?.present(controller, animated: true) { player.play() }
+        // The player is made once the screen is up: a refused one fetches nothing.
+        show(controller, ended: { [weak controller] in controller?.player?.pause() }, then: {
+            controller.player = AVPlayer(playerItem: AVPlayerItem(asset: asset))
+            controller.player?.play()
+        })
     }
 
     /// Files' Download: `url` is the page's own `muxen-app://h-{host}/fs/raw/…`, resolved as the scheme handler
@@ -158,7 +217,7 @@ final class MediaController: NSObject, PHPickerViewControllerDelegate, UIImagePi
         case .noHost: fail("Couldn't find this file's server.", nil); return
         case .locked, .notEnrolled: fail("Unlock muxen to download.", nil); return
         }
-        // UIKit drops a present while another is up, and one download runs at a time.
+        // One download runs at a time, and its sheet can't go up over another screen.
         guard presenter?.presentedViewController == nil, !downloader.isBusy else {
             fail("Close what's open, then download again.", nil)
             return
@@ -173,56 +232,37 @@ final class MediaController: NSObject, PHPickerViewControllerDelegate, UIImagePi
             if progress.message != text { progress.message = text }
         }, completion: { [weak self] result in
             guard let self else { Downloader.discard(); reply(NSNull(), nil); return }
-            // The alert dismisses itself on Cancel; any other end takes it down before the sheet goes up.
-            self.dismissDownloadScreen {
+            // However it ended (Cancel, a lock, the last byte), the alert goes before anything else goes up.
+            self.takeDown(progress) {
                 switch result {
-                case .success(let file): self.share(file, reply: reply)
+                case .success(let file): self.share(file, reply: reply, fail: fail)
                 case .failure(DownloadFailure.cancelled): reply(NSNull(), nil)
                 case .failure(let error): fail(error.localizedDescription, (error as? DownloadFailure)?.code)
                 }
             }
         })
-        // A small file goes straight to the sheet: the alert shows only for a download still running after 0.5 s.
+        // A small file goes straight to the sheet: the alert shows only for a download still running after 0.5 s, and
+        // only over a still page, since nothing waits for it.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            guard let self, let presenter = self.presenter, self.downloader.isBusy, presenter.presentedViewController == nil, !self.model.isLocked else { return }
-            self.downloadScreen = progress
-            presenter.present(progress, animated: true)
+            guard let self, self.downloader.isBusy, self.presenter?.presentedViewController == nil else { return }
+            self.show(progress)
         }
     }
 
-    private func share(_ file: URL, reply: @escaping (Any?, String?) -> Void) {
-        guard !model.isLocked, let presenter else { Downloader.discard(); reply(NSNull(), nil); return }
+    /// Offers the downloaded `file`; `reply` runs once, when the sheet closes however it closes, or at once if the
+    /// sheet can't go up (the file goes then too).
+    private func share(_ file: URL, reply: @escaping (Any?, String?) -> Void, fail: @escaping (String, String?) -> Void) {
         let sheet = UIActivityViewController(activityItems: [file], applicationActivities: nil)
-        // Cleared on its first call: the lock calls it too, and a reply handler must run once.
+        // Cleared on its first call: the lock calls it too.
         sheet.completionWithItemsHandler = { [weak sheet] _, _, _, _ in
             sheet?.completionWithItemsHandler = nil
             Downloader.discard()
             reply(NSNull(), nil)
         }
-        sheet.popoverPresentationController?.sourceView = presenter.view
-        sheet.popoverPresentationController?.sourceRect = CGRect(x: presenter.view.bounds.midX, y: presenter.view.bounds.midY, width: 1, height: 1)
-        downloadScreen = sheet
-        presenter.present(sheet, animated: true)
-    }
-
-    private func dismissDownloadScreen(then next: @escaping () -> Void) {
-        guard let screen = downloadScreen, screen.presentingViewController != nil, !screen.isBeingDismissed else { next(); return }
-        // A dismiss while the alert is still animating in is dropped, so it waits for the presentation to end.
-        if screen.isBeingPresented, let coordinator = screen.transitionCoordinator {
-            coordinator.animate(alongsideTransition: nil) { _ in screen.dismiss(animated: true, completion: next) }
-        } else {
-            screen.dismiss(animated: true, completion: next)
-        }
-    }
-
-    /// The lock's end to a download: the fetch stops, and the alert or the sheet goes with its file.
-    func endDownload() {
-        downloader.cancel()
-        if let sheet = downloadScreen as? UIActivityViewController, sheet.presentingViewController != nil {
-            sheet.dismiss(animated: false) { sheet.completionWithItemsHandler?(nil, false, nil, nil) }
-        } else {
-            downloadScreen?.dismiss(animated: false)
-        }
+        show(sheet, ended: { [weak sheet] in sheet?.completionWithItemsHandler?(nil, false, nil, nil) }, refused: { [weak self] in
+            Downloader.discard()
+            if self?.model.isLocked != false { reply(NSNull(), nil) } else { fail("Close what's open, then download again.", nil) }
+        })
     }
 
     private static func jpegData(_ image: UIImage) -> Data? {
@@ -244,7 +284,7 @@ final class MediaController: NSObject, PHPickerViewControllerDelegate, UIImagePi
     func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
         let pick = pendingPick
         pendingPick = nil
-        presenter?.dismiss(animated: true)
+        takeDown(picker)
         guard let pick else { return }
         guard let provider = results.first?.itemProvider, provider.canLoadObject(ofClass: UIImage.self) else {
             cancel(pick)
@@ -264,7 +304,7 @@ final class MediaController: NSObject, PHPickerViewControllerDelegate, UIImagePi
     func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
         let pick = pendingPick
         pendingPick = nil
-        presenter?.dismiss(animated: true)
+        takeDown(picker)
         guard let pick else { return }
         if let image = info[.originalImage] as? UIImage { upload(image, id: pick.id, host: pick.host) }
         else { cancel(pick) }
@@ -273,7 +313,7 @@ final class MediaController: NSObject, PHPickerViewControllerDelegate, UIImagePi
     func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
         let pick = pendingPick
         pendingPick = nil
-        presenter?.dismiss(animated: true)
+        takeDown(picker)
         if let pick { cancel(pick) }
     }
 }
