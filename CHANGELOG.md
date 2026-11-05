@@ -6,7 +6,7 @@ version section on release.
 ## [Unreleased]
 
 - On a desktop, Files shows a Preview panel beside the list: select a file to see it, or a folder to read its README (or what it holds). Its toggle sits at the far right of the Files header whether the panel is on or off, so a second click undoes the first; Space does the same. Drag the divider (or use the arrow keys on it) to resize. Both are remembered on this device. Open a file full width with the expand button, a double-click or Enter; Back or Escape returns to the list.
-- On a desktop, Files is an outline: click a folder to open it in place, double-click or press Enter to go into it, and use the arrow keys to walk the tree (Right opens, Left closes). Each open folder is listed once; a big one ends in Show more.
+- On a desktop, Files is an outline: click a folder's triangle to open it in place, double-click or press Enter to go into it, and use the arrow keys to walk the tree (Right opens, Left closes). Each open folder is listed once; a big one ends in Show more.
 - On touch, a tap outside an open menu only closes it: the row or button under your finger no longer acts too.
 - Files writes its shortcuts for your keyboard: Ctrl+Shift+. and Ctrl+I on Linux and Windows, ⇧⌘. and ⌘I on a Mac. ⌘I shows only on a file's own Insert menu, the one it works for.
 - On the phone, pull a folder's list down from the top to refresh it.

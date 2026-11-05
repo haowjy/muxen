@@ -4929,6 +4929,20 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
   return to the tab (the cache already holds them); keeping the open set in history (Back would close
   folders instead of leaving places); an unbounded open set (a long session would pin the cache).
 
+### The outline's disclosure is the one target that opens a folder in place
+
+- **Decided:** 2026-11-05, the lead, from the phase 2 review (p546). **Supersedes** "Why one target per
+  row" in "A desktop's Files list is an outline": a click on a folder row no longer opens or closes it.
+- **What:** on a desktop a click on a row selects it (the Preview panel shows a folder's summary); a
+  click on a folder's disclosure opens or closes it, every click; double-click or Enter goes in;
+  ArrowRight and ArrowLeft open and close. The disclosure's hit area is 28px wide.
+- **Why:** with the click opening folders, a double-click to go in first opened the folder, so Back found
+  it open in its parent's outline, holding one of the tab's 32 slots for nothing. A click that only
+  selects also lets the panel show a folder without changing the tree.
+- **Rejected:** keeping one target and accepting the open folder behind (it costs a listing and a slot
+  per folder entered); the click toggling and the double-click undoing it (a flicker, and a listing
+  asked for and dropped).
+
 ### The folder cache asks for two first pages at a time, the outline's last
 
 - **Decided:** 2026-11-05, from the phase 2 review (p546): Show hidden re-listed every open folder at

@@ -42,7 +42,11 @@
   column-gap: 6px;
   padding-left: calc(var(--space-2) + var(--depth) * 16px);
 }
-.disclosure { color: var(--color-text-muted); transition: rotate var(--duration-1) ease-out; }
+/* The one target that opens and closes a folder in place: 28px wide over the 16px column, so it is easy to hit. */
+.disclosure { position: relative; display: flex; align-self: stretch; align-items: center; color: var(--color-text-muted); }
+.disclosure::before { content: ""; position: absolute; inset: 0 -6px; }
+.disclosure:hover { color: var(--color-text); }
+.chevronTurn { transition: rotate var(--duration-1) ease-out; }
 .open { rotate: 90deg; }
 /* Under each open folder's disclosure; quiet until the pointer is over the list. */
 .guide {

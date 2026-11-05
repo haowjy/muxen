@@ -38,7 +38,7 @@ interface RowListProps {
   /** A click or tap on a row. */
   onPress: (row: OutlineRow, e: MouseEvent) => void;
   /** A double-click on a row. */
-  onDouble?: (row: OutlineRow) => void;
+  onDouble?: (row: OutlineRow, e: MouseEvent) => void;
 }
 
 /** What an expanded folder's `rest` row says, and what choosing it does. */
@@ -92,7 +92,7 @@ class FileRow extends Component<FileRowProps> {
       ...(tree && { "aria-level": depth + 1 }),
       style: { "--depth": depth },
       onClick: (e: MouseEvent) => { act.current.onPress(row, e); },
-      onDblClick: () => { act.current.onDouble?.(row); },
+      onDblClick: (e: MouseEvent) => { act.current.onDouble?.(row, e); },
     };
     if (row.kind === "rest") {
       return (
@@ -129,7 +129,7 @@ class FileRow extends Component<FileRowProps> {
         class={cx(styles.row, dir && styles.dir, entry.name.startsWith(".") && styles.dotted, place === null && styles.disabled, selected && styles.selected)}
       >
         {tree && <Guides depth={depth} />}
-        {tree && (dir && place ? <Icon name="chevron" size={16} class={cx(styles.disclosure, row.expanded && styles.open)} /> : <span />)}
+        {tree && (dir && place ? <span class={styles.disclosure} data-disclosure><Icon name="chevron" size={16} class={cx(styles.chevronTurn, row.expanded && styles.open)} /></span> : <span />)}
         <span class={cx(styles.icon, dir && styles.folder)}><Icon name={dir ? "folder" : fileIcon(entry.name, entry.mime)} size={16} /></span>
         <span class={styles.name}>{entry.name}</span>
         {why !== null ? <span class={styles.why}>{why}</span> : (
@@ -173,7 +173,7 @@ interface FolderListboxProps {
   rows: readonly OutlineRow[];
   selected: string | null;
   fresh?: string | null | undefined;
-  /** The desktop's outline: a click selects (and opens or closes a folder in place), a double-click or Enter goes in. */
+  /** The desktop's outline: a click selects, the disclosure opens or closes a folder in place, a double-click or Enter goes in. */
   tree?: TreeProps | undefined;
   onSelect: (selection: string | null) => void;
   onOpen: (place: FilesPlace) => void;
@@ -232,19 +232,19 @@ function FolderListbox({ rows, selected, fresh, tree, onSelect, onOpen, onKeyNav
     ...(goUp && { onUp: goUp }),
     ...(tree && { onToggle: tree.onToggle }),
   });
-  /** The outline's click looks: it selects, and a folder opens or closes in place. A flat list's tap opens. */
+  /** The outline's click looks: it selects, and only a folder's disclosure opens or closes it in place. A flat list's tap opens. */
   const onPress = (row: OutlineRow, e: MouseEvent): void => {
     if (row.kind === "up") onUp?.();
     else if (!tree) { if (row.place) onOpen(row.place); }
-    // The second click of a double-click is the double-click's: it doesn't close what the first opened.
+    else if (onDisclosure(e)) tree.onToggle(row.key, !row.expanded);
+    // The second click of a double-click is the double-click's: it doesn't ask for a folder's next page twice.
     else if (e.detail < 2) {
       onSelect(row.key);
       if (row.kind === "rest") rest(row);
-      else if (row.kind === "dir" && row.place) tree.onToggle(row.key, !row.expanded);
     }
   };
-  const onDouble = (row: OutlineRow): void => {
-    if (tree && row.kind !== "up" && row.place) onOpen(row.place);
+  const onDouble = (row: OutlineRow, e: MouseEvent): void => {
+    if (tree && row.kind !== "up" && row.place && !onDisclosure(e)) onOpen(row.place);
   };
   return (
     <div
@@ -281,6 +281,9 @@ function FolderListbox({ rows, selected, fresh, tree, onSelect, onOpen, onKeyNav
     </div>
   );
 }
+
+/** The press landed on a folder's disclosure: each click there opens or closes it, and a double-click goes nowhere. */
+const onDisclosure = (e: MouseEvent): boolean => e.target instanceof Element && e.target.closest("[data-disclosure]") !== null;
 
 /** A folder that was moved or deleted since the tab last showed it: only the way up remains. */
 export function MissingFolder({ parent, onKeyNavigate }: { parent?: { path: string; onOpen: () => void }; onKeyNavigate: () => void }) {
