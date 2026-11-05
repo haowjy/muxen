@@ -50,15 +50,16 @@ async fn settings_save_at_once_and_a_reload_reports_what_waits() {
     let text = std::fs::read_to_string(&daemon.config).expect("written");
     assert_eq!(text, "search_skip = [\"dist\", \"*.egg-info\"]\n");
 
-    for body in [
-        r#"{"searchSkip":["a/b"]}"#,
-        r#"{"searchSkip":["*"]}"#,
-        r#"{"uploadsDir":"relative"}"#,
-        r#"{"favorites":[]}"#,
+    // An unknown or mistyped field is JSON axum refuses: `bad_request` with its 422.
+    for (body, status) in [
+        (r#"{"searchSkip":["a/b"]}"#, 400),
+        (r#"{"searchSkip":["*"]}"#, 400),
+        (r#"{"uploadsDir":"relative"}"#, 400),
+        (r#"{"favorites":[]}"#, 422),
+        (r#"{"searchSkip":"dist"}"#, 422),
     ] {
         let refused = request(&daemon, "POST", "/settings", body).await;
-        // An unknown field is JSON axum refuses: `bad_request` with its 422.
-        assert!([400, 422].contains(&refused.status), "{body}");
+        assert_eq!(refused.status, status, "{body}");
         assert_eq!(refused.text(), r#"{"error":"bad_request"}"#, "{body}");
     }
     assert_eq!(std::fs::read_to_string(&daemon.config).expect("read"), text);

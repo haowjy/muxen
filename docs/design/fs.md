@@ -444,7 +444,7 @@ SettingsChange = { searchSkip?: [string] | null, uploadsDir?: string | null }
   (`["node_modules"]`, `"~/.muxen-uploads"`); `defaults` carries them so the client keeps no copy.
   `searchSkip: []` is a set key that skips nothing; `null` is no key, the default.
 - **`POST`** takes a `SettingsChange`: a field left out is unchanged, `null` removes the key, a value
-  sets it. Unknown fields are `400 bad_request`. It answers the resulting `ServerSettings`, which the
+  sets it. An unknown or mistyped field is `bad_request` with axum's 422, as every JSON body axum rejects. It answers the resulting `ServerSettings`, which the
   client draws. **Validation:** at most 64 patterns, each 1–255 bytes of UTF-8 with no `/` or NUL, not
   made only of `*` (which would skip every folder); duplicates are dropped, order kept. `uploadsDir`
   absolute or starting with `~/`, at most 4,096 bytes. Anything else is `400 bad_request` and nothing is

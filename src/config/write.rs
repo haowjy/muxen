@@ -94,6 +94,8 @@ impl Target {
             )));
         };
         let dir = Dir::open(parent).map_err(write_error)?;
+        // The rename would replace a file Jimmy made read-only; the spec refuses it.
+        dir.check_writable(name).map_err(write_error)?;
         let name = name.to_owned();
         let mut temp_name = name.clone();
         temp_name.push(".tmp");
@@ -165,6 +167,7 @@ pub(super) fn edited(
 
 /// Applies `change` to `doc`, leaving every other key, comment and table as it was.
 fn edit(doc: &mut DocumentMut, change: &SettingsChange) {
+    let was_empty = doc.is_empty();
     match &change.search_skip {
         Patch::Keep => {}
         Patch::Remove => drop(doc.remove("search_skip")),
@@ -174,6 +177,16 @@ fn edit(doc: &mut DocumentMut, change: &SettingsChange) {
         Patch::Keep => {}
         Patch::Remove => drop(doc.remove("uploads_dir")),
         Patch::Set(dir) => set_string(doc, "uploads_dir", dir),
+    }
+    // A file of only comments holds them as the document's trailing text, which a new key
+    // would go above: they move before the first key, so the header stays on top.
+    let first = doc.iter().next().map(|(key, _)| key.to_owned());
+    if let (true, Some(first)) = (was_empty, first) {
+        let header = doc.trailing().as_str().unwrap_or_default().to_owned();
+        if let Some(mut key) = doc.key_mut(&first) {
+            key.leaf_decor_mut().set_prefix(header);
+        }
+        doc.set_trailing("");
     }
 }
 
@@ -216,6 +229,14 @@ fn append(list: &mut Array, text: &str) {
         trailing.contains('\n') || list.iter().any(|entry| prefix(entry).contains('\n'));
     let mut entry = Value::from(text);
     if multi_line {
+        // With no comma after the last entry, the line break before `]` is that entry's
+        // suffix, not the array's trailing text: move it there, so the new entry goes
+        // after the comma, on a line of its own.
+        let suffix = list.iter().last().map(suffix).unwrap_or_default();
+        if let Some(last) = list.iter_mut().last() {
+            last.decor_mut().set_suffix("");
+        }
+        let trailing = format!("{suffix}{trailing}");
         let indent = last.as_deref().map_or("  ", own_lines);
         entry
             .decor_mut()
@@ -262,6 +283,11 @@ fn remove_entries(list: &mut Array, doomed: impl Fn(&str) -> bool) {
 fn prefix(entry: &Value) -> String {
     let prefix = entry.decor().prefix().and_then(|prefix| prefix.as_str());
     prefix.unwrap_or_default().to_owned()
+}
+
+fn suffix(entry: &Value) -> String {
+    let suffix = entry.decor().suffix().and_then(|suffix| suffix.as_str());
+    suffix.unwrap_or_default().to_owned()
 }
 
 /// The text up to and including the first newline: the line before's tail.
@@ -451,7 +477,7 @@ answer = 42
         let link = std::fs::symlink_metadata(tree.path("config.toml")).expect("there");
         assert!(link.file_type().is_symlink());
         let text = std::fs::read_to_string(tree.path("dotfiles/config.toml")).expect("read");
-        assert_eq!(text, "search_skip = []\n# mine\n");
+        assert_eq!(text, "# mine\nsearch_skip = []\n");
         assert_eq!(live.keys().search_skip, Some(Vec::new()));
         assert!(!live.file_changed());
 
@@ -463,6 +489,45 @@ answer = 42
             "{refused:?}"
         );
         assert!(!tree.path("nowhere.toml").exists());
+    }
+
+    #[test]
+    fn an_append_and_a_first_key_keep_the_layout() {
+        let tree = Tree::new("write-layout");
+        let read = || std::fs::read_to_string(tree.path("config.toml")).expect("read");
+        // A multi-line list with no comma after its last entry.
+        tree.write(
+            "config.toml",
+            b"search_skip = [\n  \"a\",\n  \"b\" # mine\n]\n",
+        );
+        let live = live(&tree, "config.toml");
+        live.save(&set(list(&["a", "b", "c"]), Patch::Keep))
+            .expect("saved");
+        assert_eq!(
+            read(),
+            "search_skip = [\n  \"a\",\n  \"b\", # mine\n  \"c\"\n]\n"
+        );
+
+        // A file of only comments keeps them on top.
+        tree.write("config.toml", b"# header\n# more\n");
+        let live = self::live(&tree, "config.toml");
+        live.save(&set(list(&["a"]), Patch::Keep)).expect("saved");
+        assert_eq!(read(), "# header\n# more\nsearch_skip = [\"a\"]\n");
+    }
+
+    #[test]
+    fn a_read_only_file_is_refused() {
+        let tree = Tree::new("write-read-only");
+        tree.write("config.toml", b"# mine\n");
+        let path = tree.path("config.toml");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o444)).expect("chmod");
+        let live = live(&tree, "config.toml");
+        let refused = live.save(&set(list(&["a"]), Patch::Keep));
+        assert!(
+            matches!(refused, Err(SaveError::ReadOnly(_))),
+            "{refused:?}"
+        );
+        assert_eq!(std::fs::read_to_string(&path).expect("read"), "# mine\n");
     }
 
     #[test]

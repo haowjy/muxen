@@ -114,6 +114,16 @@ impl Dir {
         }
     }
 
+    /// An error if this user may not write `name` (`faccessat(W_OK)`, links followed); a
+    /// missing `name` passes.
+    pub fn check_writable(&self, name: &OsStr) -> io::Result<()> {
+        let write = rustix::fs::Access::WRITE_OK;
+        match rustix::fs::accessat(&*self.0, name, write, AtFlags::empty()) {
+            Ok(()) | Err(Errno::NOENT) => Ok(()),
+            Err(errno) => Err(errno.into()),
+        }
+    }
+
     /// The stamp of the entry `name` itself (a link isn't followed); `None` if missing.
     fn stamp(&self, name: &OsStr) -> io::Result<Option<Stamp>> {
         match rustix::fs::statat(&*self.0, name, AtFlags::SYMLINK_NOFOLLOW) {
