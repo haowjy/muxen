@@ -185,10 +185,10 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
               width={width}
               min={LIST_MIN_PX}
               max={max}
-              initial={listDefault(windowWidth)}
               from={() => files.current?.getBoundingClientRect().left ?? 0}
               onDrag={(px) => { files.current?.style.setProperty("--files-list-w", `${String(px)}px`); }}
               onWidth={(px) => { setStored(px); app.view.set("listWidth", px); }}
+              onReset={() => { setStored(null); app.view.set("listWidth", null); }}
             />
             <PreviewPanel session={session} root={pages} selection={tree.selection} hidden={hidden} held={held} toggle={toggleControl(true)} fileToggle={toggleControl(false)} onOpen={open} onLink={onLink} />
           </>

@@ -9,18 +9,18 @@ interface Props {
   width: number;
   min: number;
   max: number;
-  /** The width the list starts at, and a double-click returns to. */
-  initial: number;
   /** Where the list's left edge is, to read a drag's width from the pointer. */
   from: () => number;
   /** Draws the list at `width` during a drag, without a render per pointer move. */
   onDrag: (width: number) => void;
-  /** The width chosen: a drag let go, a key, a double-click. */
+  /** The width chosen: a drag let go, a key. */
   onWidth: (width: number) => void;
+  /** A double-click: back to the default width, which follows the window. */
+  onReset: () => void;
 }
 
 /** The line between the Files list and the Preview panel: drag it, or focus it and use the arrow keys, Home and End. */
-export function Divider({ width, min, max, initial, from, onDrag, onWidth }: Props) {
+export function Divider({ width, min, max, from, onDrag, onWidth, onReset }: Props) {
   const dragged = useRef<number | null>(null);
   const clamp = (px: number): number => Math.round(Math.max(min, Math.min(max, px)));
   const end = (): void => {
@@ -50,7 +50,7 @@ export function Divider({ width, min, max, initial, from, onDrag, onWidth }: Pro
       }}
       onPointerUp={end}
       onPointerCancel={end}
-      onDblClick={() => { onWidth(clamp(initial)); }}
+      onDblClick={onReset}
       onKeyDown={(e) => {
         const step = e.shiftKey ? 4 * STEP_PX : STEP_PX;
         const to = e.key === "ArrowLeft" ? width - step : e.key === "ArrowRight" ? width + step : e.key === "Home" ? min : e.key === "End" ? max : null;
