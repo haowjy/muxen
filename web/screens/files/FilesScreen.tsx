@@ -5,13 +5,13 @@ import { Spinner } from "../../ui/primitives/Spinner";
 import { activeTab } from "../../workspace/state";
 import { TabRow } from "../shell/TabRow";
 import { FilesPane } from "./FilesPane";
-import { filesSession } from "./session";
+import { filesSession, type KnownHost } from "./session";
 import styles from "./FilesScreen.module.css";
 
 export function FilesScreen() {
   const app = useApp();
   const tab = useAppView((v) => { const t = activeTab(v.workspace); return t?.kind === "files" ? t : null; });
-  const host = useAppView((v) => v.hosts.find((h) => h.hostId === tab?.host));
+  const host = useAppView((v) => v.hosts.find((h): h is KnownHost => h.hostId === tab?.host));
   const dock = useAppView((v) => v.viewport.directInput !== "xterm");
   if (!tab) return null;
   return (

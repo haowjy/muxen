@@ -53,15 +53,19 @@ const OPENED_KEPT = 20;
 /** Searches kept per host, by Files tab and the folder searched: each that Back may return to. */
 const SEARCHES_KEPT = 8;
 
+/** A host whose daemon has said who it is: a Files tab names its host by that id. */
+export type KnownHost = HostClient & { readonly hostId: string };
+
 /** Two tabs may show the same folder, each scrolled its own way. */
 export const scrollKey = (tab: string, path: string): string => `${tab}\n${path}`;
 
 const sessions = new WeakMap<FsApi, FilesSession>();
 
-export function filesSession(app: AppController, host: HostClient): FilesSession {
+export function filesSession(app: AppController, host: KnownHost): FilesSession {
   const existing = sessions.get(host.fs);
   if (existing) return existing;
-  const known = app.snapshot.workspace.workspaces.find((w) => w.host === host.hostId)?.home ?? null;
+  const { hostId } = host;
+  const known = app.snapshot.workspace.workspaces.find((w) => w.host === hostId)?.home ?? null;
   const browser = new FileBrowser({ api: host.fs, hidden: app.view.get("showHidden"), home: known });
   // The workspace keeps the host's home, so a Files tab there is labelled "~" on every screen and after a reload.
   let told = known;
@@ -73,13 +77,13 @@ export function filesSession(app: AppController, host: HostClient): FilesSession
       app.view.set("showHidden", remembered);
     }
     const { home } = browser.snapshot;
-    if (home === told || home === null || host.hostId === null) return;
+    if (home === told || home === null) return;
     told = home;
-    app.dispatch({ type: "homeKnown", host: host.hostId, home });
+    app.dispatch({ type: "homeKnown", host: hostId, home });
   });
   const searches = new Recent<FileSearch>(SEARCHES_KEPT);
-  // `host` is the client as it was when the session began: its id may have been learned since.
-  const hostId = (): string | null => app.hosts.get(host.entry.handle)?.hostId ?? null;
+  // Clear local data forgets the recents: a kept Search would still show the ones it began with.
+  app.persist.onClear(() => { searches.clear(); });
   const session: FilesSession = {
     handle: host.entry.handle,
     get hostName() { return app.hosts.get(host.entry.handle)?.name ?? "the server"; },
@@ -90,19 +94,16 @@ export function filesSession(app: AppController, host: HostClient): FilesSession
     selections: new Recent(SCROLLS_KEPT),
     handed: null,
     opened: (file) => {
-      const id = hostId();
-      if (id === null) return;
       const all = app.view.get("opened");
-      const before = (all[id] ?? []).filter((f) => f.path !== file.path);
+      const before = (all[hostId] ?? []).filter((f) => f.path !== file.path);
       const now = { path: file.path, mime: file.mime, at: Math.floor(Date.now() / 1000) };
-      app.view.set("opened", { ...all, [id]: [now, ...before].slice(0, OPENED_KEPT) });
+      app.view.set("opened", { ...all, [hostId]: [now, ...before].slice(0, OPENED_KEPT) });
     },
     search: (tab, root, fresh = false) => {
       const kept = searches.get(scrollKey(tab, root));
       if (kept && !fresh) return kept;
       kept?.stop();
-      const id = hostId();
-      const made = new FileSearch(host.fs, root, browser.snapshot.hidden, recentsBelow(id === null ? [] : app.view.get("opened")[id] ?? [], root));
+      const made = new FileSearch(host.fs, root, browser.snapshot.hidden, recentsBelow(app.view.get("opened")[hostId] ?? [], root));
       searches.set(scrollKey(tab, root), made);
       return made;
     },

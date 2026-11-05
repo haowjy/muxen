@@ -9,18 +9,33 @@ import { BIG, BIG_PAGE, bigTree, ETC, WIDE, wideTree, findTree, FIND_ROOT, HOME,
 import type { FakeTree } from "../../platform/test/fs";
 import type { AppController } from "../../app/controller";
 import type { ViewState } from "../../app/viewMemory";
-import { filesSession, scrollKey } from "../../screens/files/session";
+import { filesSession, scrollKey, type KnownHost } from "../../screens/files/session";
+
+/** Runs `run` on the fake host's Files session once the host has said who it is, before the screen (which waits for that too) draws. */
+function withSession(app: AppController, run: (session: ReturnType<typeof filesSession>) => void): void {
+  const known = (): KnownHost | undefined => app.hosts.all().find((h): h is KnownHost => h.hostId !== null);
+  const now = known();
+  if (now) {
+    run(filesSession(app, now));
+    return;
+  }
+  const off = app.subscribe(() => {
+    const host = known();
+    if (!host) return;
+    off();
+    run(filesSession(app, host));
+  });
+}
 
 /** A desktop outline as a tab would have left it: these folders open (oldest first), this row selected; `preview: false` with the Preview panel off. */
 const outlined = (fixture: Fixture, expanded: string[], selection?: string, preview = true): Fixture => ({
   ...fixture,
   start: (app: AppController) => {
     app.view.set("preview", preview);
-    const host = app.hosts.all()[0];
-    if (!host) return;
-    const session = filesSession(app, host);
-    session.expanded.set("files-1", expanded);
-    if (selection !== undefined) session.selections.set(scrollKey("files-1", REPO), selection);
+    withSession(app, (session) => {
+      session.expanded.set("files-1", expanded);
+      if (selection !== undefined) session.selections.set(scrollKey("files-1", REPO), selection);
+    });
   },
 });
 
@@ -59,13 +74,13 @@ const searching = (text: string, { fresh = false, configure, then, root = REPO, 
   overlay: { screen: "files", name: "search", params: { root } },
   start: (app: AppController) => {
     if (!fresh) app.view.set("opened", OPENED());
-    // Once the folder is listed and the host has said who it is, as a magnifier tap finds them.
+    // Once the folder is listed, as a magnifier tap finds it.
     setTimeout(() => {
-      const host = app.hosts.all()[0];
-      if (!host) return;
-      const search = filesSession(app, host).search("files-1", root);
-      if (text !== "") search.type(text);
-      if (then !== undefined) setTimeout(() => { search.type(then); }, 800);
+      withSession(app, (session) => {
+        const search = session.search("files-1", root);
+        if (text !== "") search.type(text);
+        if (then !== undefined) setTimeout(() => { search.type(then); }, 800);
+      });
     }, 300);
   },
 });
