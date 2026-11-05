@@ -119,6 +119,10 @@ pub fn search(
                 path.push('/');
             }
             path.push_str(name);
+            // No route could open a longer path, so it is neither answered nor entered.
+            if root.path.len() + 1 + path.len() > MAX_PATH {
+                continue;
+            }
             let dir = file_type == FileType::Directory;
             if dir && SKIPPED.contains(&name) {
                 continue;
@@ -126,8 +130,7 @@ pub fn search(
             if let Some(rank) = pattern.rank(&path) {
                 best.offer(rank, &path, file_type);
             }
-            // No route could open a longer path.
-            if dir && root.path.len() + 1 + path.len() <= MAX_PATH {
+            if dir {
                 queue.push(&path);
             }
         }

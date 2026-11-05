@@ -180,9 +180,9 @@ request it no longer needs ([browser-behaviors.md](client/browser-behaviors.md#f
   RESOLVE_NO_XDEV)`, which refuses a same-device bind mount too (where `openat2` answers `ENOSYS`,
   before Linux 5.6, the walk falls back to `openat` with `O_NOFOLLOW` and the device check below); on macOS `openat(root, rel, O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW_ANY)` and an
   `fstat` whose device must equal the root's. A symlinked directory is matched but never entered, so
-  there are no cycles, and no walk wanders into `/proc`, a network mount or another disk. A
-  directory whose relative path would pass 4,096 bytes with the root's is not queued: no route
-  could open it.
+  there are no cycles, and no walk wanders into `/proc`, a network mount or another disk. An
+  entry whose relative path would pass 4,096 bytes with the root's is neither matched nor queued:
+  no route could open it.
 - **Kinds:** names and `d_type` only; `fstatat` (not following, relative to the folder being read) is
   called only for a `DT_UNKNOWN` entry, as listings do, so a filesystem without `d_type` is still walked.
 - **Skipped by name:** `.git`, `node_modules` and `target` directories, and every name starting with
