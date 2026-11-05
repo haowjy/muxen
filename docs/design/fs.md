@@ -56,10 +56,12 @@ the default, for the terminal's pasted images and Files' Upload.
 ([auth.md](auth.md#state-on-disk)): the file is small, so a hand edit applies to the next
 upload with no watcher, cache or restart. They read the path `Config::load` resolved at
 startup (`--config`, else the default), kept in `App`, with the same rule: a missing
-default file means the defaults. A file that exists but can't be read or parsed **fails
-closed**: uploads answer `503 config_unavailable`. **Search re-reads `search_skip`** the same way,
-inside its lane closure, but **fails open**: a file that can't be read or parsed means the default
-patterns, logged at `warn`, since a skip list decides nothing about where bytes land. Listing and raw
+default file means the defaults. **Search re-reads `search_skip`** the same way, inside its lane closure. **A file that can't be read
+or parsed falls back to the last good one:** the daemon keeps the live keys (`uploads_dir`,
+`search_skip`) from the last read that parsed, at startup or later, and uses those, logging the parse
+error at `warn` once per change of the file (by `files::Stamp`). Only with no good read since startup
+does an upload answer `503 config_unavailable`, and a search use the default patterns. So a typo saved
+in an editor never stops uploads or search; the fix applies at the next read. Listing and raw
 reads don't read the config. The other config keys are still read once, at startup.
 
 ## Path resolution: `fs::open`

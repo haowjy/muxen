@@ -1464,8 +1464,13 @@ are Jimmy's ([Files](#files-view-and-upload-now-three-write-operations-in-v2)).
   the hidden rule covers it. A cache tag marks build output without guessing from a name: pop-os has 192
   under `~`, cargo's `target/` among them, while a folder merely named `target` stays searchable.
   `node_modules` writes no tag, so it is the one default pattern. A skipped folder is listed, not
-  entered, so Search still finds `node_modules` or `target` themselves and a tap goes in. Search reads
-  `search_skip` fail-open (a broken file means the defaults), unlike uploads.
+  entered, so Search still finds `node_modules` or `target` themselves and a tap goes in.
+- **Re-read, with the last good copy (Jimmy: "could we at least remember the last one if it breaks").**
+  The live keys stay re-read per request, so a hand edit or a Settings save applies at once with one
+  source of truth (the file); loading once was weighed and kept rejected (a hand edit would need a
+  restart, and Settings would show a copy that can differ from the file). A read that doesn't parse
+  uses the keys from the last read that did, so an editor's half-saved typo never stops uploads or
+  search. This replaces uploads' fail-closed `503` except when no read has parsed since startup.
 - **Rejected:** keeping `target` by name (hides ordinary folders of that name); honouring `.gitignore`
   with the `ignore` crate (a dependency and a rule set for what two defaults and a tag cover; possible
   later); skipping nothing but hidden (results flooded by dependencies and build files, and `~`'s cap
