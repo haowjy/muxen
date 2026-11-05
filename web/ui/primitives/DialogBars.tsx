@@ -1,9 +1,6 @@
 // The top rows a `Dialog` is given as its `header`: the dialog's variant says where it sits, the
 // bar says what its top row holds. Each closes by a tap, so a keyboard that was up can come back.
 import { useFocus } from "../focus";
-import { BottomBar } from "./BottomBar";
-import { DockButton } from "./DockButton";
-import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
 import styles from "./DialogBars.module.css";
 
@@ -27,12 +24,3 @@ export function TitleBar({ title, onClose }: { title: string; onClose: () => voi
   );
 }
 
-/** A docked page's bottom bar: Back where the dock's tab row has it. */
-export function PageBack({ back, onBack }: { back: string; onBack: () => void }) {
-  const closeByTap = useCloseByTap(onBack);
-  return (
-    <BottomBar label={back}>
-      <DockButton kind="control" aria-label={back} onClick={(e) => { closeByTap(e.currentTarget); }}><Icon name="back" size={20} /></DockButton>
-    </BottomBar>
-  );
-}

@@ -4,7 +4,7 @@
 // and the opener's focus return are the overlay machinery's.
 import { useRef, useState } from "preact/hooks";
 import { useFocus } from "../../ui/focus";
-import { useApp, useAppView, useBells, useDocked, useOverlay } from "../../app/context";
+import { useApp, useAppView, useBells, useOverlay } from "../../app/context";
 import type { HostClient } from "../../net/hosts";
 import { tabId } from "../../platform/tabKey";
 import { bellLook } from "../../sessions/bells";
@@ -13,7 +13,6 @@ import type { SessionListing, TmuxListing } from "../../proto/generated/messages
 import { BellDot } from "../../ui/primitives/BellDot";
 import { Button } from "../../ui/primitives/Button";
 import { Dialog } from "../../ui/primitives/Dialog";
-import { PageBack } from "../../ui/primitives/DialogBars";
 import { ScreenBar } from "../../ui/primitives/ScreenBar";
 import { EmptyState } from "../../ui/primitives/EmptyState";
 import { Row } from "../../ui/primitives/Row";
@@ -28,9 +27,8 @@ export function OpenSessionScreen() {
   const { open, params, close } = useOverlay("sessions", "open");
   const workspace = useAppView((v) => v.workspace.workspaces.find((w) => w.id === params?.["workspace"]) ?? null);
   const host = useAppView((v) => v.hosts.find((h) => h.hostId === workspace?.host));
-  const docked = useDocked();
   return (
-    <Dialog open={open} title="Open session" variant="page" onClose={close} header={<ScreenBar back="Back" onBack={close} title="Open session" docked={docked} />} footer={docked && <PageBack back="Back" onBack={close} />}>
+    <Dialog open={open} title="Open session" variant="page" onClose={close} header={<ScreenBar back="Back" onBack={close} title="Open session" />}>
       {open && workspace && host && <Body host={host} workspace={workspace} />}
     </Dialog>
   );

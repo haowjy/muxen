@@ -93,9 +93,9 @@ between the key row and keyboard. Standalone PWA mode has no Safari toolbar.
   without covering its controls.
 - Home is a centered column on desktop, with width `min(720px, 100% - 2 gutters)`.
   Every screen and full-screen page (Home, the tab overview, Settings, Open session) has the
-  same 44 pt header row, `ScreenBar`: a back icon where the screen has a parent (in the bottom bar
-  instead where tabs have the dock), the 17 pt title left-aligned in the column, the screen's own
-  controls at the end, and a rule under it. No large titles, no centred titles.
+  same 44 pt header row, `ScreenBar`: a back icon at the top left where the screen has a parent,
+  on every layout (only a tab keeps Back at the bottom, in its dock's tab row), the 17 pt title
+  left-aligned in the column, the screen's own controls at the end, and a rule under it. No large titles, no centred titles.
 - A terminal tab's session name is bold and its current window name regular, separated
   by spacing, including for a one-window session; a phone pill shows the session alone. Truncate the window name first. A Files
   tab is labelled by its folder or open file, and a tab at the host's home reads "~". Icon-only controls have accessible
@@ -203,8 +203,8 @@ tmux prefix keys sent by muxen reach the pane, not tmux's key tables.
 
 The tab overview is one workspace's page: the tab list over a tab, opened from the tab row's All tabs, or
 the page of a workspace with no tab, reached from Home. Its header has the workspace's name (the server's
-name for now) and Back, named for where it goes (the tab under the list, or Home); docked, Back is in
-the bottom bar. A tap on a row, Open session and Open files close the list onto that tab. Below it, one row per tab in
+name for now) and Back, named for where it goes (the tab under the list, or Home), at its top left on
+every layout. A tap on a row, Open session and Open files close the list onto that tab. Below it, one row per tab in
 workspace order: an icon for the kind, the label, and a line of detail (a terminal's window and
 how long since its last activity or bell, from the latest listing, with no request of its own; a
 Files tab's path, shortened under home, when that says more than the label); the workspace's last-shown tab's row is filled.

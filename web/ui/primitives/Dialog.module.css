@@ -35,5 +35,3 @@
 }
 .page[open] { animation: rise var(--duration-2) var(--ease-out); }
 .page .body { box-sizing: border-box; width: min(var(--page-width), 100%); margin: 0 auto; padding: var(--space-3) var(--space-gutter) calc(var(--space-4) + var(--safe-bottom)); }
-/* A footer (a docked page's bottom bar) holds the safe area under the page. */
-.page .body:not(:last-child) { padding-bottom: var(--space-4); }

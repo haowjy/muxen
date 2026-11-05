@@ -8,13 +8,13 @@
 // the confirmation returns here.
 import type { ComponentChildren } from "preact";
 import { useId, useState } from "preact/hooks";
-import { useApp, useAppView, useDocked, useOverlay } from "../../app/context";
+import { useApp, useAppView, useOverlay } from "../../app/context";
 import type { HostClient } from "../../net/hosts";
 import type { Appearance, Relock, TextSize } from "../../platform/types";
 import { Button } from "../../ui/primitives/Button";
 import { Choice } from "../../ui/primitives/Choice";
 import { Dialog } from "../../ui/primitives/Dialog";
-import { PageBack, TitleBar } from "../../ui/primitives/DialogBars";
+import { TitleBar } from "../../ui/primitives/DialogBars";
 import { ScreenBar } from "../../ui/primitives/ScreenBar";
 import styles from "./Settings.module.css";
 
@@ -98,7 +98,6 @@ export function Settings() {
   const hosts = useAppView((v) => v.hosts);
   const preferences = useAppView((v) => v.preferences);
   const keyboard = useAppView((v) => v.viewport.directInput === "xterm");
-  const docked = useDocked();
   const canRemove = removable(hosts);
   // The one host this device would be removed from. The browser has exactly one.
   const target = canRemove[0];
@@ -111,7 +110,7 @@ export function Settings() {
 
   return (
     <>
-      <Dialog open={open} title="Settings" variant="page" header={<ScreenBar back="Back to Home" onBack={close} title="Settings" docked={docked} />} footer={docked && <PageBack back="Back to Home" onBack={close} />} onClose={close}>
+      <Dialog open={open} title="Settings" variant="page" header={<ScreenBar back="Back to Home" onBack={close} title="Settings" />} onClose={close}>
         {open && (
           <div class={styles.sections}>
             <Section title="Appearance" detail="System follows your device's light or dark setting.">

@@ -3619,6 +3619,17 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 - **Why:** Jimmy wanted Settings higher and more vertical space for the content.
 - **Rejected:** large titles and a separate back/header row.
 
+### Back is at the top on pages, at the bottom only on tabs
+
+- **Decided:** 2026-11-05, Jimmy ("the back button on the settings is still at the bottom", then of the
+  choices put to him: "Top on pages, bottom on tabs").
+- **What:** Settings, Open session and the tab list put Back at the top left of their header on the
+  phone too; they have no bottom bar. Terminal and Files tabs keep ‹ in the dock's tab row.
+- **Why:** with the gear moved to the top, Settings opened from the top and closed from the bottom.
+- **Rejected:** Back at the top on tabs too (a terminal row, and a reach); Settings alone.
+- **Supersedes:** the "bottom everywhere" part of "Home and a tab are the two levels; Back sits where
+  the dock is" (2026-10-31), for pages. `BottomBar`, `PageBack` and the dialog footer are gone.
+
 ### Settings' gear is in Home's header on the phone too
 
 - **Decided:** 2026-11-05, Jimmy ("I feel like on phon,e the settings should be at the top as well").

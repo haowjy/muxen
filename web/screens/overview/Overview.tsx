@@ -5,15 +5,12 @@
 // stream every tab's screen.
 import type { TargetedPointerEvent } from "preact";
 import { useRef, useState } from "preact/hooks";
-import { useApp, useAppView, useBells, useDocked, useHostName } from "../../app/context";
+import { useApp, useAppView, useBells, useHostName } from "../../app/context";
 import { shorten } from "../../files/format";
 import { bellsUnavailable } from "../../sessions/bells";
 import { ago, findSession } from "../../sessions/groups";
-import { BottomBar } from "../../ui/primitives/BottomBar";
 import { ScreenBar } from "../../ui/primitives/ScreenBar";
 import { Button } from "../../ui/primitives/Button";
-import { DockButton } from "../../ui/primitives/DockButton";
-import { Icon } from "../../ui/primitives/Icon";
 import { DragHandle } from "../../ui/primitives/DragHandle";
 import { SwipeToClose } from "../../ui/primitives/SwipeToClose";
 import { Row } from "../../ui/primitives/Row";
@@ -35,7 +32,6 @@ export function Overview() {
 /** `over`: the tab list over the workspace's tab, else the overview route of a workspace with no tab. */
 function WorkspacePage({ workspace, over }: { workspace: Workspace; over: boolean }) {
   const app = useApp();
-  const docked = useDocked();
   const terminals = terminalsOf(app);
   const host = useAppView((v) => v.hosts.find((h) => h.hostId === workspace.host));
   const sessions = useStore(app.sessions, (s) => (host ? s.hosts[host.entry.handle] : undefined));
@@ -106,7 +102,7 @@ function WorkspacePage({ workspace, over }: { workspace: Workspace; over: boolea
 
   return (
     <div class={styles.page}>
-      <ScreenBar title={name} back={`Back to ${back}`} onBack={goBack} docked={docked} />
+      <ScreenBar title={name} back={`Back to ${back}`} onBack={goBack} />
       <div class={styles.body}>
         <div class={styles.column}>
           {bellsUnavailable(bells, workspace.host) && <p class={styles.note}>Bell tracking unavailable on this host</p>}
@@ -163,11 +159,6 @@ function WorkspacePage({ workspace, over }: { workspace: Workspace; over: boolea
           </div>
         </div>
       </div>
-      {docked && (
-        <BottomBar label="Tab list">
-          <DockButton kind="control" aria-label={`Back to ${back}`} onClick={goBack}><Icon name="back" size={20} /></DockButton>
-        </BottomBar>
-      )}
     </div>
   );
 }
