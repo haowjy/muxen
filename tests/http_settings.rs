@@ -33,6 +33,7 @@ async fn settings_save_at_once_and_a_reload_reports_what_waits() {
             "searchSkip": null,
             "uploadsDir": null,
             "fileChanged": false,
+            "restartNeeded": [],
             "defaults": { "searchSkip": ["node_modules"], "uploadsDir": "~/.muxen-uploads" }
         })
     );
@@ -76,12 +77,18 @@ async fn settings_save_at_once_and_a_reload_reports_what_waits() {
     let reloaded = request(&daemon, "POST", "/settings/reload", "").await;
     assert_eq!(reloaded.status, 200, "{}", reloaded.text());
     let reloaded = json(&reloaded);
-    assert_eq!(
-        reloaded["restartNeeded"],
-        json!(["memory_budget_mib", "tmux.socket_name"])
-    );
-    assert_eq!(reloaded["settings"]["searchSkip"], json!([]));
-    assert_eq!(reloaded["settings"]["fileChanged"], json!(false));
+    let restart = json!(["memory_budget_mib", "tmux.socket_name"]);
+    assert_eq!(reloaded["restartNeeded"], restart);
+    assert_eq!(reloaded["searchSkip"], json!([]));
+    assert_eq!(reloaded["fileChanged"], json!(false));
+
+    // A save that adopts a hand edit reports its restart-only keys too, as GET does after.
+    std::fs::write(&daemon.config, "name = \"elsewhere\"\n").expect("edited");
+    let saved = request(&daemon, "POST", "/settings", r#"{"searchSkip":["x"]}"#).await;
+    assert_eq!(saved.status, 200, "{}", saved.text());
+    assert_eq!(json(&saved)["restartNeeded"], json!(["name"]));
+    let read = request(&daemon, "GET", "/settings", "").await;
+    assert_eq!(json(&read)["restartNeeded"], json!(["name"]));
 
     // A file that doesn't parse is never written, and says where.
     std::fs::write(&daemon.config, "search_skip = [\"a\"\n").expect("broken");

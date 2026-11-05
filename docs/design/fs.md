@@ -60,7 +60,7 @@ if it doesn't parse, nothing changes, the running config stays, and the error is
 answered (`503 config_unavailable` with the parser's line and column in `detail`). If it parses, the
 live keys take the new values at once, and a restart-only key that differs from the running value
 (`name`, `memory_budget_mib`, `[tmux]`, `[complete]`) is reported, not applied: logged, and listed in
-the answer's `restartNeeded`. A Settings save writes the file and then updates the copy in memory, so
+`restartNeeded` on every Settings answer until the daemon restarts. A Settings save writes the file and then updates the copy in memory, so
 its change needs no reload. A hand edit does nothing until a reload; the file and the running config
 can differ until then, and Settings shows the running values with "config.toml has changed since it
 was loaded" and the Reload button when the file's `files::Stamp` differs from the one last loaded or
@@ -434,6 +434,7 @@ auth layers. The code is `src/config/` (the writer beside the loader), not `src/
 ```text
 ServerSettings = { searchSkip: [string] | null,   // null: no key, the default applies
                    fileChanged: bool,             // the file differs from what is running
+                   restartNeeded: [string],       // restart-only keys the loaded file changed
                    uploadsDir: string | null,
                    defaults: { searchSkip: [string], uploadsDir: string } }   // the daemon's own
 SettingsChange = { searchSkip?: [string] | null, uploadsDir?: string | null }
@@ -460,10 +461,13 @@ SettingsChange = { searchSkip?: [string] | null, uploadsDir?: string | null }
   re-stat the original and rename, retrying up to 3 times if it changed, then `503 busy`. A file that exists but doesn't
   parse is never written: `503 config_unavailable`. A missing file is created with only the keys set,
   its directory with mode 0700 if absent (this covers a `--config` path deleted after startup).
-- **`POST /settings/reload`** reloads as SIGHUP does and answers `{ settings: ServerSettings,
-  restartNeeded: [string] }`, or `503 config_unavailable` with the parse error, the running config
+- **`POST /settings/reload`** reloads as SIGHUP does and answers the resulting `ServerSettings`, or
+  `503 config_unavailable` with the parse error, the running config
   unchanged. A save on a file that changed by hand since it was loaded first reloads it (so the save
   never overwrites a hand edit with stale values), and fails the same way if it doesn't parse.
+  `restartNeeded` is kept with the running config, not computed per answer: the restart-only keys of
+  the file last loaded or written that differ from the ones the daemon started with. GET, a save and a
+  reload all carry it, so a save that picked up a hand edit to `[tmux]` still shows it.
 - **Concurrent saves:** the last write wins. The client sends one save at a time per server and draws
   the answer, so its own taps can't reorder; two devices saving at the same moment can lose one change,
   which Settings' next open shows. Accepted: one user, rare, visible.

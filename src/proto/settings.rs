@@ -4,8 +4,8 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use ts_rs::TS;
 
-/// `GET /settings`, and `POST /settings`' answer: the running config's values, `null`
-/// where the file has no key and the default applies.
+/// `GET /settings`, and the answer to a save and a reload: the running config's values,
+/// `null` where the file has no key and the default applies.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ServerSettings {
@@ -14,6 +14,9 @@ pub struct ServerSettings {
     pub uploads_dir: Option<String>,
     /// The file differs from what is running: edited by hand since it was loaded.
     pub file_changed: bool,
+    /// Keys the file last loaded or written changed that apply only at a restart, as
+    /// `tmux.socket_name`; empty when none.
+    pub restart_needed: Vec<String>,
     pub defaults: SettingsDefaults,
 }
 
@@ -70,15 +73,6 @@ impl<T: Serialize> Serialize for Patch<T> {
             Self::Set(value) => value.serialize(serializer),
         }
     }
-}
-
-/// `POST /settings/reload`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "camelCase")]
-pub struct Reloaded {
-    pub settings: ServerSettings,
-    /// Keys that changed in the file but apply only at a restart, as `tmux.socket_name`.
-    pub restart_needed: Vec<String>,
 }
 
 #[cfg(test)]

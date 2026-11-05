@@ -2,7 +2,7 @@
 // keeps and applies without a restart, read and written on the daemon, never kept here.
 
 import { BUSY_RETRIES, send } from "./http";
-import type { Reloaded, ServerSettings, SettingsChange } from "../proto/generated/messages";
+import type { ServerSettings, SettingsChange } from "../proto/generated/messages";
 
 export interface SettingsApi {
   /** The running values, with the daemon's defaults. */
@@ -10,7 +10,7 @@ export interface SettingsApi {
   /** Writes `change` to config.toml; the answer is what is running after it. */
   save(change: SettingsChange): Promise<ServerSettings>;
   /** Applies a hand edit to config.toml; a refusal `config_unavailable` carries where it doesn't parse. */
-  reload(): Promise<Reloaded>;
+  reload(): Promise<ServerSettings>;
 }
 
 export function httpSettingsApi(origin: string, fetchFn?: typeof fetch): SettingsApi {
@@ -19,6 +19,6 @@ export function httpSettingsApi(origin: string, fetchFn?: typeof fetch): Setting
   return {
     read: () => json<ServerSettings>("/settings"),
     save: (change) => json<ServerSettings>("/settings", post(JSON.stringify(change))),
-    reload: () => json<Reloaded>("/settings/reload", post("")),
+    reload: () => json<ServerSettings>("/settings/reload", post("")),
   };
 }

@@ -16,7 +16,7 @@ import styles from "./Settings.module.css";
 type Load = { kind: "loading" } | { kind: "unreachable" } | { kind: "loaded"; settings: ServerSettings };
 
 /** What the last Reload said, until the next one. */
-type Reloaded = { kind: "broken"; where: string | null } | { kind: "restart"; keys: string[] } | { kind: "failed"; words: string };
+type Reloaded = { kind: "broken"; where: string | null } | { kind: "failed"; words: string };
 
 const same = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((x, i) => x === b[i]);
 
@@ -77,10 +77,9 @@ export function ServerSection({ host }: { host: HostClient }) {
   const reload = async (): Promise<void> => {
     setReloading(true);
     try {
-      const answer = await api.reload();
-      answered(answer.settings);
+      answered(await api.reload());
       setUploads(null);
-      setReloaded(answer.restartNeeded.length > 0 ? { kind: "restart", keys: answer.restartNeeded } : null);
+      setReloaded(null);
     } catch (error) {
       if (error instanceof HttpRefusal && error.code === "config_unavailable") setReloaded({ kind: "broken", where: error.detail ?? null });
       else setReloaded({ kind: "failed", words: why(error) });
@@ -149,8 +148,8 @@ export function ServerSection({ host }: { host: HostClient }) {
                 config.toml doesn't parse{reloaded.where ? `: ${reloaded.where}` : ""}. muxen keeps the values below until it does.
               </p>
             )}
-            {reloaded?.kind === "restart" && (
-              <p class={styles.detail} role="status">Restart muxen to apply: {reloaded.keys.join(", ")}</p>
+            {settings.restartNeeded.length > 0 && (
+              <p class={styles.detail} role="status">Restart muxen to apply: {settings.restartNeeded.join(", ")}</p>
             )}
             {reloaded?.kind === "failed" && <p class={styles.error} role="alert">{reloaded.words}</p>}
 

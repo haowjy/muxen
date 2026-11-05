@@ -54,6 +54,8 @@ struct Running {
     keys: LiveKeys,
     /// The file as last loaded or written (`None`: there was none).
     stamp: Option<Stamp>,
+    /// The restart-only keys in that file that differ from the ones running.
+    restart_needed: Vec<&'static str>,
 }
 
 impl LiveConfig {
@@ -64,6 +66,7 @@ impl LiveConfig {
             running: Mutex::new(Running {
                 keys: LiveKeys::of(&started),
                 stamp,
+                restart_needed: Vec::new(),
             }),
             started,
             changing: Mutex::new(()),
@@ -84,19 +87,28 @@ impl LiveConfig {
         self.running().keys.clone()
     }
 
+    /// The restart-only keys the file last loaded or written changed, which apply at the
+    /// next start. Doesn't touch the file.
+    pub fn restart_needed(&self) -> Vec<&'static str> {
+        self.running().restart_needed.clone()
+    }
+
     /// Whether the file differs from what was last loaded or written: a hand edit not yet
     /// reloaded. Blocks.
     pub fn file_changed(&self) -> bool {
         self.file.stamp() != self.running().stamp
     }
 
-    /// Reads and parses the whole file; if it parses, applies the live keys and answers
-    /// the restart-only keys that differ from the running ones. If it doesn't, nothing
-    /// changes. Blocks.
-    pub fn reload(&self) -> Result<Vec<&'static str>, ConfigError> {
+    /// Reads and parses the whole file; if it parses, applies the live keys and records
+    /// the restart-only keys that differ from the running ones (`restart_needed`). If it
+    /// doesn't, nothing changes. Blocks.
+    pub fn reload(&self) -> Result<(), ConfigError> {
         let _changing = self.changing();
         match self.file.read() {
-            Ok((config, stamp)) => Ok(self.adopt(&config, stamp, "config.toml reloaded")),
+            Ok((config, stamp)) => {
+                self.adopt(&config, stamp, "config.toml reloaded");
+                Ok(())
+            }
             Err(error) => {
                 warn!(%error, "config.toml not reloaded: the running config stays");
                 Err(error)
@@ -134,14 +146,9 @@ impl LiveConfig {
     }
 
     /// `config`, just read or written with `stamp`, becomes the running config's live
-    /// keys; the restart-only keys that differ are answered and logged as `event`, with
+    /// keys; the restart-only keys that differ are recorded and logged as `event`, with
     /// the live keys that changed (never their values), not applied.
-    fn adopt(
-        &self,
-        config: &Config,
-        stamp: Option<Stamp>,
-        event: &'static str,
-    ) -> Vec<&'static str> {
+    fn adopt(&self, config: &Config, stamp: Option<Stamp>, event: &'static str) {
         let keys = LiveKeys::of(config);
         let mut running = self.running();
         let changed: Vec<&str> = [
@@ -151,11 +158,13 @@ impl LiveConfig {
         .into_iter()
         .filter_map(|(key, changed)| changed.then_some(key))
         .collect();
-        *running = Running { keys, stamp };
-        drop(running);
-        let restart = restart_needed(&self.started, config);
-        info!(?changed, restart_needed = ?restart, "{event}");
-        restart
+        let restart_needed = restart_needed(&self.started, config);
+        info!(?changed, ?restart_needed, "{event}");
+        *running = Running {
+            keys,
+            stamp,
+            restart_needed,
+        };
     }
 
     fn running(&self) -> MutexGuard<'_, Running> {
@@ -208,7 +217,8 @@ mod tests {
         );
         assert!(live.file_changed());
         assert_eq!(live.keys().uploads_dir(), "/a");
-        assert_eq!(live.reload().expect("parses"), ["memory_budget_mib"]);
+        live.reload().expect("parses");
+        assert_eq!(live.restart_needed(), ["memory_budget_mib"]);
         let reloaded = LiveKeys {
             uploads_dir: Some("/b".into()),
             search_skip: Some(Vec::new()),

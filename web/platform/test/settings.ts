@@ -1,6 +1,6 @@
 // A server's settings (fs.md "Server settings") for `FakeDaemon.settings`: the running values,
 // saves that apply them as the daemon does, and a reload that answers what a fixture sets.
-import type { ErrorBody, Reloaded, ServerSettings, SettingsChange } from "../../proto/generated/messages";
+import type { ErrorBody, ServerSettings, SettingsChange } from "../../proto/generated/messages";
 
 export interface FakeSettings {
   running: ServerSettings;
@@ -16,7 +16,7 @@ export interface FakeSettings {
 
 /** The daemon's defaults, every key absent. */
 export function defaultSettings(): ServerSettings {
-  return { searchSkip: null, uploadsDir: null, fileChanged: false, defaults: { searchSkip: ["node_modules"], uploadsDir: "~/.muxen-uploads" } };
+  return { searchSkip: null, uploadsDir: null, fileChanged: false, restartNeeded: [], defaults: { searchSkip: ["node_modules"], uploadsDir: "~/.muxen-uploads" } };
 }
 
 const json = (status: number, body: unknown): Response =>
@@ -38,9 +38,8 @@ export function serveSettings(settings: FakeSettings, method: string, path: stri
   if (method === "POST" && path === "/settings/reload") {
     const reload = settings.reload ?? { file: {}, restartNeeded: [] };
     if ("refusal" in reload) return Promise.resolve(json(reload.refusal.status, reload.refusal.body));
-    settings.running = { ...settings.running, ...reload.file, fileChanged: false };
-    const answer: Reloaded = { settings: settings.running, restartNeeded: reload.restartNeeded };
-    return Promise.resolve(json(200, answer));
+    settings.running = { ...settings.running, ...reload.file, fileChanged: false, restartNeeded: reload.restartNeeded };
+    return Promise.resolve(json(200, settings.running));
   }
   return undefined;
 }

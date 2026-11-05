@@ -16,7 +16,7 @@ use crate::config::{
     self, ConfigError, DEFAULT_SEARCH_SKIP, DEFAULT_UPLOADS_DIR, LiveConfig, SaveError,
 };
 use crate::proto::HttpError;
-use crate::proto::settings::{Reloaded, ServerSettings, SettingsChange, SettingsDefaults};
+use crate::proto::settings::{ServerSettings, SettingsChange, SettingsDefaults};
 
 /// 64 patterns of 255 bytes, escaped, and an `uploadsDir`.
 const BODY: usize = 64 * 1024;
@@ -77,11 +77,8 @@ async fn reload(State(ctx): State<Arc<Ctx>>) -> Response {
         .settings(move || {
             let config = &app.app.config;
             // `reload` logs a failure.
-            let restart_needed = config.reload()?;
-            Ok::<_, ConfigError>(Reloaded {
-                settings: settings(config),
-                restart_needed: restart_needed.into_iter().map(str::to_owned).collect(),
-            })
+            config.reload()?;
+            Ok::<_, ConfigError>(settings(config))
         })
         .await;
     match reloaded {
@@ -98,6 +95,11 @@ fn settings(config: &LiveConfig) -> ServerSettings {
         search_skip: keys.search_skip,
         uploads_dir: keys.uploads_dir,
         file_changed: config.file_changed(),
+        restart_needed: config
+            .restart_needed()
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
         defaults: SettingsDefaults {
             search_skip: DEFAULT_SEARCH_SKIP.map(str::to_owned).to_vec(),
             uploads_dir: DEFAULT_UPLOADS_DIR.to_owned(),

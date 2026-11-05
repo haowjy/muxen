@@ -143,7 +143,8 @@ words beside the field and keeps the typed value; leaving Settings mid-save lets
 section shows the server's running values. When its `config.toml` was edited by hand since it was
 loaded, the section says "config.toml has changed since muxen loaded it" with **Reload config.toml**,
 which applies it, or shows the parse error ("config.toml doesn't parse: line 3, column 7…") and leaves
-the running values, or lists restart-only keys that changed ("Restart muxen to apply: memory_budget_mib").
+the running values. Restart-only keys that a reload, or a save that picked up a hand edit, found changed
+are listed until muxen restarts ("Restart muxen to apply: memory_budget_mib").
 A server that can't be reached shows "Can't reach <server name>" in place of its values, with Try again.
 
 **Where a launch opens.** A launch (a reload, a bookmark, a copied link, or the app after iOS

@@ -330,8 +330,8 @@ export type Uploaded = {
 path: string, size: number, };
 
 /**
- * `GET /settings`, and `POST /settings`' answer: the running config's values, `null`
- * where the file has no key and the default applies.
+ * `GET /settings`, and the answer to a save and a reload: the running config's values,
+ * `null` where the file has no key and the default applies.
  */
 export type ServerSettings = {
 /**
@@ -341,7 +341,12 @@ searchSkip: Array<string> | null, uploadsDir: string | null,
 /**
  * The file differs from what is running: edited by hand since it was loaded.
  */
-fileChanged: boolean, defaults: SettingsDefaults, };
+fileChanged: boolean,
+/**
+ * Keys the file last loaded or written changed that apply only at a restart, as
+ * `tmux.socket_name`; empty when none.
+ */
+restartNeeded: Array<string>, defaults: SettingsDefaults, };
 
 /**
  * The daemon's own defaults, so the client keeps no copy.
@@ -353,15 +358,6 @@ export type SettingsDefaults = { searchSkip: Array<string>, uploadsDir: string, 
  * it.
  */
 export type SettingsChange = { searchSkip?: Array<string> | null, uploadsDir?: string | null, };
-
-/**
- * `POST /settings/reload`.
- */
-export type Reloaded = { settings: ServerSettings,
-/**
- * Keys that changed in the file but apply only at a restart, as `tmux.socket_name`.
- */
-restartNeeded: Array<string>, };
 
 export type CompleteRequest = {
 /**
