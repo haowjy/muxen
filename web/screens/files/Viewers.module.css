@@ -23,7 +23,10 @@
   margin: 0;
   padding: var(--space-3) 0 var(--space-7);
   overflow-x: auto;
-  font: var(--text-small) / 1.7 var(--font-mono);
+  /* A whole-pixel row: WebKit rounds each line box of the gutter's one text block to whole pixels but not the
+     lines' own boxes, so a fractional row (1.7em = 22.1px) drifted the numbers 281px off by line 3,000. */
+  --code-row: 22px;
+  font: var(--text-small) / var(--code-row) var(--font-mono);
   color: var(--color-text);
   tab-size: 4;
   counter-reset: line;
@@ -49,7 +52,7 @@
 }
 .gutter::before { content: attr(data-lines); }
 .code code { flex: 1 0 auto; }
-.code :global(.line) { display: block; min-height: 1.7em; padding-right: var(--space-7); white-space: pre; }
+.code :global(.line) { display: block; min-height: var(--code-row); padding-right: var(--space-7); white-space: pre; }
 .wrap .gutter { display: none; }
 .wrap code { flex: 1 1 0; min-width: 0; }
 .wrap :global(.line) { padding-left: 8.5ch; white-space: pre-wrap; overflow-wrap: anywhere; counter-increment: line; }
@@ -62,7 +65,7 @@
   color: var(--color-text-faint);
   user-select: none;
 }
-:root[data-layout="phone"] .code { padding-top: var(--space-1); font-size: var(--text-meta); }
+:root[data-layout="phone"] .code { --code-row: 20px; padding-top: var(--space-1); font-size: var(--text-meta); }
 :root[data-layout="phone"] .gutter { width: 4.5ch; padding-right: 2ch; }
 :root[data-layout="phone"] .wrap :global(.line) { padding-left: 6.5ch; }
 :root[data-layout="phone"] .wrap :global(.line)::before { width: 4.5ch; margin: 0 2ch 0 -6.5ch; }
