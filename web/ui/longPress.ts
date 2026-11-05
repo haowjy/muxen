@@ -27,7 +27,8 @@ export interface LongPress<E extends HTMLElement> {
   swallowClick: () => boolean;
 }
 
-export function useLongPress<E extends HTMLElement>(onMenu: (ask: MenuAsk<E>) => void): LongPress<E> {
+/** `onMenu` answers whether it opened a menu: a press that opened none leaves the next click alone. */
+export function useLongPress<E extends HTMLElement>(onMenu: (ask: MenuAsk<E>) => boolean): LongPress<E> {
   const hold = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null);
   const opened = useRef(false);
   const latest = useRef(onMenu);
@@ -42,7 +43,7 @@ export function useLongPress<E extends HTMLElement>(onMenu: (ask: MenuAsk<E>) =>
       if (e.pointerType !== "touch") return;
       const anchor = e.currentTarget;
       const { clientX: x, clientY: y } = e;
-      hold.current = { x, y, timer: setTimeout(() => { hold.current = null; opened.current = true; latest.current({ anchor, x, y, touch: true }); }, LONG_PRESS_MS) };
+      hold.current = { x, y, timer: setTimeout(() => { hold.current = null; opened.current = latest.current({ anchor, x, y, touch: true }); }, LONG_PRESS_MS) };
     },
     onPointerMove: (e) => { if (hold.current && Math.hypot(e.clientX - hold.current.x, e.clientY - hold.current.y) > SLOP) stop(); },
     onPointerUp: stop,

@@ -152,6 +152,7 @@ function FolderListbox({ rows, selected, fresh, onSelect, onOpen, onKeyNavigate,
   const press = useLongPress<HTMLDivElement>(({ anchor, x, y, touch }) => {
     const row = menuRow(document.elementFromPoint(x, y));
     if (row) ask(row, { x, y }, anchor, !touch);
+    return row !== null;
   });
   const goUp = onUp && (() => { onKeyNavigate(); onUp(); });
   const box = useListbox({

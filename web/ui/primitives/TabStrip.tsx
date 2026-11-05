@@ -81,7 +81,7 @@ export function TabStrip({ pills, active, onSelect, onClose, onMenu }: TabStripP
 /** One pill. The active one's select button is the focus target `tabs`, where Ctrl+Shift+F leaves the terminal. */
 function PillView({ pill, active, onSelect, onClose, onMenu }: { pill: Pill; active: boolean; onSelect: (id: string) => void; onClose: (id: string) => void; onMenu: TabStripProps["onMenu"] }) {
   const focusRef = useFocusRef(active ? "tabs" : undefined);
-  const press = useLongPress<HTMLButtonElement>(({ anchor }) => { onMenu(pill.id, anchor); });
+  const press = useLongPress<HTMLButtonElement>(({ anchor }) => { onMenu(pill.id, anchor); return true; });
   return (
     <div class={cx(styles.pill, active && styles.active)} data-tone={pill.tone}>
       <button
