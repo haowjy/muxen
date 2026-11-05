@@ -486,7 +486,8 @@ without a disk.
 | `fs/open.rs` | `fs::open`, `fs::check_dir`, the platform descriptor-path lookup |
 | `fs/slots.rs` | scan, search, raw-response and upload permits, with waits counted against the fs lane |
 | `fs/list.rs` | the scan; pure sort and page |
-| `fs/search.rs` | the walk; the pure matcher (glob and fuzzy scoring) and the best 50 |
+| `fs/search/mod.rs` | the walk and the best 50 |
+| `fs/search/matcher.rs` | pure: query parsing, glob and fuzzy scoring, hits, result order |
 | `fs/raw.rs` | pure `parse_range` and `If-Range`; the chunk producer; ETags come from `files::Stamp` |
 | `fs/mime.rs` | the extension table |
 | `fs/upload.rs` | pure name generation; part file, flush, rename, the in-flight record and its cleanup |

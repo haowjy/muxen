@@ -5,7 +5,7 @@ reads and uploads. Plain functions over files re-read per
 request; no cache, no cursor, no descriptor kept between requests. It knows nothing of
 axum: `http/fs.rs` parses requests, takes slots and builds responses. `mod.rs` holds
 `FsError`; `slots.rs` the limits and the fs lane; the rest one route family
-each.
+each (`search/` splits the pure matcher from the walk).
 
 Rules the code relies on, which are easy to break:
 
@@ -45,6 +45,7 @@ Rules the code relies on, which are easy to break:
   upload name, or `config.toml`'s text: a parse error is logged by line number, never
   by the parser's message, which quotes the text.
 
-Tests: `open.rs` (links, FIFOs, the swapped component), `list.rs`, `search.rs` (the
-matcher; the walk's skips, caps and errors on a temp tree), `raw.rs`
+Tests: `open.rs` (links, FIFOs, the swapped component), `list.rs`, `search/matcher.rs`
+(globs, fuzzy ranking, hits), `search/mod.rs` (the best 50; the walk's skips, caps and errors
+on a temp tree), `raw.rs`
 (Range, ETag), `mime.rs` (the allowlist), `upload.rs`; `tests/http_fs.rs` and `tests/http_auth.rs` over a real socket.
