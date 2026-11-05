@@ -30,8 +30,12 @@ export interface FilesSession {
   expanded: Recent<readonly string[]>;
   /** The selected row's key (`files/outline.ts`), by Files tab and the folder the list starts at (`scrollKey`). */
   selections: Recent<string>;
-  /** The text read last (`useText`), by path and modification time: one, since each can be a MiB. */
-  texts: Recent<TextPreview>;
+  /**
+   * A file's text, handed from the view leaving to the one taking its place (the Preview panel's file opened full
+   * width, and Back to the panel): taken once by `useText`, and dropped once the place has changed, so it is never a
+   * cache.
+   */
+  handed: { path: string; text: TextPreview } | null;
   /**
    * The user opened `file`: full width, full screen on the phone, Enter on a Search result, or a selection that settled
    * in the Preview panel. Search's recents list it first.
@@ -84,7 +88,7 @@ export function filesSession(app: AppController, host: HostClient): FilesSession
     scroll: new Recent(SCROLLS_KEPT),
     expanded: new Recent(SCROLLS_KEPT),
     selections: new Recent(SCROLLS_KEPT),
-    texts: new Recent(1),
+    handed: null,
     opened: (file) => {
       const id = hostId();
       if (id === null) return;

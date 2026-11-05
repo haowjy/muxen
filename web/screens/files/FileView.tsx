@@ -12,10 +12,14 @@ import { Menu } from "../../ui/primitives/Menu";
 import { CopyButton, DownloadButton, InsertButton } from "./FileActions";
 import { fileIcon } from "./fileIcon";
 import { copyText } from "./copy";
+import { useFilesKey, type Chord } from "./keymap";
 import { Preview } from "./Preview";
 import { TEXT_LIMIT, useText } from "./TextViewers";
 import type { FilesSession } from "./session";
 import styles from "./FileView.module.css";
+
+/** Leaves a file full width for the list. */
+const LEAVE: Chord = { key: "escape" };
 
 interface Props {
   session: FilesSession;
@@ -49,17 +53,25 @@ export function FileView({ session, file, back, folder: within, onExpand, onLink
   const Heading = onExpand ? "h2" : "h1";
   const size = file.size !== null ? formatSize(file.size) : null;
   const url = session.browser.api.rawUrl(file.path);
-  const text = useText(session, file, !children && (kind === "code" || kind === "markdown"));
+  const text = useText(session, file.path, !children && (kind === "code" || kind === "markdown"));
   // Copy text copies what was read: a file past the first MiB copies only that much, and says so.
   const loaded = kind === "code" && text.kind === "done" ? text.value : null;
   const copyNote = loaded?.truncated ? `Copied the first ${formatSize(TEXT_LIMIT)} of ${file.name}` : null;
+  /** Leaving for the view that shows this file in the other size: it takes the text read here. */
+  const handOver = (go: () => void) => (): void => {
+    session.handed = text.kind === "done" ? { path: file.path, text: text.value } : null;
+    go();
+  };
+  const expand = onExpand && handOver(onExpand);
+  const leave = back && handOver(back.onBack);
+  useFilesKey(LEAVE, () => { leave?.(); }, !phone && leave !== undefined);
 
   return (
     <div class={styles.view}>
       <header class={styles.bar}>
         {back && (phone
-          ? <IconButton icon="back" label={`Back to ${back.folder}`} onClick={back.onBack} />
-          : <Button variant="quiet" class={styles.back} icon="back" aria-label={`Back to ${back.folder}`} onClick={back.onBack}>{back.folder}</Button>)}
+          ? <IconButton icon="back" label={`Back to ${back.folder}`} onClick={leave} />
+          : <Button variant="quiet" class={styles.back} icon="back" aria-label={`Back to ${back.folder}`} onClick={leave}>{back.folder}</Button>)}
         {back && !phone && <span class={styles.sep} />}
         <Heading class={styles.name} title={file.path}>
           {!phone && <Icon name={fileIcon(file.name, file.mime)} size={16} class={styles.kind} />}
@@ -80,10 +92,10 @@ export function FileView({ session, file, back, folder: within, onExpand, onLink
             <InsertButton path={file.path} compact={phone} shortcut />
           </>
         )}
-        {onExpand && (
+        {expand && (
           <>
             <span class={styles.sep} />
-            <IconButton icon="expand" label="Open full width" onClick={onExpand} />
+            <IconButton icon="expand" label="Open full width" onClick={expand} />
           </>
         )}
         {!children && phone && kind === "code" && (

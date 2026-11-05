@@ -22,30 +22,29 @@ export type Loaded<T> = { kind: "loading" } | { kind: "done"; value: T } | { kin
 
 /**
  * A file's first MiB as text, fetched once per path while `wanted` (a text viewer is showing) and abandoned when it
- * closes. The file's header copies it. The text read last is kept in the session by path and time, so the same file
- * shown again (the Preview panel's file opened full width, then Back) costs no second read; a file whose time is
- * unknown (opened by path, not from a listing) is read each time.
+ * closes. The file's header copies it. A view that mounts in place of another showing the same file (the Preview
+ * panel's file opened full width, and Back) takes the text that one handed over (`FilesSession.handed`) instead of
+ * reading it again; nothing else is kept, so a file shown again later is read fresh.
  */
-export function useText(session: FilesSession, file: { path: string; mtime: number | null }, wanted: boolean): Loaded<TextPreview> {
-  const { path, mtime } = file;
-  const key = mtime === null ? null : `${path}\n${String(mtime)}`;
-  const kept = key === null ? undefined : session.texts.get(key);
-  const [state, setState] = useState<{ path: string; loaded: Loaded<TextPreview> } | null>(null);
+export function useText(session: FilesSession, path: string, wanted: boolean): Loaded<TextPreview> {
+  const [state, setState] = useState<{ path: string; loaded: Loaded<TextPreview> } | null>(() => {
+    const handed = session.handed?.path === path ? session.handed.text : null;
+    if (!handed) return null;
+    session.handed = null;
+    return { path, loaded: { kind: "done", value: handed } };
+  });
+  const have = state?.path === path;
   useEffect(() => {
-    if (!wanted || kept) return undefined;
+    if (!wanted || have) return undefined;
     const abort = new AbortController();
     session.browser.api.text(path, TEXT_LIMIT, abort.signal).then(
-      (value) => {
-        if (key !== null) session.texts.set(key, value);
-        setState({ path, loaded: { kind: "done", value } });
-      },
+      (value) => { setState({ path, loaded: { kind: "done", value } }); },
       (error: unknown) => { if (!abort.signal.aborted) setState({ path, loaded: { kind: "error", error: error instanceof HttpRefusal ? error : new HttpRefusal(0, "internal") } }); },
     );
     return () => { abort.abort(); };
-  }, [session, path, key, kept, wanted]);
-  if (kept) return { kind: "done", value: kept };
+  }, [session, path, wanted]);
   // Another file's text, from before a switch, is never this one's.
-  return state?.path === path ? state.loaded : { kind: "loading" };
+  return have ? state.loaded : { kind: "loading" };
 }
 
 function Loading({ what }: { what: string }) {

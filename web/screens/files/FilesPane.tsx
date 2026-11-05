@@ -22,8 +22,6 @@ import bar from "./FileView.module.css";
 
 /** Shows and hides the Preview panel while the list has the keys (Finder's Quick Look key). */
 const PREVIEW: Chord = { key: " ", inList: true };
-/** Leaves a file full width for the list. */
-const LEAVE: Chord = { key: "escape" };
 
 /** The list's width beside the Preview panel: at least this, and at most this share of the window, so the panel keeps the rest. */
 const LIST_MIN_PX = 300;
@@ -102,7 +100,6 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
   // A file full width: Back returns to the list it was opened from (history Back), else, after a reload, its folder.
   const backTo = place.kind === "file" ? (phone ? up?.path ?? null : app.router.folderBelow(tab.id, place.file.path) ?? up?.path ?? null) : null;
   const back = backTo === null ? undefined : { folder: baseName(backTo) || "/", onBack: () => { app.toPlace({ kind: "dir", path: backTo }); } };
-  useFilesKey(LEAVE, () => { back?.onBack(); }, !phone && back !== undefined);
 
   const onLink = (target: LinkTarget): void => {
     if (target.kind === "external") app.platform.openURL(target.url);
@@ -119,6 +116,8 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
   const fileBody = place.kind !== "file" ? null
     : error ? <Refused session={session} error={error} />
     : loading && place.file.mime === null && place.file.size === null ? <Loading what="Opening the file" /> : null;
+  // A text handed from the view that left is the next one's only: past this place nothing takes it.
+  useEffect(() => { session.handed = null; }, [session, place]);
   // A file shown full width (or full screen) was opened: Search's recents list it first.
   const shownFile = place.kind === "file" && !fileBody ? place.file : null;
   useEffect(() => { if (shownFile) session.opened(shownFile); }, [session, shownFile?.path]);
