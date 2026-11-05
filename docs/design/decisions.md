@@ -3619,7 +3619,27 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 - **Why:** Jimmy wanted Settings higher and more vertical space for the content.
 - **Rejected:** large titles and a separate back/header row.
 
-### A clean launch opens Home
+### A launch opens where you left off, and the address names it
+
+- **Decided:** 2026-11-05, Jimmy ("we should record more information in the …/#/tab address... we
+  should be able to get back to where ever we left off at"; then, of the choices put to him: reopen and
+  explain an unreachable server in place; the address carries the tab and the Files folder or file; the
+  app reopens too; "readable i guess").
+- **What:** a launch (a reload, a bookmark, a copied link, the app after iOS killed it) opens the place
+  the hash names, else the route last shown (saved with the workspaces), else Home. The hash reads
+  `#/`, `#/tabs`, `#/term/<session>`, `#/files/<path>` (a folder ends in `/`; `~/…` under home). It
+  names no server: a browser page talks to one host, its own origin. A session with no tab shows the
+  overview; a Files place with no tab showing it opens a new Files tab there. Back from it is Home. A
+  server that is down is explained on the tab itself ("Can't reach the server" with Retry).
+- **Why:** landing on Home after every reload threw the place away, and the tab already explains an
+  unreachable server, which was the reason for the earlier rule.
+- **Rejected:** an opaque tab id in the hash (a reload works but a link can't name a folder); a server
+  name segment (it repeats the origin, and a browser learns the host's id only after `/auth/info`).
+  Accepted cost: file paths and session names now enter browser history, which iCloud and Google sync;
+  client-architecture §6.6 had kept them out for that reason.
+- **Supersedes:** "A clean launch opens Home" (below).
+
+### A clean launch opens Home (superseded 2026-11-05)
 
 - **Decided:** 2026-10-27, Jimmy ("I think we should default to home from a clean
   launch...? what if muxen isn't running anymore?").

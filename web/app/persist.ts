@@ -1,7 +1,7 @@
 // Persist now (browser-behaviors.md "Persistence and input"): the one owner of "hand everything pending to
 // storage at once". The saved workspace is assembled, not owned: the workspace
 // reducer supplies the tabs, and the host name comes from the controller. Draft writes are debounced by drafts/, which registers a flusher and a clearer.
-import type { PlatformStorage, SavedWorkspace } from "../platform/types";
+import type { PlatformStorage, SavedRoute, SavedWorkspace } from "../platform/types";
 import { savedTabId } from "../workspace/saved";
 
 export class Persist {
@@ -15,6 +15,7 @@ export class Persist {
     private readonly storage: PlatformStorage,
     private readonly workspaces: () => SavedWorkspace[],
     private readonly bellSeen: () => Record<string, number>,
+    private readonly shown: () => SavedRoute | null,
   ) {}
 
   /** The controller says the page's host name, once `/auth/info` has told it. */
@@ -37,6 +38,7 @@ export class Persist {
   /** The workspaces changed: hand storage the assembled form (the adapter coalesces). */
   save(): void {
     const hostName = this.hostName();
+    const shown = this.shown();
     const workspaces = this.workspaces();
     const open = new Set(workspaces.flatMap((w) => w.tabs.map(savedTabId)));
     // A closed tab leaves the set, so opening its session again saves it.
@@ -47,6 +49,7 @@ export class Persist {
       workspaces: workspaces.map((w) => ({ ...w, tabs: w.tabs.filter((t) => !this.cleared.has(savedTabId(t))), last: kept(w.last), lastTerminal: kept(w.lastTerminal) })),
       ...(hostName !== null && { hostName }),
       bellSeen: this.bellSeen(),
+      ...(shown !== null && { shown }),
     });
   }
 

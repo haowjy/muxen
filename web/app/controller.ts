@@ -10,10 +10,11 @@ import { SessionsCache } from "../sessions/cache";
 import { samePlace, type BootResult, type FilesPlace, type Lifecycle, type Platform, type Preferences, type UpdateState, type Viewport } from "../platform/types";
 import { Store } from "../ui/store";
 import { parseSavedWorkspaces } from "../workspace/saved";
-import { activeTab, allTabs, initialWorkspace, reduce, savedWorkspaces, screenOf, shownTab, type Route, type Screen, type WorkspaceEffect, type WorkspaceEvent, type WorkspaceState } from "../workspace/state";
+import { activeTab, allTabs, initialWorkspace, reduce, savedRoute, savedWorkspaces, screenOf, shownTab, type Route, type Screen, type WorkspaceEffect, type WorkspaceEvent, type WorkspaceState } from "../workspace/state";
 import { FocusController } from "./focus";
 import { ListingFetcher } from "./listing";
 import { Persist } from "./persist";
+import { hashOf, launchOf, underHome, type Launch } from "./address";
 import { browserHistory, enrolCodeFromHash, Router, type Entry, type Overlay } from "./router";
 
 const NOTICE_MS = 5_000;
@@ -67,6 +68,8 @@ export class AppController extends Store<AppView> {
   /** The screen and overlay state the focus controller was last told. */
   private sentScreen: { screen: Screen; overlay: boolean } | null = null;
   private sentBackSwipe: boolean | undefined;
+  /** Where this launch opens, until it can: the hash's place, else the saved route. Dropped once opened, or once the user goes anywhere first. */
+  private launch: Launch | null;
   static async start(platform: Platform, options: StartOptions = {}): Promise<AppController> {
     const boot = await platform.boot();
     const app = new AppController(platform, boot, options);
@@ -89,7 +92,8 @@ export class AppController extends Store<AppView> {
     // Read before the Router: it replaces the link's `#code=…` with the entry hash, so a reload or Back cannot replay the code.
     const enrolCode = enrolCodeFromHash(history.current().hash);
     const saved = parseSavedWorkspaces(boot.workspace);
-    const router = new Router(history, (id) => this.snapshot.workspace.workspaces.find((w) => w.id === id));
+    const launch = enrolCode === null ? launchOf(history.current().hash, saved?.shown ?? null) : null;
+    const router = new Router(history, (id) => this.snapshot.workspace.workspaces.find((w) => w.id === id), (landing) => hashOf(this.snapshot.workspace, landing));
     super({
       viewport: boot.viewport,
       preferences: boot.preferences,
@@ -103,6 +107,7 @@ export class AppController extends Store<AppView> {
       update: "none",
     });
     this.router = router;
+    this.launch = launch;
     this.enrolCode = enrolCode;
     this.linkHandoffPending = enrolCode !== null;
     this.linkOfferPending = enrolCode !== null;
@@ -117,7 +122,7 @@ export class AppController extends Store<AppView> {
       },
       ...(options.fetchFn && { fetchFn: options.fetchFn }),
     });
-    this.persist = new Persist(platform.storage, () => savedWorkspaces(this.snapshot.workspace), () => this.bells.toSave(this.hosts.all().map((h) => h.hostId)));
+    this.persist = new Persist(platform.storage, () => savedWorkspaces(this.snapshot.workspace), () => this.bells.toSave(this.hosts.all().map((h) => h.hostId)), () => savedRoute(this.snapshot.workspace));
     this.persist.provideHostName(() => this.hosts.all()[0]?.name ?? null);
     this.listing = new ListingFetcher({
       restoring: () => allTabs(this.snapshot.workspace).some((t) => t.kind === "terminal" && t.restoring),
@@ -132,12 +137,14 @@ export class AppController extends Store<AppView> {
     this.applyPreferences(boot.preferences);
     this.hosts.subscribe(() => { this.hostsChanged(); });
     this.hosts.setLifecycle(boot.lifecycle);
+    // The saved tabs come back, and the router is followed, before any host is known: the launch opens from them (an app host's id is known at once, and would make an empty workspace first).
+    router.subscribe((entry) => { this.navigated(entry); });
+    this.dispatch({ type: "restored", saved });
+    this.navigated(router.entry);
+    this.openLaunch();
     // A browser host's name is unknown until `/auth/info` answers; an offline launch names it from the last save.
     const savedName = saved?.hostName;
     this.hosts.set(boot.hosts.map((h) => (h.name === null && h.pageOrigin !== null && savedName !== undefined ? { ...h, name: savedName } : h)));
-    this.dispatch({ type: "restored", saved });
-    this.dispatch({ type: "navigated", entry: router.entry });
-    router.subscribe((entry) => { this.navigated(entry); });
     this.listing.subscribe((event) => {
       const client = this.hosts.get(event.handle);
       const hostId = client?.hostId;
@@ -158,7 +165,10 @@ export class AppController extends Store<AppView> {
   /** Runs the reducer and its effects. Effects run in the caller's stack, so a focus made inside a tap stays inside the tap. */
   dispatch(event: WorkspaceEvent): void {
     const { state, effects } = reduce(this.snapshot.workspace, event);
-    if (state !== this.snapshot.workspace) this.update({ workspace: state });
+    if (state !== this.snapshot.workspace) {
+      this.update({ workspace: state });
+      this.router.rehash();
+    }
     // On a tab route the current entry names the active tab, so a switch rewrites it (a replace: no history is added).
     const tab = activeTab(state);
     const { entry } = this.router;
@@ -166,6 +176,37 @@ export class AppController extends Store<AppView> {
     this.syncScreen();
     for (const effect of effects) this.run(effect);
     this.syncListing();
+  }
+
+  /** Opens the launch's place once a workspace can hold it: at boot from the saved tabs, else when a host's id is known; with every host known and none to hold it, it is dropped. Back from it is Home. */
+  private openLaunch(complete = false): void {
+    const { launch } = this;
+    if (!launch) return;
+    if (this.router.entry.route !== "home" || this.router.entry.overlay !== null) {
+      this.launch = null;
+      return;
+    }
+    const { workspaces } = this.snapshot.workspace;
+    const ws = workspaces.find((w) => w.id === launch.workspace) ?? workspaces[0];
+    if (!ws) {
+      if (complete) this.launch = null;
+      return;
+    }
+    this.launch = null;
+    if (launch.kind === "overview") this.router.toOverview(ws.id);
+    else if (launch.kind === "last") {
+      if (ws.last !== null) this.dispatch({ type: "activated", id: ws.last });
+      else this.router.toOverview(ws.id);
+    } else if (launch.kind === "session") {
+      const tab = [ws, ...workspaces].flatMap((w) => w.tabs).find((t) => t.kind === "terminal" && t.session === launch.session);
+      if (tab) this.dispatch({ type: "activated", id: tab.id });
+      else this.router.toOverview(ws.id);
+    } else {
+      const place = underHome(launch.place, ws.home);
+      const tab = ws.tabs.find((t) => t.kind === "files" && samePlace(t.place, place));
+      if (tab) this.dispatch({ type: "activated", id: tab.id });
+      else this.openFiles(ws.id, place);
+    }
   }
 
   /** Opens an overlay from `opener`, the control that asked: closing the dialog returns focus to it. */
@@ -313,7 +354,9 @@ export class AppController extends Store<AppView> {
     if (this.linkOfferPending && own?.admission.kind === "admitted") this.offerApp(own.entry.pageOrigin);
     this.listing.setHosts(hosts.map((h) => ({ handle: h.entry.handle, host: h.socket })));
     const ids = hosts.flatMap((h) => (h.hostId === null ? [] : [h.hostId]));
-    this.dispatch({ type: "hostsKnown", ids, complete: hosts.length > 0 && ids.length === hosts.length });
+    const complete = hosts.length > 0 && ids.length === hosts.length;
+    this.dispatch({ type: "hostsKnown", ids, complete });
+    this.openLaunch(complete);
   }
 
   /** A host stays joined while Home or Open session is on screen, a tab on it exists, or one is restoring. This is the one place that asks for a listing on entering one of them. */

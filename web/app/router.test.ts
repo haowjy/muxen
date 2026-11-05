@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { FilesPlace } from "../platform/types";
+import type { Landing } from "../workspace/state";
 import { Router, type HistoryPort, type Entry } from "./router";
+
+const hashOf = (l: Landing): string => (l.route === "home" ? "#/" : `#/${l.route}`);
 
 /** A browser's history: a list of entries and a cursor. `back` pops synchronously here. */
 function fakeHistory(initialHash = "#/", initialState: unknown = null) {
@@ -23,7 +26,7 @@ const dir = (path: string): FilesPlace => ({ kind: "dir", path });
 function setup(hash = "#/") {
   const h = fakeHistory(hash);
   const state = { active: null as string | null };
-  const router = new Router(h.port, (id) => (id === "w1" ? { last: state.active } : undefined));
+  const router = new Router(h.port, (id) => (id === "w1" ? { last: state.active } : undefined), hashOf);
   const seen: Entry[] = [];
   router.subscribe((n) => seen.push(n));
   const open = (tab: string, place: FilesPlace | null = null): void => { state.active = tab; router.openTab("w1", tab, place); };
@@ -31,7 +34,7 @@ function setup(hash = "#/") {
 }
 
 describe("Router", () => {
-  it("opens Home on a clean launch, whatever the hash says, replacing the first entry", () => {
+  it("starts at Home, whatever the hash says, replacing the first entry", () => {
     const { router, h } = setup("#/tab");
     expect(router.entry).toMatchObject({ route: "home", overlay: null });
     expect(h.entries).toHaveLength(1);
@@ -102,11 +105,11 @@ describe("Router", () => {
     const { router, open, h } = setup();
     open("f1", { kind: "dir", path: "~" });
     router.pushPlace("f1", dir("/a"));
-    const after = new Router(h.port, () => undefined); // a reload: a new stack, no tab active
+    const after = new Router(h.port, () => undefined, hashOf); // a reload: a new stack, no tab active
     h.port.go(-1);
     expect(after.entry.route).toBe("home");
     // and an overlay cannot be popped to: a new Router starts at Home with no overlay
-    expect(new Router(h.port, () => undefined).entry.overlay).toBeNull();
+    expect(new Router(h.port, () => undefined, hashOf).entry.overlay).toBeNull();
   });
 
   it("runs what follows a close after the overlay is gone, or at once when none is open; closing every overlay is one history step", () => {

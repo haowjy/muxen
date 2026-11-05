@@ -126,8 +126,17 @@ drafts and the saved workspaces on this device, leaving currently open tabs unti
 destructive actions confirm independently. Remove this device is available only where the
 host admits this device as a tailnet node. Settings has Back to Home.
 
-A clean launch opens Home, even with saved tabs: Home is where an unreachable server or
-stopped daemon is explained. Returning from the background keeps the screen the user left.
+**Where a launch opens.** A launch (a reload, a bookmark, a copied link, or the app after iOS
+killed it) opens the place the page's address names, else the route last shown, saved with the
+workspaces, else Home. The address reads `#/` (Home), `#/tabs` (the tab overview),
+`#/term/<session>` or `#/files/<path>`: a folder ends in `/`, a path under home reads `~/…`, and
+any other path drops its leading `/` (`#/files/etc/hosts`). It names no server, since a browser page
+talks to its own origin's host only; the app has no address and opens its saved route. A session no
+tab follows shows the overview; a Files place no tab shows opens a new Files tab there. The page is
+opened above Home, so Back goes to Home. A server that is down is explained on the tab
+("Can't reach the server", with Retry). A setup link (`#code=…`) opens Home. Returning from the
+background keeps the screen the user left. The address is rewritten, without a history entry,
+when what it names changes (a session renamed).
 
 ## Terminal
 

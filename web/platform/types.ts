@@ -118,6 +118,13 @@ export interface SavedWorkspaces {
   hostName?: string;
   /** Bell attention (sessions/bells.ts): the bell mark this device last showed, by tab id, for the sessions it has seen. */
   bellSeen?: Record<string, number>;
+  /** Where the user last was, so a launch opens it again: a workspace's overview or its last tab. Absent: Home. */
+  shown?: SavedRoute;
+}
+
+export interface SavedRoute {
+  route: "overview" | "tab";
+  workspace: string;
 }
 
 export interface DraftRecord {

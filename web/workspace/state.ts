@@ -1,7 +1,7 @@
 // The workspace core (browser-behaviors.md "Platform layout"): a pure reducer over the workspaces,
 // their open tabs and the route. Events in; state and effects out. No Preact, no window, no document.
 import { tabId } from "../platform/tabKey";
-import { samePlace, type FilesPlace, type SavedTab, type SavedWorkspace, type SavedWorkspaces, type TabKey } from "../platform/types";
+import { samePlace, type FilesPlace, type SavedRoute, type SavedTab, type SavedWorkspace, type SavedWorkspaces, type TabKey } from "../platform/types";
 import type { TmuxListing } from "../proto/generated/messages";
 
 /** A tab that follows one tmux session. Its id is `tabId(key)`, so drafts keep their keys. */
@@ -359,7 +359,7 @@ export function reduce(state: WorkspaceState, event: WorkspaceEvent): Reduced {
   const result = step(state, event);
   const next = result.state;
   const effects: WorkspaceEffect[] = [];
-  if (next.workspaces !== state.workspaces && savedChanged(state, next)) effects.push({ type: "save" });
+  if ((next.workspaces !== state.workspaces && savedChanged(state, next)) || !sameRoute(state.route, next.route)) effects.push({ type: "save" });
   // A route whose workspace is gone shows Home; the tab route of a workspace with no tab left shows that workspace's overview.
   const ws = routeWorkspace(next);
   const emptied: Route | null = next.route.kind === "home" ? null : !ws ? HOME : next.route.kind === "tab" && ws.last === null ? { kind: "overview", workspace: ws.id } : null;
@@ -369,6 +369,9 @@ export function reduce(state: WorkspaceState, event: WorkspaceEvent): Reduced {
   for (const text of result.notices) effects.push({ type: "notice", text });
   return { state: next, effects };
 }
+
+/** The route in its saved form, so a launch opens it again; null on Home. */
+export const savedRoute = (state: WorkspaceState): SavedRoute | null => (state.route.kind === "home" ? null : { route: state.route.kind, workspace: state.route.workspace });
 
 /** The saved form of the workspaces, for persist now. */
 export const savedWorkspaces = (state: WorkspaceState): SavedWorkspace[] => state.workspaces.map(savedWorkspace);

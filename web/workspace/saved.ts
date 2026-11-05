@@ -3,7 +3,7 @@
 // and every version decision lives here. Anything but the current version is discarded
 // whole, never converted; drafts are keyed by tab key and are not this parser's to touch.
 import { isTabKey, tabId } from "../platform/tabKey";
-import type { FilesPlace, SavedTab, SavedWorkspace, SavedWorkspaces } from "../platform/types";
+import type { FilesPlace, SavedRoute, SavedTab, SavedWorkspace, SavedWorkspaces } from "../platform/types";
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
 const isString = (v: unknown): v is string => typeof v === "string";
@@ -42,5 +42,7 @@ export function parseSavedWorkspaces(raw: unknown): SavedWorkspaces | null {
   if (parsed.some((w) => w === null)) return null;
   const { hostName } = raw;
   const bellSeen = isRecord(raw["bellSeen"]) ? Object.fromEntries(Object.entries(raw["bellSeen"]).filter((e): e is [string, number] => Number.isInteger(e[1]))) : {};
-  return { version: 5, workspaces: parsed as SavedWorkspace[], ...(isString(hostName) && { hostName }), bellSeen };
+  const shown = raw["shown"];
+  const route: SavedRoute | null = isRecord(shown) && (shown["route"] === "overview" || shown["route"] === "tab") && isString(shown["workspace"]) ? { route: shown["route"], workspace: shown["workspace"] } : null;
+  return { version: 5, workspaces: parsed as SavedWorkspace[], ...(isString(hostName) && { hostName }), bellSeen, ...(route && { shown: route }) };
 }

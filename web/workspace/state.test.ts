@@ -48,10 +48,12 @@ describe("opening and closing", () => {
 });
 
 describe("saving", () => {
-  it("saves on every change to the tabs and on none other: not when only the screen, or what is not saved (restoring), changed, nor when a watching or a listing says what is known", () => {
+  it("saves on every change to the tabs or the route, and on none other: not for what is not saved (restoring), nor when a watching or a listing says what is known", () => {
     expect(open(base, 1).effects).toContainEqual({ type: "save" });
     const s = open(base, 1).state;
-    expect(reduce(s, { type: "navigated", entry: { route: "tab", workspace: "ws/h1", tab: "x", place: null } }).effects.some((e) => e.type === "save")).toBe(false);
+    const toTab = reduce(s, { type: "navigated", entry: { route: "tab", workspace: "ws/h1", tab: "x", place: null } });
+    expect(toTab.effects.some((e) => e.type === "save")).toBe(true);
+    expect(reduce(toTab.state, { type: "navigated", entry: { route: "tab", workspace: "ws/h1", tab: "x", place: null } }).effects.some((e) => e.type === "save")).toBe(false);
     const same = (e: WorkspaceEvent): void => { const r = reduce(s, e); expect(r.state).toBe(s); expect(r.effects).toEqual([]); };
     same({ type: "watching", id: tabId(key(1)), window: "w1" });
     same({ type: "listing", hostId: "h1", listing: listing("main:1-1", [1]) });

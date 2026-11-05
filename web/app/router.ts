@@ -1,7 +1,7 @@
 // Browser history is the navigation stack, and this is its only writer (browser-behaviors.md
 // "Keyboard ownership and navigation history"). Each entry's state holds the route (Home, a
-// workspace's overview, or one of its tabs), the overlay open on it (the tab list over a tab is one), and a record of the tab's Files place. The URL carries the route only, so file paths never enter
-// it. Everyone else learns of navigation one way: `navigated`, after every push, replace and pop.
+// workspace's overview, or one of its tabs), the overlay open on it (the tab list over a tab is one), and a record of the tab's Files place. The hash names the
+// place in words (`hashOf`, the controller's), so a reload or a bookmark finds it again. Everyone else learns of navigation one way: `navigated`, after every push, replace and pop.
 import { samePlace, type FilesPlace } from "../platform/types";
 import { isPlace } from "../workspace/saved";
 import type { Landing } from "../workspace/state";
@@ -37,7 +37,6 @@ export interface HistoryPort {
   onPop(listener: () => void): () => void;
 }
 
-const HASHES: Record<Landing["route"], string> = { home: "#/", overview: "#/overview", tab: "#/tab" };
 
 /** The enrolment code in a setup link's fragment (`#code=7KQ4-XM2P`), or null. Normalised to the bare characters the code field holds. */
 export function enrolCodeFromHash(hash: string): string | null {
@@ -65,14 +64,19 @@ export class Router {
   private settling: { at: number; next: Next & { route: "tab" } } | null = null;
 
   /**
-   * A clean launch opens Home, even with saved tabs: the first entry is replaced with Home's.
+   * The router starts at Home: the first entry is replaced with Home's. The controller then opens the launch's place above it.
    * `workspace` finds a workspace by id: a pop to a tab entry that isn't its workspace's last tab is
    * stale, and so is a pop to an entry of a workspace that is gone.
    */
-  constructor(private readonly port: HistoryPort, private readonly workspace: (id: string) => { last: string | null } | undefined) {
+  constructor(
+    private readonly port: HistoryPort,
+    private readonly workspace: (id: string) => { last: string | null } | undefined,
+    private readonly hashOf: (landing: Landing) => string,
+  ) {
     const entry = { id: this.nextId++, ...HOME };
     this.stack = [entry];
-    port.replace(entry, HASHES.home);
+    // Home's hash is fixed, and `hashOf` may not be callable yet (the controller builds the router before itself).
+    port.replace(entry, "#/");
     port.onPop(() => { this.popped(); });
   }
 
@@ -224,18 +228,24 @@ export class Router {
     else this.replace(fallback);
   }
 
+  /** What the hash says of the entry on screen changed (a session renamed, a folder's home learned): it is rewritten, with no history added and nothing announced. */
+  rehash(): void {
+    const hash = this.hashOf(this.entry);
+    if (this.port.current().hash !== hash) this.port.replace(this.entry, hash);
+  }
+
   private push(next: Next): void {
     const entry = { ...next, id: this.nextId++ };
     this.stack.splice(this.at + 1, Infinity, entry);
     this.at++;
-    this.port.push(entry, HASHES[entry.route]);
+    this.port.push(entry, this.hashOf(entry));
     this.emit();
   }
 
   private replace(next: Next): void {
     const entry = { ...next, id: this.nextId++ };
     this.stack[this.at] = entry;
-    this.port.replace(entry, HASHES[entry.route]);
+    this.port.replace(entry, this.hashOf(entry));
     this.emit();
   }
 
