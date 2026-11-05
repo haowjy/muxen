@@ -3,7 +3,7 @@
 import { HttpRefusal } from "../../net/http";
 import type { FakeDaemon } from "../../platform/test";
 import type { Stopped } from "../../proto/generated/messages";
-import { FakeFs, serveFs, type FakeTree } from "../../platform/test/fs";
+import { aborted, FakeFs, serveFs, type FakeTree } from "../../platform/test/fs";
 
 const README = `# muxen
 
@@ -175,11 +175,12 @@ export class FilesFs extends FakeFs {
   /** The cap the search walk says it stopped at. */
   searchStopped: Stopped | null = null;
 
-  override async search(path: string, q: string, hidden: boolean): ReturnType<FakeFs["search"]> {
+  override async search(path: string, q: string, hidden: boolean, signal?: AbortSignal): ReturnType<FakeFs["search"]> {
     if (this.searchFails === "denied") throw new HttpRefusal(403, "denied");
     if (this.searchFails === "offline") throw new TypeError("Failed to fetch");
-    if (this.searchHangs(q)) return new Promise(() => undefined);
-    return { ...(await super.search(path, q, hidden)), stopped: this.searchStopped };
+    // Never answers, but an abort ends it, as it ends a fetch.
+    if (this.searchHangs(q)) return new Promise((_, reject) => { signal?.addEventListener("abort", () => { reject(aborted()); }, { once: true }); });
+    return { ...(await super.search(path, q, hidden, signal)), stopped: this.searchStopped };
   }
 
   override async list(path: string, offset: number, hidden: boolean): ReturnType<FakeFs["list"]> {

@@ -5,6 +5,12 @@ import type { Entry, FsApi, Listing } from "../../files/api";
 import type { Match, Search } from "../../proto/generated/messages";
 import type { FakeDaemon } from ".";
 
+/** What an aborted `fetch` rejects with. */
+export const aborted = (): DOMException => new DOMException("The operation was aborted.", "AbortError");
+
+/** Folders the daemon's search walk never enters (`src/fs/search/mod.rs` `SKIPPED`). */
+const SKIPPED = [".git", "node_modules", "target"];
+
 export interface FakeTree {
   home: string;
   /** Directory paths and file paths (with their mime); parents are implied. */
@@ -49,8 +55,8 @@ export class FakeFs implements FsApi {
     return Promise.resolve({ text: "", size: 0, truncated: false });
   }
 
-  search(path: string, q: string, hidden: boolean): Promise<Search> {
-    return this.answer(`search ${path} ${q}`, () => this.found(path === "~" ? this.tree.home : path, q, hidden));
+  search(path: string, q: string, hidden: boolean, signal?: AbortSignal): Promise<Search> {
+    return this.answer(`search ${path} ${q}`, () => this.found(path === "~" ? this.tree.home : path, q, hidden), signal);
   }
 
   rawUrl(path: string): string {
@@ -59,13 +65,15 @@ export class FakeFs implements FsApi {
 
   /**
    * A stand-in for the daemon's search walk (fs.md "GET /fs/search"): every entry below `root`, skipping what the walk
-   * skips, matched by a plain subsequence per term (fuzzy) or a glob, nearer first. Close enough to draw; the real
-   * ranking is the daemon's.
+   * skips (dotted names unless `hidden`; folders named `.git`, `node_modules` or `target`, themselves and all below),
+   * matched by a plain subsequence per term (fuzzy) or a glob, nearer first. Close enough to draw; the real ranking is
+   * the daemon's.
    */
   private found(root: string, q: string, hidden: boolean): Search {
     if (!this.tree.dirs.includes(root)) throw new HttpRefusal(404, this.tree.files[root] ? "not_a_directory" : "not_found");
     const prefix = root === "/" ? "/" : `${root}/`;
-    const skipped = (rel: string): boolean => rel.split("/").some((seg, i, all) => (!hidden && seg.startsWith(".")) || (i < all.length - 1 && [".git", "node_modules", "target"].includes(seg)));
+    const skipped = (rel: string): boolean => rel.split("/").some((seg, i, all) =>
+      (!hidden && seg.startsWith(".")) || (SKIPPED.includes(seg) && (i < all.length - 1 || this.tree.dirs.includes(prefix + rel))));
     const below = [...this.tree.dirs, ...Object.keys(this.tree.files)].filter((p) => p.startsWith(prefix) && p !== root).map((p) => p.slice(prefix.length)).filter((rel) => !skipped(rel));
     const glob = /[*?]/.test(q);
     const matches: { rel: string; hits: [number, number][] }[] = [];
@@ -117,11 +125,19 @@ export class FakeFs implements FsApi {
     };
   }
 
-  private answer<T>(call: string, body: () => T): Promise<T> {
+  /** `body`'s answer, or its refusal; with `signal`, an abort before it is given rejects as `fetch` does. */
+  private answer<T>(call: string, body: () => T, signal?: AbortSignal): Promise<T> {
     this.calls.push(call);
-    const run = (): Promise<T> => new Promise((resolve, reject) => { if (this.offline) reject(new HttpRefusal(0, "network")); else resolve(body()); });
+    const run = (): Promise<T> => new Promise((resolve, reject) => {
+      if (signal?.aborted) reject(aborted());
+      else if (this.offline) reject(new HttpRefusal(0, "network"));
+      else resolve(body());
+    });
     if (!this.hold) return run();
-    return new Promise((resolve, reject) => { this.held.push(() => { run().then(resolve, reject); }); });
+    return new Promise((resolve, reject) => {
+      signal?.addEventListener("abort", () => { reject(aborted()); }, { once: true });
+      this.held.push(() => { run().then(resolve, reject); });
+    });
   }
 }
 
@@ -148,15 +164,23 @@ function fuzzyHits(q: string, rel: string): [number, number][] | null {
   return runsOf([...hit].sort((a, b) => a - b));
 }
 
-/** `*` and `?` within a segment, `**` across them; with no `/`, against the last segment. The hits are the literal runs. */
+/**
+ * `*` and `?` within a segment, `**` across whole segments (one not bounded by `/` or the pattern's ends is a `*`);
+ * with no `/`, against the last segment. The hits are the literal runs.
+ */
 function globHits(q: string, rel: string): [number, number][] | null {
   const segment = !q.includes("/");
   const base = segment ? rel.lastIndexOf("/") + 1 : 0;
   const text = rel.slice(base);
   let source = "";
+  let at = 0;
   for (const part of q.split(/(\*\*\/?|\*|\?)/)) {
+    const before = q[at - 1];
+    at += part.length;
     if (part === "") continue;
-    if (part.startsWith("**")) source += part.endsWith("/") ? "(?:.*/)?" : ".*";
+    const bounded = (before === undefined || before === "/") && (part.endsWith("/") || at === q.length);
+    if (part.startsWith("**") && bounded) source += part.endsWith("/") ? "(?:.*/)?" : ".*";
+    else if (part.startsWith("**")) source += part.endsWith("/") ? "[^/]*/" : "[^/]*";
     else if (part === "*") source += "[^/]*";
     else if (part === "?") source += "[^/]";
     else source += `(${part.replace(/[.+^${}()|[\]\\]/g, "\\$&")})`;
@@ -189,14 +213,14 @@ const decodePath = (encoded: string): string => encoded.split("/").map(decodeURI
  */
 export function serveFs(fs: FakeFs): NonNullable<FakeDaemon["fs"]> {
   const page = (query: URLSearchParams): [number, boolean] => [Number(query.get("offset") ?? 0), query.get("hidden") === "1"];
-  const route = async ({ method, path, query }: Parameters<NonNullable<FakeDaemon["fs"]>>[0]): Promise<Response> => {
+  const route = async ({ method, path, query, signal }: Parameters<NonNullable<FakeDaemon["fs"]>>[0]): Promise<Response> => {
     // `~` and `~/…` ride bare after the route's `/` (the client's `url`).
     const at = (prefix: string): string => {
       const rest = decodePath(path.slice(prefix.length));
       return rest.startsWith("/~") ? rest.slice(1) : rest;
     };
     if (method === "GET" && path.startsWith("/fs/list/")) return json(200, await fs.list(at("/fs/list"), ...page(query)));
-    if (method === "GET" && path.startsWith("/fs/search/")) return json(200, await fs.search(at("/fs/search"), query.get("q") ?? "", query.get("hidden") === "1"));
+    if (method === "GET" && path.startsWith("/fs/search/")) return json(200, await fs.search(at("/fs/search"), query.get("q") ?? "", query.get("hidden") === "1", signal ?? undefined));
     if (method === "GET" && path.startsWith("/fs/raw/")) {
       const target = at("/fs/raw");
       const probed = await fs.probe(target);

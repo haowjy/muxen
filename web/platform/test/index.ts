@@ -65,7 +65,8 @@ export interface FakeDaemon {
   /** The size every watched window has: the watching tab's own size when unset. A size that is not the tab's shows the band. */
   windowSize?: Size;
   /** Answers `/fs/*` requests (`serveFs` serves a tree); `undefined` falls through to a 404. */
-  fs?: (request: { method: string; path: string; query: URLSearchParams; body: string | null }) => Response | Promise<Response> | undefined;
+  /** `signal` is the request's: a route that waits (a search) ends on an abort, as a real fetch does. */
+  fs?: (request: { method: string; path: string; query: URLSearchParams; body: string | null; signal: AbortSignal | null }) => Response | Promise<Response> | undefined;
   /** Requests seen, `"METHOD /path?query"`, in order. */
   requests: string[];
 }
@@ -153,7 +154,7 @@ function daemonFetch(daemon: FakeDaemon): typeof fetch {
         return Promise.resolve(new Response(null, { status: 204 }));
       default: {
         const answer = url.pathname.startsWith("/fs/")
-          ? daemon.fs?.({ method, path: url.pathname, query: url.searchParams, body: typeof init?.body === "string" ? init.body : null })
+          ? daemon.fs?.({ method, path: url.pathname, query: url.searchParams, body: typeof init?.body === "string" ? init.body : null, signal: init?.signal ?? null })
           : undefined;
         return Promise.resolve(answer ?? json(404, { error: "not_found" }));
       }
