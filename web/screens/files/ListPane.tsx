@@ -113,9 +113,9 @@ export function ListPane({ session, tab, view, pages, tree, up, search, onOpen }
           search={search}
           where={shorten(search.root, home)}
           onOpen={onOpen}
-          onReveal={(path) => {
+          onReveal={(found) => {
             app.router.closeOverlay(() => {
-              tree.reveal(path);
+              tree.reveal(found.path, found.entry);
               listTakesKeys();
             });
           }}

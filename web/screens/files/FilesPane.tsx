@@ -146,7 +146,7 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
               onWidth={(px) => { setStored(px); app.view.set("listWidth", px); }}
               onReset={() => { setStored(null); app.view.set("listWidth", null); }}
             />
-            <PreviewPanel session={session} root={pages} selection={search ? found?.path ?? null : tree.selection} known={found} hidden={hidden} held={held} onOpen={open} onLink={onLink} />
+            <PreviewPanel session={session} root={pages} selection={search ? found?.path ?? null : tree.selection} known={search ? found : tree.known} hidden={hidden} held={held} onOpen={open} onLink={onLink} />
           </>
         )}
       </div>

@@ -133,6 +133,20 @@ export function bigTree(): FakeTree {
   return { home: HOME, dirs: ["/", "/home", HOME, BIG, `${BIG}/alpha`, `${BIG}/beta`, `${BIG}/gamma`, `${HOME}/other`], files: { ...files, [`${BIG}/zeta-notes.md`]: MD } };
 }
 
+/**
+ * Folders of 250 entries, past the daemon's page of 200, for a reveal that must load pages: `~/wide` holds `lib` and 250
+ * files, `lib` 250 more, so `zz-last.txt` and `lib/f-249.txt` each sort past the first page of their folder.
+ */
+export const WIDE = `${HOME}/wide`;
+export function wideTree(): FakeTree {
+  const files = (dir: string, name: (i: number) => string) => Object.fromEntries(Array.from({ length: 250 }, (_, i) => [`${dir}/${name(i + 1)}`, TEXT]));
+  return {
+    home: HOME,
+    dirs: ["/", "/home", HOME, WIDE, `${WIDE}/lib`],
+    files: { ...files(WIDE, (i) => `file-${String(i).padStart(3, "0")}.txt`), [`${WIDE}/zz-last.txt`]: TEXT, ...files(`${WIDE}/lib`, (i) => `f-${String(i).padStart(3, "0")}.txt`) },
+  };
+}
+
 const CONTENT: Record<string, string> = {
   [`${REPO}/README.md`]: README,
   [`${REPO}/Cargo.toml`]: '[package]\nname = "muxen"\nversion = "0.1.0"\n',

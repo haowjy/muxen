@@ -54,9 +54,9 @@ export class Folders extends Store<FoldersView> {
   private serial = 0;
   /** The folders each owner has on screen (the browser's place, the outline's open folders, the Preview panel's folder). */
   private readonly pins = new Map<string, Set<string>>();
-  /** First pages under way, at most `LISTINGS_AT_ONCE`; the rest wait their turn, the ones asked `behind` last. */
+  /** First pages under way, at most `LISTINGS_AT_ONCE`; the rest wait their turn, by folder, the ones asked `behind` last. */
   private running = 0;
-  private readonly waiting: { go: () => void; behind: boolean }[] = [];
+  private readonly waiting: { key: string; go: () => void; behind: boolean }[] = [];
 
   constructor(private readonly api: FsApi) {
     super({ held: new Map() });
@@ -92,12 +92,22 @@ export class Folders extends Store<FoldersView> {
   /**
    * Lists `path` now (Go cannot wait out the settle), or joins the listing under way. The refusal is the record's, not
    * thrown. `behind`: the folder is one of many asked together (the outline's open folders), so what the user is looking
-   * at (the place, the Preview panel, the path field) goes first.
+   * at (the place, the Preview panel, the path field) goes first; asked for again without `behind`, a queued folder
+   * moves ahead of them.
    */
   load(path: string, hidden: boolean, behind = false): Promise<void> {
     // Its state is written under `path`, so `path` must be the canonical one; `first` takes `~`.
     if (path === "~") return Promise.reject(new Error("Folders.load needs a canonical path"));
-    return this.inflight.get(folderKey(path, hidden)) ?? this.relist(path, hidden, behind);
+    const key = folderKey(path, hidden);
+    const running = this.inflight.get(key);
+    if (!running) return this.relist(path, hidden, behind);
+    if (!behind) this.ahead(key);
+    return running;
+  }
+
+  /** A folder the user now looks at, queued behind the outline's: it waits only for what the user asked before it. */
+  private ahead(key: string): void {
+    for (const waiter of this.waiting) if (waiter.key === key) waiter.behind = false;
   }
 
   /** Starts a first-page listing whatever is under way; the older requests' pages are discarded when they land. */
@@ -117,9 +127,11 @@ export class Folders extends Store<FoldersView> {
     return this.snapshot.held.get(folderKey(path, hidden))?.listing ?? null;
   }
 
-  /** Like {@link peek}, but waits for a fetch under way instead of asking again. */
+  /** Like {@link peek}, but waits for a fetch under way instead of asking again; one queued behind the outline's moves ahead. */
   async settled(path: string, hidden: boolean): Promise<Listing | null> {
-    await this.inflight.get(folderKey(path, hidden));
+    const key = folderKey(path, hidden);
+    this.ahead(key);
+    await this.inflight.get(key);
     return this.peek(path, hidden);
   }
 
@@ -129,9 +141,10 @@ export class Folders extends Store<FoldersView> {
    * path's, which the daemon names (`path` may be `~`).
    */
   async first(path: string, hidden: boolean, behind = false): Promise<Listing> {
-    const ticket = this.begin(folderKey(path, hidden));
-    const listing = await this.turn(behind, () => this.api.list(path, 0, hidden));
-    if (this.landed(folderKey(path, hidden), ticket)) this.put(listing.path, hidden, { listing, error: null });
+    const key = folderKey(path, hidden);
+    const ticket = this.begin(key);
+    const listing = await this.turn(key, behind, () => this.api.list(path, 0, hidden));
+    if (this.landed(key, ticket)) this.put(listing.path, hidden, { listing, error: null });
     return listing;
   }
 
@@ -145,11 +158,17 @@ export class Folders extends Store<FoldersView> {
     return done;
   }
 
-  /** Every page of `path` not yet held, one request after another: the path field's "Load the rest". */
-  async rest(path: string, hidden: boolean): Promise<void> {
+  /**
+   * Every page of `path` not yet held, one request after another: the path field's "Load the rest". With `until`, only
+   * until that name is held: a reveal needs its row, which a folder of more than a page may sort past the first. The
+   * first page is asked for (ahead of the outline's) if none is held.
+   */
+  async rest(path: string, hidden: boolean, until?: string): Promise<void> {
+    if (!this.peek(path, hidden)) await this.load(path, hidden);
     for (;;) {
       const have = this.peek(path, hidden);
       if (!have || have.entries.length >= have.total || have.truncated) return;
+      if (until !== undefined && have.entries.some((e) => e.name === until)) return;
       await this.more(path, hidden);
       // A page that added nothing (the daemon's total moved) ends the loop instead of asking again.
       if ((this.peek(path, hidden)?.entries.length ?? 0) <= have.entries.length) return;
@@ -166,9 +185,9 @@ export class Folders extends Store<FoldersView> {
   }
 
   /** Runs `ask` once fewer than `LISTINGS_AT_ONCE` first pages are under way; a finished one hands its turn on. */
-  private async turn<T>(behind: boolean, ask: () => Promise<T>): Promise<T> {
+  private async turn<T>(key: string, behind: boolean, ask: () => Promise<T>): Promise<T> {
     if (this.running < LISTINGS_AT_ONCE) this.running++;
-    else await new Promise<void>((go) => { this.waiting.push({ go, behind }); });
+    else await new Promise<void>((go) => { this.waiting.push({ key, go, behind }); });
     try {
       return await ask();
     } finally {

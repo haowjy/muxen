@@ -22,7 +22,7 @@ interface Props {
   /** The folder the list starts at, and its pages. */
   root: Listing;
   selection: string | null;
-  /** The selected row's entry when no listing held holds it (Search's results). */
+  /** The selected row's entry when no listing held holds it: a Search result, or a revealed one until its row loads. */
   known?: { path: string; entry: Entry } | null;
   hidden: boolean;
   held: ReadonlyMap<string, Held>;

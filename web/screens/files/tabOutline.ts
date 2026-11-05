@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { describeError } from "../../files/browser";
 import { folderKey } from "../../files/folders";
+import type { Entry } from "../../files/api";
 import { foldersBetween, withExpanded } from "../../files/outline";
+import { baseName } from "../../files/paths";
 import type { HttpRefusal } from "../../net/http";
 import { useStore } from "../../ui/store";
 import type { OutlineProps } from "./FolderList";
@@ -13,8 +15,14 @@ export interface TabOutline {
   selection: string | null;
   select: (key: string | null) => void;
   toggle: (folder: string, open: boolean) => void;
-  /** Opens the folders between the list's root and `path`, and selects it. */
-  reveal: (path: string) => void;
+  /**
+   * Opens the folders between the list's root and `path`, selects it, and loads each folder's pages until the next
+   * name down is held, so its row exists. `entry`, when the caller has it (a Search result), stands in for the row's
+   * until then, so the Preview panel shows the file meanwhile.
+   */
+  reveal: (path: string, entry?: Entry) => void;
+  /** The entry `reveal` was given, while that path is still the selection. */
+  known: { path: string; entry: Entry } | null;
 }
 
 /**
@@ -29,6 +37,7 @@ export function useTabOutline(session: FilesSession, tab: string, root: string |
   const [picked, setPicked] = useState(() => ({ root, key: kept(root) }));
   const selection = picked.root === root ? picked.key : kept(root);
   const expanded = useMemo(() => new Set(open), [open]);
+  const [revealed, setRevealed] = useState<{ path: string; entry: Entry } | null>(null);
 
   const select = (key: string | null): void => {
     setPicked({ root, key });
@@ -45,11 +54,17 @@ export function useTabOutline(session: FilesSession, tab: string, root: string |
     selection,
     select,
     toggle: (folder, on) => { if (root !== null) expand(withExpanded(open, folder, on, root)); },
-    reveal: (path) => {
+    reveal: (path, entry) => {
       if (root === null) return;
-      expand(foldersBetween(root, path).reduce((all: readonly string[], folder) => withExpanded(all, folder, true, root), open));
+      const folders = foldersBetween(root, path);
+      expand(folders.reduce((all: readonly string[], folder) => withExpanded(all, folder, true, root), open));
       select(path);
+      setRevealed(entry ? { path, entry } : null);
+      // Each level at once, ahead of the outline's other folders: the row is what the user asked for.
+      const { hidden } = session.browser.snapshot;
+      [root, ...folders].forEach((folder, i) => { void session.browser.folders.rest(folder, hidden, baseName(folders[i] ?? path)); });
     },
+    known: revealed?.path === selection ? revealed : null,
   };
 }
 

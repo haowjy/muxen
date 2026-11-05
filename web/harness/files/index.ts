@@ -5,7 +5,7 @@
 import type { FilesPlace } from "../../platform/types";
 import type { Fixture, Fixtures } from "../fixture";
 import { LISTING, savedPlus } from "../shared";
-import { BIG, BIG_PAGE, bigTree, ETC, findTree, FIND_ROOT, HOME, REPO, serveTree, type FilesFs } from "./fakes";
+import { BIG, BIG_PAGE, bigTree, ETC, WIDE, wideTree, findTree, FIND_ROOT, HOME, REPO, serveTree, type FilesFs } from "./fakes";
 import type { FakeTree } from "../../platform/test/fs";
 import type { AppController } from "../../app/controller";
 import type { ViewState } from "../../app/viewMemory";
@@ -54,16 +54,16 @@ const OPENED = (): ViewState["opened"] => {
  * Search open over `~/muxen` with `text` typed (asked for as the app starts), and the device's recents unless `fresh`.
  * `then` is typed a moment later, for an answer still on its way over the last one's rows.
  */
-const searching = (text: string, { fresh = false, configure, then }: { fresh?: boolean; configure?: (fs: FilesFs) => void; then?: string } = {}): Fixture => ({
-  ...at({ kind: "dir", path: REPO }, undefined, configure),
-  overlay: { screen: "files", name: "search", params: { root: REPO } },
+const searching = (text: string, { fresh = false, configure, then, root = REPO, tree, page }: { fresh?: boolean; configure?: (fs: FilesFs) => void; then?: string; root?: string; tree?: FakeTree; page?: number } = {}): Fixture => ({
+  ...at({ kind: "dir", path: root }, tree, configure, page),
+  overlay: { screen: "files", name: "search", params: { root } },
   start: (app: AppController) => {
     if (!fresh) app.view.set("opened", OPENED());
     // Once the folder is listed and the host has said who it is, as a magnifier tap finds them.
     setTimeout(() => {
       const host = app.hosts.all()[0];
       if (!host) return;
-      const search = filesSession(app, host).search("files-1", REPO);
+      const search = filesSession(app, host).search("files-1", root);
       if (text !== "") search.type(text);
       if (then !== undefined) setTimeout(() => { search.type(then); }, 800);
     }, 300);
@@ -122,6 +122,8 @@ export const fixtures: Fixtures = {
   filesSearchOffline: searching("md", { configure: (fs) => { fs.searchFails = "offline"; } }),
   /** The answer for "md" is up; "md zz" never answers, so its rows stay, quieted. */
   filesSearchSlow: searching("md", { configure: (fs) => { fs.searchHangs = (q) => q.includes("zz"); }, then: "md zz" }),
+  /** Search over folders of 250 entries (pages of 200): Enter on `lib/f-249.txt` must load `lib`'s second page to show its row. */
+  filesSearchWide: searching("f-249", { root: WIDE, tree: wideTree(), page: BIG_PAGE }),
   /** The folder refuses to list. */
   filesDenied: at({ kind: "dir", path: REPO }, undefined, (fs) => { fs.denied.add(REPO); }),
 };

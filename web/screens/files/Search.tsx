@@ -35,7 +35,7 @@ interface Props {
   /** A tap on the phone: a folder is entered, a file opened full screen, over the results. */
   onOpen: (place: FilesPlace) => void;
   /** Enter or a double-click on a desktop: Search closes and the outline shows the row. */
-  onReveal: (path: string) => void;
+  onReveal: (found: Found) => void;
   /** Cancel, Escape: Search's history entry is left. */
   onClose: () => void;
 }
@@ -84,7 +84,7 @@ export function Search({ session, search, where, onOpen, onReveal, onClose: clos
     // Selected too, so Back to the results finds the row tapped, where it was.
     search.select(place.path);
     if (phone) onOpen(place);
-    else onReveal(place.path);
+    else onReveal(row);
   };
   useFilesKey(CLOSE, close);
   // Search is open already: its keys, pressed outside the field (a row clicked, the Preview panel), go back to it.
