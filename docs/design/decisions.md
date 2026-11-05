@@ -4892,3 +4892,12 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
   scrolls sideways and a line may take several rows, so each line carries its own non-sticky counter in its
   padding: 17 ms. Rejected: sticky numbers below a line cap (two looks for one file kind); one gutter in
   wrap mode too (it drifts from wrapped lines, as above).
+
+### On touch, the tap that closes a menu only closes it
+
+- **Decided:** 2026-11-05, ux lead (Files phase 2 brief), following iOS: a tap outside an open menu
+  dismisses it and nothing else.
+- **What:** `Menu` swallows the click that ends a touch press outside it, so a row or button under the
+  finger doesn't also open. A mouse press outside still closes the menu and acts, as on a desktop.
+- **Rejected:** a transparent backdrop under every menu (it would also swallow a scroll starting on the
+  list, which closes a row's menu today).

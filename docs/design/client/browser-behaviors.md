@@ -89,7 +89,7 @@ between the key row and keyboard. Standalone PWA mode has no Safari toolbar.
   known while the terminal is hidden, so no second resize follows.
 - Blue is the selection/accent channel; green is reserved for connected status. Selected
   rows use a blue-tinted fill and weight. Connection state is distinct from selection.
-- Menus and the tab overview use the current theme's raised surface. A toast floats above the dock
+- Menus and the tab overview use the current theme's raised surface. A press outside an open menu closes it; on touch that tap only closes it, as on iOS, so the row or control under the finger doesn't also act. A toast floats above the dock
   without covering its controls.
 - Home is a centered column on desktop, with width `min(720px, 100% - 2 gutters)`.
   Every screen and full-screen page (Home, the tab overview, Settings, Open session) has the

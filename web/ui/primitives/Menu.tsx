@@ -39,6 +39,26 @@ interface MenuProps {
   focusFirst: boolean;
 }
 
+/** The click that ends this press, if any, goes nowhere. Ended by the next press, a press that became a scroll, or a second. */
+function swallowClick(): void {
+  const stop = (e: Event): void => {
+    e.preventDefault();
+    e.stopPropagation();
+    done();
+  };
+  const done = (): void => {
+    clearTimeout(timer);
+    document.removeEventListener("click", stop, true);
+    document.removeEventListener("pointerdown", done, true);
+    document.removeEventListener("pointercancel", done, true);
+  };
+  // Added while this press is being dispatched, so the press itself doesn't end it.
+  document.addEventListener("click", stop, true);
+  document.addEventListener("pointerdown", done, true);
+  document.addEventListener("pointercancel", done, true);
+  const timer = setTimeout(done, 1_000);
+}
+
 /** Space between the menu and its anchor, and between it and the window's edge. */
 const GAP_PX = 8;
 
@@ -81,7 +101,10 @@ export function Menu({ anchor, at, label, sections, onClose, focusFirst }: MenuP
       const target = e.target as Node | null;
       // A control's own click toggles its menu: closing here too would reopen it. A menu opened at a point
       // (a row's) has no control under it, and its anchor (a whole list) is only where focus returns.
-      if (!ref.current?.contains(target) && (pointed || !anchor.contains(target))) onClose();
+      if (ref.current?.contains(target) || (!pointed && anchor.contains(target))) return;
+      // On touch the tap that closes a menu only closes it, as on iOS: what is under it doesn't also act.
+      if (e.pointerType === "touch") swallowClick();
+      onClose();
     };
     const keys = (e: KeyboardEvent): void => {
       if (e.key === "Escape") {

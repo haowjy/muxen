@@ -5,6 +5,7 @@ version section on release.
 
 ## [Unreleased]
 
+- On touch, a tap outside an open menu only closes it: the row or button under your finger no longer acts too.
 - Files writes its shortcuts for your keyboard: Ctrl+Shift+. and Ctrl+I on Linux and Windows, ⇧⌘. and ⌘I on a Mac. ⌘I shows only on a file's own Insert menu, the one it works for.
 - On the phone, pull a folder's list down from the top to refresh it.
 - A row in Files has a menu: right-click it on a desktop (or Shift+F10), hold it on the phone. It offers Open, Open in new tab, Copy path, Download for a file, and the terminal tabs to insert its path into.
