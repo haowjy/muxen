@@ -6,7 +6,7 @@ import { useApp } from "../../app/context";
 
 /** A shortcut. `mod` is Cmd or Ctrl (either is taken, on every platform). */
 export interface Chord {
-  /** `KeyboardEvent.key`, lower case. */
+  /** `KeyboardEvent.key`, lower case. One character with no `mod` is matched by the character alone, Shift and AltGr ignored. */
   key: string;
   /** Matched as well as `key`, for a key whose `key` changes with Shift (`.` is `>` on a US layout). */
   code?: string;
@@ -40,9 +40,16 @@ function free(e: Event, chord: Chord): boolean {
 }
 
 function matches(e: KeyboardEvent, chord: Chord): boolean {
-  if (chord === PASTE || e.isComposing || e.altKey) return false;
+  if (chord === PASTE || e.isComposing) return false;
+  // A printed character (`/`) is whatever keys type it: Shift+7 on a German layout, AltGr (Ctrl+Alt to the page) on
+  // some Windows layouts. Only Cmd or Ctrl held for themselves make it another key.
+  if (printed(chord)) return e.key === chord.key && (e.getModifierState("AltGraph") || !(e.metaKey || e.ctrlKey));
+  if (e.altKey) return false;
   return (e.key.toLowerCase() === chord.key || e.code === chord.code) && (e.metaKey || e.ctrlKey) === (chord.mod === true) && e.shiftKey === (chord.shift === true);
 }
+
+/** A chord that is one character typed, with no Cmd/Ctrl and no key position of its own. */
+const printed = (chord: Chord): boolean => chord.key.length === 1 && chord.mod !== true && chord.code === undefined;
 
 function dispatch(e: Event, find: (b: Binding) => boolean): void {
   const hit = bindings.findLast(find);
