@@ -89,7 +89,7 @@ export function FileView({ session, file, up, onUp, onLink, children }: Props) {
             sections={[{
               items: [
                 { label: "Wrap lines", checked: wrap, onSelect: () => { setWrap(!wrap); } },
-                { label: "Copy text", icon: "copyText", disabled: loaded === null, onSelect: () => { if (loaded) void copyText(app, loaded.text).then((ok) => { if (ok) app.notify(copyNote ?? `Copied the text of ${file.name}`); }); } },
+                { label: "Copy text", icon: "copyText", disabled: loaded === null, onSelect: () => { if (loaded) void copyText(app, loaded.text, copyNote ?? `Copied the text of ${file.name}`); } },
               ],
             }]}
           />

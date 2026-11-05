@@ -3,14 +3,17 @@
 import type { AppController } from "../../app/controller";
 import { shorten } from "../../files/format";
 
-/** Copies `text`; false, with the refusal said, when the browser refused the clipboard. */
-export async function copyText(app: AppController, text: string): Promise<boolean> {
-  if ((await app.platform.clipboard.writeText(text)) === "ok") return true;
-  app.notify("Couldn't copy: this browser refused clipboard access");
-  return false;
+/** Copies `text`, then says `notice` when given; false, with the refusal said, when the browser refused the clipboard. */
+export async function copyText(app: AppController, text: string, notice: string | null = null): Promise<boolean> {
+  if ((await app.platform.clipboard.writeText(text)) !== "ok") {
+    app.notify("Couldn't copy: this browser refused clipboard access");
+    return false;
+  }
+  if (notice !== null) app.notify(notice);
+  return true;
 }
 
 /** Copies the absolute `path`, and says so (`home` shortens what the notice shows). */
 export async function copyPath(app: AppController, path: string, home: string | null): Promise<void> {
-  if (await copyText(app, path)) app.notify(`Copied ${shorten(path, home)}`);
+  await copyText(app, path, `Copied ${shorten(path, home)}`);
 }

@@ -3,6 +3,7 @@ import { useApp, useAppView } from "../../app/context";
 import { useStore } from "../../ui/store";
 import { Menu, type MenuItem } from "../../ui/primitives/Menu";
 import { IconButton } from "../../ui/primitives/IconButton";
+import type { IconName } from "../../ui/primitives/Icon";
 import { copyPath } from "./copy";
 import { PASTE, useChordLabel, useFilesKey, type Chord } from "./keymap";
 import { pasteIntoFolder, startUpload, type FilesSession } from "./session";
@@ -36,24 +37,23 @@ export function FolderActions({ session, path, pasteable, loading }: Props) {
   const hiddenKeys = useChordLabel(SHOW_HIDDEN);
   const pasteKeys = useChordLabel(PASTE);
 
-  const upload: MenuItem = { label: "Upload", icon: "upload", onSelect: () => { startUpload(app, session); } };
-  const paste: MenuItem = { label: "Paste", icon: "paste", onSelect: () => { pasteIntoFolder(app, session, path); } };
-  const refresh: MenuItem = { label: "Refresh", icon: "refresh", disabled: loading, onSelect: () => { void browser.reload(); } };
+  // Drawn as icons beside ⋯ on a desktop, as ⋯'s last rows on the phone.
+  const tools: (MenuItem & { icon: IconName })[] = [
+    { label: "Upload", icon: "upload", onSelect: () => { startUpload(app, session); } },
+    ...(pasteable ? [{ label: "Paste", icon: "paste" as const, ...(!phone && { hint: pasteKeys }), onSelect: () => { pasteIntoFolder(app, session, path); } }] : []),
+    { label: "Refresh", icon: "refresh", disabled: loading, onSelect: () => { void browser.reload(); } },
+  ];
   const sections = [
     { items: [{ label: "Copy path", icon: "copy" as const, onSelect: () => { void copyPath(app, path, browser.snapshot.home); } }] },
     { items: [{ label: "Show hidden files", checked: hidden, ...(!phone && { hint: hiddenKeys }), onSelect: () => { void browser.toggleHidden(); } }] },
-    ...(phone ? [{ items: [upload, ...(pasteable ? [paste] : []), refresh] }] : []),
+    ...(phone ? [{ items: tools }] : []),
   ];
 
   return (
     <>
-      {!phone && (
-        <>
-          <IconButton icon="upload" label="Upload" onClick={() => { startUpload(app, session); }} />
-          {pasteable && <IconButton icon="paste" label={`Paste (${pasteKeys})`} onClick={() => { pasteIntoFolder(app, session, path); }} />}
-          <IconButton icon="refresh" label="Refresh" disabled={loading} onClick={() => { void browser.reload(); }} />
-        </>
-      )}
+      {!phone && tools.map((t) => (
+        <IconButton key={t.label} icon={t.icon} label={t.hint === undefined ? t.label : `${t.label} (${t.hint})`} disabled={t.disabled} onClick={t.onSelect} />
+      ))}
       <IconButton icon="more" label="Folder options" aria-haspopup="menu" aria-expanded={menu !== null} onClick={(e) => { setMenu(menu ? null : e.currentTarget); }} />
       {menu && <Menu anchor={menu} label="Folder options" sections={sections} focusFirst={!touch} onClose={() => { setMenu(null); }} />}
     </>

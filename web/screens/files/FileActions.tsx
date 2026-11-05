@@ -6,10 +6,9 @@ import { cx } from "../../ui/cx";
 import { Button } from "../../ui/primitives/Button";
 import { Icon } from "../../ui/primitives/Icon";
 import { IconButton } from "../../ui/primitives/IconButton";
-import { Menu, type MenuSection } from "../../ui/primitives/Menu";
-import { routeWorkspace } from "../../workspace/state";
+import { Menu } from "../../ui/primitives/Menu";
 import { copyText } from "./copy";
-import { insertPath, useInsertChoices, type InsertChoice } from "./insert";
+import { insertSection, useInsert } from "./insert";
 import { useChordLabel, useFilesKey, type Chord } from "./keymap";
 import styles from "./FileActions.module.css";
 
@@ -18,29 +17,6 @@ const INSERT: Chord = { key: "i", mod: true };
 
 /** How long a copy button shows that it copied. */
 const COPIED_MS = 1_600;
-
-/** The Insert menu's rows: each terminal tab, the default (first) with `shortcut`, where the control has one; a tab that can't take a path is disabled and says why. */
-export function insertSection(choices: readonly InsertChoice[], insert: (id: string) => void, shortcut: string | null): MenuSection {
-  if (choices.length === 0) return { title: "Insert path into", items: [{ label: "Open a terminal tab first", disabled: true, onSelect: () => undefined }] };
-  return {
-    title: "Insert path into",
-    items: choices.map((c, i) => ({
-      label: c.label,
-      icon: "terminal" as const,
-      disabled: c.blocked !== null,
-      ...(c.blocked !== null ? { hint: c.blocked } : i === 0 && shortcut !== null ? { hint: shortcut } : {}),
-      onSelect: () => { insert(c.id); },
-    })),
-  };
-}
-
-/** The terminal tabs `path` can go to from the screen's server, `first` leading (else its last terminal tab). */
-export function useInsert(path: string, first: string | null, onInserted?: () => void): { choices: InsertChoice[]; insert: (id: string) => void } {
-  const app = useApp();
-  const workspace = useAppView((v) => routeWorkspace(v.workspace));
-  const choices = useInsertChoices(workspace, first);
-  return { choices, insert: (id) => { if (insertPath(app, id, path)) onInserted?.(); } };
-}
 
 /**
  * Insert ▾: opens the list of terminal tabs. `compact` is the phone's icon form. With `shortcut`, Cmd/Ctrl+I sends the
@@ -89,11 +65,7 @@ export function CopyButton({ value, label, icon, compact, note }: { value: strin
     return () => { clearTimeout(timer); };
   }, [copied]);
   const copy = (): void => {
-    void copyText(app, value).then((ok) => {
-      if (!ok) return;
-      setCopied(true);
-      if (note) app.notify(note);
-    });
+    void copyText(app, value, note ?? null).then((ok) => { if (ok) setCopied(true); });
   };
   return (
     <>
