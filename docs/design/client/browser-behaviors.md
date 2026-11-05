@@ -120,7 +120,7 @@ Home Screen instructions.
 
 No servers shows enrolment instructions and Add server. If a server's tmux is not running,
 its row says so; muxen never starts Jimmy's tmux server. Server management includes adding,
-removing and re-enrolling a server. Settings is a separate screen reached from Home's gear (its header, or docked its bottom bar), with
+removing and re-enrolling a server. Settings is a separate screen reached from the gear in Home's header, on every layout, with
 appearance, terminal text size, this device/browser and local-data controls. The app also
 offers the Face ID relock setting ([auth.md](../auth.md#swift-side-keychain-item-and-app-lock));
 the phone browser has no Face ID setting. Clear local data deletes

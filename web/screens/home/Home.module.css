@@ -1,5 +1,6 @@
 .home { display: flex; flex: 1; flex-direction: column; min-height: 0; }
-.body { flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-4) var(--space-gutter); scroll-padding: var(--space-1); }
+/* No bottom bar under Home: its list scrolls clear of the home indicator. */
+.body { flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-4) var(--space-gutter) calc(var(--space-4) + var(--safe-bottom)); scroll-padding: var(--space-1); }
 /* A centred column, `min(720px, 100% - 2 * gutter)`: still no sidebar. */
 .column { display: flex; flex-direction: column; gap: var(--space-4); width: min(var(--page-width), 100%); margin: 0 auto; }
 .add { align-self: flex-start; }

@@ -3619,6 +3619,16 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
 - **Why:** Jimmy wanted Settings higher and more vertical space for the content.
 - **Rejected:** large titles and a separate back/header row.
 
+### Settings' gear is in Home's header on the phone too
+
+- **Decided:** 2026-11-05, Jimmy ("I feel like on phon,e the settings should be at the top as well").
+- **What:** the gear sits at the end of Home's header on every layout; Home has no bottom bar. Back
+  stays in the bottom bar on docked screens (the 2026-10-31 rule), since Home has no Back.
+- **Rejected:** keeping the gear in a bottom bar of its own (the lead's recommendation, for reach and
+  for the 2026-10-31 "bottom everywhere" rule).
+- **Amends:** "Home and a tab are the two levels; Back sits where the dock is" (Home's Settings no
+  longer in a bottom bar).
+
 ### One header row on every screen
 
 - **Decided:** 2026-11-05, ux lead, for Jimmy's "consistency" ask.
