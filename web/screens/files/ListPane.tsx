@@ -114,10 +114,9 @@ export function ListPane({ session, tab, view, pages, tree, up, search, onOpen }
           where={shorten(search.root, home)}
           onOpen={onOpen}
           onReveal={(found) => {
-            app.router.closeOverlay(() => {
-              tree.reveal(found.path, found.entry);
-              listTakesKeys();
-            });
+            // Selected before Search closes, so the Preview panel goes straight to it, not through the outline's last row.
+            tree.reveal(found.path, found.entry);
+            app.router.closeOverlay(listTakesKeys);
           }}
           onClose={() => { app.router.closeOverlay(listTakesKeys); }}
         />

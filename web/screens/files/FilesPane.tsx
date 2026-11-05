@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { useApp, useAppView, useOverlay } from "../../app/context";
 import { describeError, parentPlace } from "../../files/browser";
 import { folderKey } from "../../files/folders";
-import type { FileSearch, Found } from "../../files/search";
+import type { Found, SearchView } from "../../files/search";
 import { baseName, parentOf } from "../../files/paths";
 import type { FilesTab } from "../../workspace/state";
 import type { LinkTarget } from "../../files/render/markdown";
 import type { FilesPlace } from "../../platform/types";
-import { useStore } from "../../ui/store";
+import { Store, useStore } from "../../ui/store";
 import { cx } from "../../ui/cx";
 import { IconButton } from "../../ui/primitives/IconButton";
 import { Divider } from "./Divider";
@@ -69,7 +69,7 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
   // The entry names the folder it searches: on a Back to it, the folder may not have caught up for a render.
   const overlay = useOverlay("files", "search");
   const search = overlay.open && root !== null && overlay.params?.["root"] === root ? session.search(tab.id, root) : null;
-  const found = useSelectedFound(search);
+  const found = useStore(search ?? CLOSED, chosenFound);
 
   // Back from a file full width lands on the list with the file selected, its folders open.
   const lastFile = useRef<string | null>(null);
@@ -119,6 +119,9 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
   const fileBody = place.kind !== "file" ? null
     : error ? <Refused session={session} error={error} />
     : loading && place.file.mime === null && place.file.size === null ? <Loading what="Opening the file" /> : null;
+  // A file shown full width (or full screen) was opened: Search's recents list it first.
+  const shownFile = place.kind === "file" && !fileBody ? place.file : null;
+  useEffect(() => { if (shownFile) session.opened(shownFile); }, [session, shownFile?.path]);
 
   return (
     <div ref={files} class={styles.files} style={{ "--files-list-w": `${String(width)}px` }}>
@@ -146,7 +149,7 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
               onWidth={(px) => { setStored(px); app.view.set("listWidth", px); }}
               onReset={() => { setStored(null); app.view.set("listWidth", null); }}
             />
-            <PreviewPanel session={session} root={pages} selection={search ? found?.path ?? null : tree.selection} known={search ? found : tree.known} hidden={hidden} held={held} onOpen={open} onLink={onLink} />
+            <PreviewPanel session={session} root={pages} from={search ? "search" : "outline"} selection={search ? found?.path ?? null : tree.selection} known={search ? found : tree.known} hidden={hidden} held={held} onOpen={open} onLink={onLink} />
           </>
         )}
       </div>
@@ -165,13 +168,8 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
   );
 }
 
-/** Search's selected row, for the Preview panel to follow; null with Search closed, failed, or nothing selected. */
-function useSelectedFound(search: FileSearch | null): Found | null {
-  const [, rerender] = useState(0);
-  useEffect(() => search?.subscribe(() => { rerender((n) => n + 1); }), [search]);
-  if (!search) return null;
-  const { selected, shown, error } = search.snapshot;
-  // A failed search shows no rows: the panel shows the folder.
-  if (error) return null;
-  return shown.rows.find((f) => f.path === selected) ?? null;
-}
+/** Search's row the user picked, for the Preview panel to follow; null when it shows none (a failed search shows no rows). */
+const chosenFound = ({ selected, chosen, shown, error }: SearchView): Found | null =>
+  (chosen && !error ? shown.rows.find((f) => f.path === selected) ?? null : null);
+/** Search closed: no row. */
+const CLOSED = new Store<SearchView>({ text: "", shown: { rows: [], stopped: null }, asking: false, error: null, selected: null, chosen: false });

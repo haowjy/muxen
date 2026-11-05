@@ -368,11 +368,12 @@ finds the query, the rows and the scroll as they were.
   heavier), and the folder it is in, relative to the searched one, in mono, quiet; on the phone that
   folder is a second line (the searched folder's name for a row directly in it), with the age at the
   row's end. They are the daemon's best 50, best first, under "3 matches" ("The best 50 matches" at
-  50). Each new answer selects its first row. ArrowUp and ArrowDown move the selection while the field
-  keeps the keys; Enter acts on it (Enter pressed before the answer lands acts on the answer). On the
+  50). Each new answer selects its first row, for Enter. ArrowUp and ArrowDown move the selection while
+  the field keeps the keys; Enter acts on it (Enter pressed before the answer lands acts on the answer). On the
   phone a tap (or Go) opens the row: a folder is entered, a file opened full screen; Back returns to
-  the results, with the query and scroll kept. On a desktop a click selects the row and the Preview
-  panel follows it, as in the outline; Enter or a double-click closes Search and reveals the row in the
+  the results, with the query and scroll kept. On a desktop a click selects the row, as in the outline; the
+  Preview panel follows a row you selected (a click or an arrow key), never the one an answer selected,
+  and shows the folder until then, so a query costs no read of its top file; Enter or a double-click closes Search and reveals the row in the
   outline, its folders opened and the list holding the keys. A reveal loads each folder's pages down to
   the row (a folder past one page may sort it later), and the Preview panel keeps showing the result
   meanwhile.
@@ -384,9 +385,10 @@ finds the query, the rows and the scroll as they were.
 - **Recents.** With the field empty, Search lists the files opened on this device from this host below
   the searched folder, most recent first, under "Opened recently", each with how long ago it was opened
   (the row has no size: the file may have changed since). The host keeps its 20 most recent (view
-  memory, per host id; Clear local data forgets them). A file is opened when it shows: full width, full
-  screen on the phone, or in the Preview panel. The phone selects none of them (a tap is the way in); a
-  desktop selects the first, and the panel shows it. With none: "Files you open show here."
+  memory, per host id; Clear local data forgets them). A file counts as opened when you open it: full
+  width, full screen on the phone, Enter or a double-click on a result, or a row you selected that stays
+  in the Preview panel; never a row the app selected (an answer's first row, the row a tab kept). The
+  phone selects none of them (a tap is the way in); a desktop selects the first, for Enter. With none: "Files you open show here."
 - **Errors** read as a listing's do, in plain words with Try again, in place of the rows; offline, the
   field stays and the list says the host can't be reached. The Preview panel shows the folder meanwhile.
 

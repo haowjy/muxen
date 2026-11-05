@@ -5,7 +5,7 @@
 import type { AppController } from "../../app/controller";
 import type { OpenedFile } from "../../app/viewMemory";
 import type { FsApi, TextPreview } from "../../files/api";
-import { FileBrowser, type FileRef } from "../../files/browser";
+import { FileBrowser } from "../../files/browser";
 import { baseName } from "../../files/paths";
 import { Recent } from "../../files/recent";
 import { FileSearch, type Found } from "../../files/search";
@@ -32,8 +32,11 @@ export interface FilesSession {
   selections: Recent<string>;
   /** The text read last (`useText`), by path and modification time: one, since each can be a MiB. */
   texts: Recent<TextPreview>;
-  /** This device opened `file` (full width, on the phone, or in the Preview panel): Search's recents list it first. */
-  opened: (file: FileRef) => void;
+  /**
+   * The user opened `file`: full width, full screen on the phone, Enter on a Search result, or a selection that settled
+   * in the Preview panel. Search's recents list it first.
+   */
+  opened: (file: { path: string; mime: string | null }) => void;
   /** The tab's Search below `root`: the one it left there, so Back to its results finds them as they were, unless `fresh`. */
   search: (tab: string, root: string, fresh?: boolean) => FileSearch;
 }

@@ -84,7 +84,11 @@ export function Search({ session, search, where, onOpen, onReveal, onClose: clos
     // Selected too, so Back to the results finds the row tapped, where it was.
     search.select(place.path);
     if (phone) onOpen(place);
-    else onReveal(row);
+    else {
+      // Enter opens it, as full width would: the recents list it first.
+      if (row.entry.kind === "file") session.opened({ path: row.path, mime: row.entry.mime ?? null });
+      onReveal(row);
+    }
   };
   useFilesKey(CLOSE, close);
   // Search is open already: its keys, pressed outside the field (a row clicked, the Preview panel), go back to it.

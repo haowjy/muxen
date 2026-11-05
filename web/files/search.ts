@@ -36,8 +36,10 @@ export interface SearchView {
   asking: boolean;
   /** Why `text` couldn't be searched; Try again asks again. */
   error: HttpRefusal | null;
-  /** The selected row's path: the first row of each new answer. */
+  /** The selected row's path: the first row of each new answer, for Enter, until the user moves it. */
   selected: string | null;
+  /** The user picked `selected` (an arrow key, a click): only then does the Preview panel follow it. */
+  chosen: boolean;
 }
 
 /** `root/rel`, for a canonical root. */
@@ -66,7 +68,7 @@ export class FileSearch extends Store<SearchView> {
   private answered: string | null = null;
 
   constructor(private readonly api: FsApi, readonly root: string, private hidden: boolean, private readonly recents: readonly Found[]) {
-    super({ text: "", shown: { rows: recents, stopped: null }, asking: false, error: null, selected: recents[0]?.path ?? null });
+    super({ text: "", shown: { rows: recents, stopped: null }, asking: false, error: null, selected: recents[0]?.path ?? null, chosen: false });
   }
 
   /** The field's text: asked for once typing pauses; emptied, the recents are back at once. */
@@ -74,7 +76,7 @@ export class FileSearch extends Store<SearchView> {
     this.stop();
     if (text.trim() === "") {
       this.answered = null;
-      this.update({ text, shown: { rows: this.recents, stopped: null }, error: null, selected: this.recents[0]?.path ?? null });
+      this.update({ text, shown: { rows: this.recents, stopped: null }, error: null, selected: this.recents[0]?.path ?? null, chosen: false });
       return;
     }
     // Back to the text the rows answer (a letter typed and deleted), or past what the daemon takes: nothing to ask.
@@ -93,8 +95,9 @@ export class FileSearch extends Store<SearchView> {
     this.resume();
   }
 
+  /** The user picked a row. */
   select(path: string | null): void {
-    this.update({ selected: path });
+    this.update({ selected: path, chosen: path !== null });
   }
 
   /** Try again, or the results came back on screen: `text` is asked for unless its answer is up. */
@@ -127,7 +130,7 @@ export class FileSearch extends Store<SearchView> {
         this.request = null;
         const rows = answer.matches.map((m) => foundOf(answer.path, m));
         this.answered = this.key(text);
-        this.update({ shown: { rows, stopped: answer.stopped }, asking: false, selected: rows[0]?.path ?? null });
+        this.update({ shown: { rows, stopped: answer.stopped }, asking: false, selected: rows[0]?.path ?? null, chosen: false });
       },
       (error: unknown) => {
         if (this.request !== request) return;
