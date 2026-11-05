@@ -1,6 +1,6 @@
 // A file's actions, wherever the file is offered: Copy path, Download and Insert ▾. One Insert control everywhere
 // (a file's header, an upload's offer, a row's menu), listing this host's terminal tabs, the default first.
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 import { useApp, useAppView } from "../../app/context";
 import { cx } from "../../ui/cx";
 import { Button } from "../../ui/primitives/Button";
@@ -10,7 +10,11 @@ import { Menu, type MenuSection } from "../../ui/primitives/Menu";
 import { routeWorkspace } from "../../workspace/state";
 import { copyText } from "./copy";
 import { insertPath, useInsertChoices, type InsertChoice } from "./insert";
+import { useFilesKey, type Chord } from "./keymap";
 import styles from "./FileActions.module.css";
+
+/** Sends the path to the default tab, with no menu. */
+const INSERT: Chord = { key: "i", mod: true };
 
 /** How long a copy button shows that it copied. */
 const COPIED_MS = 1_600;
@@ -40,7 +44,7 @@ export function useInsert(path: string, first: string | null, onInserted?: () =>
 
 /**
  * Insert ▾: opens the list of terminal tabs. `compact` is the phone's icon form. With `shortcut`, Cmd/Ctrl+I sends the
- * path to the first tab while no field, dialog or menu has the keys.
+ * path to the first tab.
  */
 export function InsertButton({ path, first = null, compact, shortcut, onInserted }: { path: string; first?: string | null; compact?: boolean; shortcut?: boolean; onInserted?: () => void }) {
   const app = useApp();
@@ -48,24 +52,12 @@ export function InsertButton({ path, first = null, compact, shortcut, onInserted
   const phone = useAppView((v) => v.viewport.layout === "phone");
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const { choices, insert } = useInsert(path, first, onInserted);
-  const latest = useRef({ choices, insert });
-  latest.current = { choices, insert };
-
-  useEffect(() => {
-    if (!shortcut) return undefined;
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key.toLowerCase() !== "i" || !(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return;
-      const target = e.target;
-      if (document.querySelector("dialog[open], [role=menu]") || (target instanceof HTMLElement && target.closest("input, textarea, [contenteditable]"))) return;
-      e.preventDefault();
-      const lead = latest.current.choices[0];
-      if (!lead) app.notify("Open a terminal tab first");
-      else if (lead.blocked !== null) app.notify(`Can't insert into ${lead.label}: ${lead.blocked.toLowerCase()}`);
-      else latest.current.insert(lead.id);
-    };
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("keydown", onKey); };
-  }, [app, shortcut]);
+  useFilesKey(INSERT, () => {
+    const lead = choices[0];
+    if (!lead) app.notify("Open a terminal tab first");
+    else if (lead.blocked !== null) app.notify(`Can't insert into ${lead.label}: ${lead.blocked.toLowerCase()}`);
+    else insert(lead.id);
+  }, shortcut === true);
 
   const toggle = (e: { currentTarget: HTMLElement }): void => { setAnchor(anchor ? null : e.currentTarget); };
   return (

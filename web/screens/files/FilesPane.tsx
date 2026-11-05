@@ -15,6 +15,7 @@ import { shorten } from "../../files/format";
 import { DirList, MissingFolder, type RowMenuAsk } from "./FolderList";
 import { PathField } from "./PathField";
 import { FileView } from "./FileView";
+import { PASTE, useFilesKey } from "./keymap";
 import { PullToRefresh } from "./PullToRefresh";
 import { RowMenu } from "./RowMenu";
 import { readPaste } from "../terminal/paste";
@@ -51,22 +52,13 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
     return () => { wantsNow.current = null; };
   }, [app, browser, wanted]);
 
-  // Cmd/Ctrl-V with the folder showing, no dialog open (Settings and the session list are modal and sit over the
-  // pane) and no text box focused (the path field keeps its own paste). The listener stays on the document, since
-  // nothing in the pane need hold focus; only app/focus.ts may move focus to make one.
+  // Cmd/Ctrl-V with the folder showing puts the clipboard into it (the path field keeps its own paste).
   const folderShown = place.kind === "dir" && pages?.path === place.path && !error ? pages.path : null;
-  useEffect(() => {
-    if (folderShown === null) return undefined;
-    const onPaste = (event: ClipboardEvent): void => {
-      const target = event.target;
-      if (document.querySelector("dialog[open]") || (target instanceof HTMLElement && target.closest("input, textarea, [contenteditable]"))) return;
-      event.preventDefault();
-      const pasted = readPaste(event.clipboardData);
-      if (pasted.kind !== "empty") pasteIntoFolder(app, session, folderShown, pasted);
-    };
-    document.addEventListener("paste", onPaste);
-    return () => { document.removeEventListener("paste", onPaste); };
-  }, [app, session, folderShown]);
+  useFilesKey(PASTE, (e) => {
+    if (folderShown === null || !(e instanceof ClipboardEvent)) return;
+    const pasted = readPaste(e.clipboardData);
+    if (pasted.kind !== "empty") pasteIntoFolder(app, session, folderShown, pasted);
+  }, folderShown !== null);
 
   const open = (to: FilesPlace): void => { app.openPlace(to); };
   const up = parentPlace(place, pages);

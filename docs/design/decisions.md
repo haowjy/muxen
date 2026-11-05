@@ -4833,6 +4833,17 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
   to refresh (it reloads the page, and the iPhone app's web view has none); pointer events (a scroll cancels
   them before the pull is long enough).
 
+### One Files keymap decides when a shortcut may fire
+
+- **Decided:** 2026-11-05, by the Files lead on review p538 (finding 3).
+- **What:** every Files shortcut registers with `screens/files/keymap.ts`, which owns the one document
+  `keydown` and `paste` listener. Keys are free for Files when no dialog or menu is open, no text field
+  has focus (unless the chord allows it), and no earlier handler claimed the key. Cmd/Ctrl+V is served by
+  the `paste` event, which alone carries the clipboard. Phase 2's Space and tree keys and phase 3's
+  Search keys register there too.
+- **Rejected:** a listener per shortcut, each with its own rule (phase 1 had four, with four different
+  rules: Cmd+Shift+. fired while typing in the path field and with a menu open, paste fired under a menu).
+
 ### The code frame: numbered lines, a Wrap lines switch, Copy text; a big Download for what muxen can't show
 
 - **Decided:** 2026-11-05, Jimmy ("make text display prettier", JSON and plain text especially; "Download for

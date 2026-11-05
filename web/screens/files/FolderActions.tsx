@@ -1,10 +1,14 @@
-import { useEffect, useState } from "preact/hooks";
+import { useState } from "preact/hooks";
 import { useApp, useAppView } from "../../app/context";
 import { useStore } from "../../ui/store";
 import { Menu, type MenuItem } from "../../ui/primitives/Menu";
 import { IconButton } from "../../ui/primitives/IconButton";
 import { copyPath } from "./copy";
+import { useFilesKey, type Chord } from "./keymap";
 import { pasteIntoFolder, startUpload, type FilesSession } from "./session";
+
+/** Toggles hidden files. */
+const SHOW_HIDDEN: Chord = { key: ".", code: "Period", mod: true, shift: true };
 
 interface Props {
   session: FilesSession;
@@ -28,16 +32,7 @@ export function FolderActions({ session, path, pasteable, loading }: Props) {
   const { browser } = session;
   const hidden = useStore(browser, (s) => s.hidden);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key !== "." && e.code !== "Period") return;
-      if (!(e.metaKey || e.ctrlKey) || !e.shiftKey || e.altKey || document.querySelector("dialog[open]")) return;
-      e.preventDefault();
-      void browser.toggleHidden();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("keydown", onKey); };
-  }, [browser]);
+  useFilesKey(SHOW_HIDDEN, () => { void browser.toggleHidden(); });
 
   const upload: MenuItem = { label: "Upload", icon: "upload", onSelect: () => { startUpload(app, session); } };
   const paste: MenuItem = { label: "Paste", icon: "paste", onSelect: () => { pasteIntoFolder(app, session, path); } };
