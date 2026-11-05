@@ -5,6 +5,7 @@ import { describeError, type FilesView } from "../../files/browser";
 import { shorten } from "../../files/format";
 import { baseName, parentOf } from "../../files/paths";
 import type { FilesPlace } from "../../platform/types";
+import { cx } from "../../ui/cx";
 import { Button } from "../../ui/primitives/Button";
 import { EmptyState } from "../../ui/primitives/EmptyState";
 import { Spinner } from "../../ui/primitives/Spinner";
@@ -101,7 +102,7 @@ export function ListPane({ session, tab, view, pages, tree, up, onOpen }: Props)
         <div
           ref={scroller}
           key={pages.path}
-          class={styles.scroll}
+          class={cx(styles.scroll, styles.rows)}
           hidden={!showing}
           onScroll={(e) => { session.scroll.set(scrollKey(tab, pages.path), e.currentTarget.scrollTop); }}
         >

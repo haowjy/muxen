@@ -4980,3 +4980,8 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
 - **Panel off keeps the outline's row** (diverges from C, which turned it into a Finder table with column
   headings, a Kind column, dates and stripes): Jimmy said "dont just copy finder" and those were dropped
   earlier, so the list keeps its name, size and age columns across the width, the fills spanning the row.
+- **Panel off, the rows stop at 960px** (the lead, from the phase 2 shots, 2026-11-05): across a 1440px
+  window a size and age sat about 1,400px from the name. They are left-aligned under the path rather
+  than centred as phase 1's column was: centred, the rows would jump sideways on every toggle and start
+  away from the path that names their folder. Rejected: a cap with the panel on too (the divider is the
+  user's own width).

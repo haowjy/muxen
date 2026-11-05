@@ -33,6 +33,9 @@
 :root[data-layout="desktop"] .list { --files-inset: var(--space-2); }
 :root[data-layout="desktop"] .list .scroll { padding: var(--space-2) var(--space-1) var(--space-4); }
 .split[data-panel] > .list { flex: none; width: var(--files-list-w); }
+/* Panel off, the rows stop at a readable width, left-aligned under the path, so a size and age stay near their name
+   and turning the panel on or off moves no row sideways. The header line still spans the window. */
+:root[data-layout="desktop"] .split:not([data-panel]) .rows > * { max-width: 960px; }
 /* The Preview toggle (one element, whichever bar is under it) sits at the header line's right end, a rule before it,
    so it stays on the same pixels with the panel on or off. The column at the right, the list's or the panel's, reads
    --files-end and its header bar leaves that much room: the rule, the button and the bars' 2px gaps. */
