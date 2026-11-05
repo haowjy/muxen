@@ -16,7 +16,7 @@ import { Spinner } from "../../ui/primitives/Spinner";
 import { useStore } from "../../ui/store";
 import { fileIcon } from "./fileIcon";
 import { whyNot } from "./FolderList";
-import { SEARCH, SEARCH_SLASH, useFilesKey, type Chord } from "./keymap";
+import { SEARCH, SEARCH_SLASH, SHOW_HIDDEN_IN_SEARCH, useFilesKey, type Chord } from "./keymap";
 import type { FilesSession } from "./session";
 import { useListbox } from "./useListbox";
 import list from "./FolderList.module.css";
@@ -95,6 +95,8 @@ export function Search({ session, search, where, onOpen, onReveal, onClose: clos
   const refocus = (): void => { app.focus.focusTarget("search"); };
   useFilesKey(SEARCH, refocus);
   useFilesKey(SEARCH_SLASH, refocus);
+  // The folder's toggle is under Search's rows: its keys still reach it, and search again.
+  useFilesKey(SHOW_HIDDEN_IN_SEARCH, () => { void session.browser.toggleHidden(); });
 
   useEffect(() => {
     search.resume();

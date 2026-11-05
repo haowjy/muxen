@@ -5,11 +5,8 @@ import { Menu, type MenuItem } from "../../ui/primitives/Menu";
 import { IconButton } from "../../ui/primitives/IconButton";
 import type { IconName } from "../../ui/primitives/Icon";
 import { copyPath } from "./copy";
-import { PASTE, SEARCH, useChordLabel, useFilesKey, type Chord } from "./keymap";
+import { PASTE, SEARCH, SHOW_HIDDEN, useChordLabel, useFilesKey } from "./keymap";
 import { pasteIntoFolder, startUpload, type FilesSession } from "./session";
-
-/** Toggles hidden files. */
-const SHOW_HIDDEN: Chord = { key: ".", code: "Period", mod: true, shift: true };
 
 interface Props {
   session: FilesSession;

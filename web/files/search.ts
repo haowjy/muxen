@@ -79,19 +79,26 @@ export class FileSearch extends Store<SearchView> {
       this.update({ text, shown: { rows: this.recents, stopped: null }, error: null, selected: this.recents[0]?.path ?? null, chosen: false });
       return;
     }
-    // Back to the text the rows answer (a letter typed and deleted), or past what the daemon takes: nothing to ask.
-    if (this.answered === this.key(text) || tooLong(text)) {
+    // Back to the text the rows answer (a letter typed and deleted): nothing to ask.
+    if (this.answered === this.key(text)) {
       this.update({ text, error: null });
+      return;
+    }
+    // Past what the daemon takes: nothing is asked, and no rows stand for the text (Enter would act on them).
+    if (tooLong(text)) {
+      this.answered = null;
+      this.update({ text, shown: { rows: [], stopped: null }, error: null, selected: null, chosen: false });
       return;
     }
     this.update({ text, asking: true, error: null });
     this.timer = setTimeout(() => { this.ask(); }, SETTLE_MS);
   }
 
-  /** The folder's Show hidden files changed: the text is searched again under it, at once. */
+  /** The folder's Show hidden files changed: the text is searched again under it, at once; a request under the old setting is dropped. */
   setHidden(hidden: boolean): void {
     if (hidden === this.hidden) return;
     this.hidden = hidden;
+    this.stop();
     this.resume();
   }
 
@@ -121,6 +128,8 @@ export class FileSearch extends Store<SearchView> {
   private ask(): void {
     this.stop();
     const { text } = this.snapshot;
+    // What the answer answers is fixed now: the hidden setting may change while it is on its way.
+    const key = this.key(text);
     const request = new AbortController();
     this.request = request;
     this.update({ asking: true, error: null });
@@ -129,7 +138,7 @@ export class FileSearch extends Store<SearchView> {
         if (this.request !== request) return;
         this.request = null;
         const rows = answer.matches.map((m) => foundOf(answer.path, m));
-        this.answered = this.key(text);
+        this.answered = key;
         this.update({ shown: { rows, stopped: answer.stopped }, asking: false, selected: rows[0]?.path ?? null, chosen: false });
       },
       (error: unknown) => {
