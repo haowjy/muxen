@@ -33,8 +33,31 @@
 .list:focus .selected, .keyed .selected { background: var(--color-bg-selected); }
 .row[data-fresh] { background: var(--color-bg-selected); }
 .keyed { cursor: default; }
-/* Folders, then a breath, then files. */
-.row[data-kind="dir"] + .row[data-kind="file"] { margin-top: 6px; }
+/* Folders, then a breath, then files: at the top level only (an open folder's rows sit tight under it). */
+.row:not(.up, [data-kind="file"][data-depth="0"]) + .row[data-kind="file"][data-depth="0"] { margin-top: 6px; }
+
+/* The desktop's outline: a disclosure column before the icon, 16px of indent per level, one guide line per level. */
+.tree .row {
+  grid-template-columns: 16px var(--files-icon) minmax(0, 1fr) 4.25rem 2.75rem;
+  column-gap: 6px;
+  padding-left: calc(var(--space-2) + var(--depth) * 16px);
+}
+.disclosure { color: var(--color-text-muted); transition: rotate var(--duration-1) ease-out; }
+.open { rotate: 90deg; }
+/* Under each open folder's disclosure; quiet until the pointer is over the list. */
+.guide {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--space-2) + var(--level) * 16px + 7.5px);
+  width: 1px;
+  background: var(--color-border);
+  opacity: 0.45;
+}
+.list:hover .guide { opacity: 1; }
+/* The end of an open folder that isn't all on screen: loading, failed, empty, or more to show. */
+.rest .name { grid-column: 3 / -1; display: flex; gap: var(--space-2); color: var(--color-text-muted); }
+.act { color: var(--color-accent); font-weight: var(--weight-medium); }
 .icon { display: grid; place-items: center; width: var(--files-icon); height: var(--files-icon); color: var(--color-text-muted); }
 .icon svg { width: var(--files-icon); height: var(--files-icon); stroke-width: 1.75; }
 /* Folders are the only coloured icons: the accent's stroke over a fill of it. */

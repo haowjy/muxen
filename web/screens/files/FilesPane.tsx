@@ -1,7 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { useApp, useAppView } from "../../app/context";
 import { describeError, parentPlace } from "../../files/browser";
 import { folderKey } from "../../files/folders";
+import type { HttpRefusal } from "../../net/http";
 import { baseName, parentOf } from "../../files/paths";
 import type { FilesTab } from "../../workspace/state";
 import type { LinkTarget } from "../../files/render/markdown";
@@ -12,7 +13,7 @@ import { FolderActions } from "./FolderActions";
 import { EmptyState } from "../../ui/primitives/EmptyState";
 import { Spinner } from "../../ui/primitives/Spinner";
 import { shorten } from "../../files/format";
-import { DirList, MissingFolder, type RowMenuAsk } from "./FolderList";
+import { DirList, MissingFolder, type OutlineProps, type RowMenuAsk } from "./FolderList";
 import { PathField } from "./PathField";
 import { FileView } from "./FileView";
 import { PASTE, useFilesKey } from "./keymap";
@@ -20,6 +21,7 @@ import { PullToRefresh } from "./PullToRefresh";
 import { RowMenu } from "./RowMenu";
 import { readPaste } from "../terminal/paste";
 import { pasteIntoFolder, scrollKey, type FilesSession } from "./session";
+import { useTabOutline } from "./tabOutline";
 import { UploadPanel } from "./UploadPanel";
 import styles from "./FilesScreen.module.css";
 
@@ -41,6 +43,7 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
   const [finding, setFinding] = useState(false);
   const [rowMenu, setRowMenu] = useState<RowMenuAsk | null>(null);
   const phone = useAppView((v) => v.viewport.layout === "phone");
+  const held = useStore(browser.folders, (s) => s.held);
 
   // The one cancellation for answers that land late: this effect's token is current only while the pane still wants this place.
   // A resolve or a Markdown link answer that finds another token (or none) is dropped.
@@ -67,6 +70,22 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
 
   // Back finds a folder's list scrolled where it was left.
   const folder = listed ? pages.path : null;
+  const tree = useTabOutline(session, tab.id, place.kind === "dir" ? folder : null);
+  const hidden = view.hidden;
+  const describe = useMemo(() => (e: HttpRefusal) => describeError(e, session.hostName), [session]);
+  const outline: OutlineProps | undefined = phone ? undefined : {
+    expanded: tree.expanded,
+    held,
+    describe,
+    onToggle: tree.toggle,
+    onRest: (path, act) => { void (act === "more" ? browser.folders.more(path, hidden) : browser.folders.load(path, hidden)); },
+    // Each open folder is listed once, when it first shows, and kept while it shows.
+    onShown: (paths) => {
+      browser.folders.pin("outline", paths.map((path) => ({ path, hidden })));
+      for (const path of paths) if (!browser.folders.snapshot.held.has(folderKey(path, hidden))) void browser.folders.load(path, hidden);
+    },
+  };
+  useEffect(() => () => { browser.folders.pin("outline", []); }, [browser]);
   useLayoutEffect(() => {
     if (folder !== null && scroller.current) scroller.current.scrollTop = session.scroll.get(scrollKey(tab.id, folder)) ?? 0;
   }, [folder, session.scroll, tab.id, listingVisible]);
@@ -131,8 +150,9 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
             loading={loading}
             fresh={view.fresh !== null && parentOf(view.fresh) === pages.path ? baseName(view.fresh) : null}
             onOpen={open}
-            view={session.outlines.get(scrollKey(tab.id, pages.path)) ?? { expanded: new Set(), selection: null }}
-            onView={(next) => { session.outlines.set(scrollKey(tab.id, pages.path), next); }}
+            outline={outline}
+            selection={tree.selection}
+            onSelect={tree.select}
             onKeyNavigate={() => { app.focus.keepKeyboardOn("list"); }}
             onMore={() => { void browser.more(); }}
             onToggleHidden={() => { void browser.toggleHidden(); }}

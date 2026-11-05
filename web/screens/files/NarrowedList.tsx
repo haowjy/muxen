@@ -49,7 +49,7 @@ export function NarrowedList({ view, home, hostName, box, loadingRest, onOpen, o
       {out.rows.length > 0 && (
         // Taken without taking focus from the field, so the keyboard doesn't drop before the open.
         <div id={box.id} role="listbox" aria-label="Matches" class={cx(styles.list, styles.keyed)} onMouseDown={(e) => { e.preventDefault(); }}>
-          <RowList rows={out.rows} selected={out.selected} optionId={box.optionId} onOpen={onOpen} onUp={() => { if (up !== null) onUp(up); }} />
+          <RowList rows={out.rows} selected={out.selected} optionId={box.optionId} onPress={(row) => { if (row.kind === "up") { if (up !== null) onUp(up); } else if (row.place) onOpen(row.place); }} />
         </div>
       )}
       {listing !== null && matches === 0 && (

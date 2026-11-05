@@ -1,8 +1,8 @@
 // The Files list's one model, apart from the DOM and the network (like workspace/state.ts): a root
 // folder, the folders expanded under it, the pages held of each, a filter and the selection in; the
-// rows to draw and the selection moves out. The phone's flat list is this with nothing expanded; the
-// path field's narrowed list is this with a filter. Rows are named by `key`, so a selection survives
-// a page arriving or a folder expanding.
+// rows to draw and the selection moves out. The desktop's outline is this with folders expanded; the
+// phone's flat list is this with nothing expanded; the path field's narrowed list is this with a
+// filter. Rows are named by `key`, so a selection survives a page arriving or a folder expanding.
 import type { Entry, Listing } from "./api";
 import type { FilesPlace } from "../platform/types";
 import { join } from "./paths";
@@ -11,9 +11,10 @@ import { join } from "./paths";
 export type Loaded = "none" | "some" | "all";
 
 export interface OutlineRow {
-  /** The row's name in selections: the entry's path, or `..` for the up row. */
+  /** The row's name in selections: the entry's path, `..` for the up row, or `restKey(folder)`. */
   key: string;
-  kind: "up" | "dir" | "file" | "other" | "broken";
+  /** `rest` ends an expanded folder that isn't all on screen: loading, failed, empty, or with more to show. */
+  kind: "up" | "dir" | "file" | "other" | "broken" | "rest";
   name: string;
   /** Folders opened above this row; 0 for the root's own rows. */
   depth: number;
@@ -22,8 +23,29 @@ export interface OutlineRow {
   place: FilesPlace | null;
   /** A folder row shown open, its rows below it. */
   expanded: boolean;
-  /** For a folder row that is expanded, how much of it is held. */
+  /** For a folder row that is expanded, and for its `rest` row, how much of it is held. */
   loaded: Loaded;
+}
+
+/** The most folders a Files tab keeps expanded: past it the one expanded longest ago closes. Each open folder holds a listing. */
+export const MAX_EXPANDED = 32;
+
+/** The `rest` row of expanded folder `folder`: no path holds a NUL. */
+export const restKey = (folder: string): string => `${folder}\0`;
+export const restFolder = (key: string): string => key.slice(0, -1);
+
+/** `expanded` (oldest first) with `path` opened or closed; opening past `MAX_EXPANDED` closes the oldest. */
+export function withExpanded(expanded: readonly string[], path: string, open: boolean): string[] {
+  const rest = expanded.filter((p) => p !== path);
+  return open ? [...rest, path].slice(-MAX_EXPANDED) : rest;
+}
+
+/** The folders between `root` and `path` (both canonical), outermost first: what to expand so `path` shows in `root`'s outline. */
+export function foldersBetween(root: string, path: string): string[] {
+  const prefix = root === "/" ? "/" : `${root}/`;
+  if (!path.startsWith(prefix)) return [];
+  const parts = path.slice(prefix.length).split("/").slice(0, -1);
+  return parts.map((_, i) => prefix + parts.slice(0, i + 1).join("/"));
 }
 
 export interface OutlineInput {
@@ -87,14 +109,18 @@ export function outline(input: OutlineInput): Outline {
       const path = join(dir, entry.name);
       const open = entry.kind === "dir" && entry.utf8 !== false && expanded.has(path);
       const listing = open ? held(path) : null;
-      rows.push({ key: path, kind: entry.kind, name: entry.name, depth, entry, place: entryPlace(dir, entry), expanded: open, loaded: open ? loadedOf(listing) : "none" });
+      const loaded = open ? loadedOf(listing) : "none";
+      rows.push({ key: path, kind: entry.kind, name: entry.name, depth, entry, place: entryPlace(dir, entry), expanded: open, loaded });
       if (listing) add(path, depth + 1, listing.entries);
+      if (open && (loaded !== "all" || listing?.entries.length === 0)) {
+        rows.push({ key: restKey(path), kind: "rest", name: "", depth: depth + 1, entry: null, place: null, expanded: false, loaded });
+      }
     }
   };
   const top = held(root);
   add(root, 0, top ? narrow(top.entries, filter) : []);
   const keys = new Set(rows.map((r) => r.key));
-  const first = rows.find((r) => r.kind !== "up")?.key ?? null;
+  const first = rows.find((r) => r.kind !== "up" && r.kind !== "rest")?.key ?? null;
   const selected = selection !== null && keys.has(selection) ? selection : filter !== "" ? first : null;
   return { rows, rootLoaded: loadedOf(top), selected };
 }

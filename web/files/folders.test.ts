@@ -106,7 +106,7 @@ describe("Folders", () => {
     const { folders } = setup([...["/a", "/b", "/c"].flatMap((d) => [d, ...kids(d)])], MAX_ENTRIES);
     await folders.first("/a", false);
     await folders.first("/b", false);
-    folders.pin([{ path: "/a", hidden: false }]);
+    folders.pin("place", [{ path: "/a", hidden: false }]);
     await folders.first("/c", false);
     // a is the oldest but pinned, so b goes; c, the one just loaded, stays
     expect(folders.peek("/a", false)).not.toBeNull();

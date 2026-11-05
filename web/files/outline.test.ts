@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Entry, Listing } from "./api";
-import { move, narrow, outline, UP, type OutlineInput } from "./outline";
+import { move, narrow, outline, restKey, UP, type OutlineInput } from "./outline";
 
 const dir = (name: string): Entry => ({ name, kind: "dir", link: false });
 const file = (name: string): Entry => ({ name, kind: "file", link: false, size: 1 });
@@ -20,7 +20,8 @@ describe("outline", () => {
 
   it("draws an expanded folder's held rows below it and says how much of it is held", () => {
     const out = outline(base(tree, { expanded: new Set(["/r/src", "/r/docs"]) }));
-    expect(out.rows.map((r) => [r.name, r.depth, r.loaded])).toEqual([["..", 0, "none"], ["src", 0, "some"], ["main.rs", 1, "none"], ["lib.rs", 1, "none"], ["docs", 0, "none"], ["a.md", 0, "none"], ["Readme.md", 0, "none"]]);
+    // a folder not all on screen ends in its rest row: src has more to show, docs isn't held yet
+    expect(out.rows.map((r) => [r.key, r.depth, r.loaded])).toEqual([[UP, 0, "none"], ["/r/src", 0, "some"], ["/r/src/main.rs", 1, "none"], ["/r/src/lib.rs", 1, "none"], [restKey("/r/src"), 1, "some"], ["/r/docs", 0, "none"], [restKey("/r/docs"), 1, "none"], ["/r/a.md", 0, "none"], ["/r/Readme.md", 0, "none"]]);
     expect(out.rootLoaded).toBe("all");
     expect(outline(base({ "/r": listing("/r", [file("a")], 9) })).rootLoaded).toBe("some");
     expect(outline(base({ "/r": listing("/r", [file("a")], 1, true) })).rootLoaded).toBe("some");

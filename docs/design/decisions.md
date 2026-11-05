@@ -3486,6 +3486,8 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   list, absent at a root; swipe Back also navigates back.
 - **Why:** moving up stays in the list and does not need another row of chrome.
 - **Rejected:** a separate up button in the path bar; folder accordions.
+- **Superseded on a desktop** by "A desktop's Files list is an outline" (2026-11-05): folders open in
+  place there; the phone keeps one folder per screen and the `..` row.
 
 ### Keep Mermaid in the Markdown viewer
 
@@ -4901,3 +4903,24 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
   finger doesn't also open. A mouse press outside still closes the menu and acts, as on a desktop.
 - **Rejected:** a transparent backdrop under every menu (it would also swallow a scroll starting on the
   list, which closes a row's menu today).
+
+### A desktop's Files list is an outline; the phone keeps one folder per screen
+
+- **Decided:** 2026-11-05, Jimmy picked mockup C's split ("a on desktop, B on phone"), whose desktop is
+  an outline with folders opening in place. **Supersedes** "A parent row and path field navigate Files"
+  on a desktop, which rejected folder accordions.
+- **What:** folder rows carry a disclosure and open in place; a click looks (selects, and opens or closes
+  a folder), a double-click or Enter goes in (the root moves, a history entry); ArrowRight and ArrowLeft
+  open, close and walk the tree. Each open folder is one listing, from the host's shared folder cache,
+  pinned while it shows; a folder past a page ends in Show more. A tab keeps at most 32 folders open,
+  closing the oldest past that, and the open set and selection are the tab's view state in its Files
+  session, never history. The phone is unchanged.
+- **Why one target per row:** mockup A entered a folder on its name and expanded it on a 12px triangle,
+  and the two fought; with the click always looking and the double-click always going in, there is
+  nothing to miss. Re-rooting is the rarer move and gets the heavier gesture Finder users know.
+- **Why 32:** each open folder holds a listing (up to a page of 200 entries, about 40 KB) and is pinned
+  against the cache's 10,000-entry bound while it shows; 32 pages is 6,400 entries, inside that bound,
+  and more open folders than a screen shows is past what anyone reads.
+- **Rejected:** the disclosure as its own target (A's two targets); listing every open folder again on a
+  return to the tab (the cache already holds them); keeping the open set in history (Back would close
+  folders instead of leaving places); an unbounded open set (a long session would pin the cache).

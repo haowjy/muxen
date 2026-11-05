@@ -228,7 +228,7 @@ export class FileBrowser extends Store<FilesView> {
   /** The folder under the place is the one on screen: it stays held. */
   protected override update(patch: Partial<FilesView>): void {
     super.update(patch);
-    if ("dir" in patch) this.folders.pin(patch.dir ? [patch.dir] : []);
+    if ("dir" in patch) this.folders.pin("place", patch.dir ? [patch.dir] : []);
   }
 
   /** A navigation that needs no answer. */

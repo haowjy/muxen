@@ -47,15 +47,17 @@ export class Folders extends Store<FoldersView> {
   /** The newest request per folder: a page that lands after a newer request began belongs to the past and is dropped. */
   private readonly latest = new Map<string, number>();
   private serial = 0;
-  private pinned = new Set<string>();
+  /** The folders each owner has on screen (the browser's place, the outline's open folders, the Preview panel's folder). */
+  private readonly pins = new Map<string, Set<string>>();
 
   constructor(private readonly api: FsApi) {
     super({ held: new Map() });
   }
 
-  /** The folders on screen: they are not dropped for room. */
-  pin(paths: readonly { path: string; hidden: boolean }[]): void {
-    this.pinned = new Set(paths.map((p) => folderKey(p.path, p.hidden)));
+  /** The folders `owner` has on screen, replacing what it pinned before: they are not dropped for room. */
+  pin(owner: string, paths: readonly { path: string; hidden: boolean }[]): void {
+    if (paths.length === 0) this.pins.delete(owner);
+    else this.pins.set(owner, new Set(paths.map((p) => folderKey(p.path, p.hidden))));
     const held = new Map(this.snapshot.held);
     this.trim(held);
     if (held.size !== this.snapshot.held.size) this.update({ held });
@@ -145,10 +147,15 @@ export class Folders extends Store<FoldersView> {
   /** A refresh or an upload changed `path`: its pages go, or if it is on screen they are replaced when the new ones land. */
   drop(path: string): void {
     const held = new Map(this.snapshot.held);
-    const shown = [false, true].filter((hidden) => this.pinned.has(folderKey(path, hidden)));
+    const shown = [false, true].filter((hidden) => this.pinned(folderKey(path, hidden)));
     for (const hidden of [false, true]) if (!shown.includes(hidden)) held.delete(folderKey(path, hidden));
     this.update({ held });
     for (const hidden of shown) void this.relist(path, hidden);
+  }
+
+  private pinned(key: string): boolean {
+    for (const keys of this.pins.values()) if (keys.has(key)) return true;
+    return false;
   }
 
   /** Whether `ticket` is still the newest request for `key`; the newest one is done, so the entry goes. */
@@ -180,7 +187,7 @@ export class Folders extends Store<FoldersView> {
     for (const record of held.values()) size += weigh(record);
     for (const [key, record] of held) {
       if (size <= MAX_ENTRIES) break;
-      if (key === keep || this.pinned.has(key)) continue;
+      if (key === keep || this.pinned(key)) continue;
       held.delete(key);
       size -= weigh(record);
     }

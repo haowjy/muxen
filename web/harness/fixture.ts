@@ -1,4 +1,5 @@
 import type { ComponentChildren } from "preact";
+import type { AppController } from "../app/controller";
 import type { Overlay } from "../app/router";
 import type { TestPlatform, TestPlatformOptions } from "../platform/test";
 
@@ -18,6 +19,8 @@ export interface Fixture {
   overview?: true;
   /** An overlay to open once the app is up, as a tap on its opener would. */
   overlay?: Overlay;
+  /** Runs once the app is up, before it renders: seeds view state no saved data holds (a Files tab's open folders). */
+  start?: (app: AppController) => void;
   /** Render this component instead of the app, inside the app's context. */
   render?: () => ComponentChildren;
 }

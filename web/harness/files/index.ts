@@ -7,6 +7,20 @@ import type { Fixture, Fixtures } from "../fixture";
 import { LISTING, savedPlus } from "../shared";
 import { BIG, BIG_PAGE, bigTree, ETC, findTree, FIND_ROOT, HOME, REPO, serveTree, type FilesFs } from "./fakes";
 import type { FakeTree } from "../../platform/test/fs";
+import type { AppController } from "../../app/controller";
+import { filesSession, scrollKey } from "../../screens/files/session";
+
+/** A desktop outline as a tab would have left it: these folders open (oldest first), this row selected. */
+const outlined = (fixture: Fixture, expanded: string[], selection?: string): Fixture => ({
+  ...fixture,
+  start: (app: AppController) => {
+    const host = app.hosts.all()[0];
+    if (!host) return;
+    const session = filesSession(app, host);
+    session.expanded.set("files-1", expanded);
+    if (selection !== undefined) session.selections.set(scrollKey("files-1", REPO), selection);
+  },
+});
 
 const at = (place: FilesPlace, tree?: FakeTree, configure?: (fs: FilesFs) => void, page?: number): Fixture => ({
   options: () => ({ workspace: savedPlus({ kind: "files", id: "files-1", host: "h-pop", place }, "files-1") }),
@@ -46,6 +60,10 @@ export const fixtures: Fixtures = {
   filesFindCapped: at({ kind: "dir", path: FIND_ROOT }, findTree(), (fs) => { fs.capped.add(`${FIND_ROOT}/web`); }),
   /** A folder over 200 entries: the first page holds the three subfolders and the first files. */
   filesBig: at({ kind: "dir", path: BIG }, bigTree(), undefined, BIG_PAGE),
+  /** The desktop outline: two folders open in place, a file in one selected; `notes` has more than a page. */
+  filesOutline: outlined(at({ kind: "dir", path: REPO }), [`${REPO}/src`, `${REPO}/notes`], `${REPO}/src/main.rs`),
+  /** Open folders that are loading (`src` never answers), refused (`docs`) and empty. */
+  filesOutlineStates: outlined(at({ kind: "dir", path: REPO }, undefined, (fs) => { fs.hanging.add(`${REPO}/src`); fs.denied.add(`${REPO}/docs`); }), [`${REPO}/src`, `${REPO}/docs`, `${REPO}/empty`]),
   /** The folder refuses to list. */
   filesDenied: at({ kind: "dir", path: REPO }, undefined, (fs) => { fs.denied.add(REPO); }),
 };

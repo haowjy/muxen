@@ -64,6 +64,7 @@ export function filesTree(): FakeTree {
   const extra = Array.from({ length: 12 }, (_, i) => `${REPO}/notes/note-${String(i + 1).padStart(2, "0")}.txt`);
   return {
     stats: {
+      ...Object.fromEntries(extra.map((path, i) => [path, { size: 180 + i * 37, mtime: ago((i + 1) * DAY) }])),
       [`${REPO}/src`]: { mtime: ago(2 * HOUR) },
       [`${REPO}/docs`]: { mtime: ago(43 * MIN) },
       [`${REPO}/notes`]: { mtime: ago(6 * DAY) },

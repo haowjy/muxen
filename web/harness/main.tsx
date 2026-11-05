@@ -40,6 +40,7 @@ window.__harness = { platform, app };
 const last = app.snapshot.workspace.workspaces[0]?.last;
 if ((fixture.openActive || params.has("open")) && last) app.dispatch({ type: "activated", id: last });
 
+fixture.start?.(app);
 if (fixture.overview) app.router.toOverview(app.snapshot.workspace.workspaces[0]?.id ?? "");
 if (fixture.overlay) app.openOverlay(fixture.overlay);
 

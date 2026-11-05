@@ -5,6 +5,7 @@ version section on release.
 
 ## [Unreleased]
 
+- On a desktop, Files is an outline: click a folder to open it in place, double-click or press Enter to go into it, and use the arrow keys to walk the tree (Right opens, Left closes). Each open folder is listed once; a big one ends in Show more.
 - On touch, a tap outside an open menu only closes it: the row or button under your finger no longer acts too.
 - Files writes its shortcuts for your keyboard: Ctrl+Shift+. and Ctrl+I on Linux and Windows, ⇧⌘. and ⌘I on a Mac. ⌘I shows only on a file's own Insert menu, the one it works for.
 - On the phone, pull a folder's list down from the top to refresh it.
