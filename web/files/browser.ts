@@ -211,7 +211,7 @@ export class FileBrowser extends Store<FilesView> {
     const place = want.path === HOME && home !== null ? { ...want, path: home } : want;
     const cached = refresh ? null : this.folders.peek(place.path, hidden);
     if (cached) {
-      this.go({ place: { ...place, path: cached.path }, dir: { path: cached.path, hidden }, loading: false, error: null, ...(place.path === HOME && { home: cached.path }) });
+      this.go({ place: { ...place, path: cached.path }, dir: { path: cached.path, hidden }, loading: false, error: null });
       return Promise.resolve();
     }
     // The same folder's pages stay up (greyed by `loading`) while it reloads; another folder's go.

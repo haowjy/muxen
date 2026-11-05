@@ -57,6 +57,8 @@ export function PathField({ session, rest, onEditing, onOpen }: Props) {
   const ask = view?.ask ?? null;
   useEffect(() => { browser.folders.ask(ask); }, [browser, ask?.path, ask?.hidden]);
   const rows = view?.out.rows ?? [];
+  // NarrowedList draws the listbox only for a typed folder that did not fail.
+  const listed = rows.length > 0 && !!view?.typed && !view.record?.error;
   const box = useListbox({ rows, selected: view?.out.selected ?? null, onSelect: setSelection, keys: "arrows" });
 
   const resetSaid = (): void => { setSelection(null); setSaid(null); };
@@ -139,7 +141,7 @@ export function PathField({ session, rest, onEditing, onOpen }: Props) {
           label="Go to path"
           placeholder="Go to path"
           value={text ?? rest}
-          listId={rows.length > 0 ? box.id : undefined}
+          listId={listed ? box.id : undefined}
           activeId={box.activeId}
           onInput={(value) => { resetSaid(); setText(value); }}
           inputRef={input}

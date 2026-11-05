@@ -44,6 +44,9 @@ export class Folders extends Store<FoldersView> {
   private timer: ReturnType<typeof setTimeout> | undefined;
   /** One request at a time per folder: a second ask for the next page joins the first. */
   private readonly inflight = new Map<string, Promise<void>>();
+  /** The newest request per folder: a page that lands after a newer request began belongs to the past and is dropped. */
+  private readonly latest = new Map<string, number>();
+  private serial = 0;
   private pinned = new Set<string>();
 
   constructor(private readonly api: FsApi) {
@@ -78,14 +81,19 @@ export class Folders extends Store<FoldersView> {
 
   /** Lists `path` now (Go cannot wait out the settle), or joins the listing under way. The refusal is the record's, not thrown. */
   load(path: string, hidden: boolean): Promise<void> {
+    // Its state is written under `path`, so `path` must be the canonical one; `first` takes `~`.
+    if (path === "~") return Promise.reject(new Error("Folders.load needs a canonical path"));
+    return this.inflight.get(folderKey(path, hidden)) ?? this.relist(path, hidden);
+  }
+
+  /** Starts a first-page listing whatever is under way; the older requests' pages are discarded when they land. */
+  private relist(path: string, hidden: boolean): Promise<void> {
     const key = folderKey(path, hidden);
-    const running = this.inflight.get(key);
-    if (running) return running;
     this.put(path, hidden, { loading: true, error: null });
     const done = this.first(path, hidden).then(
       () => { this.put(path, hidden, { loading: false }); },
       (error: unknown) => { this.put(path, hidden, { loading: false, error: error instanceof HttpRefusal ? error : new HttpRefusal(0, "internal") }); },
-    ).finally(() => { this.inflight.delete(key); });
+    ).finally(() => { if (this.inflight.get(key) === done) this.inflight.delete(key); });
     this.inflight.set(key, done);
     return done;
   }
@@ -107,8 +115,9 @@ export class Folders extends Store<FoldersView> {
    * path's, which the daemon names (`path` may be `~`).
    */
   async first(path: string, hidden: boolean): Promise<Listing> {
+    const ticket = this.begin(folderKey(path, hidden));
     const listing = await this.api.list(path, 0, hidden);
-    this.put(listing.path, hidden, { listing, error: null });
+    if (this.landed(folderKey(path, hidden), ticket)) this.put(listing.path, hidden, { listing, error: null });
     return listing;
   }
 
@@ -117,7 +126,7 @@ export class Folders extends Store<FoldersView> {
     const key = folderKey(path, hidden);
     const running = this.inflight.get(key);
     if (running) return running;
-    const done = this.nextPage(path, hidden).finally(() => { this.inflight.delete(key); });
+    const done = this.nextPage(path, hidden).finally(() => { if (this.inflight.get(key) === done) this.inflight.delete(key); });
     this.inflight.set(key, done);
     return done;
   }
@@ -139,7 +148,19 @@ export class Folders extends Store<FoldersView> {
     const shown = [false, true].filter((hidden) => this.pinned.has(folderKey(path, hidden)));
     for (const hidden of [false, true]) if (!shown.includes(hidden)) held.delete(folderKey(path, hidden));
     this.update({ held });
-    for (const hidden of shown) void this.load(path, hidden);
+    for (const hidden of shown) void this.relist(path, hidden);
+  }
+
+  /** Whether `ticket` is still the newest request for `key`; the newest one is done, so the entry goes. */
+  private landed(key: string, ticket: number): boolean {
+    const newest = this.latest.get(key) === ticket;
+    if (newest) this.latest.delete(key);
+    return newest;
+  }
+
+  private begin(key: string): number {
+    this.latest.set(key, ++this.serial);
+    return this.serial;
   }
 
   /** Merges `patch` into the folder's record and makes it the newest, then makes room. */
@@ -168,10 +189,11 @@ export class Folders extends Store<FoldersView> {
   private async nextPage(path: string, hidden: boolean): Promise<void> {
     const have = this.peek(path, hidden);
     if (!have || have.entries.length >= have.total) return;
+    const ticket = this.begin(folderKey(path, hidden));
     const next = await this.api.list(path, have.entries.length, hidden);
-    // The folder was refreshed or dropped while this page was on its way: it belongs to the old pages.
+    // A newer request began, or the folder was dropped, while this page was on its way: it belongs to the old pages.
     const now = this.peek(path, hidden);
-    if (now !== have) return;
+    if (!this.landed(folderKey(path, hidden), ticket) || now !== have) return;
     this.put(path, hidden, { listing: { ...now, total: next.total, truncated: next.truncated, entries: [...now.entries, ...next.entries] } });
   }
 }
