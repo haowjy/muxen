@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "preact/hooks";
 import type { Entry, Listing } from "../../files/api";
 import { formatSize } from "../../files/format";
-import { move, outline, type Move } from "../../files/outline";
+import { move, outline, type Move, type OutlineRow } from "../../files/outline";
 import { baseName } from "../../files/paths";
 import type { FilesPlace } from "../../platform/types";
 import { Button } from "../../ui/primitives/Button";
@@ -59,6 +59,34 @@ export function listKey(e: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "
   }
 }
 
+/** The rows of a listbox, as options: the caller's container holds the focus and names the selected one by `${listId}-${index}`. */
+export function RowList({ rows, selected, listId, fresh, upLabel, onOpen, onUp }: { rows: OutlineRow[]; selected: string | null; listId: string; fresh?: string | null | undefined; /** The up row's text; the folder it goes to, by default. */ upLabel?: string; onOpen: (place: FilesPlace) => void; onUp?: () => void }) {
+  const upName = baseName(rows[0]?.kind === "up" ? (rows[0].place?.path ?? "") : "");
+  return (
+    <>
+      {rows.map((row, at) => {
+        const { entry, place } = row;
+        const common = { key: row.key, id: rowId(listId, at), class: styles.item, selected: row.key === selected || (entry !== null && entry.name === fresh) };
+        if (!entry) return <OptionRow {...common} icon="back" label={upLabel ?? upName} aria-label={`Up to ${upName}`} onClick={() => { onUp?.(); }} />;
+        return (
+          <OptionRow
+            {...common}
+            {...(entry.name === fresh && { "data-fresh": "" })}
+            icon={iconFor(entry)}
+            label={entry.name}
+            meta={metaFor(entry)}
+            {...(place && { trailing: "chevron" as const })}
+            disabled={place === null}
+            onClick={() => { if (place) onOpen(place); }}
+          />
+        );
+      })}
+    </>
+  );
+}
+
+export const rowId = (listId: string, at: number): string => `${listId}-${String(at)}`;
+
 export interface DirListProps {
   /** The pages held of the folder shown. */
   pages: Listing;
@@ -85,7 +113,7 @@ export function DirList({ pages, hidden, loading, fresh, onOpen, view: initial, 
   const { rows, selected } = outline({ root: pages.path, parent: onUp ? (pages.parent ?? null) : null, expanded: view.expanded, held: (path) => (path === pages.path ? pages : null), filter: "", selection: view.selection });
   const listId = useId();
   const listRef = useFocusRef("list");
-  const idOf = (key: string | null): string | undefined => { const at = rows.findIndex((r) => r.key === key); return at < 0 ? undefined : `${listId}-${String(at)}`; };
+  const idOf = (key: string | null): string | undefined => { const at = rows.findIndex((r) => r.key === key); return at < 0 ? undefined : rowId(listId, at); };
   const select = (selection: string | null): void => {
     const next = { ...view, selection };
     setView(next);
@@ -135,23 +163,7 @@ export function DirList({ pages, hidden, loading, fresh, onOpen, view: initial, 
       )}
       {entries.length > 0 && (
         <div ref={listRef} role="listbox" aria-label="Contents" tabIndex={0} aria-activedescendant={idOf(selected)} class={styles.list} onKeyDown={onKeyDown}>
-          {rows.map((row, at) => {
-            const { entry, place } = row;
-            const common = { key: row.key, id: `${listId}-${String(at)}`, class: styles.item, selected: row.key === selected || (entry !== null && entry.name === fresh) };
-            if (!entry) return <OptionRow {...common} icon="back" label={upName} aria-label={`Up to ${upName}`} onClick={() => { onUp?.(); }} />;
-            return (
-              <OptionRow
-                {...common}
-                {...(entry.name === fresh && { "data-fresh": "" })}
-                icon={iconFor(entry)}
-                label={entry.name}
-                meta={metaFor(entry)}
-                {...(place && { trailing: "chevron" as const })}
-                disabled={place === null}
-                onClick={() => { if (place) onOpen(place); }}
-              />
-            );
-          })}
+          <RowList rows={rows} selected={selected} listId={listId} fresh={fresh} onOpen={onOpen} {...(onUp && { onUp })} />
         </div>
       )}
       {more && (

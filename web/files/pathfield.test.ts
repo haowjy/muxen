@@ -1,20 +1,23 @@
 import { describe, expect, it } from "vitest";
+import type { Entry, Listing } from "./api";
+import { folderKey, type Held } from "./folders";
+import { enter, fieldView, parseTyped, type FieldContext } from "./pathfield";
 import { HttpRefusal } from "../net/http";
-import { folderKey, type FolderState } from "./folders";
-import { accept, complete, go, parseTyped, slashAccepts, type CompleteContext } from "./pathfield";
 
-const ready = (names: string[], capped = false): FolderState => ({ status: "ready", names, capped });
+const dir = (name: string): Entry => ({ name, kind: "dir", link: false });
+const file = (name: string): Entry => ({ name, kind: "file", link: false, size: 1 });
+const listing = (path: string, entries: Entry[], total = entries.length): Listing => ({ path, parent: null, total, offset: 0, truncated: false, entries });
+const record = (l: Listing | null, over: Partial<Held> = {}): Held => ({ listing: l, loading: false, error: null, ...over });
 
 /** The listings held, by `path` (hidden=0 unless the key says otherwise). */
-function ctxOf(held: Record<string, FolderState>, showHidden = false): CompleteContext {
-  return { home: "/home/j", showHidden, folder: (key) => held[key] };
+function ctxOf(held: Record<string, Held>, showHidden = false): FieldContext {
+  return { home: "/home/j", showHidden, held: (key) => held[key] };
 }
-const at = (path: string, state: FolderState, hidden = false): Record<string, FolderState> => ({ [folderKey(path, hidden)]: state });
+const at = (path: string, h: Held, hidden = false): Record<string, Held> => ({ [folderKey(path, hidden)]: h });
 
 const repos = ctxOf({
-  ...at("/home/j/repos", ready(["many", "muxen", "muxen-old", "muxer", "Zed"])),
-  ...at("/home/j/repos/muxen", ready(["src", "web"])),
-  ...at("/home/j", ready(["repos", "other"])),
+  ...at("/home/j/repos", record(listing("/home/j/repos", [dir("many"), dir("muxen"), dir("muxen-old"), dir("Zed"), file("notes.txt"), file("a-muxen.md")]))),
+  ...at("/home/j/big", record(listing("/home/j/big", [dir("alpha"), file("f1")], 400))),
 });
 
 describe("parseTyped", () => {
@@ -28,64 +31,54 @@ describe("parseTyped", () => {
   });
 });
 
-describe("complete", () => {
-  it("lists the parent's folders that start with the segment, case folded, and predicts the first; an empty segment lists every folder and predicts none", () => {
-    const c = complete("~/repos/mu", repos);
-    expect(c.rows.map((r) => r.name)).toEqual(["muxen", "muxen-old", "muxer"]);
-    expect(c.predicted?.name).toBe("muxen");
-    expect(c.ghost).toBe("xen/");
-    expect(complete("~/repos/z", repos).rows.map((r) => r.name)).toEqual(["Zed"]);
-    const all = complete("~/repos/", repos);
-    expect(all.rows).toHaveLength(5);
-    expect(all.predicted).toBeNull();
-    expect(all.ghost).toBe("");
+describe("fieldView", () => {
+  it("narrows the typed folder's folders and files, starts-with first then contains, case folded", () => {
+    const v = fieldView("~/repos/mu", repos, null);
+    expect(v.out.rows.filter((r) => r.kind !== "up").map((r) => r.name)).toEqual(["muxen", "muxen-old", "a-muxen.md"]);
+    expect(v.out.selected).toBe("/home/j/repos/muxen");
+    expect(fieldView("~/repos/z", repos, null).out.rows.map((r) => r.name)).toEqual(["..", "Zed"]);
+    // an empty segment lists everything and selects nothing
+    const all = fieldView("~/repos/", repos, null);
+    expect(all.out.rows).toHaveLength(7);
+    expect(all.out.selected).toBeNull();
   });
 
-  it("asks for the typed parent, hidden only for a dot segment or the toggle, and only until it is held", () => {
-    const none = ctxOf({});
-    expect(complete("~/repos/te", none).ask).toEqual({ path: "/home/j/repos", hidden: false });
-    expect(complete("~/repos/.g", none).ask).toEqual({ path: "/home/j/repos", hidden: true });
-    expect(complete("~/repos/te", ctxOf({}, true)).ask).toEqual({ path: "/home/j/repos", hidden: true });
-    // A held hidden listing is a different cache entry.
-    expect(complete("~/repos/.g", repos).rows).toEqual([]);
+  it("asks for the typed parent, with hidden files when the name starts with a dot; the up row steps the text up", () => {
+    expect(fieldView("~/repos/mu", repos, null).ask).toEqual({ path: "/home/j/repos", hidden: false });
+    expect(fieldView("~/repos/.g", repos, null)).toMatchObject({ ask: { path: "/home/j/repos", hidden: true }, up: "~/" });
+    expect(fieldView("/srv/x", repos, null)).toMatchObject({ up: "/" });
+    expect(fieldView("/x", repos, null).up).toBeNull();
+    expect(fieldView("repos", repos, null)).toMatchObject({ typed: null, ask: null });
   });
-});
 
-describe("accept and slash", () => {
-  it("accept puts the full path and a slash; a slash accepts the prediction only after a partial name that is not . or ..", () => {
-    const typed = parseTyped("~/repos/mu", "/home/j");
-    expect(typed && accept(typed, "muxen")).toBe("~/repos/muxen/");
-    expect(slashAccepts("~/repos/mu", repos)).toBe("~/repos/muxen/");
-    expect(slashAccepts("~/re", repos)).toBe("~/repos/");
-    const hidden = ctxOf({ ...at("/home/j/repos/muxen", ready([".git", "src"]), true) });
-    expect(slashAccepts("~/repos/muxen/.", hidden)).toBeNull();
-    expect(slashAccepts("~/repos/muxen/..", hidden)).toBeNull();
-    expect(slashAccepts("~/repos/muxen/.g", hidden)).toBe("~/repos/muxen/.git/");
-    expect(slashAccepts("~/repos/muxen", repos)).toBeNull();
-    expect(slashAccepts("~/repos/", repos)).toBeNull();
-    expect(slashAccepts("~/repos/qq", repos)).toBeNull();
+  it("says when the folder is not held in full, so its matches come from the pages loaded", () => {
+    expect(fieldView("~/big/f", repos, null).out.rootLoaded).toBe("some");
+    expect(fieldView("~/repos/f", repos, null).out.rootLoaded).toBe("all");
+    expect(fieldView("~/nowhere/", repos, null).out.rootLoaded).toBe("none");
   });
 });
 
-describe("go", () => {
-  const missing: FolderState = { status: "error", error: new HttpRefusal(404, "not_found") };
-  const denied: FolderState = { status: "error", error: new HttpRefusal(403, "denied") };
-  const highlighted = complete("~/repos/mu", repos).predicted;
-  it.each([
-    ["the highlighted row", "~/repos/mu", highlighted, repos, { open: "/home/j/repos/muxen" }],
-    ["the folder the text names, right after an accept too", "~/repos/muxen/", null, repos, { open: "/home/j/repos/muxen" }],
-    ["a folder named without the slash", "~/repos/many", null, repos, { open: "/home/j/repos/many" }],
-    ["a folder named whole without waiting for a listing", "~/repos/muxen/", null, ctxOf({}), { open: "/home/j/repos/muxen" }],
-    ["a folder past the scan cap that the list lacks", "~/repos/zzz", null, ctxOf(at("/home/j/repos", ready(["a"], true))), { open: "/home/j/repos/zzz" }],
-    ["the parent for a trailing ..", "~/repos/muxen/..", null, repos, { open: "/home/j/repos" }],
-    ["any folder", "/", null, repos, { open: "/" }],
-    ["any folder, with no listing", "/srv/", null, ctxOf({}), { open: "/srv" }],
-    ["says when the text names nothing", "~/repos/muxenx", null, repos, { say: "No folder ~/repos/muxenx" }],
-    ["waits for a listing it has not got", "~/repos/muxen", null, ctxOf({}), { wait: true }],
-    ["says a missing parent is no folder", "~/gone/", null, ctxOf(at("/home/j/gone", missing)), { say: "No folder ~/gone" }],
-    ["leaves other refusals to the list", "~/x/", null, ctxOf(at("/home/j/x", denied)), { say: null }],
-    ["says where a path must start", "repos", null, repos, { say: "Start with ~ or /" }],
-  ])("%s", (_name, text, row, ctx, expected) => {
-    expect(go(text, row, ctx)).toEqual(expected);
+describe("enter", () => {
+  const go = (text: string, ctx = repos, selection: string | null = null) => enter(fieldView(text, ctx, selection), "/home/j");
+
+  it("opens the first match, a file as a file and a folder as a folder; the arrow-picked row wins", () => {
+    expect(go("~/repos/mux")).toEqual({ open: { kind: "dir", path: "/home/j/repos/muxen" } });
+    expect(go("~/repos/not")).toEqual({ open: { kind: "file", path: "/home/j/repos/notes.txt" } });
+    expect(go("~/repos/mux", repos, "/home/j/repos/a-muxen.md")).toEqual({ open: { kind: "file", path: "/home/j/repos/a-muxen.md" } });
+    expect(go("~/repos/mux", repos, "..")).toEqual({ up: "~/" });
+  });
+
+  it("opens the folder a trailing slash or dots name, and says when a held folder has no such name", () => {
+    expect(go("~/repos/")).toEqual({ open: { kind: "dir", path: "/home/j/repos" } });
+    expect(go("~/repos/..")).toEqual({ open: { kind: "dir", path: "/home/j" } });
+    expect(go("~/repos/nothing")).toEqual({ say: "Nothing named nothing in ~/repos" });
+    expect(go("repos")).toEqual({ say: "Start with ~ or /" });
+  });
+
+  it("asks the host about a name that may be on an unloaded page, waits for a listing not held, and leaves a refusal to the list", () => {
+    expect(go("~/big/zzz")).toEqual({ resolve: "/home/j/big/zzz" });
+    expect(go("~/other/x")).toEqual({ wait: true });
+    const refused = ctxOf(at("/home/j/other", record(null, { error: new HttpRefusal(403, "denied") })));
+    expect(go("~/other/x", refused)).toEqual({ say: null });
   });
 });

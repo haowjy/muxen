@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeFs, type FakeTree } from "../platform/test/fs";
-import { Folders, MAX_ENTRIES, SETTLE_MS, stateOf } from "./folders";
+import { Folders, MAX_ENTRIES, SETTLE_MS } from "./folders";
 import type { Entry, Listing } from "./api";
 
 const many = (n: number): string[] => Array.from({ length: n }, (_, i) => `/home/j/repos/d${String(i).padStart(3, "0")}`);
@@ -14,7 +14,7 @@ function setup(extra: string[] = [], page = 3) {
   const fs = new FakeFs(tree(extra), page);
   return { fs, folders: new Folders(fs) };
 }
-const state = (f: Folders, path: string) => stateOf(f.snapshot.held.get(`0${path}`));
+const record = (f: Folders, path: string) => f.snapshot.held.get(`0${path}`);
 const entries = (n: number): Entry[] => Array.from({ length: n }, (_, i) => ({ name: `f${String(i)}`, kind: "file", link: false }));
 const listing = (path: string, n: number): Listing => ({ path, parent: null, total: n, offset: 0, truncated: false, entries: entries(n) });
 
@@ -30,7 +30,8 @@ describe("Folders", () => {
     expect(fs.calls).toEqual([]);
     await vi.advanceTimersByTimeAsync(1);
     expect(fs.calls).toEqual(["list /home/j/repos 0"]);
-    expect(state(folders, "/home/j/repos")).toMatchObject({ status: "ready", names: ["muxen"] });
+    expect(record(folders, "/home/j/repos")).toMatchObject({ loading: false, error: null });
+    expect(folders.peek("/home/j/repos", false)?.entries.map((e) => e.name)).toEqual(["muxen"]);
   });
 
   it("does not ask again for a folder it holds or has under way", async () => {
@@ -60,11 +61,13 @@ describe("Folders", () => {
     expect(fs.calls).toHaveLength(2);
   });
 
-  it("pages a folder for its subfolders until it holds them all, in one record the browsing list shares", async () => {
+  it("lists a folder's first page only for the field, and loads the rest page by page when asked, into the same record", async () => {
     const { fs, folders } = setup(many(5), 4);
     await folders.load("/home/j/repos", false);
+    expect(fs.calls).toEqual(["list /home/j/repos 0"]);
+    expect(folders.peek("/home/j/repos", false)?.entries).toHaveLength(4);
+    await folders.rest("/home/j/repos", false);
     expect(fs.calls).toEqual(["list /home/j/repos 0", "list /home/j/repos 4"]);
-    expect(state(folders, "/home/j/repos")).toMatchObject({ status: "ready", capped: false });
     expect(folders.peek("/home/j/repos", false)?.entries).toHaveLength(6);
   });
 
@@ -73,10 +76,10 @@ describe("Folders", () => {
     const ask = async (): Promise<void> => { folders.ask({ path: "/home/j/repos", hidden: false }); await vi.advanceTimersByTimeAsync(SETTLE_MS); };
     fs.offline = true;
     await ask();
-    expect(state(folders, "/home/j/repos")).toMatchObject({ status: "error" });
+    expect(record(folders, "/home/j/repos")).toMatchObject({ error: { code: "network" } });
     fs.offline = false;
     await ask();
-    expect(state(folders, "/home/j/repos")).toMatchObject({ status: "ready" });
+    expect(record(folders, "/home/j/repos")).toMatchObject({ error: null, loading: false });
     folders.ask({ path: "/home/j/nope", hidden: false });
     await vi.advanceTimersByTimeAsync(SETTLE_MS);
     folders.ask({ path: "/home/j/nope", hidden: false });

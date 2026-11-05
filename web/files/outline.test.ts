@@ -30,6 +30,8 @@ describe("outline", () => {
     const names = narrow([dir("src"), file("cursor.md"), file("Source.md"), file("x")], "SO").map((e) => e.name);
     expect(names).toEqual(["Source.md", "cursor.md"]);
     expect(narrow([file("a-doc"), file("doc"), dir("my-docs")], "doc").map((e) => e.name)).toEqual(["doc", "a-doc", "my-docs"]);
+    // the name typed whole comes first, even after names that only start with it
+    expect(narrow([dir("docs-old"), file("docs")], "docs").map((e) => e.name)).toEqual(["docs", "docs-old"]);
     // with a filter and no selection, Enter has a first match; the up row never is one
     const out = outline(base(tree, { filter: "a" }));
     expect(out.selected).toBe("/r/a.md");

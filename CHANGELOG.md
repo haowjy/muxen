@@ -5,6 +5,8 @@ version section on release.
 
 ## [Unreleased]
 
+- Files' path field now narrows the folder's rows as you type, files as well as folders (names that start with what you typed first, then names that contain it). Enter opens the first match, or the row you picked with ↑ and ↓. Typing a path to another folder lists that folder, and in a folder with more entries than were loaded the list offers Load the rest. The ghost text and the Tab and `/` accept are gone.
+- Files has keyboard control on a desktop: ↑ ↓ Home End move a selection through the list, Enter opens the selected row, and Backspace or Cmd/Ctrl+↑ goes up a folder.
 - On the phone, Settings is back at the top of Home, in its header, as on a desktop. Settings, Open session and the tab list put Back at their top left too; only a terminal or Files tab keeps ‹ at the bottom, in its tab row.
 - Home, the tab list, Settings and Open session share one header: Back on the left (on a desktop), the title left-aligned, and a line under it. The tab list's title is no longer centred, and Settings gains the line.
 - muxen opens where you left off. A reload, or the iPhone app reopening after iOS closed it, returns to the tab, folder or file you last had, instead of Home. In a browser the address names the place (`#/term/muxen`, `#/files/~/repos/muxen/README.md`), so you can bookmark or share it; opening one shows that session's tab or opens a Files tab there. If the server can't be reached, the tab says so with Retry.

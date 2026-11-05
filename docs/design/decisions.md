@@ -4708,3 +4708,28 @@ keyboard" (this day's earlier call, when the app was to match Safari).
    terminal's input already holding the keyboard, a tap on the prompt row still moves the cursor. The focus is made in
    the tap's own `touchend`: iOS shows the keyboard only for a focus made in the gesture. **Rejected:** Safari's earlier
    rule (a tap never raises; the dock button does), which Jimmy found wrong in use ("the terminal itself").
+
+### The path field narrows the folder's rows; the completion stack is gone
+
+- **Decided:** 2026-11-05, Jimmy (Files redesign, `ui-polish/audit.md`), settled in a plan review (p529) that found
+  the first-page cache could not serve it.
+- **What:** typing in the path field narrows the typed folder's held rows, folders and files, through the outline core
+  (`files/outline.ts`): the name typed whole first, then starts-with, then contains. Enter opens the selected row (the
+  first match when a name is typed), a folder as a folder and a file as a file. Typing a path to another folder lists
+  that folder once, after the 250 ms settle. When the folder is not held in full the list says its matches come from the
+  pages loaded and offers Load the rest. **Supersedes** "Files gets a path field … it predicts the next existing folder",
+  and from "The field heads Files, and Go opens": the ghost text, `/`, Tab and → accepting the prediction, "completion
+  lists folders only", and a row tap that does not leave the field (a row tap now opens the place and ends editing,
+  which is Go on that row). **Supersedes** from "One listing per folder, never one per keystroke": the 32-folder cache
+  of first pages, the folders-only paging to 1,000 folders, and the `names` held beside the first page. The
+  one-listing-per-folder rule stays.
+- **Per-folder record:** every folder has one record holding all the pages loaded so far, shared by browsing and the
+  path field, pinned while on screen and bounded by total entries held (10,000), not by folder count. A first page
+  cannot hold the files of a folder over 200 entries, since the daemon sorts folders first.
+- **Why:** a path field that finds files as well as folders is what Jimmy asked for; ghost and accept rules needed a
+  separate folders-only model (`names`, `MAX_PAGES`, `seed`, `FolderField` with no callers) beside the pages browsing
+  already held. One record and one filter replace both.
+- **Rejected:** keeping ghost text and Tab-accept beside file rows (two models, and the mockup has neither); a search
+  request per keystroke or per pause for matches in an unloaded page (a round trip each; Load the rest is one tap and
+  pages through the existing `more()`); matching only the first 200 entries without saying so (misses files in any
+  big folder).

@@ -10,18 +10,6 @@ export const SETTLE_MS = 250;
  * costs one more than its entries, so a thousand empty folders are bounded too.
  */
 export const MAX_ENTRIES = 10_000;
-/** The path field pages a folder for its subfolders until it holds this many entries, then gives up. */
-const MAX_FOLDERS = 1_000;
-
-/** One subfolder listing's names as the daemon sorted them, and whether the scan stopped short. */
-export interface FolderNames {
-  names: string[];
-  /** Past the page limit or the daemon's scan cap: more folders may exist than are listed. */
-  capped: boolean;
-}
-
-export type FolderState = { status: "loading" } | { status: "error"; error: HttpRefusal } | ({ status: "ready" } & FolderNames);
-
 /** The cache key of one listing; `hidden` listings are kept apart (`hidden=1` is a different scan). */
 export const folderKey = (path: string, hidden: boolean): string => `${hidden ? "1" : "0"}${path}`;
 
@@ -29,7 +17,7 @@ export const folderKey = (path: string, hidden: boolean): string => `${hidden ? 
 export interface Held {
   /** The pages loaded so far, merged: `entries` grows as the next pages arrive. */
   listing: Listing | null;
-  /** A request for the first page, or for the subfolders the path field completes from, is under way. */
+  /** The path field's request for the folder's first page is under way. */
   loading: boolean;
   /** The last request failed; the listing stays as it was. */
   error: HttpRefusal | null;
@@ -66,26 +54,26 @@ export class Folders extends Store<FoldersView> {
     if (held.size !== this.snapshot.held.size) this.update({ held });
   }
 
-  /** The folder the field names now: fetched once typing settles, unless held or already under way. */
+  /** The folder the field names now: listed once typing settles, unless held or already under way. */
   ask(target: { path: string; hidden: boolean } | null): void {
     clearTimeout(this.timer);
     if (!target) return;
     const record = this.snapshot.held.get(folderKey(target.path, target.hidden));
     // A listing that failed for want of a connection is asked for again: it may be back.
-    if (record && (record.loading || (record.listing && foldersKnown(record.listing)) || (record.error && record.error.code !== "network"))) {
+    if (record && (record.loading || record.listing || (record.error && record.error.code !== "network"))) {
       this.put(target.path, target.hidden, {});
       return;
     }
     this.timer = setTimeout(() => { void this.load(target.path, target.hidden); }, SETTLE_MS);
   }
 
-  /** Fetches the subfolders of `path` now (Go cannot wait out the settle), or joins the fetch under way. */
+  /** Lists `path` now (Go cannot wait out the settle), or joins the listing under way. The refusal is the record's, not thrown. */
   load(path: string, hidden: boolean): Promise<void> {
     const key = folderKey(path, hidden);
     const running = this.inflight.get(key);
     if (running) return running;
     this.put(path, hidden, { loading: true, error: null });
-    const done = this.fetchNames(path, hidden).then(
+    const done = this.first(path, hidden).then(
       () => { this.put(path, hidden, { loading: false }); },
       (error: unknown) => { this.put(path, hidden, { loading: false, error: error instanceof HttpRefusal ? error : new HttpRefusal(0, "internal") }); },
     ).finally(() => { this.inflight.delete(key); });
@@ -124,6 +112,17 @@ export class Folders extends Store<FoldersView> {
     const done = this.nextPage(path, hidden).finally(() => { this.inflight.delete(key); });
     this.inflight.set(key, done);
     return done;
+  }
+
+  /** Every page of `path` not yet held, one request after another: the path field's "Load the rest". */
+  async rest(path: string, hidden: boolean): Promise<void> {
+    for (;;) {
+      const have = this.peek(path, hidden);
+      if (!have || have.entries.length >= have.total || have.truncated) return;
+      await this.more(path, hidden);
+      // A page that added nothing (the daemon's total moved) ends the loop instead of asking again.
+      if ((this.peek(path, hidden)?.entries.length ?? 0) <= have.entries.length) return;
+    }
   }
 
   /** A refresh or an upload changed `path`. */
@@ -166,36 +165,6 @@ export class Folders extends Store<FoldersView> {
     if (now !== have) return;
     this.put(path, hidden, { listing: { ...now, total: next.total, truncated: next.truncated, entries: [...now.entries, ...next.entries] } });
   }
-
-  /** Pages the folder until every subfolder is held (they sort first), or `MAX_FOLDERS` entries are. */
-  private async fetchNames(path: string, hidden: boolean): Promise<void> {
-    if (!this.peek(path, hidden)) {
-      const listing = await this.api.list(path, 0, hidden);
-      this.put(listing.path, hidden, { listing });
-      if (listing.path !== path) this.put(path, hidden, { listing });
-    }
-    for (let have = this.peek(path, hidden); have && !foldersKnown(have); have = this.peek(path, hidden)) await this.nextPage(path, hidden);
-  }
 }
 
 const weigh = (record: Held): number => 1 + (record.listing?.entries.length ?? 0);
-
-/** Every subfolder is held (they sort first), or the scan or `MAX_FOLDERS` stopped the paging. */
-function foldersKnown(listing: Listing): boolean {
-  return holdsAll(listing) || listing.truncated || listing.entries.length >= MAX_FOLDERS;
-}
-
-const holdsAll = (listing: Listing): boolean => listing.entries.length >= listing.total || listing.entries.some((e) => e.kind !== "dir");
-
-/** The subfolder names held, and whether more folders may exist unlisted. */
-export function namesOf(listing: Listing): FolderNames {
-  return { names: listing.entries.filter((e) => e.kind === "dir" && e.utf8 !== false).map((e) => e.name), capped: listing.truncated || !holdsAll(listing) };
-}
-
-/** What the path field's completion model reads of a record. */
-export function stateOf(record: Held | undefined): FolderState | undefined {
-  if (!record) return undefined;
-  if (record.error) return { status: "error", error: record.error };
-  if (record.listing && foldersKnown(record.listing)) return { status: "ready", ...namesOf(record.listing) };
-  return record.loading || record.listing ? { status: "loading" } : undefined;
-}

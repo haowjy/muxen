@@ -1,15 +1,18 @@
-// The path field's completion model (browser-behaviors.md "Files"), apart from the DOM and the
-// network: typed text and the folder listings held so far in, rows and what each key does out.
-// `folders.ts` holds and fetches the listings; the screen draws what this returns.
-import { join, parentOf } from "./paths";
+// The path field's model (browser-behaviors.md "Files"), apart from the DOM and the network: typed
+// text and the folder pages held in; the rows the list narrows to and what Enter does out. The
+// rows are the outline core's, with the typed last segment as its filter. `folders.ts` holds and
+// fetches the listings; the screen draws what this returns.
+import type { FilesPlace } from "../platform/types";
 import { shorten } from "./format";
-import { folderKey, type FolderState } from "./folders";
+import { folderKey, type Held } from "./folders";
+import { outline, type Outline } from "./outline";
+import { parentOf } from "./paths";
 
 /** Typed text split at its last `/`. */
 export interface Typed {
-  /** The text through the last `/` as typed (`~/re` → `~/`), which an accepted name is appended to. */
+  /** The text through the last `/` as typed (`~/re` → `~/`). */
   prefix: string;
-  /** What follows the last `/`: the name being completed. */
+  /** What follows the last `/`: the name being narrowed to. */
   segment: string;
   /** The folder holding the segment, `.` and `..` resolved. */
   parent: string;
@@ -18,7 +21,7 @@ export interface Typed {
 }
 
 /** `~`, `~/x` and `/x` are paths; anything else is not. */
-export const isPath = (text: string): boolean => text === "~" || text.startsWith("~/") || text.startsWith("/");
+const isPath = (text: string): boolean => text === "~" || text.startsWith("~/") || text.startsWith("/");
 
 /** The typed path split at its last `/`, or null when the text is not a path. `..` stops at `/`. */
 export function parseTyped(text: string, home: string): Typed | null {
@@ -37,61 +40,50 @@ export function parseTyped(text: string, home: string): Typed | null {
   return { prefix, segment: cut < 0 ? "" : text.slice(cut + 1), parent: resolve(prefix), named: resolve(text) };
 }
 
-export interface CompletionRow {
-  name: string;
-  path: string;
-}
-
-export interface Completion {
-  /** Null while the text is not a path. */
-  typed: Typed | null;
-  /** What the list says instead of rows: the start of a path. */
-  note: "start" | null;
-  /** The listing of the typed parent. Rows exist only when it is ready. */
-  folder: FolderState | null;
-  /** The listing to ask for once typing settles (`Folders.ask` skips one it holds); null when none is needed. */
-  ask: { path: string; hidden: boolean } | null;
-  /** The text that steps the field to the typed parent's parent folder; null at `/`. */
-  up: string | null;
-  rows: CompletionRow[];
-  /** The first row, once a character of the segment is typed. */
-  predicted: CompletionRow | null;
-  /** The rest of the prediction, shown after the caret: `ther/` for `te` → `muxen`. */
-  ghost: string;
-  capped: boolean;
-}
-
-/** Matches as the daemon sorts: ASCII letters folded, nothing else. */
-const fold = (s: string): string => s.replace(/[A-Z]/g, (c) => c.toLowerCase());
-
-export interface CompleteContext {
+export interface FieldContext {
   /** The canonical `$HOME`, which `~` names. */
   home: string;
   /** The hidden-files toggle. */
   showHidden: boolean;
-  folder: (key: string) => FolderState | undefined;
+  /** The record `Folders` holds under a key (`folderKey`). */
+  held: (key: string) => Held | undefined;
 }
 
-export function complete(text: string, ctx: CompleteContext): Completion {
+export interface FieldView {
+  /** Null while the text is not a path. */
+  typed: Typed | null;
+  /** The listing to ask for once typing settles (`Folders.ask` skips one it holds); null when none is needed. */
+  ask: { path: string; hidden: boolean } | null;
+  /** What `Folders` holds of the typed parent. */
+  record: Held | undefined;
+  /** The typed parent's rows narrowed to the segment, with the selection. Rows exist only once a listing is held. */
+  out: Outline;
+  /** The text that steps the field to the typed parent's parent folder; null at `/`. */
+  up: string | null;
+}
+
+const NOTHING: ReadonlySet<string> = new Set();
+const EMPTY: Outline = { rows: [], rootLoaded: "none", selected: null };
+
+/** `.` and `..` name folders, not names to narrow to. */
+const isDots = (segment: string): boolean => segment === "." || segment === "..";
+
+export function fieldView(text: string, ctx: FieldContext, selection: string | null): FieldView {
   const typed = parseTyped(text, ctx.home);
-  if (!typed) return { typed, note: "start", folder: null, ask: null, up: null, rows: [], predicted: null, ghost: "", capped: false };
+  if (!typed) return { typed, ask: null, record: undefined, out: EMPTY, up: null };
+  // A name starting with `.` is a hidden file: it is asked for, whatever the toggle says.
   const hidden = ctx.showHidden || typed.segment.startsWith(".");
-  const folder = ctx.folder(folderKey(typed.parent, hidden));
-  const names = folder?.status === "ready" ? folder.names : [];
-  const wanted = fold(typed.segment);
-  const rows = names.filter((name) => fold(name).startsWith(wanted)).map((name) => ({ name, path: join(typed.parent, name) }));
-  const predicted = typed.segment === "" ? null : (rows[0] ?? null);
-  return {
-    typed,
-    note: null,
-    folder: folder ?? null,
-    ask: { path: typed.parent, hidden },
-    up: typed.parent === "/" ? null : upText(typed.parent, ctx.home),
-    rows,
-    predicted,
-    ghost: predicted ? `${predicted.name.slice(typed.segment.length)}/` : "",
-    capped: folder?.status === "ready" && folder.capped,
-  };
+  const record = ctx.held(folderKey(typed.parent, hidden));
+  const up = typed.parent === "/" ? null : upText(typed.parent, ctx.home);
+  const out = outline({
+    root: typed.parent,
+    parent: up === null ? null : parentOf(typed.parent),
+    expanded: NOTHING,
+    held: (path) => (path === typed.parent ? (record?.listing ?? null) : null),
+    filter: isDots(typed.segment) ? "" : typed.segment,
+    selection,
+  });
+  return { typed, ask: { path: typed.parent, hidden }, record, out, up };
 }
 
 /** The field's text for the folder above `path`: `~/repos/muxen` → `~/repos/`. */
@@ -100,46 +92,20 @@ function upText(path: string, home: string): string {
   return up === "/" ? "/" : `${shorten(up, home)}/`;
 }
 
-/** A typed path as the absolute path it names (`~/x` under `home`); text that is no path comes back as typed. */
-export function absolute(text: string, home: string): string {
-  return parseTyped(text.trim(), home)?.named ?? text;
-}
+/** What Enter does: open a place, step the field up, say why not (null: the list already shows the refusal), ask the host what the path is, or wait for the typed parent's listing. */
+export type Go = { open: FilesPlace } | { up: string } | { say: string | null } | { resolve: string } | { wait: true };
 
-/** The text with `name` accepted: its full path and a `/`. */
-export const accept = (typed: Typed, name: string): string => `${typed.prefix}${name}/`;
-
-/**
- * `/` typed after a partial name accepts the prediction in its place ("rep" + "/" becomes
- * "repos/"). After an exact folder name, or with nothing predicted, the `/` is just a `/`.
- * `before` is the text without the `/`; returns the text to show, or null to keep the `/`.
- */
-export function slashAccepts(before: string, ctx: CompleteContext): string | null {
-  const c = complete(before, ctx);
-  if (!c.typed || !c.predicted) return null;
-  // `.` and `..` name real folders: the `/` after them is a `/`.
-  if (c.typed.segment === "." || c.typed.segment === "..") return null;
-  return c.rows.some((row) => row.name === c.typed?.segment) ? null : accept(c.typed, c.predicted.name);
-}
-
-/** What Go does: open a folder, say why not (null: the list already shows the refusal), or wait for the typed parent's listing (never for a folder named whole, which opening lists). */
-export type Go = { open: string } | { say: string | null } | { wait: true };
-
-/**
- * Go opens the highlighted row, or with none the folder the text names. The listing of the
- * typed parent decides whether that folder exists, so it must have arrived (`wait`).
- */
-export function go(text: string, highlighted: CompletionRow | null, ctx: CompleteContext): Go {
-  if (highlighted) return { open: highlighted.path };
-  const { typed, folder } = complete(text, ctx);
+/** Enter opens the selected row (the first match, with a segment typed), else what the text names. */
+export function enter(view: FieldView, home: string): Go {
+  const { typed, record, out } = view;
   if (!typed) return { say: "Start with ~ or /" };
-  // A trailing `.` or `..` names a folder that exists; any other segment must be one in the listing, exactly.
-  if (typed.segment === "." || typed.segment === "..") return { open: typed.named };
-  if (!folder || folder.status === "loading") {
-    // A trailing `/` names the folder itself, whose own listing opening it fetches: nothing to wait for.
-    return typed.segment === "" ? { open: typed.named } : { wait: true };
-  }
-  if (folder.status === "error") return { say: folder.error.code === "not_found" || folder.error.code === "not_a_directory" ? `No folder ${shorten(typed.named, ctx.home)}` : null };
-  // Past the cap the folder may exist unlisted: its own listing decides.
-  if (typed.segment !== "" && !folder.names.includes(typed.segment) && !folder.capped) return { say: `No folder ${shorten(typed.named, ctx.home)}` };
-  return { open: typed.named };
+  if (isDots(typed.segment)) return { open: { kind: "dir", path: typed.named } };
+  const row = out.rows.find((r) => r.key === out.selected);
+  if (row?.kind === "up") return view.up === null ? { say: null } : { up: view.up };
+  if (row?.place) return { open: row.place };
+  if (typed.segment === "") return { open: { kind: "dir", path: typed.named } };
+  if (record?.error) return { say: null };
+  if (!record?.listing) return { wait: true };
+  // Pages not loaded yet may hold the name: the host decides.
+  return out.rootLoaded === "all" ? { say: `Nothing named ${typed.segment} in ${shorten(typed.parent, home)}` } : { resolve: typed.named };
 }

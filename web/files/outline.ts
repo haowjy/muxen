@@ -56,18 +56,20 @@ const fold = (s: string): string => s.replace(/[A-Z]/g, (c) => c.toLowerCase());
 export const loadedOf = (listing: Listing | null): Loaded =>
   !listing ? "none" : listing.entries.length >= listing.total && !listing.truncated ? "all" : "some";
 
-/** The entries a filter keeps: names that start with it, then names that contain it, each in the daemon's order. */
+/** The entries a filter keeps: the name that is the filter, then names that start with it, then names that contain it, each in the daemon's order. */
 export function narrow(entries: readonly Entry[], filter: string): Entry[] {
   const wanted = fold(filter);
   if (wanted === "") return [...entries];
+  const same: Entry[] = [];
   const starts: Entry[] = [];
   const holds: Entry[] = [];
   for (const entry of entries) {
-    const at = fold(entry.name).indexOf(wanted);
-    if (at === 0) starts.push(entry);
-    else if (at > 0) holds.push(entry);
+    const name = fold(entry.name);
+    const at = name.indexOf(wanted);
+    if (at < 0) continue;
+    (name === wanted ? same : at === 0 ? starts : holds).push(entry);
   }
-  return [...starts, ...holds];
+  return [...same, ...starts, ...holds];
 }
 
 export function outline(input: OutlineInput): Outline {
