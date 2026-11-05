@@ -1,7 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from "preact/hooks";
 import { useApp, useAppView } from "../../app/context";
 import { describeError } from "../../files/browser";
-import { formatAge, formatSize, formatTime } from "../../files/format";
 import type { OutlineRow } from "../../files/outline";
 import { baseName } from "../../files/paths";
 import { isGlob, marked, tooLong, type FileSearch, type Found } from "../../files/search";
@@ -10,12 +9,10 @@ import type { Stopped } from "../../proto/generated/messages";
 import { cx } from "../../ui/cx";
 import { Button } from "../../ui/primitives/Button";
 import { EmptyState } from "../../ui/primitives/EmptyState";
-import { Icon } from "../../ui/primitives/Icon";
 import { PathInput } from "../../ui/primitives/PathInput";
 import { Spinner } from "../../ui/primitives/Spinner";
 import { useStore } from "../../ui/store";
-import { fileIcon } from "./fileIcon";
-import { whyNot } from "./FolderList";
+import { EntryCells, whyNot } from "./FolderList";
 import { SEARCH, SEARCH_SLASH, SHOW_HIDDEN_IN_SEARCH, useFilesKey, type Chord } from "./keymap";
 import type { FilesSession } from "./session";
 import { useListbox } from "./useListbox";
@@ -210,8 +207,6 @@ function FoundRow({ found, id, selected, folderLine, now, onPress, onDouble }: R
   const { entry, rel, hits, opened } = found;
   const cut = rel.lastIndexOf("/");
   const dir = entry.kind === "dir";
-  const why = whyNot(entry);
-  const when = opened ?? entry.mtime;
   const runs = (from: number, to: number) => marked(rel, hits, from, to).map((r, i) => (r.hit ? <mark key={i} class={styles.hit}>{r.text}</mark> : r.text));
   const folder = cut > 0 ? runs(0, cut) : folderLine;
   return (
@@ -221,23 +216,16 @@ function FoundRow({ found, id, selected, folderLine, now, onPress, onDouble }: R
       aria-selected={selected}
       aria-disabled={placeOf(found) === null || undefined}
       data-kind={dir ? "dir" : "file"}
-      class={cx(list.row, styles.found, dir && list.dir, entry.name.startsWith(".") && list.dotted, why !== null && list.disabled, selected && list.selected)}
+      class={cx(list.row, styles.found, dir && list.dir, entry.name.startsWith(".") && list.dotted, whyNot(entry) !== null && list.disabled, selected && list.selected)}
       onClick={onPress}
       onDblClick={onDouble}
     >
-      <span class={cx(list.icon, dir && list.folder)}><Icon name={dir ? "folder" : fileIcon(entry.name, entry.mime)} size={16} /></span>
-      <span class={styles.text}>
-        <span class={styles.name}>{runs(cut + 1, rel.length)}</span>
-        {folder !== null && <span class={styles.dir}>{folder}</span>}
-      </span>
-      {why !== null ? <span class={list.why}>{why}</span> : (
-        <>
-          <span class={cx(list.size, styles.size)}>{entry.kind === "file" && entry.size !== undefined ? formatSize(entry.size) : ""}</span>
-          {when !== undefined
-            ? <span class={cx(list.age, styles.age, now / 1000 - when < 86_400 && list.recent)} title={`${opened !== undefined ? "Opened" : "Modified"} ${formatTime(when)}`}>{formatAge(when, now)}</span>
-            : <span class={cx(list.age, styles.age)} />}
-        </>
-      )}
+      <EntryCells entry={entry} now={now} opened={opened} sizeClass={styles.size} ageClass={styles.age}>
+        <span class={styles.text}>
+          <span class={styles.name}>{runs(cut + 1, rel.length)}</span>
+          {folder !== null && <span class={styles.dir}>{folder}</span>}
+        </span>
+      </EntryCells>
     </div>
   );
 }

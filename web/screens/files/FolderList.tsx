@@ -1,4 +1,4 @@
-import { Component, type TargetedMouseEvent } from "preact";
+import { Component, type ComponentChildren, type TargetedMouseEvent } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { Entry, Listing } from "../../files/api";
 import { folderKey, type Held } from "../../files/folders";
@@ -48,6 +48,41 @@ export interface RestNote {
   busy?: boolean;
   /** What a click or Enter on the row does, and its label. */
   action?: { label: string; act: "more" | "retry" };
+}
+
+interface EntryCellsProps {
+  entry: Entry;
+  /** The time ages count from. */
+  now: number;
+  /** When this device opened the file (a Search recent), unix seconds: the age is that, not the modification time. */
+  opened?: number | undefined;
+  /** Added to the size and age cells, for a list that lays them out its own way. */
+  sizeClass?: string | undefined;
+  ageClass?: string | undefined;
+  /** The name, between the icon and the facts. */
+  children: ComponentChildren;
+}
+
+/** An entry's cells in a row: its kind's icon, the name, then why it can't be opened, or its size (files) and age. */
+export function EntryCells({ entry, now, opened, sizeClass, ageClass, children }: EntryCellsProps) {
+  const dir = entry.kind === "dir";
+  const why = whyNot(entry);
+  const when = opened ?? entry.mtime;
+  return (
+    <>
+      <span class={cx(styles.icon, dir && styles.folder)}><Icon name={dir ? "folder" : fileIcon(entry.name, entry.mime)} size={16} /></span>
+      {children}
+      {why !== null ? <span class={styles.why}>{why}</span> : (
+        <>
+          <span class={cx(styles.size, sizeClass)}>{entry.kind === "file" && entry.size !== undefined ? formatSize(entry.size) : ""}</span>
+          {/* Changed (or opened) in the last day: full text colour, so what just changed stands out. */}
+          {when !== undefined
+            ? <span class={cx(styles.age, ageClass, now / 1000 - when < 86_400 && styles.recent)} title={`${opened !== undefined ? "Opened" : "Modified"} ${formatTime(when)}`}>{formatAge(when, now)}</span>
+            : <span class={cx(styles.age, ageClass)} />}
+        </>
+      )}
+    </>
+  );
 }
 
 /** The latest handlers, read when a row is pressed: a row is not redrawn for a new closure. */
@@ -117,7 +152,6 @@ class FileRow extends Component<FileRowProps> {
       );
     }
     const dir = entry.kind === "dir";
-    const why = whyNot(entry);
     return (
       <div
         {...item}
@@ -130,17 +164,7 @@ class FileRow extends Component<FileRowProps> {
       >
         {tree && <Guides depth={depth} />}
         {tree && (dir && place ? <span class={styles.disclosure} data-disclosure><Icon name="chevron" size={16} class={cx(styles.chevronTurn, row.expanded && styles.open)} /></span> : <span />)}
-        <span class={cx(styles.icon, dir && styles.folder)}><Icon name={dir ? "folder" : fileIcon(entry.name, entry.mime)} size={16} /></span>
-        <span class={styles.name}>{entry.name}</span>
-        {why !== null ? <span class={styles.why}>{why}</span> : (
-          <>
-            <span class={styles.size}>{entry.kind === "file" && entry.size !== undefined ? formatSize(entry.size) : ""}</span>
-            {/* Changed in the last day: full text colour, so what just changed stands out. */}
-            {entry.mtime !== undefined
-              ? <span class={cx(styles.age, now / 1000 - entry.mtime < 86_400 && styles.recent)} title={`Modified ${formatTime(entry.mtime)}`}>{formatAge(entry.mtime, now)}</span>
-              : <span class={styles.age} />}
-          </>
-        )}
+        <EntryCells entry={entry} now={now}><span class={styles.name}>{entry.name}</span></EntryCells>
         {dir && place && !tree && <Icon name="chevron" size={16} class={styles.chevron} />}
       </div>
     );
