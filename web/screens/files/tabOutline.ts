@@ -39,10 +39,10 @@ export function useTabOutline(session: FilesSession, tab: string, root: string |
     expanded,
     selection,
     select,
-    toggle: (folder, on) => { expand(withExpanded(open, folder, on)); },
+    toggle: (folder, on) => { if (root !== null) expand(withExpanded(open, folder, on, root)); },
     reveal: (path) => {
       if (root === null) return;
-      expand(foldersBetween(root, path).reduce((all: readonly string[], folder) => withExpanded(all, folder, true), open));
+      expand(foldersBetween(root, path).reduce((all: readonly string[], folder) => withExpanded(all, folder, true, root), open));
       select(path);
     },
   };

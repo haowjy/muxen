@@ -4921,6 +4921,10 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
 - **Why 32:** each open folder holds a listing (up to a page of 200 entries, about 40 KB) and is pinned
   against the cache's 10,000-entry bound while it shows; 32 pages is 6,400 entries, inside that bound,
   and more open folders than a screen shows is past what anyone reads.
+- **Which folder closes at 32** (amended after review, 2026-11-05): first the oldest that doesn't show
+  (inside a closed folder, or outside the root), then the oldest that does, and never one holding the
+  folder just opened, whose open ancestors become the newest with it. Closing plain oldest-first closed
+  the parent of the 32nd subfolder opened, hiding it and its siblings.
 - **Rejected:** the disclosure as its own target (A's two targets); listing every open folder again on a
   return to the tab (the cache already holds them); keeping the open set in history (Back would close
   folders instead of leaving places); an unbounded open set (a long session would pin the cache).

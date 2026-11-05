@@ -22,7 +22,7 @@ export interface FilesSession {
   /** Scroll position by Files tab and folder path (`scrollKey`), so Back finds the list where it was. */
   scroll: Recent<number>;
   /**
-   * The folders a Files tab has expanded in its desktop outline, oldest first (at most `MAX_EXPANDED`), by tab: view
+   * The folders a Files tab has expanded in its desktop outline, least recently opened first (at most `MAX_EXPANDED`), by tab: view
    * state, never history or the workspace. Paths are absolute, so a folder stays open when the list's root moves.
    */
   expanded: Recent<readonly string[]>;

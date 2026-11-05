@@ -27,17 +27,33 @@ export interface OutlineRow {
   loaded: Loaded;
 }
 
-/** The most folders a Files tab keeps expanded: past it the one expanded longest ago closes. Each open folder holds a listing. */
+/** The most folders a Files tab keeps expanded: past it one closes (`withExpanded`). Each open folder holds a listing. */
 export const MAX_EXPANDED = 32;
 
 /** The `rest` row of expanded folder `folder`: no path holds a NUL. */
 export const restKey = (folder: string): string => `${folder}\0`;
 export const restFolder = (key: string): string => key.slice(0, -1);
 
-/** `expanded` (oldest first) with `path` opened or closed; opening past `MAX_EXPANDED` closes the oldest. */
-export function withExpanded(expanded: readonly string[], path: string, open: boolean): string[] {
+/**
+ * `expanded` (least recently opened first) with `path` opened or closed, in `root`'s outline. Opening makes `path` and
+ * the open folders holding it the newest. Past `MAX_EXPANDED` the oldest folder that doesn't show (one inside a closed
+ * folder, or outside `root`) closes first, then the oldest that does; never one holding `path`, so an open never hides itself.
+ */
+export function withExpanded(expanded: readonly string[], path: string, open: boolean, root: string): string[] {
   const rest = expanded.filter((p) => p !== path);
-  return open ? [...rest, path].slice(-MAX_EXPANDED) : rest;
+  if (!open) return rest;
+  const holds = (p: string): boolean => path.startsWith(p === "/" ? "/" : `${p}/`);
+  const next = [...rest.filter((p) => !holds(p)), ...rest.filter(holds), path];
+  const set = new Set(next);
+  const shows = (p: string): boolean => p.startsWith(root === "/" ? "/" : `${root}/`) && foldersBetween(root, p).every((f) => set.has(f));
+  for (const hidden of [true, false]) {
+    for (let i = 0; next.length > MAX_EXPANDED && i < next.length;) {
+      const p = next[i] as string;
+      if (!holds(p) && p !== path && shows(p) !== hidden) next.splice(i, 1);
+      else i++;
+    }
+  }
+  return next.slice(-MAX_EXPANDED);
 }
 
 /** The folders between `root` and `path` (both canonical), outermost first: what to expand so `path` shows in `root`'s outline. */

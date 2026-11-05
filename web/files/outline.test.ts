@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Entry, Listing } from "./api";
-import { move, narrow, outline, restKey, UP, type OutlineInput } from "./outline";
+import { MAX_EXPANDED, move, narrow, outline, restKey, UP, withExpanded, type OutlineInput } from "./outline";
 
 const dir = (name: string): Entry => ({ name, kind: "dir", link: false });
 const file = (name: string): Entry => ({ name, kind: "file", link: false, size: 1 });
@@ -66,5 +66,19 @@ describe("move", () => {
     expect(move(rows, "/r/src/deep/z", "left").selection).toBe("/r/src/deep");
     expect(move(rows, "/r/src/m", "parent").selection).toBe("/r/src");
     expect(move(rows, "/r/docs", "left").selection).toBe("/r/docs");
+  });
+});
+
+describe("withExpanded", () => {
+  it("keeps the folder holding the one just opened at the cap, closing a hidden folder before a shown one", () => {
+    let open = withExpanded([], "/r/a", true, "/r");
+    open = withExpanded(open, "/r/gone/x", true, "/r");
+    for (let i = 0; i < MAX_EXPANDED; i++) open = withExpanded(open, `/r/a/c${String(i)}`, true, "/r");
+    expect(open).toHaveLength(MAX_EXPANDED);
+    expect(open).toContain("/r/a");
+    expect(open.at(-1)).toBe(`/r/a/c${String(MAX_EXPANDED - 1)}`);
+    // /r/gone/x sat in a closed folder: it went before any folder on screen
+    expect(open).not.toContain("/r/gone/x");
+    expect(open).not.toContain("/r/a/c0");
   });
 });
