@@ -15,7 +15,7 @@ import type { FilesSession } from "./session";
 import styles from "./PreviewPanel.module.css";
 
 /** The panel waits this long after the selection last moved, so a held arrow key costs no read per row. */
-export const SETTLE_MS = 200;
+const PANEL_SETTLE_MS = 200;
 
 /** The Preview panel's on and off, at one place on the Files header line whichever bar it ends. */
 export function PreviewToggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
@@ -67,7 +67,7 @@ export function PreviewPanel({ session, root, selection, hidden, held, toggle, f
       return undefined;
     }
     if (selection === settled.key) return undefined;
-    const timer = setTimeout(() => { setSettled({ key: selection, root: root.path }); }, SETTLE_MS);
+    const timer = setTimeout(() => { setSettled({ key: selection, root: root.path }); }, PANEL_SETTLE_MS);
     return () => { clearTimeout(timer); };
   }, [selection, root.path, settled.key, moved]);
   const shown = shownFor(showing);
