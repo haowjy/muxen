@@ -43,8 +43,8 @@ auth is [auth.md](auth.md). Decisions and the alternatives rejected are in
 An upload that names no folder goes to `uploads_dir` in `config.toml` (default `~/.muxen-uploads`), absolute or
 starting with `~/`. A missing absolute path is created by the next upload; one that is
 neither absolute nor `~/` makes every upload answer `409 not_a_directory`. There are no
-favorites and no route that writes `config.toml`: Jimmy edits it by hand
-([decisions.md](decisions.md#no-favorites-2026-10-30)).
+favorites. `uploads_dir` is edited by hand or from Settings, through the one route that writes
+`config.toml` ([Server settings](#server-settings)).
 
 An upload may instead name a folder ([`dir`](#post-fsupload)): Files' Paste writes into the
 folder it shows. Those folders are any path the daemon's user can write, which adds writes
@@ -57,8 +57,10 @@ the default, for the terminal's pasted images and Files' Upload.
 upload with no watcher, cache or restart. They read the path `Config::load` resolved at
 startup (`--config`, else the default), kept in `App`, with the same rule: a missing
 default file means the defaults. A file that exists but can't be read or parsed **fails
-closed**: uploads answer `503 config_unavailable`. Listing and raw reads don't read the
-config. The other config keys are still read once, at startup.
+closed**: uploads answer `503 config_unavailable`. **Search re-reads `search_skip`** the same way,
+inside its lane closure, but **fails open**: a file that can't be read or parsed means the default
+patterns, logged at `warn`, since a skip list decides nothing about where bytes land. Listing and raw
+reads don't read the config. The other config keys are still read once, at startup.
 
 ## Path resolution: `fs::open`
 
@@ -172,7 +174,7 @@ request it no longer needs ([browser-behaviors.md](client/browser-behaviors.md#f
 - A queue holds the directories still to read, as paths relative to the root. The walk opens the
   next one relative to the root's descriptor (read with `Dir::new` on that descriptor, never a copy
   of it), streams its names and `d_type` through the matcher,
-  queueing its subdirectories as it goes, and closes it. At most two descriptors are open (the root and the one being read), whatever
+  queueing its subdirectories as it goes, and closes it. At most two descriptors are open (the root and the one being read; three for a cache-tag probe), whatever
   the depth, and a capped walk has covered everything down to some depth, so a short path under the
   root is never missed for a deep one.
 - **Opening** refuses symlinks in every component and never leaves the root's filesystem: on Linux
@@ -185,8 +187,22 @@ request it no longer needs ([browser-behaviors.md](client/browser-behaviors.md#f
   no route could open it.
 - **Kinds:** names and `d_type` only; `fstatat` (not following, relative to the folder being read) is
   called only for a `DT_UNKNOWN` entry, as listings do, so a filesystem without `d_type` is still walked.
-- **Skipped by name:** `.git`, `node_modules` and `target` directories, and every name starting with
-  `.` unless `hidden=1`. The root itself is never skipped, whatever its name. Non-UTF-8 names are
+- **Skipped:** every name starting with `.` unless `hidden=1` (so `.git`, `.cache` and `.venv` too);
+  any directory whose name matches one of the server's **search skip patterns**
+  ([Server settings](#server-settings); default `node_modules`); and any directory below the root tagged as a cache
+  under the [Cache Directory Tagging spec](https://bford.info/cachedir/): it holds a regular file
+  `CACHEDIR.TAG` whose first 43 bytes are `Signature: 8a477f597d28d172789f06886806bc55` (cargo's `target/`,
+  pip's and ccache's caches, the convention `tar --exclude-caches` and backup tools follow). Before
+  reading a directory below the root, the walk tries `openat(dir, "CACHEDIR.TAG", O_RDONLY | O_NOFOLLOW |
+  O_NONBLOCK | O_CLOEXEC | O_NOCTTY)` on its descriptor (a third descriptor, for that moment). `ENOENT`,
+  the usual answer, costs one lookup (0.9 µs warm on macOS). Any other error means no tag. On success
+  `fstat` must find a regular file, and the read loops until 43 bytes or end of file; only an exact
+  signature is a tag, and the directory then isn't read. **A skipped directory is listed, not entered**,
+  by either rule: its own entry, read in its parent, is matched like any other, so Search can find
+  `node_modules` or `target` and a tap goes into it (where, as the root, nothing is skipped). The probe
+  leaves a negative dentry per directory, kernel memory charged to the unit but reclaimable, like page
+  cache. A pattern is a folder name or a glob with `*` and `?` over the name alone,
+  compared exactly (no case folding); `[` and every other character are literal. The root itself is never skipped, whatever its name. Non-UTF-8 names are
   neither matched nor entered (their path can't be sent back).
 - **Errors below the root** (`EACCES`, `ENOENT` from a folder deleted mid-walk, `ELOOP`, `ENOTDIR`,
   `EXDEV`, an `EIO` from `getdents`) skip that directory. Only an error on the root fails the request.
@@ -402,6 +418,44 @@ deleted. A body that stalls for the idle timeout, or that breaks because the cli
 disconnected, answers `400 bad_request`: the body failed, and the client is usually
 gone to read it. Nothing else in muxen uses the `.muxen-upload-` prefix.
 
+## Server settings
+
+`GET /settings` and `POST /settings` read and write the keys of `config.toml` that apply without a
+restart, so Settings can show and change them per server. Both sit in the `devices` router behind both
+auth layers. The code is `src/config/` (the writer beside the loader), not `src/fs/`.
+
+```text
+ServerSettings = { searchSkip: [string] | null,   // null: no key, the default applies
+                   uploadsDir: string | null,
+                   defaults: { searchSkip: [string], uploadsDir: string } }   // the daemon's own
+SettingsChange = { searchSkip?: [string] | null, uploadsDir?: string | null }
+```
+
+- **Keys:** `search_skip` (top level) and `uploads_dir`. A key that is absent means the default
+  (`["node_modules"]`, `"~/.muxen-uploads"`); `defaults` carries them so the client keeps no copy.
+  `searchSkip: []` is a set key that skips nothing; `null` is no key, the default.
+- **`POST`** takes a `SettingsChange`: a field left out is unchanged, `null` removes the key, a value
+  sets it. Unknown fields are `400 bad_request`. It answers the resulting `ServerSettings`, which the
+  client draws. **Validation:** at most 64 patterns, each 1–255 bytes of UTF-8 with no `/` or NUL, not
+  made only of `*` (which would skip every folder); duplicates are dropped, order kept. `uploadsDir`
+  absolute or starting with `~/`, at most 4,096 bytes. Anything else is `400 bad_request` and nothing is
+  written. A pattern starting with `.` only matters while Show hidden files is on; it is allowed.
+- **Writing** follows the earlier writer's rules
+  ([decisions.md](decisions.md#config-writes-toml_edit-auths-lock-temp-file-and-rename-re-stat-before-rename)),
+  on the fs lane with a permit of its own (one write at a time): take the `flock` on
+  `$XDG_STATE_HOME/muxen/lock` with `LOCK_NB`, retrying for up to 2 s, then `503 busy` (a write never
+  waits indefinitely on the lock, which auth also takes); canonicalize the config path so a symlinked
+  `config.toml` (a dotfiles checkout) is written at its target; refuse a dangling link or an unwritable
+  target with `409 config_read_only`; edit only the two keys with `toml_edit`, keeping comments, order
+  and every other key; write `<name>.tmp` beside it with the original's mode (0600 for a new file),
+  re-stat the original and rename, retrying up to 3 times if it changed. A file that exists but doesn't
+  parse is never written: `503 config_unavailable`. A missing file is created with only the keys set,
+  its directory with mode 0700 if absent (this covers a `--config` path deleted after startup).
+- **Concurrent saves:** the last write wins. The client sends one save at a time per server and draws
+  the answer, so its own taps can't reorder; two devices saving at the same moment can lose one change,
+  which Settings' next open shows. Accepted: one user, rare, visible.
+- **Logging:** a write at `info`, naming the keys changed, not their values.
+
 ## Errors
 
 JSON `{"error": "<code>"}`, from the shared `HttpError` type ([auth.md](auth.md#endpoints)).
@@ -419,6 +473,7 @@ The auth middleware also uses this body for `forbidden`, `auth_required`,
 | 404 | `not_found` | `ENOENT`, `ENOTDIR` while resolving, `ELOOP` at open |
 | 409 | `not_a_directory`, `not_a_file` | the wrong kind for the route; a FIFO, socket or device is `not_a_file`; an upload when `uploads_dir` isn't an absolute or `~/` path, or the upload's `dir` or `uploads_dir` isn't a directory |
 | 409 | `memory_backed` | on Linux, an upload destination directory on tmpfs or ramfs; its pages would remain charged to muxen's unit while the file exists |
+| 409 | `config_read_only` | `config.toml`, or a directory on its way, is a dangling link or can't be written |
 | 413 | `too_large` | an upload over the cap |
 | 416 | `bad_range` | a range starting past the end |
 | 503 | `busy` | no slot within the wait, too many waiting, or the upload slot taken; `Retry-After: 1` |

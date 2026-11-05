@@ -1448,6 +1448,34 @@ are Jimmy's ([Files](#files-view-and-upload-now-three-write-operations-in-v2)).
 - **Rejected:** byte-exact names in base64 on every entry and route (every client pays
   for a case that doesn't occur); hiding them (the directory would look wrong).
 
+### Search skips hidden names, tagged caches and the server's own patterns (2026-11-05)
+
+- **Decided:** 2026-11-05, Jimmy. Asked why `target` was skipped by a hard-coded list: "by default skip
+  hidden files...? and then we have a setting for ignored patterns?"; on `target`: "but target is a common
+  folder name...". He agreed to the rules below ("yeah, sure") and to the setting living in the app,
+  per server ("in app... also in app should be able to modify config.toml... maybe?").
+- **What:** Search skips names starting with `.` unless Show hidden files is on; directories tagged with
+  a valid `CACHEDIR.TAG` (the Cache Directory Tagging spec, which cargo writes in `target/`); and
+  directories matching `search_skip` in the server's `config.toml`, default `["node_modules"]`, edited in
+  Settings' section for that server. Settings also edits `uploads_dir` there. The hard-coded list
+  (`.git`, `node_modules`, `target`) goes.
+- **Why:** no tool shares a default list (research p564): per-query walkers (ripgrep, fd, VS Code search)
+  skip hidden files and honour project rules, with a switch to include the rest. `.git` is hidden, so
+  the hidden rule covers it. A cache tag marks build output without guessing from a name: pop-os has 192
+  under `~`, cargo's `target/` among them, while a folder merely named `target` stays searchable.
+  `node_modules` writes no tag, so it is the one default pattern. A skipped folder is listed, not
+  entered, so Search still finds `node_modules` or `target` themselves and a tap goes in. Search reads
+  `search_skip` fail-open (a broken file means the defaults), unlike uploads.
+- **Rejected:** keeping `target` by name (hides ordinary folders of that name); honouring `.gitignore`
+  with the `ignore` crate (a dependency and a rule set for what two defaults and a tag cover; possible
+  later); skipping nothing but hidden (results flooded by dependencies and build files, and `~`'s cap
+  spent inside them); the list per device (each device would differ, and it would ride every request);
+  hand edits only (Jimmy wants it in the app). The keys that apply only at a restart stay hand edits:
+  shown in the app they would need a restart step, and a wrong tmux socket set from the phone would cut
+  off the screen that fixes it.
+- **Supersedes:** "skipped by name" in the decision below, and the deletion of the `config.toml` writer
+  in "No favorites (2026-10-30)": a writer returns for `search_skip` and `uploads_dir`.
+
 ### Search walks per query and sends only the best 50 (2026-11-05)
 
 - **Decided:** 2026-11-05, by the UX lead building Jimmy's Files Search ("search for a file (a glob? or

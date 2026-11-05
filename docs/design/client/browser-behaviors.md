@@ -42,10 +42,9 @@ back-forward gesture on or off. Over a terminal (the tab list, Open session, Set
 over it; a Files tab steps out to the parent folder, then Home. Phone Safari owns its edge swipe and
 cannot be told no, so there a swipe on a terminal goes Home, as ‹ does.
 
-**Back's place.** Where a tab has the dock (touch), every screen puts Back and its controls in a bottom
-bar the dock's height, where the dock's tab row has its ‹: Home (Settings, at the row's end), the tab
-overview and page dialogs (Settings, Open session); their titles stay at the top. With a mouse, Back is
-in each screen's header (Jimmy, 2026-10-31: "the back button jumps from top to bottom").
+**Back's place.** Pages (the tab list, Settings, Open session) put Back at the top left of their header on
+every layout (Jimmy, 2026-11-05: "the back button on the settings is still at the bottom"). Only a tab keeps
+‹ at the bottom, in the dock's tab row, where a terminal's keyboard and keys are.
 
 **Workspace state.** A workspace record has its own id, its server's host id, its tabs in order and
 its last-shown tab; today each host has exactly one, made when the server is first known. The route is Home,
@@ -121,12 +120,28 @@ Home Screen instructions.
 No servers shows enrolment instructions and Add server. If a server's tmux is not running,
 its row says so; muxen never starts Jimmy's tmux server. Server management includes adding,
 removing and re-enrolling a server. Settings is a separate screen reached from the gear in Home's header, on every layout, with
-appearance, terminal text size, this device/browser and local-data controls. The app also
+appearance, terminal text size, a section per server (below), this device/browser and local-data
+controls. The app also
 offers the Face ID relock setting ([auth.md](../auth.md#swift-side-keychain-item-and-app-lock));
 the phone browser has no Face ID setting. Clear local data deletes
 drafts and the saved workspaces on this device, leaving currently open tabs until closed;
 destructive actions confirm independently. Remove this device is available only where the
 host admits this device as a tailnet node. Settings has Back to Home.
+
+**A server's settings.** Settings has one section per server, named for it, holding what that server's
+`config.toml` keeps and applies without a restart ([fs.md](../fs.md#server-settings)): **Search skips**
+(folder name patterns Search lists but doesn't enter; default `node_modules`) and **Uploads folder** (where
+Upload and pasted images land; default `~/.muxen-uploads`). They are read from the server each time
+Settings opens and shown as the server answers, defaults included; nothing is kept on the device. A
+change saves at once (Remove, Add, Reset) or when a field is committed (Return or leaving it), one save
+at a time per server, and the section redraws from the server's answer, so every device sees the same.
+Search skips is a list: one row per pattern with Remove, an Add field, and Reset, which returns to the
+defaults (shown only while the list differs from them). Removing every row skips nothing. A pattern is a
+folder name, or a glob with `*` and `?` over a folder's name alone. The keys that apply only at a restart
+(`name`, `memory_budget_mib`, `[tmux]`, `[complete]`) stay hand edits. A save that fails says why in plain
+words beside the field and keeps the typed value; leaving Settings mid-save lets the save finish. A
+server that can't be reached shows "Can't reach <server name>" in place of its values, with Try again;
+a `config.toml` that doesn't parse shows "config.toml on <server name> doesn't parse. Fix it there."
 
 **Where a launch opens.** A launch (a reload, a bookmark, a copied link, or the app after iOS
 killed it) opens the place the page's address names, else the route last shown, saved with the
