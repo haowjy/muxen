@@ -37,7 +37,9 @@ interface Props {
 export function FileView({ session, file, up, onUp, onLink, children }: Props) {
   const app = useApp();
   const phone = useAppView((v) => v.viewport.layout === "phone");
-  const [asText, setAsText] = useState(false);
+  // "Open as text" is one file's: the view stays mounted from file to file (Wrap lines carries over), so it names the file.
+  const [textOf, setTextOf] = useState<string | null>(null);
+  const asText = textOf === file.path;
   const [wrap, setWrap] = useState(phone);
   const [menu, setMenu] = useState<HTMLElement | null>(null);
   const kind = asText ? "code" : viewerFor(file.mime);
@@ -93,7 +95,7 @@ export function FileView({ session, file, up, onUp, onLink, children }: Props) {
           />
         )}
       </header>
-      {children ?? <Preview session={session} file={file} text={text} kind={kind} plain={asText} wrap={wrap} onAsText={() => { setAsText(true); }} onLink={onLink} />}
+      {children ?? <Preview session={session} file={file} text={text} kind={kind} plain={asText} wrap={wrap} onAsText={() => { setTextOf(file.path); }} onLink={onLink} />}
     </div>
   );
 }
