@@ -23,8 +23,10 @@ Rules the code relies on, which are easy to break:
 - Search opens each directory below its root only through `search::Below`, relative to the
   root's descriptor: `openat2` with `RESOLVE_BENEATH | NO_SYMLINKS | NO_XDEV` on Linux,
   `O_NOFOLLOW_ANY` and a device check on macOS. One directory is open at a time (two
-  descriptors with the root's), and the search permit moves into the lane closure with the
-  walk, so an aborted search can't overlap the next. The matcher lives only here: the client
+  descriptors with the root's, three during its `CACHEDIR.TAG` probe), and the search permit
+  moves into the lane closure with the walk, so an aborted search can't overlap the next.
+  A skipped folder (a `search_skip` pattern, a cache tag) is offered to the matcher and
+  never queued; the root is never skipped. The matcher lives only here: the client
   draws `hits` and never matches.
 - An upload's `dir` opens through `fs::open` like a read; without it, uploads land in the
   running config's `uploads_dir` (`App::config`, `src/config/live.rs`). Nothing here reads

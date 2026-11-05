@@ -228,6 +228,28 @@ fn boundary(before: Option<char>, scalar: char) -> i32 {
     }
 }
 
+/// The server's search skip patterns (fs.md "Skipped"): a folder whose name one matches is
+/// listed but not entered. Each is a name, or a glob with `*` and `?` over the name alone,
+/// compared exactly. One with a `/` (only a hand edit can write it) matches no name.
+#[derive(Debug)]
+pub struct Skip(Vec<Glob>);
+
+impl Skip {
+    pub fn new(patterns: &[String]) -> Self {
+        Self(
+            patterns
+                .iter()
+                .filter(|pattern| !pattern.is_empty() && !pattern.contains('/'))
+                .map(|pattern| Glob::parse(pattern, false))
+                .collect(),
+        )
+    }
+
+    pub(super) fn skips(&self, name: &str) -> bool {
+        self.0.iter().any(|glob| glob.matches(name, None))
+    }
+}
+
 /// `*` within a segment, `?` one scalar of one, `**` whole segments; anchored at both ends,
 /// against the last segment when the pattern has no `/`.
 #[derive(Debug)]
@@ -393,6 +415,30 @@ mod tests {
             .collect();
         ranked.sort_by(|&a, &b| order(pattern.is_glob(), a, b));
         ranked.into_iter().map(|(_, path)| path).collect()
+    }
+
+    #[test]
+    fn skip_patterns_match_the_whole_name_exactly() {
+        let skip = Skip::new(&[
+            "build".into(),
+            "*.egg-info".into(),
+            "[x]".into(),
+            "a/b".into(),
+        ]);
+        for (name, skipped) in [
+            ("build", true),
+            ("Build", false),
+            ("builds", false),
+            ("pkg.egg-info", true),
+            ("egg-info", false),
+            ("[x]", true),
+            ("x", false),
+            ("b", false),
+        ] {
+            assert_eq!(skip.skips(name), skipped, "{name}");
+        }
+        assert!(Skip::new(&["**".into()]).skips("anything"));
+        assert!(!Skip::new(&[]).skips("node_modules"));
     }
 
     #[test]

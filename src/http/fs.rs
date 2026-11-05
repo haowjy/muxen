@@ -124,12 +124,14 @@ async fn searched(
     let found = async {
         let slot = ctx.fs.search().await?;
         let (asked, home, cancel) = (path.clone(), ctx.app.home.clone(), cancel.0.clone());
+        let skip = search::skip(&ctx.app.config);
         ctx.fs
             .lane
             .run(move || {
                 let _slot = slot;
                 let root = crate::fs::open(&asked, &home, Want::Dir)?;
-                search::search(&root, &pattern, filter, &search::CAPS, &cancel).map_err(FsError::io)
+                search::search(&root, &pattern, filter, &skip, &search::CAPS, &cancel)
+                    .map_err(FsError::io)
             })
             .await?
     }

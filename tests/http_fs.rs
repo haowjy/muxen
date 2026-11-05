@@ -301,23 +301,42 @@ async fn an_upload_can_name_its_folder_and_never_replaces_a_file() {
 #[tokio::test]
 async fn config_edits_apply_at_a_reload_and_a_broken_one_changes_nothing() {
     let daemon = start("fs-reload").await;
+    std::fs::create_dir_all(daemon.home("code/node_modules/pkg")).expect("a dir");
+    std::fs::write(daemon.home("code/node_modules/pkg/found"), b"").expect("a file");
+    let search = url("/fs/search/", &daemon.home("code")) + "?q=**";
     let landed = async || {
         let upload = post(&daemon, "/fs/upload?name=a.png", b"x", false).await;
         assert_eq!(upload.status, 201, "{}", upload.text());
         upload.text().to_owned()
     };
+    let entered = async || {
+        get(&daemon, &search, &[])
+            .await
+            .text()
+            .contains("pkg/found")
+    };
+    // The defaults: `node_modules` is listed, not entered.
     assert!(landed().await.contains("/.muxen-uploads/"));
+    let found = get(&daemon, &search, &[]).await.text().to_owned();
+    assert!(found.contains(r#""path":"node_modules""#), "{found}");
+    assert!(!entered().await);
 
     // A hand edit waits for a reload.
-    std::fs::write(&daemon.config, "uploads_dir = \"~/up\"\n").expect("edited");
+    std::fs::write(&daemon.config, "uploads_dir = \"~/up\"\nsearch_skip = []\n").expect("edited");
     assert!(landed().await.contains("/.muxen-uploads/"));
     assert!(daemon.live.reload().expect("parses").is_empty());
     assert!(landed().await.contains("/up/"));
+    assert!(entered().await);
 
     // One that doesn't parse changes nothing.
-    std::fs::write(&daemon.config, "uploads_dir = \"~/elsewhere\n").expect("broken");
+    std::fs::write(
+        &daemon.config,
+        "uploads_dir = \"~/elsewhere\"\nsearch_skip = [\n",
+    )
+    .expect("broken");
     assert!(daemon.live.reload().is_err());
     assert!(landed().await.contains("/up/"));
+    assert!(entered().await);
 }
 
 /// Writes `request` and reads until the server closes or a second passes.

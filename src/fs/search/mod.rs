@@ -1,11 +1,13 @@
 //! Files' Search (fs.md "GET /fs/search"): a breadth-first walk below one folder, one
 //! directory open at a time, that streams every name it reads through the matcher
-//! (`matcher.rs`, pure) and keeps the best 50. Nothing is kept between requests.
+//! (`matcher.rs`, pure) and keeps the best 50. Nothing is kept between requests; the skip
+//! patterns come from the running config.
 
 use std::cmp::Ordering;
 use std::collections::VecDeque;
-use std::io;
-use std::os::fd::OwnedFd;
+use std::fs::File;
+use std::io::{self, Read as _};
+use std::os::fd::{AsFd, OwnedFd};
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::time::{Duration, Instant};
 
@@ -14,17 +16,20 @@ use rustix::io::Errno;
 
 use super::list::{self, Filter};
 use super::{MAX_PATH, Opened};
+use crate::config::{DEFAULT_SEARCH_SKIP, LiveConfig};
 use crate::proto::fs::{EntryKind, Match, Search, Stopped};
 
 mod matcher;
 
-pub use matcher::Pattern;
+pub use matcher::{Pattern, Skip};
 use matcher::{last_segment, order};
 
 /// Matches answered.
 pub const MATCHES: usize = 50;
-/// Directories neither matched nor entered, at any depth (the root excepted).
-const SKIPPED: [&str; 3] = [".git", "node_modules", "target"];
+/// A cache directory's tag file and the bytes it must start with
+/// (<https://bford.info/cachedir/>).
+const CACHE_TAG: &str = "CACHEDIR.TAG";
+const CACHE_SIGNATURE: &[u8; 43] = b"Signature: 8a477f597d28d172789f06886806bc55";
 /// Entries between checks of the deadline and the cancel flag.
 const CHECK_EVERY: u32 = 1024;
 
@@ -44,13 +49,23 @@ pub const CAPS: Caps = Caps {
     queue: 1 << 20,
 };
 
+/// The running config's `search_skip`, else the default patterns.
+pub fn skip(config: &LiveConfig) -> Skip {
+    match config.keys().search_skip {
+        Some(patterns) => Skip::new(&patterns),
+        None => Skip::new(&DEFAULT_SEARCH_SKIP.map(str::to_owned)),
+    }
+}
+
 /// The matches below `root` for `pattern`, best first. Only an error on the root itself
-/// fails; a directory below it that can't be opened or read is skipped. A set `cancel`
+/// fails; a directory below it that can't be opened or read is skipped. A directory `skip`
+/// names, or one below the root tagged as a cache, is listed but not entered. A set `cancel`
 /// ends the walk at its next check, as the deadline does. Blocks.
 pub fn search(
     root: &Opened,
     pattern: &Pattern,
     filter: Filter,
+    skip: &Skip,
     caps: &Caps,
     cancel: &AtomicBool,
 ) -> io::Result<Search> {
@@ -66,9 +81,15 @@ pub fn search(
     let mut stopped = None;
     'walk: loop {
         let prefix = std::str::from_utf8(&current).expect("queued from a str");
-        let opened = below.open(prefix).and_then(|fd| Ok(Dir::new(fd)?));
+        // The root is read whatever it holds.
+        let opened = below.open(prefix).and_then(|fd| {
+            if !prefix.is_empty() && cache_tagged(&fd) {
+                return Ok(None);
+            }
+            Ok(Some(Dir::new(fd)?))
+        });
         let mut entries = match opened {
-            Ok(entries) => Some(entries),
+            Ok(entries) => entries,
             Err(error) if prefix.is_empty() => return Err(error),
             Err(_) => None,
         };
@@ -123,14 +144,10 @@ pub fn search(
             if root.path.len() + 1 + path.len() > MAX_PATH {
                 continue;
             }
-            let dir = file_type == FileType::Directory;
-            if dir && SKIPPED.contains(&name) {
-                continue;
-            }
             if let Some(rank) = pattern.rank(&path) {
                 best.offer(rank, &path, file_type);
             }
-            if dir {
+            if file_type == FileType::Directory && !skip.skips(name) {
                 queue.push(&path);
             }
         }
@@ -203,6 +220,26 @@ impl<'a> Below<'a> {
         }
         Ok(fd)
     }
+}
+
+/// Whether `dir` holds a regular file `CACHEDIR.TAG` starting with the signature. Any
+/// error means no tag. `O_NONBLOCK` keeps a FIFO of that name from blocking the open,
+/// `O_NOCTTY` a tty from becoming the daemon's terminal.
+fn cache_tagged(dir: impl AsFd) -> bool {
+    let flags =
+        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::NONBLOCK | OFlags::CLOEXEC | OFlags::NOCTTY;
+    let Ok(tag) = rustix::fs::openat(dir, CACHE_TAG, flags, Mode::empty()) else {
+        return false;
+    };
+    let tag = File::from(tag);
+    if !tag.metadata().is_ok_and(|meta| meta.is_file()) {
+        return false;
+    }
+    let mut head = Vec::with_capacity(CACHE_SIGNATURE.len());
+    let read = (&tag)
+        .take(CACHE_SIGNATURE.len() as u64)
+        .read_to_end(&mut head);
+    read.is_ok() && head == CACHE_SIGNATURE
 }
 
 /// `stat`'s `st_dev`, whose type differs by platform.
@@ -356,9 +393,14 @@ mod tests {
     }
 
     fn walk(tree: &Tree, q: &str, hidden: bool, caps: &Caps) -> Search {
+        walk_skipping(tree, q, hidden, &["node_modules"], caps)
+    }
+
+    fn walk_skipping(tree: &Tree, q: &str, hidden: bool, skip: &[&str], caps: &Caps) -> Search {
         let root = open(&tree.str(""), Path::new("/"), Want::Dir).expect("the root");
         let cancel = AtomicBool::new(false);
-        search(&root, &parse(q), Filter { hidden }, caps, &cancel).expect("searched")
+        let skip = Skip::new(&skip.iter().map(|&p| p.to_owned()).collect::<Vec<_>>());
+        search(&root, &parse(q), Filter { hidden }, &skip, caps, &cancel).expect("searched")
     }
 
     fn paths(search: &Search) -> Vec<&str> {
@@ -371,6 +413,7 @@ mod tests {
         let tree = Tree::new("search");
         for dir in [
             "src/deep",
+            "src/build",
             "docs",
             ".hidden",
             "node_modules/pkg",
@@ -382,6 +425,7 @@ mod tests {
         for file in [
             "src/main.rs",
             "src/deep/main.rs",
+            "src/build/main.rs",
             "docs/target",
             ".hidden/main.rs",
             ".env",
@@ -391,13 +435,16 @@ mod tests {
         ] {
             tree.write(file, b"fn main() {}");
         }
+        tree.write("src/build/CACHEDIR.TAG", TAG);
         symlink(tree.path("src"), tree.path("linked")).expect("a link");
         symlink(tree.path("missing"), tree.path("broken")).expect("a link");
         tree
     }
 
+    const TAG: &[u8] = b"Signature: 8a477f597d28d172789f06886806bc55\n# a cache\n";
+
     #[test]
-    fn the_walk_skips_links_builds_and_dotfiles_and_answers_entries() {
+    fn the_walk_lists_skipped_folders_without_entering_them_and_answers_entries() {
         let tree = sample();
         let everything = walk(&tree, "**", false, &CAPS);
         assert_eq!(
@@ -407,26 +454,34 @@ mod tests {
                 "docs",
                 "docs/target",
                 "linked",
+                "node_modules",
                 "src",
+                "src/build",
                 "src/deep",
                 "src/deep/main.rs",
-                "src/main.rs"
+                "src/main.rs",
+                "target",
+                "target/debug",
+                "target/debug/main"
             ]
         );
-        // Skipped names count as read: 9 at the root, 2 + 1 + 1 below.
-        assert_eq!((everything.read, everything.stopped), (13, None));
-        let with_hidden = walk(&tree, "**", true, &CAPS);
-        assert!(paths(&with_hidden).contains(&".hidden/main.rs"));
-        assert!(paths(&with_hidden).contains(&".env"));
-        assert!(
-            !paths(&with_hidden)
-                .iter()
-                .any(|path| path.starts_with(".git"))
-        );
+        // Hidden names count as read: 9 at the root, 3 + 1 + 1 + 1 + 1 below.
+        assert_eq!((everything.read, everything.stopped), (16, None));
+        // Hidden names are the only rule `hidden=1` lifts.
+        let with_hidden = paths(&walk(&tree, "**", true, &CAPS)).join(" ");
+        for found in [".hidden/main.rs", ".env", ".git/main"] {
+            assert!(with_hidden.contains(found), "{found}: {with_hidden}");
+        }
+        for skipped in ["node_modules/", "src/build/"] {
+            assert!(!with_hidden.contains(skipped), "{skipped}: {with_hidden}");
+        }
 
         let found = walk(&tree, "main", false, &CAPS);
         assert_eq!(found.path, tree.str(""));
-        assert_eq!(paths(&found), ["src/deep/main.rs", "src/main.rs"]);
+        assert_eq!(
+            paths(&found),
+            ["src/deep/main.rs", "src/main.rs", "target/debug/main"]
+        );
         let main = &found.matches[0];
         assert_eq!(
             (main.path.as_str(), main.entry.name.as_str()),
@@ -454,6 +509,79 @@ mod tests {
     }
 
     #[test]
+    fn only_an_exact_cache_tag_in_a_regular_file_skips_a_folder() {
+        let tree = Tree::new("tags");
+        tree.write("CACHEDIR.TAG", TAG);
+        let mut tags: Vec<(&str, Option<&[u8]>)> = vec![
+            ("exact", Some(&TAG[..43])),
+            ("longer", Some(TAG)),
+            ("short", Some(&TAG[..42])),
+            ("case", Some(b"signature: 8a477f597d28d172789f06886806bc55")),
+            ("empty", Some(b"")),
+            ("linked", None),
+            ("fifo", None),
+            ("folder", None),
+        ];
+        for (dir, tag) in &mut tags {
+            tree.mkdir(dir);
+            tree.write(&format!("{dir}/x"), b"");
+            if let Some(tag) = tag {
+                tree.write(&format!("{dir}/CACHEDIR.TAG"), tag);
+            }
+        }
+        symlink(
+            tree.path("exact/CACHEDIR.TAG"),
+            tree.path("linked/CACHEDIR.TAG"),
+        )
+        .expect("a link");
+        let fifo = std::process::Command::new("mkfifo")
+            .arg(tree.path("fifo/CACHEDIR.TAG"))
+            .status();
+        assert!(fifo.expect("mkfifo ran").success());
+        tree.mkdir("folder/CACHEDIR.TAG");
+        // The root is read though it is tagged; only `exact` and `longer` aren't.
+        let entered = walk(&tree, "*/x", false, &CAPS);
+        assert_eq!(
+            paths(&entered),
+            [
+                "case/x", "empty/x", "fifo/x", "folder/x", "linked/x", "short/x"
+            ]
+        );
+    }
+
+    #[test]
+    fn patterns_match_a_folder_name_exactly() {
+        let tree = Tree::new("patterns");
+        for dir in [
+            "pkg.egg-info",
+            "Cache",
+            "[ab]",
+            "a",
+            "n/node_modules",
+            "n/node_modules2",
+        ] {
+            tree.mkdir(dir);
+            tree.write(&format!("{dir}/x"), b"");
+        }
+        let entered = |skip: &[&str]| {
+            let found = walk_skipping(&tree, "**/x", false, skip, &CAPS);
+            paths(&found)
+                .into_iter()
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            entered(&["*.egg-info", "cache", "[ab]", "node_modules", "n/x"]),
+            ["Cache/x", "a/x", "n/node_modules2/x"]
+        );
+        // `a` and `n`.
+        assert_eq!(entered(&["?"]), ["Cache/x", "[ab]/x", "pkg.egg-info/x"]);
+        // `*` would skip every folder below the root; settings refuse it, a hand edit can write it.
+        assert_eq!(entered(&["*"]), Vec::<String>::new());
+        assert_eq!(entered(&[]).len(), 6);
+    }
+
+    #[test]
     fn caps_stop_the_walk_and_say_which() {
         let tree = sample();
         let caps = |entries, time, queue| Caps {
@@ -471,14 +599,16 @@ mod tests {
             &caps(CAPS.entries, Duration::ZERO, CAPS.queue),
         );
         assert_eq!((timed.read, timed.stopped), (9, Some(Stopped::Time)));
-        assert_eq!(paths(&timed), ["broken", "docs", "linked", "src"]);
-        // Room for `docs` alone (2 + 4 bytes): it is read, `src` never queued.
+        assert_eq!(
+            paths(&timed),
+            ["broken", "docs", "linked", "node_modules", "src", "target"]
+        );
+        // Room for `docs` (2 + 4 bytes) alone: it is read, `docs/sub` never queued.
+        let tree = Tree::new("queue");
+        tree.mkdir("docs/sub/deeper");
         let queued = walk(&tree, "**", false, &caps(CAPS.entries, CAPS.time, 6));
         assert_eq!(queued.stopped, Some(Stopped::Queue));
-        assert_eq!(
-            paths(&queued),
-            ["broken", "docs", "docs/target", "linked", "src"]
-        );
+        assert_eq!(paths(&queued), ["docs", "docs/sub"]);
 
         let root = open(&tree.str(""), Path::new("/"), Want::Dir).expect("the root");
         let cancelled = AtomicBool::new(true);
@@ -486,6 +616,7 @@ mod tests {
             &root,
             &parse("**"),
             Filter { hidden: false },
+            &Skip::new(&[]),
             &CAPS,
             &cancelled,
         );
@@ -499,7 +630,7 @@ mod tests {
         std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).expect("chmod");
         let found = walk(&tree, "main", false, &CAPS);
         std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).expect("chmod");
-        assert_eq!(paths(&found), ["src/main.rs"]);
+        assert_eq!(paths(&found), ["src/main.rs", "target/debug/main"]);
         assert_eq!(found.stopped, None);
     }
 }

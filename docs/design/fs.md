@@ -216,9 +216,12 @@ request it no longer needs ([browser-behaviors.md](client/browser-behaviors.md#f
   counted; when it is full the walk stops queueing, keeps reading what is queued, and answers
   `stopped: "queue"`. The deadline and the cancel flag are checked every 1,024 entries and
   between directories; one stalled filesystem call can't be interrupted.
-- **Host cost:** measured on pop-os, warm, through the route: a 67,000-entry repo walks in 50 to 65 ms,
-  and 100,000 entries of `~` or `~/gitrepos` take 60 to 120 ms of one core unconstrained, 155 to 250 ms
-  under the unit's `CPUQuota=50%`. That is the
+- **Host cost:** measured on pop-os, warm, through the route, with these skip rules: a 67,000-entry
+  repo (`hidden=1`) walks in 60 to 73 ms, and 100,000 entries of `~` or `~/gitrepos` take 75 to 140 ms
+  of one core unconstrained, 180 to 330 ms under the unit's `CPUQuota=50%`. The cache-tag probe is
+  about 1 µs a directory there: 6 to 8 ms of the repo's walk (6,400 directories), 5 to 25 ms of a
+  100,000-entry one, most where `hidden=1` opens more folders. A cold walk wasn't measured (dropping
+  the caches needs root). That is the
   bound per settled query, shared with the rest of muxen inside the unit's quota. The walk doesn't
   change its thread's priority: an unprivileged thread can't lower its nice again (`RLIMIT_NICE` is
   0), so a lane thread would stay deprioritised for every later listing.
@@ -551,8 +554,8 @@ without a disk.
 | `fs/open.rs` | `fs::open`, `fs::check_dir`, the platform descriptor-path lookup |
 | `fs/slots.rs` | scan, search, raw-response and upload permits, with waits counted against the fs lane |
 | `fs/list.rs` | the scan; pure sort and page |
-| `fs/search/mod.rs` | the walk and the best 50 |
-| `fs/search/matcher.rs` | pure: query parsing, glob and fuzzy scoring, hits, result order |
+| `fs/search/mod.rs` | the walk, the cache-tag probe and the best 50 |
+| `fs/search/matcher.rs` | pure: query parsing, glob and fuzzy scoring, hits, result order, the skip patterns |
 | `fs/raw.rs` | pure `parse_range` and `If-Range`; the chunk producer; ETags come from `files::Stamp` |
 | `fs/mime.rs` | the extension table |
 | `fs/upload.rs` | pure name generation; part file, flush, rename, the in-flight record and its cleanup |
