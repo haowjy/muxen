@@ -391,7 +391,7 @@ triggers it when the bridge request arrives.
 
 ## The bridge
 
-Bridge version 10 has one `muxen` message handler
+Bridge version 11 has one `muxen` message handler
 (`WKScriptMessageHandlerWithReply`) and a page entry point, invoked in the page
 content world: `window.__muxen.receive(messages)` accepts an array of native events.
 The native shell does not query page state. Uploads name their own host and id (below). Each bridge message is a
@@ -404,7 +404,7 @@ token to native solely for comparison and revocation, never into storage or logs
 
 | Web → native | Reply | Purpose |
 |---|---|---|
-| `ready` | `Boot { bridgeVersion: 10, hosts, workspace, viewport, preferences, lifecycle }` | Start and restore the saved workspace (opaque JSON) |
+| `ready` | `Boot { bridgeVersion: 11, hosts, workspace, viewport, preferences, lifecycle }` | Start and restore the saved workspace (opaque JSON) |
 | `socket { host }` | `{ url, token }`, `{ locked: true }` or `{ notEnrolled: true }` | Resolve the WebSocket endpoint and credential inside `HostLink`; keep both there except echoing the exact refused token to native for `hostRejected` |
 | `hostRejected { host, token }` | `null` | Clear that exact rejected token only, then re-publish `hosts` |
 | `recreateWebView` | `null` | Discard/reload the page after unrecoverable WebSocket connection failure |
@@ -419,6 +419,7 @@ token to native solely for comparison and revocation, never into storage or logs
 | `haptic { kind }` | `null` | `key` or `modifier` (native's own ^C/^D `warning` is not a bridge kind) |
 | `pickMedia { id, host }` | `null` | Present the native media action sheet, then upload the pick to `host` under the web-chosen `id`. Needs no open tab |
 | `playVideo { host, path }` | `null` | Play an authenticated `/fs/raw` resource |
+| `download { url, name }` | `null` or `{ error, code? }`, when the share sheet closes | Files' Download: native fetches the file `url` names (the page's own `muxen-app://h-{host}/fs/raw/…`) from that host, shows its progress, then offers it as `name` in the share sheet ("Files and sharing"). `null` is shared, dismissed or cancelled; `code` is the daemon's refusal code, worded by the web as for `upload`, `error` the fallback |
 | `setPreference { name, value }` | Every `Preferences` | Native keeps the choice (`appearance`, `textSize` or `relock`), applies it, and answers with all three; an unknown name or value is a refused request. The web shows the reply. Only the web's Settings changes a preference, so native sends no change event |
 | `backSwipe { enabled }` | `null` | Turn WebKit's left-edge back-forward swipe on or off for the current web view. It starts off and is off again for each new web view; the web sends it whenever it changes (off on a terminal tab with nothing over it, on elsewhere), so a swipe pops the page's own history. A content-process crash makes a new web view, so the back list never holds an earlier document |
 | `editMenu { rect }` | `null` | Show iOS's edit menu (`UIEditMenuInteraction` on the web view, Copy and Paste) over `rect` (`{ x, y, width, height }`, client points = web view points), hide it if it is already up, or hide it when `rect` is `null`. The page owns the keyboard-up mark and sends the rect of its text; native owns whether the menu is up. The choice comes back as `menuCopy` or `menuPaste` |
@@ -465,7 +466,7 @@ HostEntry = { id: string, name: string, baseURL: string }
 PlatformHost = { handle: string, hostId: string | null,
                  name: string | null, pageOrigin: string | null }
 TabKey = { host: string, session: { server: string, session: string } }
-Boot = { bridgeVersion: 10, hosts: PlatformHost[],
+Boot = { bridgeVersion: 11, hosts: PlatformHost[],
          workspace: JSON | null, viewport: Viewport,
          preferences: Preferences, lifecycle: Lifecycle }
 Preferences = { appearance: "system" | "light" | "dark",
@@ -539,6 +540,34 @@ manifest), and tells Jimmy to open muxen. On the next foreground the app offers 
 the network. It waits on an explicit App ID with the App Groups capability; the
 wildcard development profile has none (Distribution).
 
+**Download (native).** A web view's download goes nowhere, so Files' Download (the browser's
+`<a download>`, `Platform.download(url, name)`) is a bridge request in the app: `download { url, name }`.
+
+1. Native takes `url` only if it is `muxen-app://h-{host}/fs/raw/…` for a saved host, with no query or
+   fragment, and fetches `{baseURL}` plus the same percent-encoded path, unchanged, with
+   `Authorization: Bearer` ([auth.md](auth.md#carrying-the-token)): the scheme handler's resolution,
+   outside the scheme handler, as the video player is. The page has listed the folder through the
+   handler, so the compatibility gate has already run. Locked, or no token: the reply is an error
+   ("Unlock muxen to download."), with no request.
+2. `Downloader` streams the body to one temporary file (`URLSessionDownloadTask`, an ephemeral session,
+   no cache), never a whole-file buffer. Its request timeout is 30 s between bytes, the daemon's raw
+   stall deadline ([fs.md](fs.md#constants)): a fetch that stalls longer fails as stalled. One download
+   at a time; the temporary folder (`tmp/Downloads/`) is emptied before each, so a crash's leftovers
+   go with the next one.
+3. A download still running after 0.5 s shows a native alert, "Downloading {name}", with the bytes so
+   far and the size ("4.2 MB of 40 MB") and Cancel; a small file goes straight to the sheet. Cancel
+   ends the request and replies `null`.
+4. A non-200 answer is an error: its `{"error": code}` body (read only when under 4 KiB) gives `code`,
+   and a `401` on the token it carried revokes that token, as the uploader's does. The file is
+   renamed to `name` reduced to one path component, then the share sheet
+   (`UIActivityViewController`) offers it: Save to Files, AirDrop, another app.
+5. When the sheet closes, however it closes, native deletes the file and replies. A lock (the app
+   relocking on foreground) cancels a running download, dismisses its alert or sheet, and deletes the
+   file: a sheet must not stay up over the lock screen.
+
+The web shows an error reply in Files' notice ("Couldn't download {name}: {words}"); `null` says
+nothing. The file never enters the web view, so nothing it holds can run as the app.
+
 **Clipboard (v2).** User-initiated `copy` writes `UIPasteboard` and is never gated by
 the server-write policy. OSC 52 writes remain disabled in the web client; the bridge
 does not expose a server-origin copy route. User-initiated Paste reads the pasteboard
@@ -589,7 +618,7 @@ ios/
     Web/                 WebShellController, AppSchemeHandler
     Auth/                TokenStore, HostStore, DraftStore, AuthClient
     Hosts/               SwiftUI server list and enrolment form
-    Media/               Uploader; picker and video presentation
+    Media/               Uploader, Downloader; picker, video and share-sheet presentation
     Support/             Haptics
   MuxenKit/             Foundation-only Swift package and tests
     Tests/Fixtures/bridge/ one flat fixture for each bridge message, shared with web tests
@@ -653,6 +682,7 @@ and fix this spec from them. The current Simulator cannot show the software keyb
 | Appearance | System follows device changes; explicit Light and Dark survive them and agree in native chrome (lock screen, the server sheet, the keyboard) and web content, including after a relaunch and with the app locked at launch |
 | Text size | Each size resizes the shown tmux window once (`tmux display -p '#{window_width}'` changes with each size) and survives a relaunch |
 | Face ID relock | For each of 5 min, 1 hour and At launch: a background trip shorter than the interval returns with no prompt; one longer asks for Face ID first thing on foreground. At launch never asks on foreground, however long the trip, and asks once after a process restart. Changing the setting takes effect at the next background trip. Choosing a longer interval or At launch asks for Face ID first, and cancelling leaves the old choice selected |
+| Download | A text file, a 100 MB file (the alert counts up; Cancel stops it) and a file the daemon refuses: Save to Files keeps the name, AirDrop and Open in work, the error reads in words, and `tmp/Downloads/` is empty after each sheet closes. Lock during a download: the alert or sheet goes |
 | Paste | The mark menu's Paste with text and with an image, with "Allow Paste" set to Ask and Allow; the line box's paste of one line and of several lines, and of an image (it goes to the terminal) |
 | Keychain unlock ([auth.md](auth.md#recovery)) | One item holds the token map; one read prompts once and subsequent requests use memory only. Check each relock setting on either side of its threshold and At launch across foreground and process restart. Reset tokens deletes the item and leaves every saved host not enrolled; after adding an alternate Face ID appearance, record the read's exact `OSStatus` |
 | Keychain update | With an existing token item and a successful unlock, add or remove a host; `SecItemUpdate` reuses the unlock's `LAContext`, raises no second Face ID prompt and leaves the UI responsive |

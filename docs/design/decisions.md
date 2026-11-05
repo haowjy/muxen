@@ -5010,3 +5010,31 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
   inside the desktop field (the path field, already shipped, ends with Cancel); one Search per tab with
   no folder (a Back onto Search's entry renders once with the folder it left before the place follows,
   which replaced the kept Search with an empty one).
+
+## Download in the iPhone app is a bridge request to a native fetch and the share sheet (bridge v11) (2026-11-05)
+
+- **Decided:** 2026-11-05, the Files redesign phase 4 build (p554), on Jimmy's "an easy download for
+  unsupported or any file".
+- **What:** the app's web view can't download, so Files hid Download there. Bridge v11 adds
+  `download { url, name }`: native resolves the page's own `muxen-app://h-{host}/fs/raw/…` URL as the scheme
+  handler does (the host's `baseURL`, the percent-encoded path unchanged), fetches it with the Bearer token
+  into one temporary file (`URLSessionDownloadTask`, 30 s between bytes, the daemon's raw stall deadline),
+  shows a native alert with the bytes so far and Cancel once the download has run 0.5 s, then presents
+  `UIActivityViewController` with the file under `name`. The reply comes when the sheet closes: `null`, or
+  `{ error, code? }` that the web words with `refusalWords` and says in Files' notice. The file is deleted
+  when the sheet closes, and the temporary folder is emptied before each download. A lock cancels the
+  download and dismisses its alert or sheet. `Platform.download` is no longer optional and returns the words
+  for a failure, so Download shows on every platform. v11 because the contract is strict equality and an
+  older native refuses a message it doesn't know.
+- **Rejected:**
+  - `download { host, path }` like `playVideo`: the page already holds the raw URL the scheme handler
+    resolves, and `Platform.download` takes it; a second path encoder in native would have to match the
+    web's.
+  - Progress in the web (an event stream like `upload` and a `cancelDownload` message, a download row in
+    the upload panel): a second message, an id, and a panel the share sheet covers anyway. The alert and
+    the sheet are both native and modal, so one reply when it's over carries everything the web shows.
+  - A whole-file `Data` fetch, or a stream into the page as a `blob:`: memory grows with the file, and the
+    blob would still need a native hand-off to save.
+  - Showing the alert for every download: a small file would flash it before the sheet.
+  - Saving straight to Files (`UIDocumentPickerViewController` in export mode): the share sheet has Save to
+    Files and also AirDrop and opening in another app, which the brief asked for.
