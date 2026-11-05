@@ -1492,6 +1492,14 @@ are Jimmy's ([Files](#files-view-and-upload-now-three-write-operations-in-v2)).
   hand edits only (Jimmy wants it in the app). The keys that apply only at a restart stay hand edits:
   shown in the app they would need a restart step, and a wrong tmux socket set from the phone would cut
   off the screen that fixes it.
+- **Changed 2026-11-05 (p567 review, lead):** SIGHUP reloads only when the daemon's stdin was not a
+  terminal at start. A foreground `muxen serve` in a terminal keeps SIGHUP's default: closing the
+  terminal ends it, where a reload would leave it running orphaned with the runtime lock, so the next
+  `muxen serve` is refused. Rejected: reloading on SIGHUP always and documenting the orphan (a surprise
+  each time a terminal closes); keying on a service manager's variables (`NOTIFY_SOCKET` is systemd's
+  only, and launchd sets none). Also from that review: the restart-only keys a loaded or written file
+  changed stay with the running config, and every Settings answer carries them (`restartNeeded`), since
+  a save can pick up a hand edit too; a reload answers the same `ServerSettings` as a save.
 - **Supersedes:** "fs reads `roots` from `config.toml` on every request"; "skipped by name" in the decision below, and the deletion of the `config.toml` writer
   in "No favorites (2026-10-30)": a writer returns for `search_skip` and `uploads_dir`.
 

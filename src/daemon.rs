@@ -1,6 +1,7 @@
 //! Daemon assembly and serving, shared by the CLI and foreground setup.
 
 use std::error::Error;
+use std::io::IsTerminal as _;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -169,19 +170,23 @@ impl Opened {
         let mut interrupt = signal(SignalKind::interrupt())?;
 
         warn_if_uploads_dir_unusable(config, &home);
-        // `systemctl --user reload muxen` (the unit's `ExecReload`). Registered before
-        // serving: SIGHUP's default would end the daemon.
-        let mut hangup = signal(SignalKind::hangup())?;
-        let (reload_live, reload_lane) = (live.clone(), lanes.fs.clone());
-        tokio::spawn(async move {
-            while hangup.recv().await.is_some() {
-                let live = reload_live.clone();
-                // The outcome is logged by `reload`.
-                if reload_lane.run(move || drop(live.reload())).await.is_err() {
-                    warn!("config.toml not reloaded: the file lane is busy");
+        // SIGHUP is a reload (`systemctl --user reload muxen`, the unit's `ExecReload`)
+        // only for a daemon not started in a terminal. In one, it is the terminal closing:
+        // its default ends the daemon, which would otherwise live on orphaned, holding the
+        // runtime lock. Registered before serving, since that default would end a service.
+        if !std::io::stdin().is_terminal() {
+            let mut hangup = signal(SignalKind::hangup())?;
+            let (reload_live, reload_lane) = (live.clone(), lanes.fs.clone());
+            tokio::spawn(async move {
+                while hangup.recv().await.is_some() {
+                    let live = reload_live.clone();
+                    // The outcome is logged by `reload`.
+                    if reload_lane.run(move || drop(live.reload())).await.is_err() {
+                        warn!("config.toml not reloaded: the file lane is busy");
+                    }
                 }
-            }
-        });
+            });
+        }
         let (hub, mut hub_task) = hub::spawn(
             Endpoints {
                 main: endpoint.clone(),

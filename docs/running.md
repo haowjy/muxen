@@ -150,6 +150,11 @@ other keys wait for a restart, and a file that doesn't parse changes nothing (th
 where). Settings in the app shows and edits `uploads_dir` and `search_skip` for each server,
 and offers Reload config.toml after a hand edit.
 
+A `muxen serve` started in a terminal keeps SIGHUP's usual meaning: closing the terminal
+(or the SSH session) ends it, and `kill -HUP` stops it rather than reloading. Use Settings'
+Reload config.toml there, or restart it. Only a muxen whose input isn't a terminal (the
+systemd unit, the launchd agent, `nohup … </dev/null`) reloads on SIGHUP.
+
 With neither socket key, muxen uses tmux's default socket, which tmux finds through
 `TMUX_TMPDIR`. A foreground run inherits it. A systemd user unit doesn't see variables
 set in your shell's rc files, so if you set `TMUX_TMPDIR` there, set `socket_path` here.

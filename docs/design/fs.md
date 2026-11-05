@@ -55,7 +55,9 @@ the default, for the terminal's pasted images and Files' Upload.
 **`config.toml` is read once, at startup, and again only on a reload**, as nginx and sshd do. The
 daemon holds the live keys (`uploads_dir`, `search_skip`) in memory; uploads and search read that copy,
 never the file. A **reload** is SIGHUP (`systemctl --user reload muxen`, the unit's `ExecReload`) or
-Settings' **Reload config.toml** (`POST /settings/reload`). It reads and parses the whole file first:
+Settings' **Reload config.toml** (`POST /settings/reload`). SIGHUP reloads only when the daemon's stdin
+was not a terminal at start; a foreground run in a terminal keeps SIGHUP's default and ends when the
+terminal closes, rather than living on orphaned with the runtime lock. Settings' reload works either way. It reads and parses the whole file first:
 if it doesn't parse, nothing changes, the running config stays, and the error is logged at `warn` and
 answered (`503 config_unavailable` with the parser's line and column in `detail`). If it parses, the
 live keys take the new values at once, and a restart-only key that differs from the running value
