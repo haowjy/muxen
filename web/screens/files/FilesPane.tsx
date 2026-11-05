@@ -1,26 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { useApp, useAppView } from "../../app/context";
 import { describeError, parentPlace } from "../../files/browser";
 import { folderKey } from "../../files/folders";
 import { baseName, parentOf } from "../../files/paths";
-import type { HttpRefusal } from "../../net/http";
 import type { FilesTab } from "../../workspace/state";
 import type { LinkTarget } from "../../files/render/markdown";
 import type { FilesPlace } from "../../platform/types";
 import { useStore } from "../../ui/store";
 import { cx } from "../../ui/cx";
-import { Button } from "../../ui/primitives/Button";
-import { EmptyState } from "../../ui/primitives/EmptyState";
 import { IconButton } from "../../ui/primitives/IconButton";
-import { Spinner } from "../../ui/primitives/Spinner";
 import { Divider } from "./Divider";
-import { MissingFolder, type OutlineProps } from "./FolderList";
 import { FileView } from "./FileView";
-import { PASTE, useFilesKey, type Chord } from "./keymap";
-import { ListPane } from "./ListPane";
+import { useFilesKey, type Chord } from "./keymap";
+import { ListPane, Loading, Refused } from "./ListPane";
 import { PreviewPanel } from "./PreviewPanel";
-import { readPaste } from "../terminal/paste";
-import { pasteIntoFolder, type FilesSession } from "./session";
+import type { FilesSession } from "./session";
 import { useTabOutline } from "./tabOutline";
 import styles from "./FilesScreen.module.css";
 import bar from "./FileView.module.css";
@@ -51,8 +45,6 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
   // The folder under the place: its pages are `Folders`' record, shared with the path field.
   const held = useStore(browser.folders, (s) => s.held);
   const pages = dir ? held.get(folderKey(dir.path, dir.hidden))?.listing ?? null : null;
-  // While the path field is being typed in, the path field's matches are the list.
-  const [finding, setFinding] = useState(false);
   const phone = useAppView((v) => v.viewport.layout === "phone");
   const windowWidth = useAppView((v) => v.viewport.width);
 
@@ -66,35 +58,12 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
     return () => { wantsNow.current = null; };
   }, [app, browser, wanted]);
 
-  // Cmd/Ctrl-V with the folder showing puts the clipboard into it (the path field keeps its own paste).
-  const folderShown = place.kind === "dir" && pages?.path === place.path && !error ? pages.path : null;
-  useFilesKey(PASTE, (e) => {
-    if (folderShown === null || !(e instanceof ClipboardEvent)) return;
-    const pasted = readPaste(e.clipboardData);
-    if (pasted.kind !== "empty") pasteIntoFolder(app, session, folderShown, pasted);
-  }, folderShown !== null);
-
   const open = (to: FilesPlace): void => { app.openPlace(to); };
   const up = parentPlace(place, pages);
   const listed = pages !== null && (place.kind === "dir" ? pages.path === place.path : pages.path === parentOf(place.file.path));
-  const showing = place.kind === "dir" && listed && !error && !finding;
 
   const root = place.kind === "dir" && listed ? pages.path : null;
   const tree = useTabOutline(session, tab.id, root);
-  const describe = useMemo(() => (e: HttpRefusal) => describeError(e, session.hostName), [session]);
-  const outline: OutlineProps | undefined = phone ? undefined : {
-    expanded: tree.expanded,
-    held,
-    describe,
-    onToggle: tree.toggle,
-    onRest: (path, act) => { void (act === "more" ? browser.folders.more(path, hidden) : browser.folders.load(path, hidden)); },
-    // Each open folder is listed once, when it first shows, and kept while it shows.
-    onShown: (paths) => {
-      browser.folders.pin("outline", paths.map((path) => ({ path, hidden })));
-      for (const path of paths) if (!browser.folders.snapshot.held.has(folderKey(path, hidden))) void browser.folders.load(path, hidden, true);
-    },
-  };
-  useEffect(() => () => { browser.folders.pin("outline", []); }, [browser]);
 
   // Back from a file full width lands on the list with the file selected, its folders open.
   const lastFile = useRef<string | null>(null);
@@ -140,20 +109,10 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
 
   const title = place.kind === "dir" ? baseName(place.path) : place.file.name;
 
-  let body;
-  if (error) {
-    // A folder that vanished (moved, deleted) still has a way up.
-    const gone = place.kind === "dir" && error.code === "not_found";
-    body = gone ? (
-      <MissingFolder onKeyNavigate={() => { app.focus.keepKeyboardOn("list"); }} {...(up && { parent: { path: up.path, onOpen: () => { app.toPlace(up); } } })} />
-    ) : (
-      <EmptyState icon="alert" title={describeError(error, session.hostName)} action={<Button onClick={() => { void browser.reload(); }}>Try again</Button>} />
-    );
-  } else if (place.kind === "dir") {
-    body = listed ? null : <Loading what="Loading the folder" />;
-  } else {
-    body = loading && place.file.mime === null && place.file.size === null ? <Loading what="Opening the file" /> : null;
-  }
+  // A file full width that can't be shown yet: refused, or still being probed.
+  const fileBody = place.kind !== "file" ? null
+    : error ? <Refused session={session} error={error} />
+    : loading && place.file.mime === null && place.file.size === null ? <Loading what="Opening the file" /> : null;
 
   return (
     <div ref={files} class={styles.files} style={{ "--files-list-w": `${String(width)}px` }}>
@@ -165,16 +124,9 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
           tab={tab.id}
           view={view}
           pages={listed ? pages : null}
-          showing={showing}
-          pasteable={folderShown !== null}
-          body={body}
-          outline={outline}
-          selection={tree.selection}
-          onSelect={tree.select}
+          tree={tree}
           up={up}
           onOpen={open}
-          finding={finding}
-          onFinding={setFinding}
         />
         {panel && (
           <>
@@ -199,13 +151,9 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
       )}
       {place.kind === "file" && (
         <FileView session={session} file={place.file} back={back} onLink={onLink}>
-          {body ? <div class={styles.scroll}>{body}</div> : undefined}
+          {fileBody ? <div class={styles.scroll}>{fileBody}</div> : undefined}
         </FileView>
       )}
     </div>
   );
-}
-
-function Loading({ what }: { what: string }) {
-  return <div class={styles.loading}><Spinner label={what} /><p>{what}</p></div>;
 }

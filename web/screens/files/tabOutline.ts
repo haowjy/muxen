@@ -1,5 +1,10 @@
-import { useMemo, useState } from "preact/hooks";
+import { useEffect, useMemo, useState } from "preact/hooks";
+import { describeError } from "../../files/browser";
+import { folderKey } from "../../files/folders";
 import { foldersBetween, withExpanded } from "../../files/outline";
+import type { HttpRefusal } from "../../net/http";
+import { useStore } from "../../ui/store";
+import type { OutlineProps } from "./FolderList";
 import { scrollKey, type FilesSession } from "./session";
 
 export interface TabOutline {
@@ -44,6 +49,30 @@ export function useTabOutline(session: FilesSession, tab: string, root: string |
       if (root === null) return;
       expand(foldersBetween(root, path).reduce((all: readonly string[], folder) => withExpanded(all, folder, true, root), open));
       select(path);
+    },
+  };
+}
+
+/**
+ * What a desktop outline draws its open folders from: the host's folder cache. Each open folder is listed once, when
+ * it first shows (behind what the user is looking at, `Folders.load`), and pinned while it shows. Undefined when off
+ * (the phone has no outline).
+ */
+export function useOutlineListings(session: FilesSession, tree: TabOutline, hidden: boolean, on: boolean): OutlineProps | undefined {
+  const { folders } = session.browser;
+  const held = useStore(folders, (s) => s.held);
+  const describe = useMemo(() => (e: HttpRefusal) => describeError(e, session.hostName), [session]);
+  useEffect(() => () => { folders.pin("outline", []); }, [folders]);
+  if (!on) return undefined;
+  return {
+    expanded: tree.expanded,
+    held,
+    describe,
+    onToggle: tree.toggle,
+    onRest: (path, act) => { void (act === "more" ? folders.more(path, hidden) : folders.load(path, hidden)); },
+    onShown: (paths) => {
+      folders.pin("outline", paths.map((path) => ({ path, hidden })));
+      for (const path of paths) if (!folders.snapshot.held.has(folderKey(path, hidden))) void folders.load(path, hidden, true);
     },
   };
 }
