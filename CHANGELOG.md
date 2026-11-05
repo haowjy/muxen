@@ -5,6 +5,7 @@ version section on release.
 
 ## [Unreleased]
 
+- Files writes its shortcuts for your keyboard: Ctrl+Shift+. and Ctrl+I on Linux and Windows, ⇧⌘. and ⌘I on a Mac. ⌘I shows only on a file's own Insert menu, the one it works for.
 - On the phone, pull a folder's list down from the top to refresh it.
 - A row in Files has a menu: right-click it on a desktop (or Shift+F10), hold it on the phone. It offers Open, Open in new tab, Copy path, Download for a file, and the terminal tabs to insert its path into.
 - Text and code files in Files read better: line numbers that stay put as long lines scroll, the code edge to edge, a Wrap lines switch and Copy text (it says when it copied only the first 1 MB). On the phone the language, line count and size sit above the code. Markdown is set at a comfortable width. A file muxen can't show says what it is and offers a big Download.

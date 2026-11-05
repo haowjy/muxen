@@ -7,7 +7,7 @@ import { createBrowserPreferences } from "./preferences";
 import { createBrowserViewport } from "./viewport";
 import { readLifecycle, watchLifecycle } from "./lifecycle";
 import { clipboard } from "./clipboard";
-import { canOpenApp, download, openInApp, openURL } from "./links";
+import { appleKeyboard, canOpenApp, download, openInApp, openURL } from "./links";
 import { createPwa } from "./pwa";
 import { restart } from "./restart";
 import type { Platform, PlatformEvent } from "../types";
@@ -54,6 +54,7 @@ export function createBrowserPlatform(): Platform {
     storage: storage.storage,
     uploads: createBrowserUploads(),
     clipboard,
+    shortcuts: appleKeyboard() ? "apple" : "other",
     openURL,
     download,
     ...(canOpenApp() && { openInApp }),

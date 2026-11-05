@@ -245,6 +245,8 @@ export interface Platform {
   storage: PlatformStorage;
   uploads: Uploads;
   clipboard: Clipboard;
+  /** How a shortcut is written: `apple` (⌘, ⇧) on a Mac, iPad or iPhone keyboard, else `other` (Ctrl, Shift). */
+  shortcuts: "apple" | "other";
   /** http(s) and mailto: only. */
   openURL(url: string): void;
   /** Saves the file at `url` (a same-origin `/fs/raw` URL) as `name`, through the platform's own downloads. Absent where a page's download goes nowhere (the app's web view). */

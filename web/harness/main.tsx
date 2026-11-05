@@ -33,7 +33,7 @@ const viewport = {
   keyboardInset: 0,
 };
 trackInputKind();
-const platform = createTestPlatform({ viewport, ...fixture.options?.() });
+const platform = createTestPlatform({ viewport, ...(params.get("keys") === "other" && { shortcuts: "other" as const }), ...fixture.options?.() });
 fixture.daemon?.(platform.daemon);
 const app = await AppController.start(platform, { fetchFn: platform.fetch, applyPreferences, applyViewport });
 window.__harness = { platform, app };

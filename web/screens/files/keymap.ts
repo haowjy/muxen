@@ -2,6 +2,7 @@
 // Nothing in the pane need hold focus for a shortcut to work, so the listener is the document's; only
 // app/focus.ts may move focus to make one.
 import { useEffect, useRef } from "preact/hooks";
+import { useApp } from "../../app/context";
 
 /** A shortcut. `mod` is Cmd or Ctrl (either is taken, on every platform). */
 export interface Chord {
@@ -65,4 +66,12 @@ export function useFilesKey(chord: Chord, run: Run, on = true): void {
       document.removeEventListener("paste", onPaste);
     };
   }, [chord, on]);
+}
+
+/** How `chord` is written on this platform's keyboard: `⇧⌘.` on Apple's, `Ctrl+Shift+.` elsewhere. */
+export function useChordLabel(chord: Chord): string {
+  const apple = useApp().platform.shortcuts === "apple";
+  const key = chord.key.toUpperCase();
+  if (apple) return `${chord.shift ? "⇧" : ""}${chord.mod ? "⌘" : ""}${key}`;
+  return [chord.mod && "Ctrl", chord.shift && "Shift", key].filter(Boolean).join("+");
 }

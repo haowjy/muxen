@@ -4841,6 +4841,10 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
   has focus (unless the chord allows it), and no earlier handler claimed the key. Cmd/Ctrl+V is served by
   the `paste` event, which alone carries the clipboard. Phase 2's Space and tree keys and phase 3's
   Search keys register there too.
+- **Written per keyboard, shown by its owner:** a shortcut's label comes from its chord (`useChordLabel`):
+  ⌘ and ⇧ where `Platform.shortcuts` is `apple`, Ctrl and Shift elsewhere (the dev box is Linux). A hint
+  appears only on the control whose shortcut it is, so the upload offer's and a row's Insert menus don't
+  show ⌘I, which only the file's own Insert answers.
 - **Rejected:** a listener per shortcut, each with its own rule (phase 1 had four, with four different
   rules: Cmd+Shift+. fired while typing in the path field and with a menu open, paste fired under a menu).
 

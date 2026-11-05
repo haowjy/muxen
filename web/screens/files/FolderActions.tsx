@@ -4,7 +4,7 @@ import { useStore } from "../../ui/store";
 import { Menu, type MenuItem } from "../../ui/primitives/Menu";
 import { IconButton } from "../../ui/primitives/IconButton";
 import { copyPath } from "./copy";
-import { useFilesKey, type Chord } from "./keymap";
+import { PASTE, useChordLabel, useFilesKey, type Chord } from "./keymap";
 import { pasteIntoFolder, startUpload, type FilesSession } from "./session";
 
 /** Toggles hidden files. */
@@ -33,13 +33,15 @@ export function FolderActions({ session, path, pasteable, loading }: Props) {
   const hidden = useStore(browser, (s) => s.hidden);
 
   useFilesKey(SHOW_HIDDEN, () => { void browser.toggleHidden(); });
+  const hiddenKeys = useChordLabel(SHOW_HIDDEN);
+  const pasteKeys = useChordLabel(PASTE);
 
   const upload: MenuItem = { label: "Upload", icon: "upload", onSelect: () => { startUpload(app, session); } };
   const paste: MenuItem = { label: "Paste", icon: "paste", onSelect: () => { pasteIntoFolder(app, session, path); } };
   const refresh: MenuItem = { label: "Refresh", icon: "refresh", disabled: loading, onSelect: () => { void browser.reload(); } };
   const sections = [
     { items: [{ label: "Copy path", icon: "copy" as const, onSelect: () => { void copyPath(app, path, browser.snapshot.home); } }] },
-    { items: [{ label: "Show hidden files", checked: hidden, ...(!phone && { hint: "⇧⌘." }), onSelect: () => { void browser.toggleHidden(); } }] },
+    { items: [{ label: "Show hidden files", checked: hidden, ...(!phone && { hint: hiddenKeys }), onSelect: () => { void browser.toggleHidden(); } }] },
     ...(phone ? [{ items: [upload, ...(pasteable ? [paste] : []), refresh] }] : []),
   ];
 
@@ -48,7 +50,7 @@ export function FolderActions({ session, path, pasteable, loading }: Props) {
       {!phone && (
         <>
           <IconButton icon="upload" label="Upload" onClick={() => { startUpload(app, session); }} />
-          {pasteable && <IconButton icon="paste" label="Paste (⌘V)" onClick={() => { pasteIntoFolder(app, session, path); }} />}
+          {pasteable && <IconButton icon="paste" label={`Paste (${pasteKeys})`} onClick={() => { pasteIntoFolder(app, session, path); }} />}
           <IconButton icon="refresh" label="Refresh" disabled={loading} onClick={() => { void browser.reload(); }} />
         </>
       )}

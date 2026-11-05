@@ -10,7 +10,7 @@ import { Menu, type MenuSection } from "../../ui/primitives/Menu";
 import { routeWorkspace } from "../../workspace/state";
 import { copyText } from "./copy";
 import { insertPath, useInsertChoices, type InsertChoice } from "./insert";
-import { useFilesKey, type Chord } from "./keymap";
+import { useChordLabel, useFilesKey, type Chord } from "./keymap";
 import styles from "./FileActions.module.css";
 
 /** Sends the path to the default tab, with no menu. */
@@ -19,8 +19,8 @@ const INSERT: Chord = { key: "i", mod: true };
 /** How long a copy button shows that it copied. */
 const COPIED_MS = 1_600;
 
-/** The Insert menu's rows: each terminal tab, the default (first) with ⌘I; a tab that can't take a path is disabled and says why. */
-export function insertSection(choices: readonly InsertChoice[], insert: (id: string) => void, phone: boolean): MenuSection {
+/** The Insert menu's rows: each terminal tab, the default (first) with `shortcut`, where the control has one; a tab that can't take a path is disabled and says why. */
+export function insertSection(choices: readonly InsertChoice[], insert: (id: string) => void, shortcut: string | null): MenuSection {
   if (choices.length === 0) return { title: "Insert path into", items: [{ label: "Open a terminal tab first", disabled: true, onSelect: () => undefined }] };
   return {
     title: "Insert path into",
@@ -28,7 +28,7 @@ export function insertSection(choices: readonly InsertChoice[], insert: (id: str
       label: c.label,
       icon: "terminal" as const,
       disabled: c.blocked !== null,
-      ...(c.blocked !== null ? { hint: c.blocked } : i === 0 && !phone ? { hint: "⌘I" } : {}),
+      ...(c.blocked !== null ? { hint: c.blocked } : i === 0 && shortcut !== null ? { hint: shortcut } : {}),
       onSelect: () => { insert(c.id); },
     })),
   };
@@ -58,6 +58,7 @@ export function InsertButton({ path, first = null, compact, shortcut, onInserted
     else if (lead.blocked !== null) app.notify(`Can't insert into ${lead.label}: ${lead.blocked.toLowerCase()}`);
     else insert(lead.id);
   }, shortcut === true);
+  const keys = useChordLabel(INSERT);
 
   const toggle = (e: { currentTarget: HTMLElement }): void => { setAnchor(anchor ? null : e.currentTarget); };
   return (
@@ -70,7 +71,7 @@ export function InsertButton({ path, first = null, compact, shortcut, onInserted
           <Icon name="chevronDown" size={16} class={styles.caret} />
         </Button>
       )}
-      {anchor && <Menu anchor={anchor} label="Insert path into" sections={[insertSection(choices, insert, phone)]} focusFirst={!touch} onClose={() => { setAnchor(null); }} />}
+      {anchor && <Menu anchor={anchor} label="Insert path into" sections={[insertSection(choices, insert, shortcut && !phone ? keys : null)]} focusFirst={!touch} onClose={() => { setAnchor(null); }} />}
     </>
   );
 }

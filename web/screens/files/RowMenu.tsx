@@ -44,7 +44,7 @@ export function RowMenu({ session, row, at, list, onClose }: Props) {
         }] : []),
       ],
     },
-    insertSection(choices, insert, phone),
+    insertSection(choices, insert, null),
   ];
   return <Menu anchor={list} at={at} label={entry.name} sections={sections} focusFirst={!touch} onClose={onClose} />;
 }

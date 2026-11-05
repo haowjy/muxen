@@ -72,6 +72,7 @@ export function createNativePlatform(post: Post = webkitPost): Platform {
       writeText: (text) => bridge.copy(text).then(() => "ok" as const, () => "denied" as const),
       read: (tab) => bridge.readPasteboard(tab, crypto.randomUUID()).catch(() => "denied" as const),
     },
+    shortcuts: "apple",
     openURL: (url) => { bridge.openURL(url); },
     playVideo: (handle, path) => {
       bridge.playVideo(handle, path);

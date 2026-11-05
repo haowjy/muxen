@@ -83,6 +83,8 @@ export interface TestPlatformOptions {
   pwa?: boolean;
   /** Offer `manageHosts` and `setRelock`, as the app does (Add server, Settings' Manage servers and Face ID relock); a tap on manage is recorded in `opened`. */
   managed?: boolean;
+  /** How shortcuts are written; `apple` unless set. */
+  shortcuts?: Platform["shortcuts"];
 }
 
 export interface TestPlatform extends Platform {
@@ -322,6 +324,7 @@ export function createTestPlatform(options: TestPlatformOptions = {}): TestPlatf
       },
       read: () => Promise.resolve("empty"),
     },
+    shortcuts: options.shortcuts ?? "apple",
     openURL: (url) => { platform.opened.push(url); },
     download: (url, name) => { platform.downloads.push(`${name} <- ${url}`); },
     playVideo: () => "inline",
