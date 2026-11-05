@@ -59,11 +59,16 @@ export type KnownHost = HostClient & { readonly hostId: string };
 /** Two tabs may show the same folder, each scrolled its own way. */
 export const scrollKey = (tab: string, path: string): string => `${tab}\n${path}`;
 
-const sessions = new WeakMap<FsApi, FilesSession>();
+/**
+ * By the host's adapter and its id: the id a host's slot holds can change (the app learns the daemon's own, which can
+ * differ from the saved one), and a session writes recents and the home under the id it was built for.
+ */
+const sessions = new WeakMap<FsApi, { hostId: string; session: FilesSession; forget: () => void }>();
 
 export function filesSession(app: AppController, host: KnownHost): FilesSession {
   const existing = sessions.get(host.fs);
-  if (existing) return existing;
+  if (existing?.hostId === host.hostId) return existing.session;
+  existing?.forget();
   const { hostId } = host;
   const known = app.snapshot.workspace.workspaces.find((w) => w.host === hostId)?.home ?? null;
   const browser = new FileBrowser({ api: host.fs, hidden: app.view.get("showHidden"), home: known });
@@ -83,7 +88,7 @@ export function filesSession(app: AppController, host: KnownHost): FilesSession 
   });
   const searches = new Recent<FileSearch>(SEARCHES_KEPT);
   // Clear local data forgets the recents: a kept Search would still show the ones it began with.
-  app.persist.onClear(() => { searches.clear(); });
+  const forget = app.persist.onClear(() => { searches.clear(); });
   const session: FilesSession = {
     handle: host.entry.handle,
     get hostName() { return app.hosts.get(host.entry.handle)?.name ?? "the server"; },
@@ -108,7 +113,7 @@ export function filesSession(app: AppController, host: KnownHost): FilesSession 
       return made;
     },
   };
-  sessions.set(host.fs, session);
+  sessions.set(host.fs, { hostId, session, forget });
   return session;
 }
 
