@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { FsApi, TextPreview } from "../../files/api";
 import type { FileRef } from "../../files/browser";
 import { HIGHLIGHT_MAX, highlightedLines, plainLines } from "../../files/render/code";
@@ -58,7 +58,8 @@ const LANGUAGE_NAMES: Record<Language, string> = {
 
 function Facts({ file, source, plain }: { file: FileRef; source: string; plain: boolean }) {
   const lang = plain ? null : languageFor(file.name);
-  const lines = source === "" ? 0 : source.split("\n").length - (source.endsWith("\n") ? 1 : 0);
+  // Counted once per text, not on each redraw (a Wrap lines toggle): a file can be a MiB.
+  const lines = useMemo(() => (source === "" ? 0 : source.split("\n").length - (source.endsWith("\n") ? 1 : 0)), [source]);
   return (
     <p class={styles.facts}>
       <span>{lang ? LANGUAGE_NAMES[lang] : "Text"}</span>
