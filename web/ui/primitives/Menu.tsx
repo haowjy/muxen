@@ -65,7 +65,10 @@ export function Menu({ anchor, at, label, sections, onClose, focusFirst }: MenuP
     menu.style.maxHeight = `${String((up ? above : below) - 2 * GAP_PX)}px`;
     menu.style.top = up ? "" : `${String(rect.bottom + GAP_PX)}px`;
     menu.style.bottom = up ? `${String(clientHeight - rect.top + GAP_PX)}px` : "";
-    menu.style.left = `${String(Math.max(GAP_PX, Math.min(rect.left, clientWidth - menu.offsetWidth - GAP_PX)))}px`;
+    // A control in the right half (a header's ⋯) hangs the menu from its right edge, so it opens inwards.
+    const right = at ? at.x : anchor.getBoundingClientRect().right;
+    const start = !at && rect.left > clientWidth / 2 ? right - menu.offsetWidth : rect.left;
+    menu.style.left = `${String(Math.max(GAP_PX, Math.min(start, clientWidth - menu.offsetWidth - GAP_PX)))}px`;
     if (focusFirst) {
       const first = menu.querySelector<HTMLElement>("button:not([aria-disabled])");
       if (first) focus.focusElement(first);

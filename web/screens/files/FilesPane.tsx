@@ -8,6 +8,7 @@ import type { LinkTarget } from "../../files/render/markdown";
 import type { FilesPlace } from "../../platform/types";
 import { useStore } from "../../ui/store";
 import { Button } from "../../ui/primitives/Button";
+import { FolderActions } from "./FolderActions";
 import { EmptyState } from "../../ui/primitives/EmptyState";
 import { IconButton } from "../../ui/primitives/IconButton";
 import { Spinner } from "../../ui/primitives/Spinner";
@@ -16,7 +17,7 @@ import { DirList, MissingFolder } from "./FolderList";
 import { PathField } from "./PathField";
 import { Preview } from "./Preview";
 import { readPaste } from "../terminal/paste";
-import { pasteIntoFolder, scrollKey, startUpload, type FilesSession } from "./session";
+import { pasteIntoFolder, scrollKey, type FilesSession } from "./session";
 import { UploadPanel } from "./UploadPanel";
 import styles from "./FilesScreen.module.css";
 
@@ -85,7 +86,9 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
   };
 
   const title = place.kind === "dir" ? baseName(place.path) : place.file.name;
-  const rest = place.kind === "dir" ? shorten(place.path, home) : "";
+  // The path line's text: the folder with its trailing `/`, the same text the field starts with.
+  const shown = place.kind === "dir" ? shorten(place.path, home) : "";
+  const rest = shown === "/" || shown === "" ? shown : `${shown}/`;
 
   let body;
   if (error) {
@@ -104,21 +107,26 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
 
   return (
     <div class={styles.files}>
-      <header class={styles.header}>
-        {place.kind === "file" && up && <IconButton icon="back" label="Back to folder" onClick={() => { app.toPlace(up); }} />}
-        <div class={styles.heading}>
-          <h1 class={styles.title}>{title}</h1>
-          {place.kind === "file" && <p class={styles.crumb} title={place.file.path}>{shorten(place.file.path, home)}</p>}
-        </div>
-        {place.kind !== "file" && (
-          <div class={styles.actions}>
-            <IconButton icon="refresh" label="Refresh" disabled={loading} onClick={() => { void browser.reload(); }} />
-            {folderShown !== null && <Button icon="paste" onClick={() => { pasteIntoFolder(app, session, folderShown); }}>Paste</Button>}
-            <Button icon="upload" onClick={() => { startUpload(app, session); }}>Upload</Button>
+      {place.kind === "file" && (
+        <header class={styles.header}>
+          {up && <IconButton icon="back" label="Back to folder" onClick={() => { app.toPlace(up); }} />}
+          <div class={styles.heading}>
+            <h1 class={styles.title}>{title}</h1>
+            <p class={styles.crumb} title={place.file.path}>{shorten(place.file.path, home)}</p>
           </div>
-        )}
-      </header>
-      {place.kind !== "file" && home !== null && <PathField session={session} rest={rest} onEditing={setFinding} onOpen={open} />}
+        </header>
+      )}
+      {place.kind === "dir" && <h1 class={styles.hiddenTitle}>{title}</h1>}
+      {place.kind === "dir" && home !== null && (
+        <PathField
+          session={session}
+          rest={rest}
+          here={place.path}
+          onEditing={setFinding}
+          onOpen={open}
+          actions={<FolderActions session={session} path={pages?.path ?? place.path} pasteable={folderShown !== null} loading={loading} />}
+        />
+      )}
       {!finding && <UploadPanel session={session} onPreview={(path) => { open({ kind: "file", path }); }} />}
       {/* The list stays mounted under a preview, so Back returns to it as it was. */}
       {listed && !error && (

@@ -10,6 +10,7 @@ import { useStore } from "../../ui/store";
 import { activeTab, type Workspace } from "../../workspace/state";
 import { baseName } from "../../files/paths";
 import { terminalsOf } from "../terminal/terminals";
+import { copyPath } from "../files/copy";
 
 /** What is open: the + menu, or a pill's menu. */
 export type MenuTarget = { kind: "add"; anchor: HTMLElement } | { kind: "tab"; id: string; anchor: HTMLElement };
@@ -70,7 +71,7 @@ function TabMenu({ id, anchor, workspace, onClose }: { id: string; anchor: HTMLE
       ],
     });
   } else {
-    sections.push({ items: [{ label: "Copy path", icon: "file", onSelect: () => { void copyPath(app, tab.place.path); } }] });
+    sections.push({ items: [{ label: "Copy path", icon: "copy", onSelect: () => { void copyPath(app, tab.place.path, workspace.home); } }] });
   }
   sections.push({
     items: [
@@ -81,9 +82,4 @@ function TabMenu({ id, anchor, workspace, onClose }: { id: string; anchor: HTMLE
   });
   const label = tab.kind === "terminal" ? tab.session : baseName(tab.place.path);
   return <Menu anchor={anchor} label={`${label} tab`} sections={sections} onClose={onClose} focusFirst={focusFirst} />;
-}
-
-async function copyPath(app: ReturnType<typeof useApp>, path: string): Promise<void> {
-  const result = await app.platform.clipboard.writeText(path);
-  if (result === "denied") app.notify("Couldn't copy the path: this browser refused clipboard access");
 }

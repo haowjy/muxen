@@ -1,3 +1,4 @@
+import type { ComponentChildren } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { useApp, useOverlay } from "../../app/context";
 import { describeError } from "../../files/browser";
@@ -15,21 +16,32 @@ import styles from "./PathField.module.css";
 
 interface Props {
   session: FilesSession;
-  /** The text at rest: the folder on screen, `~/…` under home. */
+  /** The text at rest: the folder on screen, `~/…/` under home, with its trailing `/`. */
   rest: string;
+  /** The folder on screen, canonical: Enter on it stays put. */
+  here: string;
+  /** The folder's controls, on the line beside the path while it is at rest. */
+  actions?: ComponentChildren;
   /** The list below is the field's while it is editing. */
   onEditing: (editing: boolean) => void;
   /** Go named a folder: the pane opens it in its tab. */
   onOpen: (to: FilesPlace) => void;
 }
 
+/** The text a click on the path line selects: the last folder's name and its `/` (`muxen/` in `~/repos/muxen/`), so Delete leaves the parent. */
+export function lastNameRange(text: string): [number, number] {
+  const cut = text.endsWith("/") ? text.lastIndexOf("/", text.length - 2) : -1;
+  return cut < 0 ? [text.length, text.length] : [cut + 1, text.length];
+}
+
 /**
- * The path field (browser-behaviors.md "Files"): at rest it reads where you are; focused, what is typed
+ * The path line (browser-behaviors.md "Files"): at rest one plain string that says where you are; a click
+ * or tap makes it the field with the last folder's name selected; what is typed
  * narrows the typed folder's rows (folders and files), and Enter opens the selected row, else the place
  * the text names. The narrowing rules are `files/pathfield.ts`'s; this wires keys, taps and focus.
  * Editing is a router overlay (`files/find`), so Back ends the edit before it leaves the folder.
  */
-export function PathField({ session, rest, onEditing, onOpen }: Props) {
+export function PathField({ session, rest, here, actions, onEditing, onOpen }: Props) {
   const app = useApp();
   const { browser } = session;
   const home = useStore(browser, (s) => s.home);
@@ -77,7 +89,8 @@ export function PathField({ session, rest, onEditing, onOpen }: Props) {
   };
   const open = (place: FilesPlace): void => {
     endEditing();
-    app.router.closeOverlay(() => { onOpen(place); });
+    // Enter on the folder you're in (the path as it started) stays put: no second entry for the same place.
+    app.router.closeOverlay(place.kind === "dir" && place.path === here ? undefined : () => { onOpen(place); });
   };
 
   /** Enter: opens the selected row, else what the text names. */
@@ -115,17 +128,30 @@ export function PathField({ session, rest, onEditing, onOpen }: Props) {
   };
 
   useEffect(() => { onEditing(editing); }, [editing, onEditing]);
-  // Starting puts the caret after the trailing `/`, where typing narrows. iOS places the caret at the tap
-  // once focus lands, after this runs, so it is set again on the next frame and once more after the tap settles.
+  // Starting selects the last folder's name, so Delete leaves its parent. iOS places the caret at the tap once
+  // focus lands, after this runs, so it is set again on the next frame and once more after the tap settles.
   useLayoutEffect(() => {
     const el = input.current;
     if (!editing || !el) return undefined;
-    const toEnd = (): void => { if (document.activeElement === el) el.setSelectionRange(el.value.length, el.value.length); };
-    toEnd();
-    const frame = requestAnimationFrame(toEnd);
-    const later = setTimeout(toEnd, 120);
+    const [from, to] = lastNameRange(el.value);
+    const select = (): void => { if (document.activeElement === el) el.setSelectionRange(from, to); };
+    select();
+    const frame = requestAnimationFrame(select);
+    const later = setTimeout(select, 120);
     return () => { cancelAnimationFrame(frame); clearTimeout(later); };
   }, [editing]);
+  // `/` with nothing else taking keys goes to the path line, on a keyboard.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented || active.current) return;
+      const target = e.target;
+      if (document.querySelector("dialog[open], [role=menu]") || (target instanceof HTMLElement && target.closest("input, textarea, [contenteditable]"))) return;
+      e.preventDefault();
+      app.focus.focusTarget("path");
+    };
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("keydown", onKey); };
+  }, [app]);
   // Back (or Forward) moved off the edit's entry; or an entry that held the edit came back without its text.
   useEffect(() => {
     if (active.current && !find.open) endEditing();
@@ -138,7 +164,8 @@ export function PathField({ session, rest, onEditing, onOpen }: Props) {
     <>
       <div class={styles.find}>
         <PathInput
-          label="Go to path"
+          line
+          label="Path"
           placeholder="Go to path"
           value={text ?? rest}
           listId={listed ? box.id : undefined}
@@ -150,7 +177,7 @@ export function PathField({ session, rest, onEditing, onOpen }: Props) {
             if (active.current || home === null) return;
             active.current = true;
             app.router.openOverlay({ screen: "files", name: "find" });
-            setText(rest.endsWith("/") ? rest : `${rest}/`);
+            setText(rest);
           }}
           // Losing focus (the keyboard hidden, a tap elsewhere) only lowers the keyboard: the edit and its text
           // stay, and a tap on the field resumes it. Cancel, Escape and Back end it.
@@ -165,9 +192,9 @@ export function PathField({ session, rest, onEditing, onOpen }: Props) {
             } else if (view) box.onKeyDown(e);
           }}
         />
-        {editing && (
+        {editing ? (
           <Button variant="quiet" onMouseDown={(e) => { e.preventDefault(); }} onClick={cancel}>Cancel</Button>
-        )}
+        ) : actions}
       </div>
       {said && <p class={styles.said} role="alert">{said}</p>}
       {view && home !== null && (

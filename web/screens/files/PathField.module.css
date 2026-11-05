@@ -1,11 +1,14 @@
+/* The folder's one header line: the path, then its controls. */
 .find {
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--files-inset);
+  gap: 2px;
+  min-height: var(--header-height);
+  padding: var(--space-1) var(--files-inset);
   border-bottom: 1px solid var(--color-border);
 }
 .said { padding: var(--space-2) var(--files-inset) 0; font-size: var(--text-small); color: var(--color-status-error); }
 .where { display: flex; align-items: center; gap: var(--space-2); min-width: 0; font-size: var(--text-small); color: var(--color-text-muted); }
 .note { font-size: var(--text-small); color: var(--color-text-muted); text-wrap: pretty; }
+:root[data-layout="phone"] .find { min-height: var(--toolbar-height); padding: 0 var(--space-1) 0 var(--space-2); }

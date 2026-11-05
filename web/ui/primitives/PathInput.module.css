@@ -15,3 +15,9 @@
 .input::placeholder { color: var(--color-text-muted); opacity: 1; }
 .input:focus { outline: none; border-color: var(--color-accent); }
 .input:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 1px; }
+/* A path line: at rest one plain string in mono, a hover fill to say it takes a click; focused, the field. */
+.line .input { font-family: var(--font-mono); }
+.line .input:not(:focus) { border-color: transparent; background: transparent; cursor: text; }
+.line .input:not(:focus):hover { background: var(--color-bg-hover); }
+.line .input::selection { background: color-mix(in oklch, var(--color-accent) 45%, transparent); color: var(--color-text); }
+:root[data-density="compact"] .line .input { height: 28px; padding: 0 var(--space-2); border-radius: 6px; font-size: var(--text-small); line-height: 26px; }

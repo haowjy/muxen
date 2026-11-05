@@ -27,6 +27,8 @@
   border-bottom: 1px solid var(--color-border);
 }
 .heading { flex: 1; min-width: 0; }
+/* A folder's name for assistive technology: the path line and the tab say it on screen. */
+.hiddenTitle { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .title {
   overflow: hidden;
   text-overflow: ellipsis;

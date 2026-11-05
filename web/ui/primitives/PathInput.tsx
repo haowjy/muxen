@@ -23,6 +23,8 @@ interface PathInputProps {
   focusTarget?: FocusTarget;
   /** Takes focus when its dialog opens, with a fine pointer (`Dialog`). */
   "data-initial-focus"?: string;
+  /** At rest it reads as a line of text, not a box; focused, it is the field. */
+  line?: boolean;
   class?: string;
 }
 
@@ -31,7 +33,7 @@ interface PathInputProps {
  * URL keyboard has no space bar and folder names hold spaces, with a Go key, and no autocorrect,
  * capitals or spellcheck: a path is not prose.
  */
-export function PathInput({ label, value, onInput, inputRef, listId, activeId, focusTarget, class: className, ...rest }: PathInputProps) {
+export function PathInput({ label, value, onInput, inputRef, listId, activeId, focusTarget, line, class: className, ...rest }: PathInputProps) {
   const registered = useFocusRef(focusTarget);
   // Stable: a new ref callback each render would withdraw and register the field every time.
   const attach = useCallback(
@@ -44,7 +46,7 @@ export function PathInput({ label, value, onInput, inputRef, listId, activeId, f
     [registered, inputRef],
   );
   return (
-    <div class={cx(styles.field, className)}>
+    <div class={cx(styles.field, line && styles.line, className)}>
       <input
         type="text"
         enterkeyhint="go"
