@@ -14,7 +14,7 @@ export interface Chord {
   shift?: boolean;
   /** Also fires while a text field has focus. */
   inField?: boolean;
-  /** Fires only while the list has the keys (it, or nothing, has focus): a plain key on a button or a viewer is theirs. */
+  /** Fires only while the list has the keys (it, or nothing, has focus): a plain key on a button or a viewer is theirs. A held key fires once. */
   inList?: boolean;
 }
 
@@ -44,6 +44,8 @@ function dispatch(e: Event, find: (b: Binding) => boolean): void {
   const hit = bindings.findLast(find);
   if (!hit || !free(e, hit.chord)) return;
   e.preventDefault();
+  // A held list key is still the list's (Space would scroll it), but it toggles once, not on every repeat.
+  if (hit.chord.inList && e instanceof KeyboardEvent && e.repeat) return;
   hit.run.current(e as KeyboardEvent | ClipboardEvent);
 }
 
