@@ -30,7 +30,7 @@ export interface MenuSection {
 interface MenuProps {
   /** The control it hangs from: it opens on the side with more room, above the keyboard. */
   anchor: HTMLElement;
-  /** Opens at this point (a right-click's, in client px) instead of against the anchor's edges. */
+  /** Opens at this point (a right-click's, in client px) instead of against the anchor's edges; any press outside the menu then closes it. */
   at?: { x: number; y: number } | undefined;
   label: string;
   sections: MenuSection[];
@@ -75,11 +75,13 @@ export function Menu({ anchor, at, label, sections, onClose, focusFirst }: MenuP
     }
   }, [anchor, at?.x, at?.y]);
 
+  const pointed = at !== undefined;
   useEffect(() => {
     const away = (e: PointerEvent): void => {
       const target = e.target as Node | null;
-      // The anchor's own click toggles the menu: closing here too would reopen it.
-      if (!ref.current?.contains(target) && !anchor.contains(target)) onClose();
+      // A control's own click toggles its menu: closing here too would reopen it. A menu opened at a point
+      // (a row's) has no control under it, and its anchor (a whole list) is only where focus returns.
+      if (!ref.current?.contains(target) && (pointed || !anchor.contains(target))) onClose();
     };
     const keys = (e: KeyboardEvent): void => {
       if (e.key === "Escape") {
@@ -106,7 +108,7 @@ export function Menu({ anchor, at, label, sections, onClose, focusFirst }: MenuP
       document.removeEventListener("pointerdown", away, true);
       document.removeEventListener("keydown", keys, true);
     };
-  }, [anchor, onClose]);
+  }, [anchor, pointed, onClose]);
 
   return createPortal(
     <div ref={ref} class={styles.menu} role="menu" aria-label={label}>
