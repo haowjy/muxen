@@ -1,0 +1,290 @@
+import AVKit
+import Foundation
+import MuxenKit
+import PhotosUI
+import UIKit
+
+/// Media over the page (ios-shell.md "Files and sharing"): picking and uploading images, the video player, and Files'
+/// Download with its progress alert and share sheet. `presenter` is the web shell, which these screens cover.
+@MainActor
+final class MediaController: NSObject, PHPickerViewControllerDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+    private let model: MuxenAppModel
+    private weak var presenter: UIViewController?
+    /// Sends an `upload` event to the page.
+    private let send: (NativeEvent) -> Void
+    private let uploader = Uploader()
+    private let downloader = Downloader()
+    /// What a download shows over the page: its progress alert, then the share sheet. A lock dismisses it.
+    private weak var downloadScreen: UIViewController?
+    private var pendingPick: PendingPick?
+
+    init(model: MuxenAppModel, presenter: UIViewController, send: @escaping (NativeEvent) -> Void) {
+        self.model = model
+        self.presenter = presenter
+        self.send = send
+    }
+
+    func readPasteboard(host: String, id: String) -> JSONValue {
+        if let image = UIPasteboard.general.image {
+            upload(image, id: id, host: host)
+            return .object(["uploading": .string(id)])
+        }
+        if let text = UIPasteboard.general.string { return .object(["text": .string(text)]) }
+        return .string("empty")
+    }
+
+    /// Files' Paste: an image (as JPEG) or the text on the pasteboard becomes a new file in `dir`.
+    func pasteInto(host: String, id: String, dir: String) -> JSONValue {
+        if let image = UIPasteboard.general.image {
+            upload(image, id: id, host: host, destination: UploadDestination(dir: dir, text: false))
+            return .object(["uploading": .string(id)])
+        }
+        if let text = UIPasteboard.general.string, !text.isEmpty {
+            upload(Data(text.utf8), id: id, host: host, fileName: "pasted.txt", destination: UploadDestination(dir: dir, text: true))
+            return .object(["uploading": .string(id)])
+        }
+        return .string("empty")
+    }
+
+    func showMediaPicker(host: String, id: String) {
+        guard let presenter else { return }
+        let target = PendingPick(host: host, id: id)
+        // UIKit drops a present while another is up (a double tap on Upload); end the stream instead of leaving it open.
+        guard presenter.presentedViewController == nil else { cancel(target); return }
+        let alert = UIAlertController(title: "Add image", message: nil, preferredStyle: .actionSheet)
+        alert.addAction(UIAlertAction(title: "Photo Library", style: .default) { [weak self] _ in self?.presentPhotoLibrary(target) })
+        if UIImagePickerController.isSourceTypeAvailable(.camera) {
+            alert.addAction(UIAlertAction(title: "Camera", style: .default) { [weak self] _ in self?.presentCamera(target) })
+        }
+        alert.addAction(UIAlertAction(title: "Paste Image", style: .default) { [weak self] _ in
+            guard let image = UIPasteboard.general.image else { self?.cancel(target); return }
+            self?.upload(image, id: id, host: host)
+        })
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { [weak self] _ in self?.cancel(target) })
+        alert.popoverPresentationController?.sourceView = presenter.view
+        alert.popoverPresentationController?.sourceRect = CGRect(x: presenter.view.bounds.midX, y: presenter.view.bounds.midY, width: 1, height: 1)
+        presenter.present(alert, animated: true)
+    }
+
+    private func presentPhotoLibrary(_ target: PendingPick) {
+        var configuration = PHPickerConfiguration()
+        configuration.filter = .images
+        configuration.selectionLimit = 1
+        let picker = PHPickerViewController(configuration: configuration)
+        picker.delegate = self
+        pendingPick = target
+        presenter?.present(picker, animated: true)
+    }
+
+    private func presentCamera(_ target: PendingPick) {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.mediaTypes = ["public.image"]
+        picker.delegate = self
+        pendingPick = target
+        presenter?.present(picker, animated: true)
+    }
+
+    /// Every `upload` event is deferred one turn: a paste's reply to the page goes out first, so its
+    /// stream exists before the first event arrives.
+    private func sendUpload(id: String, progress: Double, path: String? = nil, error: String? = nil, code: String? = nil, cancelled: Bool = false) {
+        Task { @MainActor [weak self] in
+            self?.send(.upload(id: id, progress: progress, path: path, error: error, code: code, cancelled: cancelled))
+        }
+    }
+
+    private func cancel(_ pick: PendingPick) { sendUpload(id: pick.id, progress: 1, cancelled: true) }
+
+    private func upload(_ image: UIImage, id: String, host hostID: String, destination: UploadDestination? = nil) {
+        guard let data = Self.jpegData(image) else {
+            sendUpload(id: id, progress: 1, error: "Couldn't prepare this image.")
+            return
+        }
+        upload(data, id: id, host: hostID, fileName: "image.jpg", destination: destination)
+    }
+
+    private func upload(_ data: Data, id: String, host hostID: String, fileName: String, destination: UploadDestination?) {
+        guard let host = model.hosts.first(where: { $0.id == hostID }) else {
+            sendUpload(id: id, progress: 1, error: "Couldn't find this server.")
+            return
+        }
+        guard case .token(let token) = model.token(for: hostID) else {
+            sendUpload(id: id, progress: 1, error: "Unlock muxen to upload.")
+            return
+        }
+        let accepted = uploader.upload(id: id, host: host, data: data, fileName: fileName, destination: destination, token: token, rejectedToken: { [weak model = self.model] rejectedToken in
+            model?.rejectedToken(for: host.id, token: rejectedToken)
+        }, progress: { [weak self] progress in
+            self?.sendUpload(id: id, progress: progress)
+        }, completion: { [weak self] result in
+            switch result {
+            case .success(let path): self?.sendUpload(id: id, progress: 1, path: path)
+            case .failure(let error): self?.sendUpload(id: id, progress: 1, error: error.localizedDescription, code: (error as? UploadFailure)?.code)
+            }
+        })
+        if accepted { sendUpload(id: id, progress: 0) }
+        else { sendUpload(id: id, progress: 1, error: "Wait for the current uploads to finish.") }
+    }
+
+    func playVideo(host: String, path: String) {
+        guard let stored = model.hosts.first(where: { $0.id == host }),
+              case .token(let token) = model.token(for: host),
+              var components = URLComponents(string: stored.baseURL) else { return }
+        let segments = path.split(separator: "/").map { segment in
+            segment.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-._~"))) ?? String(segment)
+        }
+        components.percentEncodedPath = "/fs/raw/" + segments.joined(separator: "/")
+        guard let url = components.url else { return }
+        let asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": ["Authorization": "Bearer \(token)"]])
+        let player = AVPlayer(playerItem: AVPlayerItem(asset: asset))
+        let controller = AVPlayerViewController()
+        controller.player = player
+        presenter?.present(controller, animated: true) { player.play() }
+    }
+
+    /// Files' Download: `url` is the page's own `muxen-app://h-{host}/fs/raw/…`, resolved as the scheme handler
+    /// resolves it. `reply` waits for the share sheet to close; the web says an `error` in its notice.
+    func download(_ value: String, name: String, reply: @escaping (Any?, String?) -> Void) {
+        let fail = { (error: String, code: String?) in
+            var failure: [String: Any] = ["error": error]
+            if let code { failure["code"] = code }
+            reply(failure, nil)
+        }
+        guard let page = URLComponents(string: value), page.scheme == "muxen-app",
+              let pageHost = page.host, pageHost.hasPrefix("h-"),
+              page.percentEncodedPath.hasPrefix("/fs/raw/"), page.query == nil, page.fragment == nil,
+              let host = model.hosts.first(where: { $0.id == String(pageHost.dropFirst(2)) }),
+              var target = URLComponents(string: host.baseURL) else {
+            fail("Couldn't find this file's server.", nil)
+            return
+        }
+        guard case .token(let token) = model.token(for: host.id) else {
+            fail("Unlock muxen to download.", nil)
+            return
+        }
+        target.percentEncodedPath = page.percentEncodedPath
+        // UIKit drops a present while another is up, and one download runs at a time.
+        guard let url = target.url, presenter?.presentedViewController == nil, !downloader.isBusy else {
+            fail("Close what's open, then download again.", nil)
+            return
+        }
+        let progress = UIAlertController(title: "Downloading \(name)", message: "Starting", preferredStyle: .alert)
+        progress.addAction(UIAlertAction(title: "Cancel", style: .cancel) { [weak self] _ in self?.downloader.cancel() })
+        let bytes = { (count: Int64) in ByteCountFormatter.string(fromByteCount: count, countStyle: .file) }
+        _ = downloader.download(url, name: name, token: token, rejectedToken: { [weak model = self.model] rejected in
+            model?.rejectedToken(for: host.id, token: rejected)
+        }, progress: { written, total in
+            let text = total.map { "\(bytes(written)) of \(bytes($0))" } ?? bytes(written)
+            if progress.message != text { progress.message = text }
+        }, completion: { [weak self] result in
+            guard let self else { Downloader.discard(); reply(NSNull(), nil); return }
+            // The alert dismisses itself on Cancel; any other end takes it down before the sheet goes up.
+            self.dismissDownloadScreen {
+                switch result {
+                case .success(let file): self.share(file, reply: reply)
+                case .failure(DownloadFailure.cancelled): reply(NSNull(), nil)
+                case .failure(let error): fail(error.localizedDescription, (error as? DownloadFailure)?.code)
+                }
+            }
+        })
+        // A small file goes straight to the sheet: the alert shows only for a download still running after 0.5 s.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self, let presenter = self.presenter, self.downloader.isBusy, presenter.presentedViewController == nil, !self.model.isLocked else { return }
+            self.downloadScreen = progress
+            presenter.present(progress, animated: true)
+        }
+    }
+
+    private func share(_ file: URL, reply: @escaping (Any?, String?) -> Void) {
+        guard !model.isLocked, let presenter else { Downloader.discard(); reply(NSNull(), nil); return }
+        let sheet = UIActivityViewController(activityItems: [file], applicationActivities: nil)
+        // Cleared on its first call: the lock calls it too, and a reply handler must run once.
+        sheet.completionWithItemsHandler = { [weak sheet] _, _, _, _ in
+            sheet?.completionWithItemsHandler = nil
+            Downloader.discard()
+            reply(NSNull(), nil)
+        }
+        sheet.popoverPresentationController?.sourceView = presenter.view
+        sheet.popoverPresentationController?.sourceRect = CGRect(x: presenter.view.bounds.midX, y: presenter.view.bounds.midY, width: 1, height: 1)
+        downloadScreen = sheet
+        presenter.present(sheet, animated: true)
+    }
+
+    private func dismissDownloadScreen(then next: @escaping () -> Void) {
+        guard let screen = downloadScreen, screen.presentingViewController != nil, !screen.isBeingDismissed else { next(); return }
+        // A dismiss while the alert is still animating in is dropped, so it waits for the presentation to end.
+        if screen.isBeingPresented, let coordinator = screen.transitionCoordinator {
+            coordinator.animate(alongsideTransition: nil) { _ in screen.dismiss(animated: true, completion: next) }
+        } else {
+            screen.dismiss(animated: true, completion: next)
+        }
+    }
+
+    /// The lock's end to a download: the fetch stops, and the alert or the sheet goes with its file.
+    func endDownload() {
+        downloader.cancel()
+        if let sheet = downloadScreen as? UIActivityViewController, sheet.presentingViewController != nil {
+            sheet.dismiss(animated: false) { sheet.completionWithItemsHandler?(nil, false, nil, nil) }
+        } else {
+            downloadScreen?.dismiss(animated: false)
+        }
+    }
+
+    private static func jpegData(_ image: UIImage) -> Data? {
+        let pixelWidth = image.size.width * image.scale
+        let pixelHeight = image.size.height * image.scale
+        guard pixelWidth > 0, pixelHeight > 0 else { return nil }
+        let factor = min(1, 2048 / max(pixelWidth, pixelHeight))
+        let size = CGSize(
+            width: max(1, floor(image.size.width * factor)),
+            height: max(1, floor(image.size.height * factor))
+        )
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        let thumbnail = renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: size)) }
+        return thumbnail.jpegData(compressionQuality: 0.9)
+    }
+
+    func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+        let pick = pendingPick
+        pendingPick = nil
+        presenter?.dismiss(animated: true)
+        guard let pick else { return }
+        guard let provider = results.first?.itemProvider, provider.canLoadObject(ofClass: UIImage.self) else {
+            cancel(pick)
+            return
+        }
+        provider.loadObject(ofClass: UIImage.self) { [weak self] object, _ in
+            Task { @MainActor in
+                guard let image = object as? UIImage else {
+                    self?.sendUpload(id: pick.id, progress: 1, error: "Couldn't read this image.")
+                    return
+                }
+                self?.upload(image, id: pick.id, host: pick.host)
+            }
+        }
+    }
+
+    func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+        let pick = pendingPick
+        pendingPick = nil
+        presenter?.dismiss(animated: true)
+        guard let pick else { return }
+        if let image = info[.originalImage] as? UIImage { upload(image, id: pick.id, host: pick.host) }
+        else { cancel(pick) }
+    }
+
+    func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+        let pick = pendingPick
+        pendingPick = nil
+        presenter?.dismiss(animated: true)
+        if let pick { cancel(pick) }
+    }
+}
+
+/// A pick the page asked for: where to upload it, and the id its `upload` events carry.
+private struct PendingPick {
+    let host: String
+    let id: String
+}

@@ -619,7 +619,7 @@ ios/
     Web/                 WebShellController, AppSchemeHandler
     Auth/                TokenStore, HostStore, DraftStore, AuthClient
     Hosts/               SwiftUI server list and enrolment form
-    Media/               Uploader, Downloader; picker, video and share-sheet presentation
+    Media/               MediaController (picker, video player, Download's alert and share sheet), Uploader, Downloader
     Support/             Haptics
   MuxenKit/             Foundation-only Swift package and tests
     Tests/Fixtures/bridge/ one flat fixture for each bridge message, shared with web tests
