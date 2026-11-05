@@ -17,14 +17,17 @@ Rules the code relies on, which are easy to break:
   with `list::Scan`; `check_shape` is also `/complete`'s `cwd` check.
 - Every blocking call runs on the fs lane (`Slots::lane`, see `src/blocking.rs`), which
   moves the thread's permit into the closure; the scan, search and raw slots wait in that
-  lane's queue. clippy forbids `spawn_blocking`, and tokio's `fs` feature is off
+  lane's queue. Work under a slot goes through the slot's method (`Slots::scan`, `search`,
+  `settings`, i.e. `PermitPool::run`), which moves the slot into the lane work too: a
+  request dropped mid-call frees nothing until its work ends. Never hold a slot in the
+  handler around `lane.run`. Only the raw producer holds its slot itself, across chunks. clippy forbids `spawn_blocking`, and tokio's `fs` feature is off
   (`tokio::fs::File`'s buffer grows to 2 MiB). Take an fs thread last and release it
   before waiting for any other slot.
 - Search opens each directory below its root only through `search::Below`, relative to the
   root's descriptor: `openat2` with `RESOLVE_BENEATH | NO_SYMLINKS | NO_XDEV` on Linux,
   `O_NOFOLLOW_ANY` and a device check on macOS. One directory is open at a time (two
-  descriptors with the root's, three during its `CACHEDIR.TAG` probe), and the search permit
-  moves into the lane closure with the walk, so an aborted search can't overlap the next.
+  descriptors with the root's, three during its `CACHEDIR.TAG` probe), and the walk runs
+  under `Slots::search`, so an aborted search can't overlap the next.
   A skipped folder (a `search_skip` pattern, a cache tag) is offered to the matcher and
   never queued; the root is never skipped. The matcher lives only here: the client
   draws `hits` and never matches.

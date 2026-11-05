@@ -192,6 +192,22 @@ impl PermitPool {
         }
     }
 
+    /// Runs `work` on `lane` holding one of these permits, which moves into the work: a
+    /// caller that stops waiting frees the permit only when the work ends, so work stuck
+    /// on a hung disk holds its permit, not another lane thread.
+    pub async fn run<T, F>(&self, lane: &Lane, work: F) -> Result<T, Busy>
+    where
+        F: FnOnce() -> T + Send + 'static,
+        T: Send + 'static,
+    {
+        let permit = self.acquire().await?;
+        lane.run(move || {
+            let _permit = permit;
+            work()
+        })
+        .await
+    }
+
     pub async fn acquire(&self) -> Result<OwnedSemaphorePermit, Busy> {
         if let Ok(permit) = self.slots.clone().try_acquire_owned() {
             return Ok(permit);

@@ -89,11 +89,9 @@ async fn listing(
         hidden: query.hidden == 1,
     };
     let listed = async {
-        let _scan = ctx.fs.scan().await?;
         let (asked, home) = (path.clone(), ctx.app.home.clone());
         ctx.fs
-            .lane
-            .run(move || {
+            .scan(move || {
                 let dir = crate::fs::open(&asked, &home, Want::Dir)?;
                 list::list(&dir, filter, query.offset).map_err(FsError::io)
             })
@@ -122,13 +120,10 @@ async fn searched(
     // Dropped with this future when the client aborts: the walk stops at its next check.
     let cancel = Cancel(Arc::new(AtomicBool::new(false)));
     let found = async {
-        let slot = ctx.fs.search().await?;
         let (asked, home, cancel) = (path.clone(), ctx.app.home.clone(), cancel.0.clone());
         let skip = search::skip(&ctx.app.config);
         ctx.fs
-            .lane
-            .run(move || {
-                let _slot = slot;
+            .search(move || {
                 let root = crate::fs::open(&asked, &home, Want::Dir)?;
                 search::search(&root, &pattern, filter, &skip, &search::CAPS, &cancel)
                     .map_err(FsError::io)

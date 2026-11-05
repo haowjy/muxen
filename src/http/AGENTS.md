@@ -61,4 +61,6 @@ Rules the code relies on, which are easy to break:
   are written on the auth lane. Nothing here calls the blocking pool except through
   `App::lanes` (`src/blocking.rs`).
 - Route-specific slot and waiter limits use `PermitPool`; shell owns the named 4-slot,
-  16-waiter limits. Do not add another semaphore-plus-waiter implementation.
+  16-waiter limits. Do not add another semaphore-plus-waiter implementation. Blocking
+  work under a slot runs through `PermitPool::run` (for fs, `Slots`' methods), which
+  moves the permit into the lane work.

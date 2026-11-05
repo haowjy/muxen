@@ -1,7 +1,8 @@
 //! The file API's limits (fs.md "Constants", "Limits and the memory ceiling"): 1 scan,
 //! 1 search, 2 raw responses, 1 upload, 1 settings read or write, waited for in the fs lane's queue (`crate::blocking`), so a
 //! slow disk stalls the file manager without holding memory or starving auth and pastes
-//! of threads. Blocking calls run on `lane`.
+//! of threads. Blocking calls run on `lane`; a slot's work runs through its method, which moves
+//! the slot into the lane work.
 
 use std::sync::Arc;
 
@@ -40,26 +41,36 @@ impl Slots {
         }
     }
 
-    /// The scan slot, for one directory listing.
-    pub async fn scan(&self) -> Result<OwnedSemaphorePermit, FsError> {
-        Ok(self.scan.acquire().await?)
+    /// `work`, one directory listing, on the lane under the scan slot.
+    pub async fn scan<T: Send + 'static>(
+        &self,
+        work: impl FnOnce() -> T + Send + 'static,
+    ) -> Result<T, Busy> {
+        self.scan.run(&self.lane, work).await
     }
 
-    /// The search slot, its own so a listing never waits behind a walk. The walk's lane
-    /// closure holds it, so an aborted search frees it only when its walk ends.
-    pub async fn search(&self) -> Result<OwnedSemaphorePermit, FsError> {
-        Ok(self.search.acquire().await?)
+    /// `work`, a search walk, under the search slot: its own, so a listing never waits
+    /// behind a walk. An aborted search frees it only when its walk ends.
+    pub async fn search<T: Send + 'static>(
+        &self,
+        work: impl FnOnce() -> T + Send + 'static,
+    ) -> Result<T, Busy> {
+        self.search.run(&self.lane, work).await
     }
 
-    /// A raw-response slot, held by the response's producer until it ends.
+    /// `work` under the settings slot (`/settings`, fs.md "Server settings"): one read,
+    /// save or reload at a time, so a save stuck on a hung disk holds one fs thread.
+    pub async fn settings<T: Send + 'static>(
+        &self,
+        work: impl FnOnce() -> T + Send + 'static,
+    ) -> Result<T, Busy> {
+        self.settings.run(&self.lane, work).await
+    }
+
+    /// A raw-response slot, held by the response's producer until it ends: it spans
+    /// many lane calls, one per chunk.
     pub async fn raw(&self) -> Result<OwnedSemaphorePermit, FsError> {
         Ok(self.raw.acquire().await?)
-    }
-
-    /// The settings slot (`/settings`, fs.md "Server settings"): one read, save or reload
-    /// at a time, so a save stuck on a hung disk holds one fs thread.
-    pub async fn settings(&self) -> Result<OwnedSemaphorePermit, Busy> {
-        self.settings.acquire().await
     }
 
     /// The upload slot, or `busy` at once: native sends one upload at a time.

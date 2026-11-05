@@ -31,14 +31,10 @@ pub(super) fn routes() -> Router<Arc<Ctx>> {
 }
 
 async fn read(State(ctx): State<Arc<Ctx>>) -> Response {
-    let read = async {
-        let _permit = ctx.fs.settings().await?;
-        let app = ctx.clone();
-        Ok::<_, HttpError>(ctx.fs.lane.run(move || settings(&app.app.config)).await?)
-    };
-    match read.await {
+    let app = ctx.clone();
+    match ctx.fs.settings(move || settings(&app.app.config)).await {
         Ok(settings) => Json(settings).into_response(),
-        Err(refused) => Refusal::from(refused).into_response(),
+        Err(busy) => Refusal::from(HttpError::from(busy)).into_response(),
     }
 }
 
@@ -51,20 +47,17 @@ async fn save(
         Ok(Err(refused)) => return Refusal::from(&refused).into_response(),
         Err(rejection) => return Refusal::from(rejection).into_response(),
     };
-    let saved = async {
-        let _permit = ctx.fs.settings().await.map_err(|_| SaveError::Busy)?;
-        let app = ctx.clone();
-        ctx.fs
-            .lane
-            .run(move || {
-                let state_dir = app.app.auth.store().dir();
-                config::save(&app.app.config, state_dir, &change)?;
-                Ok(settings(&app.app.config))
-            })
-            .await
-            .map_err(|_| SaveError::Busy)?
-    };
-    match saved.await {
+    let app = ctx.clone();
+    let saved = ctx
+        .fs
+        .settings(move || {
+            let state_dir = app.app.auth.store().dir();
+            config::save(&app.app.config, state_dir, &change)?;
+            Ok(settings(&app.app.config))
+        })
+        .await
+        .unwrap_or(Err(SaveError::Busy));
+    match saved {
         Ok(settings) => Json(settings).into_response(),
         Err(refused) => {
             match &refused {
@@ -79,28 +72,23 @@ async fn save(
 }
 
 async fn reload(State(ctx): State<Arc<Ctx>>) -> Response {
-    let reloaded = async {
-        let _permit = ctx.fs.settings().await?;
-        let app = ctx.clone();
-        Ok::<_, HttpError>(
-            ctx.fs
-                .lane
-                .run(move || {
-                    let config = &app.app.config;
-                    // `reload` logs a failure.
-                    let restart_needed = config.reload()?;
-                    Ok::<_, ConfigError>(Reloaded {
-                        settings: settings(config),
-                        restart_needed: restart_needed.into_iter().map(str::to_owned).collect(),
-                    })
-                })
-                .await?,
-        )
-    };
-    match reloaded.await {
+    let app = ctx.clone();
+    let reloaded = ctx
+        .fs
+        .settings(move || {
+            let config = &app.app.config;
+            // `reload` logs a failure.
+            let restart_needed = config.reload()?;
+            Ok::<_, ConfigError>(Reloaded {
+                settings: settings(config),
+                restart_needed: restart_needed.into_iter().map(str::to_owned).collect(),
+            })
+        })
+        .await;
+    match reloaded {
         Ok(Ok(reloaded)) => Json(reloaded).into_response(),
         Ok(Err(error)) => Refusal::from(&error).into_response(),
-        Err(refused) => Refusal::from(refused).into_response(),
+        Err(busy) => Refusal::from(HttpError::from(busy)).into_response(),
     }
 }
 
