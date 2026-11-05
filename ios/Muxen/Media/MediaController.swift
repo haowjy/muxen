@@ -69,8 +69,13 @@ final class MediaController: NSObject, PHPickerViewControllerDelegate, UIImagePi
     /// Takes `screen` down if it is still up, once any transition has finished (a dismiss during a present is dropped).
     /// `next` runs when it has gone.
     private func takeDown(_ screen: UIViewController, animated: Bool = true, then next: @escaping () -> Void = {}) {
-        afterTransition {
+        afterTransition { [weak self] in
             guard screen.presentingViewController != nil else { next(); return }
+            // Already going (a lock's dismiss): a second dismiss would be dropped with its completion, so wait for it.
+            guard !screen.isBeingDismissed else {
+                DispatchQueue.main.async { self?.takeDown(screen, animated: animated, then: next) }
+                return
+            }
             screen.dismiss(animated: animated, completion: next)
         }
     }
@@ -92,7 +97,8 @@ final class MediaController: NSObject, PHPickerViewControllerDelegate, UIImagePi
         guard let screen else { return }
         let ended = screenEnded
         afterTransition {
-            guard screen.presentingViewController != nil else { return }
+            // Gone, or already going on its own: that close runs its own handler.
+            guard screen.presentingViewController != nil, !screen.isBeingDismissed else { return }
             screen.dismiss(animated: false, completion: ended)
         }
     }
