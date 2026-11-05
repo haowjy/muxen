@@ -1,0 +1,21 @@
+/* A round chip over the list's top edge, centred. It follows the finger, so it has no transition while pulled. */
+.chip {
+  position: absolute;
+  left: 50%;
+  z-index: var(--z-band);
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--color-bg-raised);
+  box-shadow: var(--shadow-1);
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+.arrow { display: inline-flex; }
+.chip[data-ready] { color: var(--color-accent); }
+/* Reduced motion: the arrow doesn't turn with the pull. */
+@media (prefers-reduced-motion: reduce) {
+  .arrow { rotate: none !important; }
+}

@@ -12,6 +12,7 @@
   /* Content sits in the same centred column as Home on a wide screen; the header, the preview bar and the lists all start at it.
      The % resolves where it is used: each of them is as wide as .files. */
   --files-inset: max(var(--space-gutter), calc((100% - 720px) / 2));
+  position: relative;
   display: flex;
   flex: 1;
   flex-direction: column;

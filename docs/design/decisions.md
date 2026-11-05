@@ -4818,6 +4818,19 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
   another terminal" submenu (a submenu is a second level on a phone, and the tab list is short); a ⋯ button
   on each row (a hover target on desktop, a second tap target on the phone's 48px rows).
 
+### Pull to refresh on the phone's folder list
+
+- **Decided:** 2026-11-05, Jimmy (C; Refresh moved into ⋯ on the phone, so the list needs its own gesture).
+- **What:** passive touch listeners on the list: a touch that starts at the top and moves down pulls a chip
+  down over the list (half the finger's distance, at most 96px); past 64px a release calls the same
+  `reload()` as Refresh. Nothing is cancelled, so iOS's rubber band and Chrome's scrolling stay native. The
+  chip is its own component with its own state, so a pull redraws only it. Reduced motion stops the arrow
+  turning.
+- **Rejected:** moving the list down with the finger (fights the rubber band, which already moves it on iOS,
+  and needs `preventDefault` on touchmove, a non-passive listener on every scroll); the browser's own pull
+  to refresh (it reloads the page, and the iPhone app's web view has none); pointer events (a scroll cancels
+  them before the pull is long enough).
+
 ### The code frame: numbered lines, a Wrap lines switch, Copy text; a big Download for what muxen can't show
 
 - **Decided:** 2026-11-05, Jimmy ("make text display prettier", JSON and plain text especially; "Download for

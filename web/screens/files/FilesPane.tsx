@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
-import { useApp } from "../../app/context";
+import { useApp, useAppView } from "../../app/context";
 import { describeError, parentPlace } from "../../files/browser";
 import { folderKey } from "../../files/folders";
 import { baseName, parentOf } from "../../files/paths";
@@ -15,6 +15,7 @@ import { shorten } from "../../files/format";
 import { DirList, MissingFolder, type RowMenuAsk } from "./FolderList";
 import { PathField } from "./PathField";
 import { FileView } from "./FileView";
+import { PullToRefresh } from "./PullToRefresh";
 import { RowMenu } from "./RowMenu";
 import { readPaste } from "../terminal/paste";
 import { pasteIntoFolder, scrollKey, type FilesSession } from "./session";
@@ -38,6 +39,7 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
   // While the path field is being typed in, the path field's matches are the list.
   const [finding, setFinding] = useState(false);
   const [rowMenu, setRowMenu] = useState<RowMenuAsk | null>(null);
+  const phone = useAppView((v) => v.viewport.layout === "phone");
 
   // The one cancellation for answers that land late: this effect's token is current only while the pane still wants this place.
   // A resolve or a Markdown link answer that finds another token (or none) is dropped.
@@ -147,6 +149,7 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
           />
         </div>
       )}
+      {phone && listingVisible && <PullToRefresh key={pages.path} scroller={scroller} onRefresh={() => browser.reload()} />}
       {place.kind === "file" && (
         <FileView session={session} file={place.file} up={up} onUp={() => { if (up) app.toPlace(up); }} onLink={onLink}>
           {body ? <div class={styles.scroll}>{body}</div> : undefined}
