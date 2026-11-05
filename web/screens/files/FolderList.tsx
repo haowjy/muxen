@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "preact/hooks";
+import { Component } from "preact";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { Entry, Listing } from "../../files/api";
 import { formatSize } from "../../files/format";
 import { outline, type OutlineRow } from "../../files/outline";
@@ -40,28 +41,53 @@ interface RowListProps {
   onUp?: () => void;
 }
 
+interface FileRowProps {
+  row: OutlineRow;
+  id: string;
+  selected: boolean;
+  fresh: boolean;
+  upLabel: string;
+  upName: string;
+  /** The latest handlers, read when a row is tapped: a row is not redrawn for a new closure. */
+  act: { current: { onOpen: (place: FilesPlace) => void; onUp: (() => void) | undefined } };
+}
+
+/** One option. Redrawn only when its own row, selection or mark changes, so an arrow key costs two rows, not the folder. */
+class FileRow extends Component<FileRowProps> {
+  override shouldComponentUpdate(next: FileRowProps): boolean {
+    const p = this.props;
+    return next.row !== p.row || next.id !== p.id || next.selected !== p.selected || next.fresh !== p.fresh || next.upLabel !== p.upLabel || next.upName !== p.upName;
+  }
+
+  override render({ row, id, selected, fresh, upLabel, upName, act }: FileRowProps) {
+    const { entry, place } = row;
+    const common = { id, class: styles.item, selected };
+    if (!entry) return <OptionRow {...common} icon="back" label={upLabel} aria-label={`Up to ${upName}`} onClick={() => { act.current.onUp?.(); }} />;
+    return (
+      <OptionRow
+        {...common}
+        {...(fresh && { "data-fresh": "" })}
+        icon={iconFor(entry)}
+        label={entry.name}
+        meta={metaFor(entry)}
+        {...(place && { trailing: "chevron" as const })}
+        disabled={place === null}
+        onClick={() => { if (place) act.current.onOpen(place); }}
+      />
+    );
+  }
+}
+
 /** The rows of a listbox, as options: the caller's container holds the focus and names the selected one by `optionId(selected)`. */
 export function RowList({ rows, selected, optionId, fresh, upLabel, onOpen, onUp }: RowListProps) {
+  const act = useRef({ onOpen, onUp });
+  act.current = { onOpen, onUp };
   const upName = baseName(rows[0]?.kind === "up" ? (rows[0].place?.path ?? "") : "");
   return (
     <>
-      {rows.map((row) => {
-        const { entry, place } = row;
-        const common = { key: row.key, id: optionId(row.key), class: styles.item, selected: row.key === selected };
-        if (!entry) return <OptionRow {...common} icon="back" label={upLabel ?? upName} aria-label={`Up to ${upName}`} onClick={() => { onUp?.(); }} />;
-        return (
-          <OptionRow
-            {...common}
-            {...(entry.name === fresh && { "data-fresh": "" })}
-            icon={iconFor(entry)}
-            label={entry.name}
-            meta={metaFor(entry)}
-            {...(place && { trailing: "chevron" as const })}
-            disabled={place === null}
-            onClick={() => { if (place) onOpen(place); }}
-          />
-        );
-      })}
+      {rows.map((row) => (
+        <FileRow key={row.key} row={row} id={optionId(row.key)} selected={row.key === selected} fresh={row.entry !== null && row.entry.name === fresh} upLabel={upLabel ?? upName} upName={upName} act={act} />
+      ))}
     </>
   );
 }
@@ -136,7 +162,10 @@ export interface DirListProps {
 export function DirList({ pages, hidden, loading, fresh, onOpen, view: initial, onView, onKeyNavigate, onMore, onToggleHidden, onUp }: DirListProps) {
   const { entries, total, truncated } = pages;
   const [view, setView] = useState(initial);
-  const { rows, selected } = outline({ root: pages.path, parent: onUp ? (pages.parent ?? null) : null, expanded: view.expanded, held: (path) => (path === pages.path ? pages : null), filter: "", selection: view.selection });
+  const parent = onUp ? (pages.parent ?? null) : null;
+  // The rows are rebuilt when the pages or the expanded folders change, never for a selection move, so the rows keep their identity.
+  const { rows } = useMemo(() => outline({ root: pages.path, parent, expanded: view.expanded, held: (path) => (path === pages.path ? pages : null), filter: "", selection: null }), [pages, parent, view.expanded]);
+  const selected = rows.some((r) => r.key === view.selection) ? view.selection : null;
   const select = (selection: string | null): void => {
     const next = { ...view, selection };
     setView(next);

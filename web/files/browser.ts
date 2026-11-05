@@ -1,10 +1,10 @@
 import { HttpRefusal } from "../net/http";
 import { refusalWords } from "../net/refusalWords";
-import type { Entry, FsApi, Listing } from "./api";
+import type { FsApi, Listing } from "./api";
 import { samePlace, type FilesPlace } from "../platform/types";
 import { hostProblem, type HostProblem } from "../ui/hostProblem";
 import { Store } from "../ui/store";
-import { baseName, join, parentOf } from "./paths";
+import { baseName, parentOf } from "./paths";
 import { Folders } from "./folders";
 import { Recent } from "./recent";
 
@@ -54,13 +54,6 @@ export interface BrowserOptions {
   home?: string | null;
 }
 
-/** The place a listing entry opens, for the router to push; null for what cannot open. */
-export function entryPlace(dir: string, entry: Entry): FilesPlace | null {
-  if (entry.utf8 === false) return null;
-  const path = join(dir, entry.name);
-  return entry.kind === "dir" ? { kind: "dir", path } : entry.kind === "file" ? { kind: "file", path } : null;
-}
-
 /** The place `[<]` goes to: up a level, or out of a viewer; null at `/`. A folder that failed to list has no parent from the daemon: the path's own. */
 export function parentPlace(place: Place, listing: Listing | null): FilesPlace | null {
   if (place.kind === "file") return { kind: "dir", path: parentOf(place.file.path) };
@@ -77,8 +70,8 @@ export function placeOf(place: Place): FilesPlace {
  * The file manager's state, apart from the DOM: the home folder, the directory under the place on
  * screen (its pages are `folders`'), and that place. The active Files tab owns where the user is (its place,
  * written from browser history); `follow` brings this state to it. Nothing is fetched until a place
- * needs it, and only the page in view (plan.md "Bandwidth"); a folder whose first page the host's
- * `folders` cache holds, and a file already probed, are shown again without a request.
+ * needs it, and only the page in view (plan.md "Bandwidth"); a folder `folders` holds pages of,
+ * and a file already probed, are shown again without a request.
  */
 export class FileBrowser extends Store<FilesView> {
   /** The host's file API, which the viewers read through too. */

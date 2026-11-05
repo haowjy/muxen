@@ -4,7 +4,6 @@
 // path field's narrowed list is this with a filter. Rows are named by `key`, so a selection survives
 // a page arriving or a folder expanding.
 import type { Entry, Listing } from "./api";
-import { entryPlace } from "./browser";
 import type { FilesPlace } from "../platform/types";
 import { join } from "./paths";
 
@@ -46,6 +45,13 @@ export interface Outline {
   rootLoaded: Loaded;
   /** The row the selection names, or with a filter and no (visible) selection the first match: what Enter opens. Null when none. */
   selected: string | null;
+}
+
+/** The place a listing entry opens, for the router to push; null for what cannot open. */
+export function entryPlace(dir: string, entry: Entry): FilesPlace | null {
+  if (entry.utf8 === false) return null;
+  const path = join(dir, entry.name);
+  return entry.kind === "dir" ? { kind: "dir", path } : entry.kind === "file" ? { kind: "file", path } : null;
 }
 
 export const UP = "..";
