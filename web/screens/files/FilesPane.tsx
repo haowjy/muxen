@@ -89,7 +89,7 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
     // Each open folder is listed once, when it first shows, and kept while it shows.
     onShown: (paths) => {
       browser.folders.pin("outline", paths.map((path) => ({ path, hidden })));
-      for (const path of paths) if (!browser.folders.snapshot.held.has(folderKey(path, hidden))) void browser.folders.load(path, hidden);
+      for (const path of paths) if (!browser.folders.snapshot.held.has(folderKey(path, hidden))) void browser.folders.load(path, hidden, true);
     },
   };
   useEffect(() => () => { browser.folders.pin("outline", []); }, [browser]);

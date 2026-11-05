@@ -4929,6 +4929,18 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
   return to the tab (the cache already holds them); keeping the open set in history (Back would close
   folders instead of leaving places); an unbounded open set (a long session would pin the cache).
 
+### The folder cache asks for two first pages at a time, the outline's last
+
+- **Decided:** 2026-11-05, from the phase 2 review (p546): Show hidden re-listed every open folder at
+  once, up to 32, against a daemon that admits one scan and 8 waiters and refuses the rest as `busy`.
+- **What:** `Folders` (the host's one owner of listings) runs at most two first-page requests; the rest
+  wait. The outline's open folders are asked `behind`, so the place's folder, the Preview panel's and the
+  path field's go first. Next pages (Show more, scrolling) are one request the user asked for and are not
+  queued.
+- **Rejected:** a limit in each caller (Show hidden, reveal and a reconnect would each need one, and they
+  would still add up); one at a time (a slow folder would hold up the one the user just clicked);
+  raising the daemon's waiter count (the cap is what keeps muxen light on a busy host).
+
 ### The Preview panel beside a desktop's outline is on or off, and its toggle never moves
 
 - **Decided:** 2026-11-05, Jimmy, on mockup C: "how do u close the desktop 'preview' one? it hsould be

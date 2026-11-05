@@ -12,6 +12,11 @@ export const SETTLE_MS = 250;
  * own `Folders`, so N servers can hold N times this.
  */
 export const MAX_ENTRIES = 10_000;
+/**
+ * First pages asked of the host at once. The daemon scans one folder at a time and refuses a request past a few
+ * waiting (`busy`), so a burst (Show hidden over 30 open folders, a reveal down a deep path) waits here instead.
+ */
+export const LISTINGS_AT_ONCE = 2;
 /** The cache key of one listing; `hidden` listings are kept apart (`hidden=1` is a different scan). */
 export const folderKey = (path: string, hidden: boolean): string => `${hidden ? "1" : "0"}${path}`;
 
@@ -49,6 +54,9 @@ export class Folders extends Store<FoldersView> {
   private serial = 0;
   /** The folders each owner has on screen (the browser's place, the outline's open folders, the Preview panel's folder). */
   private readonly pins = new Map<string, Set<string>>();
+  /** First pages under way, at most `LISTINGS_AT_ONCE`; the rest wait their turn, the ones asked `behind` last. */
+  private running = 0;
+  private readonly waiting: { go: () => void; behind: boolean }[] = [];
 
   constructor(private readonly api: FsApi) {
     super({ held: new Map() });
@@ -81,18 +89,22 @@ export class Folders extends Store<FoldersView> {
     return !!record && (record.loading || !!record.listing || (!!record.error && record.error.code !== "network"));
   }
 
-  /** Lists `path` now (Go cannot wait out the settle), or joins the listing under way. The refusal is the record's, not thrown. */
-  load(path: string, hidden: boolean): Promise<void> {
+  /**
+   * Lists `path` now (Go cannot wait out the settle), or joins the listing under way. The refusal is the record's, not
+   * thrown. `behind`: the folder is one of many asked together (the outline's open folders), so what the user is looking
+   * at (the place, the Preview panel, the path field) goes first.
+   */
+  load(path: string, hidden: boolean, behind = false): Promise<void> {
     // Its state is written under `path`, so `path` must be the canonical one; `first` takes `~`.
     if (path === "~") return Promise.reject(new Error("Folders.load needs a canonical path"));
-    return this.inflight.get(folderKey(path, hidden)) ?? this.relist(path, hidden);
+    return this.inflight.get(folderKey(path, hidden)) ?? this.relist(path, hidden, behind);
   }
 
   /** Starts a first-page listing whatever is under way; the older requests' pages are discarded when they land. */
-  private relist(path: string, hidden: boolean): Promise<void> {
+  private relist(path: string, hidden: boolean, behind = false): Promise<void> {
     const key = folderKey(path, hidden);
     this.put(path, hidden, { loading: true, error: null });
-    const done = this.first(path, hidden).then(
+    const done = this.first(path, hidden, behind).then(
       () => { this.put(path, hidden, { loading: false }); },
       (error: unknown) => { this.put(path, hidden, { loading: false, error: error instanceof HttpRefusal ? error : new HttpRefusal(0, "internal") }); },
     ).finally(() => { if (this.inflight.get(key) === done) this.inflight.delete(key); });
@@ -116,9 +128,9 @@ export class Folders extends Store<FoldersView> {
    * returns the listing; the pages held stay in view until it lands. The record is the canonical
    * path's, which the daemon names (`path` may be `~`).
    */
-  async first(path: string, hidden: boolean): Promise<Listing> {
+  async first(path: string, hidden: boolean, behind = false): Promise<Listing> {
     const ticket = this.begin(folderKey(path, hidden));
-    const listing = await this.api.list(path, 0, hidden);
+    const listing = await this.turn(behind, () => this.api.list(path, 0, hidden));
     if (this.landed(folderKey(path, hidden), ticket)) this.put(listing.path, hidden, { listing, error: null });
     return listing;
   }
@@ -151,6 +163,20 @@ export class Folders extends Store<FoldersView> {
     for (const hidden of [false, true]) if (!shown.includes(hidden)) held.delete(folderKey(path, hidden));
     this.update({ held });
     for (const hidden of shown) void this.relist(path, hidden);
+  }
+
+  /** Runs `ask` once fewer than `LISTINGS_AT_ONCE` first pages are under way; a finished one hands its turn on. */
+  private async turn<T>(behind: boolean, ask: () => Promise<T>): Promise<T> {
+    if (this.running < LISTINGS_AT_ONCE) this.running++;
+    else await new Promise<void>((go) => { this.waiting.push({ go, behind }); });
+    try {
+      return await ask();
+    } finally {
+      const next = this.waiting.findIndex((w) => !w.behind);
+      const [waiter] = this.waiting.splice(next < 0 ? 0 : next, 1);
+      if (waiter) waiter.go();
+      else this.running--;
+    }
   }
 
   private pinned(key: string): boolean {
