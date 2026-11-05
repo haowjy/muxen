@@ -140,18 +140,6 @@ export function PathField({ session, rest, here, actions, onEditing, onOpen }: P
     const later = setTimeout(select, 120);
     return () => { cancelAnimationFrame(frame); clearTimeout(later); };
   }, [editing]);
-  // `/` with nothing else taking keys goes to the path line, on a keyboard.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented || active.current) return;
-      const target = e.target;
-      if (document.querySelector("dialog[open], [role=menu]") || (target instanceof HTMLElement && target.closest("input, textarea, [contenteditable]"))) return;
-      e.preventDefault();
-      app.focus.focusTarget("path");
-    };
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("keydown", onKey); };
-  }, [app]);
   // Back (or Forward) moved off the edit's entry; or an entry that held the edit came back without its text.
   useEffect(() => {
     if (active.current && !find.open) endEditing();

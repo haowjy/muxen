@@ -4767,8 +4767,8 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
   mono string with its trailing `/`; a click or tap makes it the field with the last folder's name and `/`
   selected. Delete leaves the parent and lists it; Enter right away stays put; Esc and Cancel restore. A
   desktop line has Upload, Paste and Refresh icons and ⋯; the phone's has ⋯ alone, which holds Upload, Paste
-  and Refresh too. ⋯ holds Copy path (first) and Show hidden files on both. `/` focuses the path line on a
-  desktop. **Supersedes** the folder header of a title with Refresh, Paste and Upload buttons (Paste's
+  and Refresh too. ⋯ holds Copy path (first) and Show hidden files on both. The path line has no keyboard shortcut
+  until Search settles its keys; a click is the way in. **Supersedes** the folder header of a title with Refresh, Paste and Upload buttons (Paste's
   "toolbar control", 2026-11-02, Paste into an open folder, is now an icon or a ⋯ item) and the path field's caret-at-the-end start ("A tap starts editing
   with the current path and a trailing `/`, and the caret goes to the end"). Show hidden files moves into ⋯
   (the quiet toggle under the list and Cmd/Ctrl+Shift+. stay).
@@ -4776,8 +4776,10 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
   arrives with Search itself.
 - **Cmd+L, Cmd+Shift+C:** not bound. Whether Chrome and Safari let a page take them was not checked on a
   real browser (no way to send real keystrokes from the build box), and both belong to the browser
-  (address bar, DevTools' inspector) where it keeps them. `/` is the desktop's way to the path; ⋯ › Copy path
-  copies the folder's path.
+  (address bar, DevTools' inspector) where it keeps them. ⋯ › Copy path copies the folder's path.
+- **`/` is not bound here:** Search owns `/` (mockup C's DIRECTION.md, settled: "Search is separate (magnifier, Cmd+P, `/`)").
+  Phase 1 first bound it to the path line, from a brief that missed this; review p538 caught it and the
+  binding was removed before Search arrived.
 - **Rejected:** clickable path segments (a fat-finger trap on the phone, Jimmy); a copy icon after the path
   (Jimmy: misplaced); selecting the whole path on a click (an earlier call the same day, overridden by
   "select the last folder"); keeping the folder name as a heading above the path (the tab and the path say
