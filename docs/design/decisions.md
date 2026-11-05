@@ -1429,6 +1429,17 @@ are Jimmy's ([Files](#files-view-and-upload-now-three-write-operations-in-v2)).
     app doesn't know); renaming over the link (the rule above: it replaces the
     dotfiles link with a copy).
 
+- **Changed 2026-11-05 (p567 review): a save no longer takes the state directory's
+  lock.** `LiveConfig::save` runs under the running config's own lock, which a reload
+  also takes, so saves and reloads in the daemon go one at a time; no other muxen
+  writer of `config.toml` exists (no CLI or setup writer), and the runtime lock keeps a
+  second daemon out.
+  - **Why:** "one lock for every muxen writer" assumed a second writer that never came.
+    The flock guarded nothing, cost a polling wait and a `503 busy` path, and let a slow
+    `auth.toml` write make Settings answer `busy`.
+  - **Rejected:** keeping it for a future CLI writer (none is planned; it would come
+    back with that writer, and its reason with it).
+
 ### Paths ride in the URL path
 
 - **What:** `/fs/list/{*path}`, `/fs/raw/{*path}`, `/fs/dirs/{*path}`, each segment

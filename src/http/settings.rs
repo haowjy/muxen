@@ -51,8 +51,7 @@ async fn save(
     let saved = ctx
         .fs
         .settings(move || {
-            let state_dir = app.app.auth.store().dir();
-            config::save(&app.app.config, state_dir, &change)?;
+            app.app.config.save(&change)?;
             Ok(settings(&app.app.config))
         })
         .await

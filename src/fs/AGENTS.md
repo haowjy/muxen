@@ -35,7 +35,7 @@ Rules the code relies on, which are easy to break:
   running config's `uploads_dir` (`App::config`, `src/config/live.rs`). Nothing here reads
   `config.toml`: it is read at startup and on a reload only.
 - The in-flight part file is recorded in `upload-part` (state dir); `upload::reap` takes the record inline (state dir only) and deletes the file it named on the fs lane, not awaited, at startup and before each upload, never failing either. User folders are touched only from lane work, never inline or under the slot. No folder is scanned. That is safe only because the upload slot lives in `Part` until its cleanup has cleared the record, and the runtime lock keeps a second daemon out.
-- Every file written whole goes through `files::Temp` (`src/files.rs`): an upload's part file (`land`, never replacing), auth's files. Linux uploads reject
+- Every file written whole goes through `files::Temp` (`src/files.rs`): an upload's part file (`land`, never replacing), auth's files, and Settings' `config.toml` (`replace_if`, `src/config/`). Linux uploads reject
   tmpfs/ramfs with `memory_backed` from the opened destination descriptor before the
   part file exists. `Temp` isn't deleted
   on drop, since a drop may happen on the runtime thread: a part file is discarded on

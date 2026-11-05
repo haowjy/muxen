@@ -7,8 +7,10 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use tracing::{info, warn};
 
+use super::write::{self, SaveError, TRIES, Target};
 use super::{Config, ConfigError, ConfigFile, DEFAULT_SEARCH_SKIP, DEFAULT_UPLOADS_DIR};
 use crate::files::Stamp;
+use crate::proto::settings::SettingsChange;
 
 /// The keys a reload applies, as the file has them: `None` is no key, the default.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,7 +45,7 @@ pub struct LiveConfig {
     started: Config,
     running: Mutex<Running>,
     /// Held across a reload's or a save's read and adoption, so neither adopts a file the
-    /// other has since replaced.
+    /// other has since replaced, and saves run one at a time.
     changing: Mutex<()>,
 }
 
@@ -102,20 +104,39 @@ impl LiveConfig {
         }
     }
 
-    /// Held by a save from its read to its `adopt`.
-    pub(super) fn changing(&self) -> MutexGuard<'_, ()> {
-        self.changing.lock().unwrap_or_else(PoisonError::into_inner)
+    /// Writes `change` (already `validated`) and makes the result the running config. A
+    /// file changed by hand since it was loaded is adopted first, so the save keeps the
+    /// hand edit. A file that changes while the new text is written is read again, up to
+    /// `TRIES` times. Blocks.
+    pub fn save(&self, change: &SettingsChange) -> Result<(), SaveError> {
+        let _changing = self.changing();
+        let target = Target::open(&self.file.path)?;
+        for _ in 0..TRIES {
+            let before = target.read()?;
+            let config = Config::parse(&target.path, &before.text)?;
+            if before.stamp != self.running().stamp {
+                self.adopt(&config, before.stamp, "config.toml reloaded before a save");
+            }
+            let Some((text, written)) = write::edited(&target.path, &before.text, change)? else {
+                return Ok(());
+            };
+            if let Some(stamp) = target.replace_if(&before, &text)? {
+                self.adopt(&written, Some(stamp), "config.toml written");
+                return Ok(());
+            }
+        }
+        warn!(path = %target.path.display(), "config.toml kept changing: write refused");
+        Err(SaveError::Busy)
     }
 
-    /// The file's stamp as last loaded or written.
-    pub(super) fn loaded_stamp(&self) -> Option<Stamp> {
-        self.running().stamp
+    fn changing(&self) -> MutexGuard<'_, ()> {
+        self.changing.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     /// `config`, just read or written with `stamp`, becomes the running config's live
     /// keys; the restart-only keys that differ are answered and logged as `event`, with
     /// the live keys that changed (never their values), not applied.
-    pub(super) fn adopt(
+    fn adopt(
         &self,
         config: &Config,
         stamp: Option<Stamp>,

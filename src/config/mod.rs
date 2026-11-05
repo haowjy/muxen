@@ -17,7 +17,7 @@ mod live;
 mod write;
 
 pub use live::{LiveConfig, LiveKeys};
-pub use write::{SaveError, save, validated};
+pub use write::{SaveError, validated};
 
 pub const DEFAULT_MEMORY_BUDGET_MIB: u64 = 72;
 /// Where uploads land when `uploads_dir` is absent.

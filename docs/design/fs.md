@@ -451,13 +451,13 @@ SettingsChange = { searchSkip?: [string] | null, uploadsDir?: string | null }
   written. A pattern starting with `.` only matters while Show hidden files is on; it is allowed.
 - **Writing** follows the earlier writer's rules
   ([decisions.md](decisions.md#config-writes-toml_edit-auths-lock-temp-file-and-rename-re-stat-before-rename)),
-  on the fs lane with a permit of its own (one write at a time): take the `flock` on
-  `$XDG_STATE_HOME/muxen/lock` with `LOCK_NB`, retrying for up to 2 s, then `503 busy` (a write never
-  waits indefinitely on the lock, which auth also takes); canonicalize the config path so a symlinked
+  on the fs lane with a permit of its own, and one at a time under the running config's lock, which a
+  reload takes too (the daemon is `config.toml`'s only writer; the runtime lock keeps a second daemon
+  out): canonicalize the config path so a symlinked
   `config.toml` (a dotfiles checkout) is written at its target; refuse a dangling link or an unwritable
   target with `409 config_read_only`; edit only the two keys with `toml_edit`, keeping comments, order
   and every other key; write `<name>.tmp` beside it with the original's mode (0600 for a new file),
-  re-stat the original and rename, retrying up to 3 times if it changed. A file that exists but doesn't
+  re-stat the original and rename, retrying up to 3 times if it changed, then `503 busy`. A file that exists but doesn't
   parse is never written: `503 config_unavailable`. A missing file is created with only the keys set,
   its directory with mode 0700 if absent (this covers a `--config` path deleted after startup).
 - **`POST /settings/reload`** reloads as SIGHUP does and answers `{ settings: ServerSettings,
@@ -559,8 +559,8 @@ without a disk.
 | `fs/raw.rs` | pure `parse_range` and `If-Range`; the chunk producer; ETags come from `files::Stamp` |
 | `fs/mime.rs` | the extension table |
 | `fs/upload.rs` | pure name generation; part file, flush, rename, the in-flight record and its cleanup |
-| `config/live.rs` | the running config's live keys, the reload, "changed since loaded" |
-| `config/write.rs` | Settings' save: validation, the lock, `toml_edit`, the temp file and rename |
+| `config/live.rs` | the running config's live keys, the reload, the save under its lock, "changed since loaded" |
+| `config/write.rs` | the save's pieces: validation, the target, `toml_edit`, the temp file and rename |
 | `http/settings.rs` | `/settings` and `/settings/reload` |
 
 Wire types go in `src/proto/fs.rs` (`src/proto/settings.rs` for `/settings`) and are generated for TypeScript like the WebSocket

@@ -1,30 +1,24 @@
-//! Settings' writes to `config.toml` (fs.md "Server settings"): under the state
-//! directory's lock, which auth's writers hold too, taken without blocking for at most
-//! `LOCK_WAIT`; through a symlinked file to its target; only `search_skip` and
-//! `uploads_dir` changed, with `toml_edit` keeping comments, order and unknown keys; and
-//! through `files::Temp` with the file's mode, retried if the file changed while the new
-//! text was written. The written config then becomes the running one.
+//! The pieces of Settings' writes to `config.toml` (fs.md "Server settings");
+//! `LiveConfig::save` puts them together under its lock. A symlinked file is written at its
+//! target; only `search_skip` and `uploads_dir` change, with `toml_edit` keeping comments,
+//! order and unknown keys; the text goes through `files::Temp` with the file's mode.
 
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsString;
 use std::fs;
 use std::io;
 use std::os::unix::fs::{DirBuilderExt as _, PermissionsExt as _};
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 use rustix::io::Errno;
 use thiserror::Error;
 use toml_edit::{Array, DocumentMut, Item, Value};
-use tracing::warn;
 
-use super::{Config, ConfigError, LiveConfig};
-use crate::files::{self, Dir, Stamp, Temp};
+use super::{Config, ConfigError};
+use crate::files::{Dir, Stamp, Temp};
 use crate::proto::settings::{Patch, SettingsChange};
 
 /// Writes retried when the file changed under one, before `busy`.
-const TRIES: usize = 3;
-/// How long a save waits for the state directory's lock before `busy`.
-const LOCK_WAIT: Duration = Duration::from_secs(2);
+pub(super) const TRIES: usize = 3;
 /// Validation (fs.md "Server settings").
 const MAX_PATTERNS: usize = 64;
 const MAX_PATTERN: usize = 255;
@@ -34,7 +28,7 @@ const MAX_UPLOADS_DIR: usize = 4096;
 pub enum SaveError {
     #[error("bad request")]
     BadRequest,
-    #[error("the state directory's lock is held")]
+    #[error("config.toml kept changing while it was written")]
     Busy,
     #[error("config.toml can't be written: {0}")]
     ReadOnly(io::Error),
@@ -82,53 +76,91 @@ pub fn validated(change: SettingsChange) -> Result<SettingsChange, SaveError> {
     })
 }
 
-/// Writes `change` (already `validated`) and makes the result the running config. A file
-/// changed by hand since it was loaded is reloaded first, so the save keeps the hand
-/// edit. Blocks, on the disk and for up to `LOCK_WAIT` on the lock.
-pub fn save(live: &LiveConfig, state_dir: &Path, change: &SettingsChange) -> Result<(), SaveError> {
-    let _changing = live.changing();
-    let _lock = files::lock_within(state_dir, LOCK_WAIT)
-        .map_err(SaveError::Internal)?
-        .ok_or(SaveError::Busy)?;
-    let target = target(&live.file().path)?;
-    let (Some(parent), Some(name)) = (target.parent(), target.file_name()) else {
-        return Err(SaveError::Internal(io::Error::other(
-            "config.toml has no name",
-        )));
-    };
-    let dir = Dir::open(parent).map_err(write_error)?;
-    let mut temp_name = OsString::from(name);
-    temp_name.push(".tmp");
-    for _ in 0..TRIES {
-        let before = read(&dir, name, &target)?;
-        let config = Config::parse(&target, &before.text)?;
-        if before.stamp != live.loaded_stamp() {
-            live.adopt(&config, before.stamp, "config.toml reloaded before a save");
-        }
-        let mut doc: DocumentMut = before.text.parse().map_err(|_| ConfigError::Parse {
-            path: target.clone(),
-            line: 0,
-            column: 0,
-        })?;
-        edit(&mut doc, change);
-        let text = doc.to_string();
-        if text == before.text {
-            return Ok(());
-        }
-        let written = Config::parse(&target, &text).map_err(|error| {
-            SaveError::Internal(io::Error::other(format!("the edit doesn't parse: {error}")))
-        })?;
-        let temp = Temp::create(&dir, &temp_name, before.mode).map_err(write_error)?;
-        if let Some(stamp) = temp
-            .replace_if(name, text.as_bytes(), before.stamp)
-            .map_err(write_error)?
-        {
-            live.adopt(&written, Some(stamp), "config.toml written");
-            return Ok(());
-        }
+/// The file a save writes: the canonical target, opened through its directory.
+pub(super) struct Target {
+    pub(super) path: PathBuf,
+    dir: Dir,
+    name: OsString,
+    temp_name: OsString,
+}
+
+impl Target {
+    /// `path`'s target (`target`), its directory opened.
+    pub(super) fn open(path: &Path) -> Result<Self, SaveError> {
+        let path = target(path)?;
+        let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
+            return Err(SaveError::Internal(io::Error::other(
+                "config.toml has no name",
+            )));
+        };
+        let dir = Dir::open(parent).map_err(write_error)?;
+        let name = name.to_owned();
+        let mut temp_name = name.clone();
+        temp_name.push(".tmp");
+        Ok(Self {
+            path,
+            dir,
+            name,
+            temp_name,
+        })
     }
-    warn!(path = %target.display(), "config.toml kept changing: write refused");
-    Err(SaveError::Busy)
+
+    /// The file as it is now; a missing file is an empty one, mode 0600.
+    pub(super) fn read(&self) -> Result<Before, SaveError> {
+        let unreadable = |source| ConfigError::Io {
+            path: self.path.clone(),
+            source,
+        };
+        let Some(opened) = self.dir.read(&self.name).map_err(unreadable)? else {
+            return Ok(Before {
+                text: String::new(),
+                stamp: None,
+                mode: 0o600,
+            });
+        };
+        let meta = opened.metadata().map_err(SaveError::Internal)?;
+        let text = io::read_to_string(&opened).map_err(unreadable)?;
+        Ok(Before {
+            text,
+            stamp: Some(Stamp::of(&meta)),
+            mode: meta.permissions().mode() & 0o7777,
+        })
+    }
+
+    /// `text` in place of the file if it is still as `before` was; `None` if it has
+    /// changed since. The new file has `before`'s mode.
+    pub(super) fn replace_if(
+        &self,
+        before: &Before,
+        text: &str,
+    ) -> Result<Option<Stamp>, SaveError> {
+        let temp = Temp::create(&self.dir, &self.temp_name, before.mode).map_err(write_error)?;
+        temp.replace_if(&self.name, text.as_bytes(), before.stamp)
+            .map_err(write_error)
+    }
+}
+
+/// `before` with `change` applied, and the config it parses to; `None` if the text
+/// comes out the same.
+pub(super) fn edited(
+    path: &Path,
+    before: &str,
+    change: &SettingsChange,
+) -> Result<Option<(String, Config)>, SaveError> {
+    let mut doc: DocumentMut = before.parse().map_err(|_| ConfigError::Parse {
+        path: path.to_owned(),
+        line: 0,
+        column: 0,
+    })?;
+    edit(&mut doc, change);
+    let text = doc.to_string();
+    if text == before {
+        return Ok(None);
+    }
+    let written = Config::parse(path, &text).map_err(|error| {
+        SaveError::Internal(io::Error::other(format!("the edit doesn't parse: {error}")))
+    })?;
+    Ok(Some((text, written)))
 }
 
 /// Applies `change` to `doc`, leaving every other key, comment and table as it was.
@@ -295,32 +327,10 @@ fn target(path: &Path) -> Result<PathBuf, SaveError> {
 
 /// The file as read, to change and to compare against before the rename: its text,
 /// its stamp (`None`: missing) and its mode, which the new file gets exactly.
-struct Before {
-    text: String,
-    stamp: Option<Stamp>,
+pub(super) struct Before {
+    pub(super) text: String,
+    pub(super) stamp: Option<Stamp>,
     mode: u32,
-}
-
-/// `name` in `dir`, which is `target`; a missing file is an empty one, mode 0600.
-fn read(dir: &Dir, name: &OsStr, target: &Path) -> Result<Before, SaveError> {
-    let unreadable = |source| ConfigError::Io {
-        path: target.to_owned(),
-        source,
-    };
-    let Some(opened) = dir.read(name).map_err(unreadable)? else {
-        return Ok(Before {
-            text: String::new(),
-            stamp: None,
-            mode: 0o600,
-        });
-    };
-    let meta = opened.metadata().map_err(SaveError::Internal)?;
-    let text = io::read_to_string(&opened).map_err(unreadable)?;
-    Ok(Before {
-        text,
-        stamp: Some(Stamp::of(&meta)),
-        mode: meta.permissions().mode() & 0o7777,
-    })
 }
 
 /// A file Jimmy can't write (read-only filesystem, a link into `/nix/store`) is a
@@ -337,7 +347,7 @@ mod tests {
     use std::os::unix::fs::symlink;
 
     use super::*;
-    use crate::config::ConfigFile;
+    use crate::config::{ConfigFile, LiveConfig};
     use crate::fs::test_tree::Tree;
 
     const HAND_WRITTEN: &str = r#"# muxen's config, by hand.
@@ -380,14 +390,12 @@ answer = 42
     #[test]
     fn a_save_keeps_comments_order_and_unknown_keys_and_applies_at_once() {
         let tree = Tree::new("write-keep");
-        tree.mkdir("state");
         tree.write("config.toml", HAND_WRITTEN.as_bytes());
         let live = live(&tree, "config.toml");
-        let state = tree.path("state");
         let read = || std::fs::read_to_string(tree.path("config.toml")).expect("read");
 
         let add = set(list(&["node_modules", "vendor", "dist"]), Patch::Keep);
-        save(&live, &state, &add).expect("saved");
+        live.save(&add).expect("saved");
         let expected = HAND_WRITTEN.replace("  \"vendor\",\n]", "  \"vendor\",\n  \"dist\",\n]");
         assert_eq!(read(), expected);
         assert_eq!(
@@ -397,7 +405,7 @@ answer = 42
         assert!(!live.file_changed());
 
         let remove = set(list(&["vendor", "dist"]), Patch::Set("/srv/up".into()));
-        save(&live, &state, &remove).expect("saved");
+        live.save(&remove).expect("saved");
         let text = read();
         assert!(
             text.contains("search_skip = [\n  \"vendor\",\n  \"dist\",\n]"),
@@ -420,7 +428,8 @@ answer = 42
         assert_eq!(live.keys().uploads_dir(), "/srv/up");
 
         // `null` removes a key; the default applies again.
-        save(&live, &state, &set(Patch::Remove, Patch::Remove)).expect("saved");
+        live.save(&set(Patch::Remove, Patch::Remove))
+            .expect("saved");
         let text = read();
         assert!(
             !text.contains("search_skip") && !text.contains("uploads_dir"),
@@ -433,13 +442,12 @@ answer = 42
     #[test]
     fn a_symlinked_config_is_written_at_its_target_and_a_dangling_one_is_refused() {
         let tree = Tree::new("write-link");
-        tree.mkdir("state");
         tree.mkdir("dotfiles");
         tree.write("dotfiles/config.toml", b"# mine\n");
         symlink(tree.path("dotfiles/config.toml"), tree.path("config.toml")).expect("a link");
         let live = live(&tree, "config.toml");
         let change = set(list(&[]), Patch::Keep);
-        save(&live, &tree.path("state"), &change).expect("saved");
+        live.save(&change).expect("saved");
         let link = std::fs::symlink_metadata(tree.path("config.toml")).expect("there");
         assert!(link.file_type().is_symlink());
         let text = std::fs::read_to_string(tree.path("dotfiles/config.toml")).expect("read");
@@ -449,7 +457,7 @@ answer = 42
 
         symlink(tree.path("nowhere.toml"), tree.path("dangling.toml")).expect("a link");
         let dangling = self::live(&tree, "dangling.toml");
-        let refused = save(&dangling, &tree.path("state"), &change);
+        let refused = dangling.save(&change);
         assert!(
             matches!(refused, Err(SaveError::ReadOnly(_))),
             "{refused:?}"
@@ -460,10 +468,9 @@ answer = 42
     #[test]
     fn a_missing_file_and_its_folder_are_created() {
         let tree = Tree::new("write-missing");
-        tree.mkdir("state");
         let live = live(&tree, "muxen/config.toml");
         let change = set(Patch::Keep, Patch::Set("~/up".into()));
-        save(&live, &tree.path("state"), &change).expect("saved");
+        live.save(&change).expect("saved");
         let meta = |path| std::fs::metadata(tree.path(path)).expect("there");
         assert_eq!(meta("muxen").permissions().mode() & 0o777, 0o700);
         assert_eq!(
@@ -478,12 +485,11 @@ answer = 42
     #[test]
     fn a_file_that_doesnt_parse_is_never_written() {
         let tree = Tree::new("write-broken");
-        tree.mkdir("state");
         tree.write("config.toml", b"uploads_dir = \"/a\"\n");
         let live = live(&tree, "config.toml");
         let broken = b"uploads_dir = \"/a\"\nsearch_skip = [\n";
         tree.write("config.toml", broken);
-        let refused = save(&live, &tree.path("state"), &set(list(&["x"]), Patch::Keep));
+        let refused = live.save(&set(list(&["x"]), Patch::Keep));
         assert!(
             matches!(
                 refused,
@@ -501,12 +507,11 @@ answer = 42
     #[test]
     fn a_save_after_a_hand_edit_reloads_first_and_keeps_it() {
         let tree = Tree::new("write-hand");
-        tree.mkdir("state");
         tree.write("config.toml", b"uploads_dir = \"/a\"\n");
         let live = live(&tree, "config.toml");
         tree.write("config.toml", b"uploads_dir = \"/b\"\n# by hand\n");
         assert!(live.file_changed());
-        save(&live, &tree.path("state"), &set(list(&["x"]), Patch::Keep)).expect("saved");
+        live.save(&set(list(&["x"]), Patch::Keep)).expect("saved");
         let text = std::fs::read_to_string(tree.path("config.toml")).expect("read");
         assert_eq!(
             text,

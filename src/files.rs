@@ -10,7 +10,6 @@ use std::io::{self, Write as _};
 use std::os::unix::fs::{MetadataExt as _, OpenOptionsExt as _, PermissionsExt as _};
 use std::path::Path;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
 
 use rustix::fs::{AtFlags, Mode, OFlags, RenameFlags};
 use rustix::io::Errno;
@@ -61,29 +60,12 @@ impl Stamp {
     }
 }
 
-/// The state directory's `flock`, held until dropped: every muxen writer holds it for
-/// its read-modify-write of `auth.toml` (the CLI's included) or `config.toml`.
+/// The state directory's `flock`, held until dropped: every writer of `auth.toml` holds it
+/// for its read-modify-write, the CLI's included.
 pub fn lock(state_dir: &Path) -> io::Result<File> {
     let file = lock_file(state_dir)?;
     rustix::fs::flock(&file, rustix::fs::FlockOperation::LockExclusive)?;
     Ok(file)
-}
-
-/// `lock`, retried without blocking until `wait` has passed; `None` if it is still held
-/// then.
-pub fn lock_within(state_dir: &Path, wait: Duration) -> io::Result<Option<File>> {
-    let file = lock_file(state_dir)?;
-    let deadline = Instant::now() + wait;
-    loop {
-        match rustix::fs::flock(&file, rustix::fs::FlockOperation::NonBlockingLockExclusive) {
-            Ok(()) => return Ok(Some(file)),
-            Err(Errno::WOULDBLOCK) if Instant::now() < deadline => {
-                std::thread::sleep(Duration::from_millis(20));
-            }
-            Err(Errno::WOULDBLOCK) => return Ok(None),
-            Err(errno) => return Err(errno.into()),
-        }
-    }
 }
 
 fn lock_file(state_dir: &Path) -> io::Result<File> {
