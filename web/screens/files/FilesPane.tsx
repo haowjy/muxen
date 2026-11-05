@@ -1,49 +1,58 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { useApp, useAppView } from "../../app/context";
 import { describeError, parentPlace } from "../../files/browser";
 import { folderKey } from "../../files/folders";
-import type { HttpRefusal } from "../../net/http";
 import { baseName, parentOf } from "../../files/paths";
+import type { HttpRefusal } from "../../net/http";
 import type { FilesTab } from "../../workspace/state";
 import type { LinkTarget } from "../../files/render/markdown";
 import type { FilesPlace } from "../../platform/types";
 import { useStore } from "../../ui/store";
 import { Button } from "../../ui/primitives/Button";
-import { FolderActions } from "./FolderActions";
 import { EmptyState } from "../../ui/primitives/EmptyState";
 import { Spinner } from "../../ui/primitives/Spinner";
-import { shorten } from "../../files/format";
-import { DirList, MissingFolder, type OutlineProps, type RowMenuAsk } from "./FolderList";
-import { PathField } from "./PathField";
+import { Divider } from "./Divider";
+import { MissingFolder, type OutlineProps } from "./FolderList";
 import { FileView } from "./FileView";
-import { PASTE, useFilesKey } from "./keymap";
-import { PullToRefresh } from "./PullToRefresh";
-import { RowMenu } from "./RowMenu";
+import { PASTE, useFilesKey, type Chord } from "./keymap";
+import { ListPane } from "./ListPane";
+import { PreviewPanel, PreviewToggle } from "./PreviewPanel";
 import { readPaste } from "../terminal/paste";
-import { pasteIntoFolder, scrollKey, type FilesSession } from "./session";
+import { pasteIntoFolder, type FilesSession } from "./session";
 import { useTabOutline } from "./tabOutline";
-import { UploadPanel } from "./UploadPanel";
 import styles from "./FilesScreen.module.css";
+import bar from "./FileView.module.css";
+
+/** Shows and hides the Preview panel while the list has the keys (Finder's Quick Look key). */
+const PREVIEW: Chord = { key: " ", inList: true };
+/** Leaves a file full width for the list. */
+const LEAVE: Chord = { key: "escape" };
+
+/** The list's width beside the Preview panel: at least this, and at most this share of the window, so the panel keeps the rest. */
+const LIST_MIN_PX = 300;
+const LIST_MAX_SHARE = 0.6;
+/** Until the divider is moved: a third of the window, from 400 to 600px. */
+const listDefault = (window: number): number => Math.round(Math.min(600, Math.max(400, window / 3)));
 
 /**
- * The file manager for one Files tab: a folder list or a preview, under a header that says
- * where you are. Where you are is the tab's place (the workspace's, written from history);
- * the host's `FileBrowser` follows it and reports the daemon's canonical path back.
+ * The file manager for one Files tab. Where you are is the tab's place (the workspace's, written from history); the
+ * host's `FileBrowser` follows it and reports the daemon's canonical path back. A folder is the list (`ListPane`), on a
+ * desktop the outline with the Preview panel beside it when it is on; a file is its viewer, full width on a desktop,
+ * with Back to the list it was opened from.
  */
 export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesTab }) {
   const app = useApp();
   const { browser } = session;
   const view = useStore(browser, (s) => s);
   const wanted = tab.place;
-  const { place, dir, home, loading, error } = view;
+  const { place, dir, loading, error, hidden } = view;
   // The folder under the place: its pages are `Folders`' record, shared with the path field.
-  const pages = useStore(browser.folders, (s) => (dir ? s.held.get(folderKey(dir.path, dir.hidden))?.listing ?? null : null));
-  const scroller = useRef<HTMLDivElement>(null);
+  const held = useStore(browser.folders, (s) => s.held);
+  const pages = dir ? held.get(folderKey(dir.path, dir.hidden))?.listing ?? null : null;
   // While the path field is being typed in, the path field's matches are the list.
   const [finding, setFinding] = useState(false);
-  const [rowMenu, setRowMenu] = useState<RowMenuAsk | null>(null);
   const phone = useAppView((v) => v.viewport.layout === "phone");
-  const held = useStore(browser.folders, (s) => s.held);
+  const windowWidth = useAppView((v) => v.viewport.width);
 
   // The one cancellation for answers that land late: this effect's token is current only while the pane still wants this place.
   // A resolve or a Markdown link answer that finds another token (or none) is dropped.
@@ -66,12 +75,10 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
   const open = (to: FilesPlace): void => { app.openPlace(to); };
   const up = parentPlace(place, pages);
   const listed = pages !== null && (place.kind === "dir" ? pages.path === place.path : pages.path === parentOf(place.file.path));
-  const listingVisible = place.kind === "dir" && listed && !error && !finding;
+  const showing = place.kind === "dir" && listed && !error && !finding;
 
-  // Back finds a folder's list scrolled where it was left.
-  const folder = listed ? pages.path : null;
-  const tree = useTabOutline(session, tab.id, place.kind === "dir" ? folder : null);
-  const hidden = view.hidden;
+  const root = place.kind === "dir" && listed ? pages.path : null;
+  const tree = useTabOutline(session, tab.id, root);
   const describe = useMemo(() => (e: HttpRefusal) => describeError(e, session.hostName), [session]);
   const outline: OutlineProps | undefined = phone ? undefined : {
     expanded: tree.expanded,
@@ -86,11 +93,43 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
     },
   };
   useEffect(() => () => { browser.folders.pin("outline", []); }, [browser]);
-  useLayoutEffect(() => {
-    if (folder !== null && scroller.current) scroller.current.scrollTop = session.scroll.get(scrollKey(tab.id, folder)) ?? 0;
-  }, [folder, session.scroll, tab.id, listingVisible]);
-  // A row's menu belongs to the folder it was asked in.
-  useEffect(() => { setRowMenu(null); }, [folder]);
+
+  // Back from a file full width lands on the list with the file selected, its folders open.
+  const lastFile = useRef<string | null>(null);
+  useEffect(() => {
+    if (place.kind === "file") lastFile.current = place.file.path;
+    else if (root !== null && lastFile.current !== null) {
+      if (!phone && lastFile.current.startsWith(`${root === "/" ? "" : root}/`)) tree.reveal(lastFile.current);
+      lastFile.current = null;
+    }
+  }, [place, root]);
+
+  // The Preview panel and the divider are remembered on this device.
+  const [preview, setPreview] = useState(() => app.view.get("preview"));
+  const [stored, setStored] = useState(() => app.view.get("listWidth"));
+  const files = useRef<HTMLDivElement>(null);
+  // The panel stays while the path field is edited: it shows what was selected.
+  const panel = !phone && preview && place.kind === "dir" && listed && !error;
+  const toggle = (): void => {
+    setPreview(!preview);
+    app.view.set("preview", !preview);
+    // The list keeps the keys, so Space toggles again from where it was.
+    app.focus.focusTarget("list");
+  };
+  useFilesKey(PREVIEW, toggle, !phone && place.kind === "dir");
+  const max = Math.max(LIST_MIN_PX, Math.round(windowWidth * LIST_MAX_SHARE));
+  const width = Math.round(Math.max(LIST_MIN_PX, Math.min(max, stored ?? listDefault(windowWidth))));
+  const toggleControl = (sep: boolean) => (!phone && place.kind === "dir" ? (
+    <>
+      {sep && <span class={bar.sep} />}
+      <PreviewToggle on={preview} onToggle={toggle} />
+    </>
+  ) : null);
+
+  // A file full width: Back returns to the list it was opened from (history Back), else, after a reload, its folder.
+  const backTo = place.kind === "file" ? (phone ? up?.path ?? null : app.router.folderBelow(tab.id, place.file.path) ?? up?.path ?? null) : null;
+  const back = backTo === null ? undefined : { folder: baseName(backTo) || "/", onBack: () => { app.toPlace({ kind: "dir", path: backTo }); } };
+  useFilesKey(LEAVE, () => { back?.onBack(); }, !phone && back !== undefined);
 
   const onLink = (target: LinkTarget): void => {
     if (target.kind === "external") app.platform.openURL(target.url);
@@ -102,9 +141,6 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
   };
 
   const title = place.kind === "dir" ? baseName(place.path) : place.file.name;
-  // The path line's text: the folder with its trailing `/`, the same text the field starts with.
-  const shown = place.kind === "dir" ? shorten(place.path, home) : "";
-  const rest = shown === "/" || shown === "" ? shown : `${shown}/`;
 
   let body;
   if (error) {
@@ -122,53 +158,47 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
   }
 
   return (
-    <div class={styles.files}>
+    <div ref={files} class={styles.files} style={{ "--files-list-w": `${String(width)}px` }}>
       {place.kind === "dir" && <h1 class={styles.hiddenTitle}>{title}</h1>}
-      {place.kind === "dir" && home !== null && (
-        <PathField
+      {/* The list stays mounted under a file, so Back returns to it as it was. */}
+      <div class={styles.split} hidden={place.kind === "file"} data-panel={panel || undefined}>
+        <ListPane
           session={session}
-          rest={rest}
-          here={place.path}
-          onEditing={setFinding}
+          tab={tab.id}
+          view={view}
+          pages={listed ? pages : null}
+          showing={showing}
+          pasteable={folderShown !== null}
+          body={body}
+          outline={outline}
+          selection={tree.selection}
+          onSelect={tree.select}
+          up={up}
           onOpen={open}
-          actions={<FolderActions session={session} path={pages?.path ?? place.path} pasteable={folderShown !== null} loading={loading} />}
+          finding={finding}
+          onFinding={setFinding}
+          end={panel ? null : toggleControl(true)}
         />
-      )}
-      {!finding && <UploadPanel session={session} onPreview={(path) => { open({ kind: "file", path }); }} />}
-      {/* The list stays mounted under a preview, so Back returns to it as it was. */}
-      {listed && !error && (
-        <div
-          ref={scroller}
-          key={pages.path}
-          class={styles.scroll}
-          hidden={!listingVisible}
-          onScroll={(e) => { session.scroll.set(scrollKey(tab.id, pages.path), e.currentTarget.scrollTop); }}
-        >
-          <DirList
-            pages={pages}
-            hidden={view.hidden}
-            loading={loading}
-            fresh={view.fresh !== null && parentOf(view.fresh) === pages.path ? baseName(view.fresh) : null}
-            onOpen={open}
-            outline={outline}
-            selection={tree.selection}
-            onSelect={tree.select}
-            onKeyNavigate={() => { app.focus.keepKeyboardOn("list"); }}
-            onMore={() => { void browser.more(); }}
-            onToggleHidden={() => { void browser.toggleHidden(); }}
-            onRowMenu={setRowMenu}
-            {...(up?.kind === "dir" && { onUp: () => { app.toPlace(up); } })}
-          />
-        </div>
-      )}
-      {phone && listingVisible && <PullToRefresh key={pages.path} scroller={scroller} onRefresh={() => browser.reload()} />}
+        {panel && (
+          <>
+            <Divider
+              width={width}
+              min={LIST_MIN_PX}
+              max={max}
+              initial={listDefault(windowWidth)}
+              from={() => files.current?.getBoundingClientRect().left ?? 0}
+              onDrag={(px) => { files.current?.style.setProperty("--files-list-w", `${String(px)}px`); }}
+              onWidth={(px) => { setStored(px); app.view.set("listWidth", px); }}
+            />
+            <PreviewPanel session={session} root={pages} selection={tree.selection} hidden={hidden} held={held} toggle={toggleControl(true)} fileToggle={toggleControl(false)} onOpen={open} onLink={onLink} />
+          </>
+        )}
+      </div>
       {place.kind === "file" && (
-        <FileView session={session} file={place.file} up={up} onUp={() => { if (up) app.toPlace(up); }} onLink={onLink}>
+        <FileView session={session} file={place.file} back={back} onLink={onLink}>
           {body ? <div class={styles.scroll}>{body}</div> : undefined}
         </FileView>
       )}
-      {place.kind === "dir" && body && !finding && <div class={styles.scroll}>{body}</div>}
-      {rowMenu && listingVisible && <RowMenu session={session} {...rowMenu} onClose={() => { setRowMenu(null); }} />}
     </div>
   );
 }

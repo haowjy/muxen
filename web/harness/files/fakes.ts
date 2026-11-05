@@ -74,6 +74,8 @@ export function filesTree(): FakeTree {
       [`${REPO}/Cargo.toml`]: { size: 1488, mtime: ago(20 * HOUR) },
       [`${REPO}/bench-results.json`]: { size: BENCH_JSON.length, mtime: ago(28 * MIN) },
       [`${REPO}/src/main.rs`]: { size: 3120, mtime: ago(2 * HOUR) },
+      [`${REPO}/docs/plan.md`]: { size: 65_400, mtime: ago(43 * MIN) },
+      [`${REPO}/docs/fs.md`]: { size: 22_100, mtime: ago(2 * DAY) },
       [`${REPO}/shot.png`]: { size: 412_330, mtime: ago(3 * HOUR) },
       [`${REPO}/demo.mp4`]: { size: 48_300_000, mtime: ago(3 * DAY) },
       [`${REPO}/muxen.bin`]: { size: 14_890_112, mtime: ago(2 * HOUR) },

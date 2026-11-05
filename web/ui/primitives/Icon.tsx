@@ -1,7 +1,7 @@
 import {
   Check, ChevronDown, ChevronLeft, ChevronRight, CircleX, ClipboardCopy, Copy, Download, Ellipsis, Equal, ExternalLink, Eye, File,
-  FileBraces, FileCode, FileCog, FileDigit, FileImage, FileLock, FileMusic, FileTerminal, FileText, FileVideoCamera, Film, Folder,
-  House, Image, Keyboard, ClipboardPaste, KeyboardOff, List, Plus, RotateCw, Search, Server, Settings, SquarePlus, Terminal,
+  FileBraces, FileCode, FileCog, FileDigit, FileImage, FileLock, FileMusic, FileTerminal, FileText, FileVideoCamera, Film, Folder, FolderOpen,
+  House, Image, Keyboard, ClipboardPaste, KeyboardOff, List, Maximize2, PanelRight, Plus, RotateCw, Search, Server, Settings, SquarePlus, Terminal,
   TriangleAlert, Upload, WrapText, X, type LucideIcon,
 } from "lucide-preact";
 
@@ -11,6 +11,12 @@ const ICONS = {
   back: ChevronLeft,
   sessions: Server,
   folder: Folder,
+  /** Go into a folder. */
+  folderOpen: FolderOpen,
+  /** The Files Preview panel's toggle. */
+  panel: PanelRight,
+  /** Open a preview full width. */
+  expand: Maximize2,
   plus: Plus,
   close: X,
   /** A tab's close: the × in a ring, as a pill's own control. */

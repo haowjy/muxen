@@ -4,9 +4,7 @@ import { useApp, useAppView } from "../../app/context";
 import type { FileRef } from "../../files/browser";
 import { formatSize, formatTime } from "../../files/format";
 import { viewerFor } from "../../files/kinds";
-import { baseName } from "../../files/paths";
 import type { LinkTarget } from "../../files/render/markdown";
-import type { FilesPlace } from "../../platform/types";
 import { Button } from "../../ui/primitives/Button";
 import { Icon } from "../../ui/primitives/Icon";
 import { IconButton } from "../../ui/primitives/IconButton";
@@ -22,9 +20,14 @@ import styles from "./FileView.module.css";
 interface Props {
   session: FilesSession;
   file: FileRef;
-  /** The folder Back goes to; null at `/`. */
-  up: FilesPlace | null;
-  onUp: () => void;
+  /** Back, named for the folder it returns to; absent in the Preview panel, and at `/`. */
+  back?: { folder: string; onBack: () => void } | undefined;
+  /** In the Preview panel: the file's folder relative to the list's root, shown quiet before its name (`docs/`). */
+  folder?: string | undefined;
+  /** In the Preview panel: opens the file full width. */
+  onExpand?: (() => void) | undefined;
+  /** The header line's last control (the Preview toggle). */
+  end?: ComponentChildren;
   onLink: (target: LinkTarget) => void;
   /** Shown instead of the viewer, and the actions, while the file can't be shown yet (loading, refused). */
   children?: ComponentChildren;
@@ -32,9 +35,10 @@ interface Props {
 
 /**
  * A file, under one header line: Back named for its folder, the name and size, the viewer's controls, then Copy
- * path, Download and Insert ▾. The phone's line is Back, the name, and the actions as icons.
+ * path, Download and Insert ▾. The phone's line is Back, the name, and the actions as icons. In the desktop's Preview
+ * panel there is no Back: the line ends with the expand button and the panel's toggle.
  */
-export function FileView({ session, file, up, onUp, onLink, children }: Props) {
+export function FileView({ session, file, back, folder: within, onExpand, end, onLink, children }: Props) {
   const app = useApp();
   const phone = useAppView((v) => v.viewport.layout === "phone");
   // "Open as text" is one file's: the view stays mounted from file to file (Wrap lines carries over), so it names the file.
@@ -43,8 +47,9 @@ export function FileView({ session, file, up, onUp, onLink, children }: Props) {
   const [wrap, setWrap] = useState(phone);
   const [menu, setMenu] = useState<HTMLElement | null>(null);
   const kind = asText ? "code" : viewerFor(file.mime);
+  // The page's heading is the file full width; in the panel the list's folder is the page, and the file one part of it.
+  const Heading = onExpand ? "h2" : "h1";
   const size = file.size !== null ? formatSize(file.size) : null;
-  const folder = up ? baseName(up.path) || "/" : null;
   const url = session.browser.api.rawUrl(file.path);
   const text = useText(session.browser.api, file.path, !children && (kind === "code" || kind === "markdown"));
   // Copy text copies what was read: a file past the first MiB copies only that much, and says so.
@@ -54,15 +59,15 @@ export function FileView({ session, file, up, onUp, onLink, children }: Props) {
   return (
     <div class={styles.view}>
       <header class={styles.bar}>
-        {up && (phone
-          ? <IconButton icon="back" label={`Back to ${folder ?? ""}`} onClick={onUp} />
-          : <Button variant="quiet" class={styles.back} icon="back" aria-label={`Back to ${folder ?? ""}`} onClick={onUp}>{folder}</Button>)}
-        {up && !phone && <span class={styles.sep} />}
-        <h1 class={styles.name} title={file.path}>
+        {back && (phone
+          ? <IconButton icon="back" label={`Back to ${back.folder}`} onClick={back.onBack} />
+          : <Button variant="quiet" class={styles.back} icon="back" aria-label={`Back to ${back.folder}`} onClick={back.onBack}>{back.folder}</Button>)}
+        {back && !phone && <span class={styles.sep} />}
+        <Heading class={styles.name} title={file.path}>
           {!phone && <Icon name={fileIcon(file.name, file.mime)} size={16} class={styles.kind} />}
-          <span class={styles.text}>{file.name}</span>
+          <span class={styles.text}>{within && <span class={styles.within}>{within}</span>}{file.name}</span>
           {!phone && size !== null && <span class={styles.facts} {...(file.mtime !== null && { title: `Modified ${formatTime(file.mtime)}` })}>{size}</span>}
-        </h1>
+        </Heading>
         {!children && kind === "code" && !phone && (
           <>
             <IconButton icon="wrap" label="Wrap lines" aria-pressed={wrap} class={styles.toggle} onClick={() => { setWrap(!wrap); }} />
@@ -77,6 +82,13 @@ export function FileView({ session, file, up, onUp, onLink, children }: Props) {
             <InsertButton path={file.path} compact={phone} shortcut />
           </>
         )}
+        {onExpand && (
+          <>
+            <span class={styles.sep} />
+            <IconButton icon="expand" label="Open full width" onClick={onExpand} />
+          </>
+        )}
+        {end}
         {!children && phone && kind === "code" && (
           <IconButton icon="more" label="File options" aria-haspopup="menu" aria-expanded={menu !== null} onClick={(e) => { setMenu(menu ? null : e.currentTarget); }} />
         )}

@@ -4924,3 +4924,26 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
 - **Rejected:** the disclosure as its own target (A's two targets); listing every open folder again on a
   return to the tab (the cache already holds them); keeping the open set in history (Back would close
   folders instead of leaving places); an unbounded open set (a long session would pin the cache).
+
+### The Preview panel beside a desktop's outline is on or off, and its toggle never moves
+
+- **Decided:** 2026-11-05, Jimmy, on mockup C: "how do u close the desktop 'preview' one? it hsould be
+  like a 'preview' bar thing", then "I usually like it when the close stays in the same place so u can
+  tap to open tap to close without moving the mouse (also I'm fine with it just being an icon)".
+- **What:** the right of a desktop's Files is the Preview panel, on or off. On, it shows the selection
+  once it has settled for 200 ms (a file's viewer; a folder's README, else its facts and Go into; the
+  list's own folder with nothing selected). Its toggle is an icon, the last control of the header line,
+  on the same pixels whether the panel is on or off (checked by script at 1440 and 2560 in six states);
+  Space toggles it while the list has the keys. The divider drags and takes the arrow keys, between 300px
+  and 60% of the window. On or off and the width are remembered per device. A file opens full width as
+  its own place, from the expand button or a double-click or Enter; Back is history Back to the list it
+  came from, else, after a reload, its own folder.
+- **Rejected:** an × on the panel (it closed one file, not the panel: "it doesn't actually close"); the
+  toggle in the list's bar always (with the panel on it would sit mid-window, and turning the panel off
+  would leave the pointer over nothing); `aria-pressed` on it (with the name saying what a click does it
+  reads "Hide preview, pressed"); a read per selection move (a held arrow key would read every file it
+  passes); full-width Back as "up to the file's folder" (from a root's outline, a nested file's folder is
+  not where you were).
+- **Panel off keeps the outline's row** (diverges from C, which turned it into a Finder table with column
+  headings, a Kind column, dates and stripes): Jimmy said "dont just copy finder" and those were dropped
+  earlier, so the list keeps its name, size and age columns across the width, the fills spanning the row.

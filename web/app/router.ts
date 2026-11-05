@@ -217,6 +217,12 @@ export class Router {
     this.goUp({ route: "tab", workspace: entry.workspace, tab, place, overlay: null }, (e) => e.route === "tab" && e.tab === tab && e.place !== null && samePlace(e.place, place));
   }
 
+  /** The nearest folder below the current entry in Files tab `tab` that holds `path`: where Back from a file opened full width returns. Null with none (a reload, a deep link). */
+  folderBelow(tab: string, path: string): string | null {
+    const below = this.stack.slice(0, this.at).findLast((e) => e.route === "tab" && e.tab === tab && e.overlay === null && e.place?.kind === "dir" && path.startsWith(e.place.path === "/" ? "/" : `${e.place.path}/`));
+    return below?.route === "tab" && below.place ? below.place.path : null;
+  }
+
   /**
    * Shows the nearest entry below the current one that `matches` and has no overlay open, in one history step, so
    * no entry between is left to step back onto; with none (after a reload or a deep link), the current entry is

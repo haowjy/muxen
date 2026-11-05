@@ -11,7 +11,7 @@ adding a file. [README.md](README.md) has the commands.
   `home | overview | tab`, a tab opened from Home sitting above its overview in history; the screen
   is derived by `screenOf`). Focus:
   `app/focus.ts`, the only caller of `.focus()` and `.blur()`. The listing: `app/listing.ts`,
-  the only sender of `listSessions`. Persistence: `app/persist.ts`; per-device view settings (Show hidden): `app/viewMemory.ts`. Screens reach them through
+  the only sender of `listSessions`. Persistence: `app/persist.ts`; per-device view settings (Show hidden, the Files Preview panel and its width): `app/viewMemory.ts`. Screens reach them through
   `useApp()` and call their own cores directly.
 - **Environment lives only in `platform/`.** Nothing outside it names an environment, touches
   `navigator`, `indexedDB`, `visualViewport` and the like, or imports an adapter; only

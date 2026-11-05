@@ -22,6 +22,8 @@ interface Props {
   here: string;
   /** The folder's controls, on the line beside the path while it is at rest. */
   actions?: ComponentChildren;
+  /** The line's last control, at rest and while editing (the Preview toggle). */
+  end?: ComponentChildren;
   /** The list below is the field's while it is editing. */
   onEditing: (editing: boolean) => void;
   /** Go named a folder: the pane opens it in its tab. */
@@ -41,7 +43,7 @@ export function lastNameRange(text: string): [number, number] {
  * the text names. The narrowing rules are `files/pathfield.ts`'s; this wires keys, taps and focus.
  * Editing is a router overlay (`files/find`), so Back ends the edit before it leaves the folder.
  */
-export function PathField({ session, rest, here, actions, onEditing, onOpen }: Props) {
+export function PathField({ session, rest, here, actions, end, onEditing, onOpen }: Props) {
   const app = useApp();
   const { browser } = session;
   const home = useStore(browser, (s) => s.home);
@@ -183,6 +185,7 @@ export function PathField({ session, rest, here, actions, onEditing, onOpen }: P
         {editing ? (
           <Button variant="quiet" onMouseDown={(e) => { e.preventDefault(); }} onClick={cancel}>Cancel</Button>
         ) : actions}
+        {end}
       </div>
       {said && <p class={styles.said} role="alert">{said}</p>}
       {view && home !== null && (

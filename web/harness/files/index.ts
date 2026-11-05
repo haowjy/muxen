@@ -10,10 +10,11 @@ import type { FakeTree } from "../../platform/test/fs";
 import type { AppController } from "../../app/controller";
 import { filesSession, scrollKey } from "../../screens/files/session";
 
-/** A desktop outline as a tab would have left it: these folders open (oldest first), this row selected. */
-const outlined = (fixture: Fixture, expanded: string[], selection?: string): Fixture => ({
+/** A desktop outline as a tab would have left it: these folders open (oldest first), this row selected; `preview: false` with the Preview panel off. */
+const outlined = (fixture: Fixture, expanded: string[], selection?: string, preview = true): Fixture => ({
   ...fixture,
   start: (app: AppController) => {
+    app.view.set("preview", preview);
     const host = app.hosts.all()[0];
     if (!host) return;
     const session = filesSession(app, host);
@@ -37,6 +38,7 @@ export const fixtures: Fixtures = {
   files: at({ kind: "dir", path: "~" }),
   filesFolder: at({ kind: "dir", path: REPO }),
   filesMarkdown: at({ kind: "file", path: `${REPO}/README.md` }),
+  /** On a desktop, a file full width, opened from a reload: Back goes to its folder. */
   filesCode: at({ kind: "file", path: `${REPO}/src/main.rs` }),
   /** JSON, with a line longer than the window: the code view's numbers and wrapping. */
   filesJson: at({ kind: "file", path: `${REPO}/bench-results.json` }),
@@ -62,6 +64,10 @@ export const fixtures: Fixtures = {
   filesBig: at({ kind: "dir", path: BIG }, bigTree(), undefined, BIG_PAGE),
   /** The desktop outline: two folders open in place, a file in one selected; `notes` has more than a page. */
   filesOutline: outlined(at({ kind: "dir", path: REPO }), [`${REPO}/src`, `${REPO}/notes`], `${REPO}/src/main.rs`),
+  /** The Preview panel on a selected folder with no README: its facts and Go into. (`filesFolder` shows the list's own README, `filesOutsideFile`'s folder its facts.) */
+  filesPanelFolder: outlined(at({ kind: "dir", path: REPO }), [`${REPO}/docs`], `${REPO}/docs`),
+  /** The Preview panel off: the list takes the window's width. */
+  filesPanelOff: outlined(at({ kind: "dir", path: REPO }), [`${REPO}/src`, `${REPO}/notes`], `${REPO}/src/main.rs`, false),
   /** Open folders that are loading (`src` never answers), refused (`docs`) and empty. */
   filesOutlineStates: outlined(at({ kind: "dir", path: REPO }, undefined, (fs) => { fs.hanging.add(`${REPO}/src`); fs.denied.add(`${REPO}/docs`); }), [`${REPO}/src`, `${REPO}/docs`, `${REPO}/empty`]),
   /** The folder refuses to list. */

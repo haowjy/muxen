@@ -14,6 +14,8 @@ export interface Chord {
   shift?: boolean;
   /** Also fires while a text field has focus. */
   inField?: boolean;
+  /** Fires only while the list has the keys (it, or nothing, has focus): a plain key on a button or a viewer is theirs. */
+  inList?: boolean;
 }
 
 /** Cmd/Ctrl+V, served by the `paste` event: only it carries the clipboard, and the Edit menu's Paste fires it too. */
@@ -29,6 +31,7 @@ const bindings: Binding[] = [];
 function free(e: Event, chord: Chord): boolean {
   if (e.defaultPrevented || document.querySelector("dialog[open], [role=menu]")) return false;
   const target = e.target;
+  if (chord.inList) return target === document.body || (target instanceof HTMLElement && target.matches("[role=tree], [role=listbox]"));
   return chord.inField === true || !(target instanceof HTMLElement && target.closest("input, textarea, [contenteditable]"));
 }
 

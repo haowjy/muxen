@@ -29,3 +29,5 @@
 .facts { flex: none; font-size: var(--text-meta); font-weight: 400; font-variant-numeric: tabular-nums; color: var(--color-text-muted); }
 /* A toggle shows its state: the accent while on. */
 .toggle[aria-pressed="true"] { color: var(--color-accent); background: var(--color-bg-pressed); }
+/* In the Preview panel: the file's folder under the list's root, quiet before its name. */
+.within { font-weight: 400; color: var(--color-text-muted); }

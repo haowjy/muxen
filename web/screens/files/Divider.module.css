@@ -1,0 +1,17 @@
+/* A hairline to see, an 8px strip to grab: the strip overlaps the panes' edges, so neither loses width to it. */
+.divider {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  box-sizing: content-box;
+  width: 1px;
+  margin: 0 -4px;
+  padding: 0 4px;
+  background: var(--color-border);
+  background-clip: content-box;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+.divider:hover, .divider:active { background-color: var(--color-accent); }
+.divider:focus-visible { background-color: var(--color-focus-ring); }
