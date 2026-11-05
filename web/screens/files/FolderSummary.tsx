@@ -56,7 +56,7 @@ export function FolderSummary({ session, path, entry, record, root, onOpen, onLi
   const within = path !== root && path.startsWith(`${root === "/" ? "" : root}/`) ? path.slice(root.length + (root === "/" ? 0 : 1), path.length - name.length) : "";
   const readme = listing?.entries.find((e) => e.kind === "file" && README.test(e.name)) ?? null;
   const readmeRef: FileRef | null = readme && { path: join(path, readme.name), name: readme.name, size: readme.size ?? null, mtime: readme.mtime ?? null, mime: readme.mime ?? null };
-  const text = useText(browser.api, readmeRef?.path ?? "", readmeRef !== null);
+  const text = useText(session, readmeRef ?? { path: "", mtime: null }, readmeRef !== null);
 
   // The folder is listed once it is the panel's (the selection settled on it), and kept while it is.
   const asked = record !== null;

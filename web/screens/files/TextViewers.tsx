@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { FsApi, TextPreview } from "../../files/api";
+import type { FilesSession } from "./session";
 import type { FileRef } from "../../files/browser";
 import { HIGHLIGHT_MAX, highlightedLines, plainLines } from "../../files/render/code";
 import { linkTarget, renderMarkdown, type LinkTarget } from "../../files/render/markdown";
@@ -19,18 +20,30 @@ export const TEXT_LIMIT = 1024 * 1024;
 
 export type Loaded<T> = { kind: "loading" } | { kind: "done"; value: T } | { kind: "error"; error: HttpRefusal };
 
-/** A file's first MiB as text, fetched once per path while `wanted` (a text viewer is showing) and abandoned when it closes. The file's header copies it. */
-export function useText(api: FsApi, path: string, wanted: boolean): Loaded<TextPreview> {
+/**
+ * A file's first MiB as text, fetched once per path while `wanted` (a text viewer is showing) and abandoned when it
+ * closes. The file's header copies it. The text read last is kept in the session by path and time, so the same file
+ * shown again (the Preview panel's file opened full width, then Back) costs no second read; a file whose time is
+ * unknown (opened by path, not from a listing) is read each time.
+ */
+export function useText(session: FilesSession, file: { path: string; mtime: number | null }, wanted: boolean): Loaded<TextPreview> {
+  const { path, mtime } = file;
+  const key = mtime === null ? null : `${path}\n${String(mtime)}`;
+  const kept = key === null ? undefined : session.texts.get(key);
   const [state, setState] = useState<{ path: string; loaded: Loaded<TextPreview> } | null>(null);
   useEffect(() => {
-    if (!wanted) return undefined;
+    if (!wanted || kept) return undefined;
     const abort = new AbortController();
-    api.text(path, TEXT_LIMIT, abort.signal).then(
-      (value) => { setState({ path, loaded: { kind: "done", value } }); },
+    session.browser.api.text(path, TEXT_LIMIT, abort.signal).then(
+      (value) => {
+        if (key !== null) session.texts.set(key, value);
+        setState({ path, loaded: { kind: "done", value } });
+      },
       (error: unknown) => { if (!abort.signal.aborted) setState({ path, loaded: { kind: "error", error: error instanceof HttpRefusal ? error : new HttpRefusal(0, "internal") } }); },
     );
     return () => { abort.abort(); };
-  }, [api, path, wanted]);
+  }, [session, path, key, kept, wanted]);
+  if (kept) return { kind: "done", value: kept };
   // Another file's text, from before a switch, is never this one's.
   return state?.path === path ? state.loaded : { kind: "loading" };
 }

@@ -3,7 +3,7 @@
 // when you go to the terminal or another tab; the active tab's own place, held by the
 // workspace, is what the browser follows when you come back.
 import type { AppController } from "../../app/controller";
-import type { FsApi } from "../../files/api";
+import type { FsApi, TextPreview } from "../../files/api";
 import { FileBrowser } from "../../files/browser";
 import { baseName } from "../../files/paths";
 import { Recent } from "../../files/recent";
@@ -28,6 +28,8 @@ export interface FilesSession {
   expanded: Recent<readonly string[]>;
   /** The selected row's key (`files/outline.ts`), by Files tab and the folder the list starts at (`scrollKey`). */
   selections: Recent<string>;
+  /** The text read last (`useText`), by path and modification time: one, since each can be a MiB. */
+  texts: Recent<TextPreview>;
 }
 
 /** Scrolls, expanded folders and selections kept per host: the least recently set go first, so closed tabs' do not pile up. */
@@ -65,6 +67,7 @@ export function filesSession(app: AppController, host: HostClient): FilesSession
     scroll: new Recent(SCROLLS_KEPT),
     expanded: new Recent(SCROLLS_KEPT),
     selections: new Recent(SCROLLS_KEPT),
+    texts: new Recent(1),
   };
   sessions.set(host.fs, session);
   return session;

@@ -49,7 +49,7 @@ export function FileView({ session, file, back, folder: within, onExpand, onLink
   const Heading = onExpand ? "h2" : "h1";
   const size = file.size !== null ? formatSize(file.size) : null;
   const url = session.browser.api.rawUrl(file.path);
-  const text = useText(session.browser.api, file.path, !children && (kind === "code" || kind === "markdown"));
+  const text = useText(session, file, !children && (kind === "code" || kind === "markdown"));
   // Copy text copies what was read: a file past the first MiB copies only that much, and says so.
   const loaded = kind === "code" && text.kind === "done" ? text.value : null;
   const copyNote = loaded?.truncated ? `Copied the first ${formatSize(TEXT_LIMIT)} of ${file.name}` : null;
