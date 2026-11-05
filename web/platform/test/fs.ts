@@ -4,12 +4,11 @@ import { HttpRefusal } from "../../net/http";
 import type { Entry, FsApi, Listing } from "../../files/api";
 import type { Match, Search } from "../../proto/generated/messages";
 import type { FakeDaemon } from ".";
+import { defaultSettings, searchSkipOf } from "./settings";
 
 /** What an aborted `fetch` rejects with. */
 export const aborted = (): DOMException => new DOMException("The operation was aborted.", "AbortError");
 
-/** Folders the daemon's search walk lists but doesn't enter: the default `search_skip`. */
-const SKIPPED = ["node_modules"];
 
 export interface FakeTree {
   home: string;
@@ -27,6 +26,8 @@ export class FakeFs implements FsApi {
   /** Every call fails as a dead network does. */
   offline = false;
   private held: (() => void)[] = [];
+  /** The `search_skip` patterns the search walk lists but doesn't enter: the fake daemon's settings once served (`serveFs`). */
+  searchSkip: () => readonly string[] = () => searchSkipOf(defaultSettings());
 
   constructor(readonly tree: FakeTree, readonly page = 3) {}
 
@@ -65,15 +66,20 @@ export class FakeFs implements FsApi {
 
   /**
    * A stand-in for the daemon's search walk (fs.md "GET /fs/search"): every entry below `root`, skipping what the walk
-   * skips (dotted names unless `hidden`; what is below a folder named `node_modules`, the folder itself listed),
+   * skips (dotted names unless `hidden`; what is below a folder matching `searchSkip`, the folder itself listed),
    * matched by a plain subsequence per term (fuzzy) or a glob, nearer first. Close enough to draw; the real ranking is
    * the daemon's.
    */
   private found(root: string, q: string, hidden: boolean): Search {
     if (!this.tree.dirs.includes(root)) throw new HttpRefusal(404, this.tree.files[root] ? "not_a_directory" : "not_found");
     const prefix = root === "/" ? "/" : `${root}/`;
+    // A pattern is a glob over a folder's name alone, case kept, as the daemon's.
+    const patterns = this.searchSkip().map((p) => {
+      const literal = p.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+      return new RegExp(`^${literal.replace(/\*/g, ".*").replace(/\?/g, ".")}$`);
+    });
     const skipped = (rel: string): boolean => rel.split("/").some((seg, i, all) =>
-      (!hidden && seg.startsWith(".")) || (SKIPPED.includes(seg) && i < all.length - 1));
+      (!hidden && seg.startsWith(".")) || (patterns.some((p) => p.test(seg)) && i < all.length - 1));
     const below = [...this.tree.dirs, ...Object.keys(this.tree.files)].filter((p) => p.startsWith(prefix) && p !== root).map((p) => p.slice(prefix.length)).filter((rel) => !skipped(rel));
     const glob = /[*?]/.test(q);
     const matches: { rel: string; hits: [number, number][] }[] = [];
@@ -207,11 +213,12 @@ const json = (status: number, body: unknown): Response =>
 const decodePath = (encoded: string): string => encoded.split("/").map(decodeURIComponent).join("/");
 
 /**
- * The daemon's `/fs/*` routes (fs.md "Routes") over `fs`, for `FakeDaemon.fs`: the app's real
- * HTTP client talks to the tree. A raw read answers the whole file as 206 with its
+ * The daemon's `/fs/*` routes (fs.md "Routes") over `fs`, for `daemon.fs`: the app's real
+ * HTTP client talks to the tree, and Search skips what `daemon.settings` says. A raw read answers the whole file as 206 with its
  * `Content-Range`, which the client's one-byte probe and its text preview both accept.
  */
-export function serveFs(fs: FakeFs): NonNullable<FakeDaemon["fs"]> {
+export function serveFs(fs: FakeFs, daemon: FakeDaemon): NonNullable<FakeDaemon["fs"]> {
+  fs.searchSkip = () => searchSkipOf(daemon.settings.running);
   const page = (query: URLSearchParams): [number, boolean] => [Number(query.get("offset") ?? 0), query.get("hidden") === "1"];
   const route = async ({ method, path, query, signal }: Parameters<NonNullable<FakeDaemon["fs"]>>[0]): Promise<Response> => {
     // `~` and `~/…` ride bare after the route's `/` (the client's `url`).

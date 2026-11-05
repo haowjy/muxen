@@ -134,8 +134,13 @@ host admits this device as a tailnet node. Settings has Back to Home.
 Upload and pasted images land; default `~/.muxen-uploads`). They are read from the server each time
 Settings opens and shown as the server answers, defaults included; nothing is kept on the device. A
 change saves at once (Remove, Add, Reset) or when a field is committed (Return or leaving it), one save
-at a time per server, and the section redraws from the server's answer, so every device sees the same.
-Search skips is a list: one row per pattern with Remove, an Add field, and Reset, which returns to the
+at a time per server, each built from the server's answer to the one before it, and the section redraws
+from the server's answer, so every device sees the same. The queue and the latest answer are the host's,
+not the screen's: closing and reopening Settings mid-save keeps the order and shows the save's outcome.
+A change that changes nothing sends nothing. "Saving…" is the only sign of a save in flight; nothing is
+disabled meanwhile. Removing a row moves focus to the next row's Remove, else the previous one's.
+Search skips is a list: one row per pattern with Remove, an Add field with an Add button (disabled while
+the field is empty; touch has no obvious Return), and Reset, which returns to the
 defaults (shown only while the list differs from them). Removing every row skips nothing. A pattern is a
 folder name, or a glob with `*` and `?` over a folder's name alone. The keys that apply only at a restart
 (`name`, `memory_budget_mib`, `[tmux]`, `[complete]`) stay hand edits. A save that fails says why in plain

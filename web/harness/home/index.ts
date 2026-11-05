@@ -60,11 +60,12 @@ export const fixtures: Fixtures = {
   homeInstall: { options: () => ({ pwa: true }), daemon: (d) => { d.listing = LISTING; } },
   /** Settings, the page behind Home's gear, in the browser. */
   settings: { overlay: { screen: "settings", name: "settings" }, daemon: (d) => { d.listing = LISTING; } },
-  /** Settings in the app: Manage servers, and no Remove this device (the host admits by token). */
   /** A server's section, its list changed from the default and a hand-set uploads folder. */
   settingsServer: { overlay: SETTINGS, daemon: (d) => { d.listing = LISTING; d.settings.running = CUSTOM(); } },
   /** Saves never answer: tap Remove to see a save in flight. */
   settingsServerSaving: { overlay: SETTINGS, daemon: (d) => { d.listing = LISTING; d.settings = { running: CUSTOM(), holdSaves: true }; } },
+  /** Saves answer after 2 s: Return then Back, or leave and come back mid-save. */
+  settingsServerSlow: { overlay: SETTINGS, daemon: (d) => { d.listing = LISTING; serveTree(d); d.settings = { running: CUSTOM(), saveDelayMs: 2000 }; } },
   /** Saves fail (a read-only config.toml): tap Remove to see the error beside the list. */
   settingsServerError: {
     overlay: SETTINGS,
@@ -88,6 +89,7 @@ export const fixtures: Fixtures = {
       d.settings = { running: { ...CUSTOM(), fileChanged: true }, reload: { file: { searchSkip: null }, restartNeeded: ["memory_budget_mib"] } };
     },
   },
+  /** Settings in the app: Manage servers, and no Remove this device (the host admits by token). */
   settingsApp: {
     options: () => ({ managed: true, hosts: [{ handle: "h1", hostId: "h-pop", name: "pop-os", pageOrigin: null }] }),
     overlay: { screen: "settings", name: "settings" },

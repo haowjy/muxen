@@ -1,4 +1,4 @@
-import type { RefObject, TargetedKeyboardEvent } from "preact";
+import type { ComponentChildren, RefObject, TargetedKeyboardEvent } from "preact";
 import { useCallback, useId } from "preact/hooks";
 import { cx } from "../cx";
 import { useFocusRef, type FocusTarget } from "../focus";
@@ -23,11 +23,13 @@ interface FieldProps {
   focusTarget?: FocusTarget;
   /** Takes focus when its dialog opens, with a fine pointer (`Dialog`). */
   "data-initial-focus"?: string;
+  /** A control in the input's row, after it (Add): what Return does, for touch, which shows no Return. */
+  action?: ComponentChildren;
   class?: string | undefined;
 }
 
 /** A labelled single-line field. With SearchField, the only place an `<input>` lives for screens (lint rule 1). */
-export function TextField({ label, value, onInput, onCommit, hint, error, focusTarget, class: className, ...rest }: FieldProps) {
+export function TextField({ label, value, onInput, onCommit, hint, error, focusTarget, action, class: className, ...rest }: FieldProps) {
   const id = useId();
   const focusRef = useFocusRef(focusTarget);
   const attach = useCallback((el: HTMLInputElement | null) => {
@@ -38,7 +40,7 @@ export function TextField({ label, value, onInput, onCommit, hint, error, focusT
   return (
     <div class={cx(styles.field, className)}>
       <label for={id} class={styles.label}>{label}</label>
-      <input
+      {wrapIn(action, <input
         type="text"
         {...rest}
         id={id}
@@ -52,11 +54,15 @@ export function TextField({ label, value, onInput, onCommit, hint, error, focusT
         aria-invalid={error ? true : undefined}
         aria-describedby={note ? `${id}-note` : undefined}
         ref={attach}
-      />
+      />)}
       {note && <p id={`${id}-note`} class={cx(styles.note, error && styles.error)} role={error ? "alert" : undefined}>{note}</p>}
     </div>
   );
 }
+
+/** The input alone, or in a row with its action. */
+const wrapIn = (action: ComponentChildren, input: ComponentChildren): ComponentChildren =>
+  action === undefined ? input : <div class={styles.row}>{input}{action}</div>;
 
 type SearchProps = Pick<FieldProps, "label" | "placeholder" | "focusTarget" | "class"> & {
   value: string;

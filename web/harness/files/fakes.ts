@@ -204,5 +204,5 @@ export class FilesFs extends FakeFs {
 export function serveTree(daemon: FakeDaemon, tree: FakeTree = filesTree(), configure?: (fs: FilesFs) => void, page = 8): void {
   const fs = new FilesFs(tree, page);
   configure?.(fs);
-  daemon.fs = serveFs(fs);
+  daemon.fs = serveFs(fs, daemon);
 }

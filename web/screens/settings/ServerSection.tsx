@@ -1,196 +1,209 @@
 // One server's section of Settings (browser-behaviors.md "A server's settings"): what its
-// config.toml keeps and applies without a restart, read from the server each time Settings opens
-// and drawn as it answers. Nothing is kept on the device. Saves go one at a time, in order, each
-// built from the server's latest answer, so quick taps can't reorder.
-import { useEffect, useId, useRef, useState } from "preact/hooks";
+// config.toml keeps and applies without a restart, read from the server each time Settings opens.
+// The host's `SettingsClient` owns the server's answer and the queue of saves, so a save outlives
+// the screen; this draws it and keeps only what is being typed. Every change is built from the
+// server's latest answer when its turn comes, so quick taps can't undo each other.
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useApp, useAppView } from "../../app/context";
 import type { HostClient } from "../../net/hosts";
-import { HttpRefusal } from "../../net/http";
 import { refusalWords } from "../../net/refusalWords";
-import type { ServerSettings, SettingsChange } from "../../proto/generated/messages";
+import type { SettingsFailure } from "../../net/settings";
+import type { ServerSettings } from "../../proto/generated/messages";
 import { Button } from "../../ui/primitives/Button";
 import { IconButton } from "../../ui/primitives/IconButton";
 import { Spinner } from "../../ui/primitives/Spinner";
 import { TextField } from "../../ui/primitives/TextField";
+import { useStore } from "../../ui/store";
+import { Section } from "./Section";
 import styles from "./Settings.module.css";
 
-type Load = { kind: "loading" } | { kind: "unreachable" } | { kind: "loaded"; settings: ServerSettings };
+/** The daemon's limits (fs.md "Server settings"), checked here so a refusal has words. */
+const MAX_PATTERNS = 64;
+const MAX_PATTERN_BYTES = 255;
+const MAX_UPLOADS_DIR_BYTES = 4096;
 
-/** What the last Reload said, until the next one. */
-type Reloaded = { kind: "broken"; where: string | null } | { kind: "failed"; words: string };
-
+const bytes = (text: string): number => new TextEncoder().encode(text).length;
 const same = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((x, i) => x === b[i]);
+const skipsOf = (settings: ServerSettings): string[] => settings.searchSkip ?? settings.defaults.searchSkip;
 
-export function ServerSection({ host }: { host: HostClient }) {
-  const name = host.name ?? host.entry.name ?? "the server";
-  const headingId = useId();
-  const [load, setLoad] = useState<Load>({ kind: "loading" });
-  const [saving, setSaving] = useState(0);
+/** Why a pattern can't be added to `skips`, in words; null if it can. */
+function patternProblem(pattern: string, skips: readonly string[]): string | null {
+  if (pattern.includes("/")) return "A folder name, without /.";
+  if (/^\*+$/.test(pattern)) return "That would skip every folder.";
+  if (bytes(pattern) > MAX_PATTERN_BYTES) return "A folder name of at most 255 bytes.";
+  if (!skips.includes(pattern) && skips.length >= MAX_PATTERNS) return `At most ${String(MAX_PATTERNS)} folders. Remove one first.`;
+  return null;
+}
+
+/** Why `dir` can't be the uploads folder, in words; null if it can. */
+function uploadsProblem(dir: string): string | null {
+  if (!dir.startsWith("/") && !dir.startsWith("~/")) return "Start with / or ~/.";
+  if (bytes(dir) > MAX_UPLOADS_DIR_BYTES) return "At most 4,096 bytes.";
+  return null;
+}
+
+/** Which control takes focus once the answer that removes the one holding it is drawn. */
+type Refocus = { after: "remove"; pattern: string; index: number } | { after: "reset" };
+
+export function ServerSection({ host, name }: { host: HostClient; name: string }) {
+  const app = useApp();
+  const client = host.settings;
+  const view = useStore(client, (v) => v);
+  const touch = useAppView((v) => v.viewport.density === "touch");
   const [adding, setAdding] = useState("");
-  const [skipError, setSkipError] = useState<string | null>(null);
+  const [addProblem, setAddProblem] = useState<string | null>(null);
+  // What is typed in Uploads folder; null: the field shows the server's value.
   const [uploads, setUploads] = useState<string | null>(null);
-  const [uploadsError, setUploadsError] = useState<string | null>(null);
-  const [reloading, setReloading] = useState(false);
-  const [reloaded, setReloaded] = useState<Reloaded | null>(null);
-  // The server's latest answer, which the next save in the queue builds on.
-  const latest = useRef<ServerSettings | null>(null);
-  const queue = useRef<Promise<void>>(Promise.resolve());
-  const api = host.settings;
+  const [uploadsProblemWords, setUploadsProblem] = useState<string | null>(null);
+  const skipField = useRef<HTMLDivElement>(null);
+  const refocus = useRef<Refocus | null>(null);
 
-  const answered = (settings: ServerSettings): void => {
-    latest.current = settings;
-    setLoad({ kind: "loaded", settings });
+  useEffect(() => { client.read(); }, [client]);
+
+  const why = (failed: SettingsFailure | null): string | null => {
+    if (!failed) return null;
+    if (failed.code === "network") return `Can't reach ${name}. Nothing changed.`;
+    if (failed.code === "config_unavailable") return `config.toml on ${name} doesn't parse${failed.detail ? `: ${failed.detail}` : ""}. Fix it there.`;
+    return refusalWords(failed.code);
   };
 
-  const read = (): void => {
-    setLoad({ kind: "loading" });
-    api.read().then(answered, () => { setLoad({ kind: "unreachable" }); });
-  };
-  useEffect(read, [api]);
+  const settings = view.settings;
+  const skips = settings ? skipsOf(settings) : [];
 
-  const why = (error: unknown): string => {
-    if (!(error instanceof HttpRefusal) || error.code === "network") return `Can't reach ${name}. Nothing changed.`;
-    if (error.code === "config_unavailable") return `config.toml on ${name} doesn't parse${error.detail ? `: ${error.detail}` : ""}. Fix it there.`;
-    return refusalWords(error.code);
-  };
+  // A Remove or Reset hid the control that held focus. After Remove, the next row's Remove takes it,
+  // else the previous row's, else the Add field; after Reset, the Add field. Never the field on
+  // touch, where focusing it raises the keyboard: the first row's Remove instead.
+  useLayoutEffect(() => {
+    const wanted = refocus.current;
+    const field = skipField.current;
+    // Not before the answer that hides the control is drawn.
+    const shown = wanted?.after === "remove" ? skips.includes(wanted.pattern) : settings !== null && !same(skips, settings.defaults.searchSkip);
+    if (!wanted || !field || shown) return;
+    refocus.current = null;
+    const removes = [...field.querySelectorAll<HTMLElement>("li button")];
+    const input = touch ? null : field.querySelector<HTMLElement>("input");
+    const next = wanted.after === "remove" ? (removes[wanted.index] ?? removes[wanted.index - 1] ?? input) : (input ?? removes[0] ?? null);
+    app.focus.refocus(next);
+  });
 
-  /** Queues a save; `change` sees the server's latest answer and returns null to skip. Resolves true if it saved. */
-  const save = (change: (now: ServerSettings) => SettingsChange | null, failed: (words: string) => void): Promise<boolean> => {
-    const run = queue.current.then(async () => {
-      const now = latest.current;
-      const body = now && change(now);
-      if (!body) return false;
-      setSaving((n) => n + 1);
-      try {
-        answered(await api.save(body));
-        return true;
-      } catch (error) {
-        failed(why(error));
-        return false;
-      } finally {
-        setSaving((n) => n - 1);
-      }
-    });
-    queue.current = run.then(() => undefined);
-    return run;
-  };
-
-  const reload = async (): Promise<void> => {
-    setReloading(true);
-    try {
-      answered(await api.reload());
-      setUploads(null);
-      setReloaded(null);
-    } catch (error) {
-      if (error instanceof HttpRefusal && error.code === "config_unavailable") setReloaded({ kind: "broken", where: error.detail ?? null });
-      else setReloaded({ kind: "failed", words: why(error) });
-    } finally {
-      setReloading(false);
-    }
-  };
-
-  return (
-    <section class={styles.section} aria-labelledby={headingId}>
-      <h3 id={headingId} class={styles.heading}>{name}</h3>
-      {load.kind === "loading" && (
-        <p class={styles.loading}><Spinner label={`Loading ${name}'s settings`} /> Loading…</p>
-      )}
-      {load.kind === "unreachable" && (
+  if (view.unreachable) {
+    return (
+      <Section title={name}>
         <div class={styles.unreachable}>
           <p class={styles.detail}>Can't reach {name}.</p>
-          <Button variant="secondary" onClick={read}>Try again</Button>
+          <Button variant="secondary" onClick={() => { client.read(); }}>Try again</Button>
+        </div>
+      </Section>
+    );
+  }
+  if (!settings) {
+    return (
+      <Section title={name}>
+        <p class={styles.loading}><Spinner label={`Loading ${name}'s settings`} /> Loading…</p>
+      </Section>
+    );
+  }
+
+  const add = (): void => {
+    const pattern = adding.trim();
+    if (pattern === "") return;
+    const problem = patternProblem(pattern, skips);
+    setAddProblem(problem);
+    if (problem) return;
+    void client.save("searchSkip", (now) => {
+      const list = skipsOf(now);
+      return list.includes(pattern) ? null : { searchSkip: [...list, pattern] };
+    }).then((saved) => { if (saved) setAdding(""); });
+  };
+  // A failed save leaves its control where it was, with focus.
+  const keepFocusIfFailed = (saved: boolean): void => { if (!saved) refocus.current = null; };
+  const remove = (pattern: string, index: number): void => {
+    refocus.current = { after: "remove", pattern, index };
+    void client.save("searchSkip", (now) => {
+      const list = skipsOf(now);
+      return list.includes(pattern) ? { searchSkip: list.filter((p) => p !== pattern) } : null;
+    }).then(keepFocusIfFailed);
+  };
+  const reset = (): void => {
+    refocus.current = { after: "reset" };
+    void client.save("searchSkip", (now) => (now.searchSkip === null ? null : { searchSkip: null })).then(keepFocusIfFailed);
+  };
+  const commitUploads = (): void => {
+    if (uploads === null) return;
+    const wanted = uploads.trim() === "" ? null : uploads.trim();
+    const problem = wanted === null ? null : uploadsProblem(wanted);
+    setUploadsProblem(problem);
+    if (problem) return;
+    void client.save("uploadsDir", (now) => (now.uploadsDir === wanted ? null : { uploadsDir: wanted }))
+      .then((saved) => { if (saved) setUploads(null); });
+  };
+
+  const skipError = addProblem ?? why(view.failed.searchSkip);
+  const uploadsError = uploadsProblemWords ?? why(view.failed.uploadsDir);
+  const reloadError = why(view.failed.reload);
+  return (
+    <Section title={name}>
+      {settings.fileChanged && (
+        <div class={styles.notice}>
+          <p role="status">config.toml has changed since muxen loaded it.</p>
+          <Button variant="secondary" busy={view.reloading} onClick={() => { client.reload(); }}>
+            {view.reloading ? "Reloading…" : "Reload config.toml"}
+          </Button>
         </div>
       )}
-      {load.kind === "loaded" && (() => {
-        const { settings } = load;
-        const skips = settings.searchSkip ?? settings.defaults.searchSkip;
-        const busy = saving > 0;
-        const failSkip = (words: string): void => { setSkipError(words); };
-        const add = (): void => {
-          const pattern = adding.trim();
-          if (pattern === "") return;
-          if (pattern.includes("/")) { setSkipError("A folder name, without /."); return; }
-          if (/^\*+$/.test(pattern)) { setSkipError("That would skip every folder."); return; }
-          setSkipError(null);
-          void save((now) => {
-            const list = now.searchSkip ?? now.defaults.searchSkip;
-            return list.includes(pattern) ? null : { searchSkip: [...list, pattern] };
-          }, failSkip).then((saved) => { if (saved) setAdding(""); });
-        };
-        const remove = (pattern: string): void => {
-          setSkipError(null);
-          void save((now) => ({ searchSkip: (now.searchSkip ?? now.defaults.searchSkip).filter((p) => p !== pattern) }), failSkip);
-        };
-        const typed = uploads ?? settings.uploadsDir ?? "";
-        const commitUploads = (): void => {
-          if (uploads === null) return;
-          const wanted = uploads.trim() === "" ? null : uploads.trim();
-          if (wanted === settings.uploadsDir) { setUploads(null); return; }
-          if (wanted !== null && !wanted.startsWith("/") && !wanted.startsWith("~/")) {
-            setUploadsError("Start with / or ~/.");
-            return;
-          }
-          setUploadsError(null);
-          void save(() => ({ uploadsDir: wanted }), setUploadsError).then((saved) => { if (saved) setUploads(null); });
-        };
-        return (
-          <>
-            <p class={styles.detail}>Kept in config.toml on {name}. A change applies at once, on every device.</p>
-            {settings.fileChanged && (
-              <div class={styles.notice} role="status">
-                <p>config.toml has changed since muxen loaded it.</p>
-                <Button variant="secondary" busy={reloading} onClick={() => { void reload(); }}>
-                  {reloading ? "Reloading…" : "Reload config.toml"}
-                </Button>
-              </div>
-            )}
-            {reloaded?.kind === "broken" && (
-              <p class={styles.error} role="alert">
-                config.toml doesn't parse{reloaded.where ? `: ${reloaded.where}` : ""}. muxen keeps the values below until it does.
-              </p>
-            )}
-            {settings.restartNeeded.length > 0 && (
-              <p class={styles.detail} role="status">Restart muxen to apply: {settings.restartNeeded.join(", ")}</p>
-            )}
-            {reloaded?.kind === "failed" && <p class={styles.error} role="alert">{reloaded.words}</p>}
+      {view.broken && (
+        <p class={styles.error} role="alert">
+          config.toml doesn't parse{view.broken.where ? `: ${view.broken.where}` : ""}. muxen keeps the values below until it does.
+        </p>
+      )}
+      {settings.restartNeeded.length > 0 && (
+        <p class={styles.detail} role="status">Restart muxen to apply: {settings.restartNeeded.join(", ")}</p>
+      )}
+      {reloadError && <p class={styles.error} role="alert">{reloadError}</p>}
 
-            <div class={styles.field}>
-              <h4 class={styles.label}>Search skips</h4>
-              <p class={styles.detail}>Folders Search lists but doesn't look inside. A folder name, or <code>*</code> and <code>?</code> to match part of one.</p>
-              {skips.length === 0 ? (
-                <p class={styles.detail}>Search looks inside every folder.</p>
-              ) : (
-                <ul class={styles.patterns}>
-                  {skips.map((pattern) => (
-                    <li key={pattern} class={styles.pattern}>
-                      <code>{pattern}</code>
-                      <IconButton icon="close" label={`Remove ${pattern}`} aria-disabled={busy || undefined} onClick={() => { if (!busy) remove(pattern); }} />
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <TextField label="Add a folder" value={adding} onInput={(v) => { setAdding(v); setSkipError(null); }} onCommit={add} error={skipError} />
-              {!same(skips, settings.defaults.searchSkip) && (
-                <Button variant="quiet" class={styles.reset} busy={busy} onClick={() => { setSkipError(null); void save(() => ({ searchSkip: null }), failSkip); }}>
-                  Reset to {settings.defaults.searchSkip.join(", ")}
-                </Button>
-              )}
-            </div>
+      <div class={styles.field} ref={skipField}>
+        <h4 class={styles.label}>Search skips</h4>
+        <p class={styles.detail}>Folders Search lists but doesn't look inside. A folder name, or <code>*</code> and <code>?</code> to match part of one.</p>
+        {skips.length === 0 ? (
+          <p class={styles.detail}>Search looks inside every folder.</p>
+        ) : (
+          <ul class={styles.patterns}>
+            {skips.map((pattern, index) => (
+              <li key={pattern} class={styles.pattern}>
+                <code>{pattern}</code>
+                <IconButton icon="close" label={`Remove ${pattern}`} onClick={() => { remove(pattern, index); }} />
+              </li>
+            ))}
+          </ul>
+        )}
+        <TextField
+          label="Add a folder"
+          value={adding}
+          onInput={(v) => { setAdding(v); setAddProblem(null); client.dismiss("searchSkip"); }}
+          onCommit={add}
+          error={skipError}
+          // Disabled while empty without a reason beside it: the empty field it sits in is the reason.
+          action={<Button variant="secondary" disabled={adding.trim() === ""} onClick={add}>Add</Button>}
+        />
+        {!same(skips, settings.defaults.searchSkip) && (
+          <Button variant="quiet" class={styles.reset} onClick={reset}>
+            Reset to {settings.defaults.searchSkip.join(", ")}
+          </Button>
+        )}
+      </div>
 
-            <div class={styles.field}>
-              <TextField
-                label="Uploads folder"
-                placeholder={settings.defaults.uploadsDir}
-                value={typed}
-                onInput={(v) => { setUploads(v); setUploadsError(null); }}
-                onCommit={commitUploads}
-                hint={`Where Upload and pasted images land. Empty means ${settings.defaults.uploadsDir}.`}
-                error={uploadsError}
-              />
-            </div>
-            {busy && <p class={styles.loading}><Spinner label="Saving" /> Saving…</p>}
-          </>
-        );
-      })()}
-    </section>
+      <div class={styles.field}>
+        <TextField
+          label="Uploads folder"
+          placeholder={settings.defaults.uploadsDir}
+          value={uploads ?? settings.uploadsDir ?? ""}
+          onInput={(v) => { setUploads(v); setUploadsProblem(null); client.dismiss("uploadsDir"); }}
+          onCommit={commitUploads}
+          hint={`Where Upload and pasted images land. Empty means ${settings.defaults.uploadsDir}.`}
+          error={uploadsError}
+        />
+      </div>
+      {view.saving > 0 && <p class={styles.loading}><Spinner label="Saving" /> Saving…</p>}
+    </Section>
   );
 }

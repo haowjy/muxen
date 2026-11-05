@@ -8,11 +8,16 @@ export interface FakeSettings {
   unreachable?: boolean;
   /** Saves wait for good while set: a save in flight. */
   holdSaves?: boolean;
+  /** Saves answer after this long; the change applies when they do. */
+  saveDelayMs?: number;
   /** A save answers this refusal and changes nothing. */
   saveRefusal?: { status: number; body: ErrorBody };
   /** What a reload does: apply `file` and report `restartNeeded`, or answer `refusal`. */
   reload?: { file: Partial<Pick<ServerSettings, "searchSkip" | "uploadsDir">>; restartNeeded: string[] } | { refusal: { status: number; body: ErrorBody } };
 }
+
+/** The folder name patterns Search skips under `settings`: the file's, else the default. */
+export const searchSkipOf = (settings: ServerSettings): string[] => settings.searchSkip ?? settings.defaults.searchSkip;
 
 /** The daemon's defaults, every key absent. */
 export function defaultSettings(): ServerSettings {
@@ -30,10 +35,14 @@ export function serveSettings(settings: FakeSettings, method: string, path: stri
     if (settings.holdSaves) return new Promise(() => {});
     if (settings.saveRefusal) return Promise.resolve(json(settings.saveRefusal.status, settings.saveRefusal.body));
     const change = JSON.parse(body ?? "{}") as SettingsChange;
-    const searchSkip = change.searchSkip === undefined ? settings.running.searchSkip : change.searchSkip && [...new Set(change.searchSkip)];
-    const uploadsDir = change.uploadsDir === undefined ? settings.running.uploadsDir : change.uploadsDir;
-    settings.running = { ...settings.running, searchSkip, uploadsDir, fileChanged: false };
-    return Promise.resolve(json(200, settings.running));
+    const apply = (): Response => {
+      const searchSkip = change.searchSkip === undefined ? settings.running.searchSkip : change.searchSkip && [...new Set(change.searchSkip)];
+      const uploadsDir = change.uploadsDir === undefined ? settings.running.uploadsDir : change.uploadsDir;
+      settings.running = { ...settings.running, searchSkip, uploadsDir, fileChanged: false };
+      return json(200, settings.running);
+    };
+    const delay = settings.saveDelayMs;
+    return delay === undefined ? Promise.resolve(apply()) : new Promise((done) => { setTimeout(() => { done(apply()); }, delay); });
   }
   if (method === "POST" && path === "/settings/reload") {
     const reload = settings.reload ?? { file: {}, restartNeeded: [] };

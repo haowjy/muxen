@@ -153,6 +153,15 @@ export class FocusController extends Store<FocusView> implements FocusPort {
     element.focus();
   }
 
+  /**
+   * The control that held focus was removed (a row deleted): `element` takes it, but only if
+   * focus fell to the page; a focus the user has moved since stays where it is.
+   */
+  refocus(element: HTMLElement | null): void {
+    const active = document.activeElement;
+    if (element?.isConnected && (active === null || active === document.body)) element.focus();
+  }
+
   /** A field the user is done with: let go of it now, which lowers the keyboard. */
   blurElement(element: HTMLElement): void {
     element.blur();

@@ -14,6 +14,9 @@
 .input::placeholder,
 .searchInput::placeholder { color: var(--color-text-muted); opacity: 1; }
 .input[aria-invalid="true"] { border-color: var(--color-status-error); }
+/* An input with its action beside it. */
+.row { display: flex; align-items: center; gap: var(--space-2); }
+.row > .input { flex: 1; min-width: 0; }
 .note { font-size: var(--text-small); color: var(--color-text-muted); }
 .error { color: var(--color-status-error); }
 

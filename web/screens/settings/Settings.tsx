@@ -7,8 +7,7 @@
 // app, when Face ID asks again; and a section per server for what its config.toml keeps
 // (`ServerSection`). Each destructive action confirms in its own overlay, so Back from
 // the confirmation returns here.
-import type { ComponentChildren } from "preact";
-import { useId, useState } from "preact/hooks";
+import { useState } from "preact/hooks";
 import { useApp, useAppView, useOverlay } from "../../app/context";
 import type { HostClient } from "../../net/hosts";
 import type { Appearance, Relock, TextSize } from "../../platform/types";
@@ -17,6 +16,7 @@ import { Choice } from "../../ui/primitives/Choice";
 import { Dialog } from "../../ui/primitives/Dialog";
 import { TitleBar } from "../../ui/primitives/DialogBars";
 import { ScreenBar } from "../../ui/primitives/ScreenBar";
+import { Section, serverName } from "./Section";
 import { ServerSection } from "./ServerSection";
 import styles from "./Settings.module.css";
 
@@ -77,18 +77,6 @@ function Confirm({ name, title, confirmLabel, run, children }: {
   );
 }
 
-/** One group on the page: a heading, what it covers, and its controls. */
-function Section({ title, detail, children }: { title: string; detail: ComponentChildren; children?: ComponentChildren }) {
-  const id = useId();
-  return (
-    <section class={styles.section} aria-labelledby={id}>
-      <h3 id={id} class={styles.heading}>{title}</h3>
-      <p class={styles.detail}>{detail}</p>
-      {children}
-    </section>
-  );
-}
-
 /** Hosts that admit this device as a tailnet node, and so can forget it. */
 function removable(hosts: HostClient[]): HostClient[] {
   return hosts.filter((h) => h.entry.pageOrigin !== null && h.admission.kind === "admitted");
@@ -103,7 +91,7 @@ export function Settings() {
   const canRemove = removable(hosts);
   // The one host this device would be removed from. The browser has exactly one.
   const target = canRemove[0];
-  const hostName = target?.name ?? "the server";
+  const hostName = serverName(target);
   const device = target?.admission.kind === "admitted" ? (target.admission.deviceName ?? "this device") : "this device";
 
   const { manageHosts, setRelock } = app.platform;
@@ -126,7 +114,7 @@ export function Settings() {
                 <Choice label="Ask for Face ID" options={RELOCKS} value={preferences.relock} onChange={setRelock} />
               </Section>
             )}
-            {hosts.map((host) => <ServerSection key={host.entry.handle} host={host} />)}
+            {hosts.map((host) => <ServerSection key={host.entry.handle} host={host} name={serverName(host)} />)}
             {manageHosts && (
               <Section
                 title="Servers"

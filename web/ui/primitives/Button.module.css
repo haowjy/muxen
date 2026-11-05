@@ -33,10 +33,12 @@
 }
 .quiet:hover { background: var(--color-bg-hover); color: var(--color-text); }
 .button:active { transform: translateY(1px); }
-.button[aria-disabled="true"] {
+.button[aria-disabled="true"],
+.button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
-.button[aria-disabled="true"]:hover { filter: none; }
+.button[aria-disabled="true"]:hover,
+.button:disabled:hover { filter: none; }
 /* A sibling of the button, so it sits in whatever row or wrap the button is in. */
 .reason { align-self: center; min-width: 0; overflow-wrap: anywhere; font-size: var(--text-small); color: var(--color-text-muted); text-wrap: pretty; }
