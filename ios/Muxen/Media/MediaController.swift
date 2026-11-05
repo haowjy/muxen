@@ -104,16 +104,14 @@ final class MediaController: NSObject, PHPickerViewControllerDelegate, UIImagePi
     }
 
     private func upload(_ data: Data, id: String, host hostID: String, fileName: String, destination: UploadDestination?) {
-        guard let host = model.hosts.first(where: { $0.id == hostID }) else {
-            sendUpload(id: id, progress: 1, error: "Couldn't find this server.")
-            return
+        let request: URLRequest, token: String
+        switch model.request(on: hostID, path: "/fs/upload", query: Uploader.query(name: fileName, destination: destination)) {
+        case .ready(let ready, let readyToken): (request, token) = (ready, readyToken)
+        case .noHost: sendUpload(id: id, progress: 1, error: "Couldn't find this server."); return
+        case .locked, .notEnrolled: sendUpload(id: id, progress: 1, error: "Unlock muxen to upload."); return
         }
-        guard case .token(let token) = model.token(for: hostID) else {
-            sendUpload(id: id, progress: 1, error: "Unlock muxen to upload.")
-            return
-        }
-        let accepted = uploader.upload(id: id, host: host, data: data, fileName: fileName, destination: destination, token: token, rejectedToken: { [weak model = self.model] rejectedToken in
-            model?.rejectedToken(for: host.id, token: rejectedToken)
+        let accepted = uploader.upload(id: id, request: request, data: data, text: destination?.text == true, token: token, rejectedToken: { [weak model = self.model] rejectedToken in
+            model?.rejectedToken(for: hostID, token: rejectedToken)
         }, progress: { [weak self] progress in
             self?.sendUpload(id: id, progress: progress)
         }, completion: { [weak self] result in
@@ -127,15 +125,12 @@ final class MediaController: NSObject, PHPickerViewControllerDelegate, UIImagePi
     }
 
     func playVideo(host: String, path: String) {
-        guard let stored = model.hosts.first(where: { $0.id == host }),
-              case .token(let token) = model.token(for: host),
-              var components = URLComponents(string: stored.baseURL) else { return }
         let segments = path.split(separator: "/").map { segment in
             segment.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-._~"))) ?? String(segment)
         }
-        components.percentEncodedPath = "/fs/raw/" + segments.joined(separator: "/")
-        guard let url = components.url else { return }
-        let asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": ["Authorization": "Bearer \(token)"]])
+        guard case .ready(let request, _) = model.request(on: host, path: "/fs/raw/" + segments.joined(separator: "/")),
+              let url = request.url else { return }
+        let asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": request.allHTTPHeaderFields ?? [:]])
         let player = AVPlayer(playerItem: AVPlayerItem(asset: asset))
         let controller = AVPlayerViewController()
         controller.player = player
@@ -152,27 +147,27 @@ final class MediaController: NSObject, PHPickerViewControllerDelegate, UIImagePi
         }
         guard let page = URLComponents(string: value), page.scheme == "muxen-app",
               let pageHost = page.host, pageHost.hasPrefix("h-"),
-              page.percentEncodedPath.hasPrefix("/fs/raw/"), page.query == nil, page.fragment == nil,
-              let host = model.hosts.first(where: { $0.id == String(pageHost.dropFirst(2)) }),
-              var target = URLComponents(string: host.baseURL) else {
+              page.percentEncodedPath.hasPrefix("/fs/raw/"), page.query == nil, page.fragment == nil else {
             fail("Couldn't find this file's server.", nil)
             return
         }
-        guard case .token(let token) = model.token(for: host.id) else {
-            fail("Unlock muxen to download.", nil)
-            return
+        let hostID = String(pageHost.dropFirst(2))
+        let request: URLRequest, token: String
+        switch model.request(on: hostID, path: page.percentEncodedPath) {
+        case .ready(let ready, let readyToken): (request, token) = (ready, readyToken)
+        case .noHost: fail("Couldn't find this file's server.", nil); return
+        case .locked, .notEnrolled: fail("Unlock muxen to download.", nil); return
         }
-        target.percentEncodedPath = page.percentEncodedPath
         // UIKit drops a present while another is up, and one download runs at a time.
-        guard let url = target.url, presenter?.presentedViewController == nil, !downloader.isBusy else {
+        guard presenter?.presentedViewController == nil, !downloader.isBusy else {
             fail("Close what's open, then download again.", nil)
             return
         }
         let progress = UIAlertController(title: "Downloading \(name)", message: "Starting", preferredStyle: .alert)
         progress.addAction(UIAlertAction(title: "Cancel", style: .cancel) { [weak self] _ in self?.downloader.cancel() })
         let bytes = { (count: Int64) in ByteCountFormatter.string(fromByteCount: count, countStyle: .file) }
-        _ = downloader.download(url, name: name, token: token, rejectedToken: { [weak model = self.model] rejected in
-            model?.rejectedToken(for: host.id, token: rejected)
+        _ = downloader.download(request, name: name, token: token, rejectedToken: { [weak model = self.model] rejected in
+            model?.rejectedToken(for: hostID, token: rejected)
         }, progress: { written, total in
             let text = total.map { "\(bytes(written)) of \(bytes($0))" } ?? bytes(written)
             if progress.message != text { progress.message = text }

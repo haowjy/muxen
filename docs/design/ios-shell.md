@@ -133,7 +133,17 @@ origin:
   - Protected requests require a cached native token. While locked the handler returns
     local `423 {"error":"locked"}`; without a token it returns local
     `401 {"error":"not_enrolled"}`. A daemon `401` revokes the cached token only if
-    the request actually carried it. Cross-origin redirects are refused.
+    the request actually carried it. A redirect is followed only by the redirect rule below.
+
+Every native request to a daemon (this proxy, uploads, Download, the video player) is built one
+way: `MuxenAppModel.request(on:path:query:)` resolves the saved host to its `baseURL`, appends the
+percent-encoded path unchanged, and adds the host's token, or answers that the host isn't saved,
+the app is locked, or the host has no token. One redirect rule, `HostRequest.redirect`, covers the
+URLSessions: follow only to the request's own origin and only within the route it was for (the
+proxy's permitted route, `/fs/upload`, `/fs/raw/`); otherwise the 3xx is the answer. The video
+player can't take the rule: AVFoundation follows redirects itself, with no hook. It drops the
+`Authorization` header on a cross-origin redirect (checked on macOS), and the player only plays
+what it gets.
 
 For HTTP endpoints, P4b builds proxy URLs from `PlatformHost.handle`; native resolves
 them to the private `baseURL` and supplies the per-host token. The production browser
@@ -545,8 +555,8 @@ wildcard development profile has none (Distribution).
 
 1. Native takes `url` only if it is `muxen-app://h-{host}/fs/raw/…` for a saved host, with no query or
    fragment, and fetches `{baseURL}` plus the same percent-encoded path, unchanged, with
-   `Authorization: Bearer` ([auth.md](auth.md#carrying-the-token)): the scheme handler's resolution,
-   outside the scheme handler, as the video player is. The page has listed the folder through the
+   `Authorization: Bearer` ([auth.md](auth.md#carrying-the-token)), through the resolver every
+   native request to a daemon uses ("Where the web UI comes from"). The page has listed the folder through the
    handler, so the compatibility gate has already run. Locked, or no token: the reply is an error
    ("Unlock muxen to download."), with no request.
 2. `Downloader` streams the body to one temporary file (`URLSessionDownloadTask`, an ephemeral session,

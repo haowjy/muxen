@@ -7,17 +7,18 @@ final class AppSchemeHandler: NSObject, WKURLSchemeHandler, URLSessionDataDelega
     private final class Pending {
         let identifier: ObjectIdentifier
         let schemeTask: WKURLSchemeTask
-        let originalURL: URL
+        /// The permitted route the request is for: a redirect stays within it.
+        let route: String
         let hostID: String?
         let sentToken: String?
         var dataTask: URLSessionDataTask?
         var statusCode: Int?
         var stopped = false
 
-        init(identifier: ObjectIdentifier, schemeTask: WKURLSchemeTask, url: URL, hostID: String?, sentToken: String?) {
+        init(identifier: ObjectIdentifier, schemeTask: WKURLSchemeTask, route: String, hostID: String?, sentToken: String?) {
             self.identifier = identifier
             self.schemeTask = schemeTask
-            self.originalURL = url
+            self.route = route
             self.hostID = hostID
             self.sentToken = sentToken
         }
@@ -105,7 +106,7 @@ final class AppSchemeHandler: NSObject, WKURLSchemeHandler, URLSessionDataDelega
         let path = requestComponents.percentEncodedPath.isEmpty ? "/" : requestComponents.percentEncodedPath
         let method = request.httpMethod?.uppercased() ?? "GET"
         let isAuthInfo = path == "/auth/info" && method == "GET"
-        guard Self.permits(path: path, method: method) else {
+        guard let route = Self.route(path: path, method: method) else {
             respond(schemeTask, status: 404, body: Data(#"{"error":"not_found"}"#.utf8), headers: Self.corsHeaders)
             return
         }
@@ -121,33 +122,32 @@ final class AppSchemeHandler: NSObject, WKURLSchemeHandler, URLSessionDataDelega
             respond(schemeTask, status: 405, body: Data(), headers: Self.corsHeaders)
             return
         }
-        guard let storedHost = MainActor.assumeIsolated({ model.hosts.first { $0.id == hostID } }),
-              let baseURL = URL(string: storedHost.baseURL),
-              var target = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+        let query = requestComponents.percentEncodedQuery
+        guard let infoURL = MainActor.assumeIsolated({ model.url(on: hostID, path: "/auth/info") }) else {
             respond(schemeTask, status: 404, body: Data(#"{"error":"not_found"}"#.utf8), headers: Self.corsHeaders)
             return
         }
         if !isAuthInfo, !compatibleHosts.contains(hostID) {
-            holdUntilChecked(schemeTask, hostID: hostID, baseURL: baseURL)
+            holdUntilChecked(schemeTask, hostID: hostID, infoURL: infoURL)
             return
         }
-        target.percentEncodedPath = path
-        target.percentEncodedQuery = requestComponents.percentEncodedQuery
-        guard let targetURL = target.url else { fail(schemeTask, error: URLError(.badURL)); return }
-        var upstream = URLRequest(url: targetURL)
-        upstream.httpMethod = request.httpMethod
-        upstream.httpBody = request.httpBody
-        for name in ["Range", "If-Match", "Content-Type"] {
-            if let value = request.value(forHTTPHeaderField: name) { upstream.setValue(value, forHTTPHeaderField: name) }
-        }
+        var upstream: URLRequest
         let sentToken: String?
         if isAuthInfo {
+            guard let url = MainActor.assumeIsolated({ model.url(on: hostID, path: path, query: query) }) else {
+                fail(schemeTask, error: URLError(.badURL))
+                return
+            }
+            upstream = URLRequest(url: url)
             sentToken = nil
         } else {
-            switch MainActor.assumeIsolated({ model.token(for: hostID) }) {
-            case .token(let value):
-                upstream.setValue("Bearer \(value)", forHTTPHeaderField: "Authorization")
-                sentToken = value
+            switch MainActor.assumeIsolated({ model.request(on: hostID, path: path, query: query) }) {
+            case .ready(let authorized, let token):
+                upstream = authorized
+                sentToken = token
+            case .noHost:
+                respond(schemeTask, status: 404, body: Data(#"{"error":"not_found"}"#.utf8), headers: Self.corsHeaders)
+                return
             case .locked:
                 respond(schemeTask, status: 423, body: Data(#"{"error":"locked"}"#.utf8), headers: Self.corsHeaders.merging(["Content-Type": "application/json"]) { _, new in new })
                 return
@@ -156,9 +156,14 @@ final class AppSchemeHandler: NSObject, WKURLSchemeHandler, URLSessionDataDelega
                 return
             }
         }
+        upstream.httpMethod = request.httpMethod
+        upstream.httpBody = request.httpBody
+        for name in ["Range", "If-Match", "Content-Type"] {
+            if let value = request.value(forHTTPHeaderField: name) { upstream.setValue(value, forHTTPHeaderField: name) }
+        }
 
         let identifier = ObjectIdentifier(schemeTask as AnyObject)
-        let item = Pending(identifier: identifier, schemeTask: schemeTask, url: targetURL, hostID: hostID, sentToken: sentToken)
+        let item = Pending(identifier: identifier, schemeTask: schemeTask, route: route, hostID: hostID, sentToken: sentToken)
         pending[identifier] = item
         let task = session.dataTask(with: upstream)
         item.dataTask = task
@@ -188,15 +193,8 @@ final class AppSchemeHandler: NSObject, WKURLSchemeHandler, URLSessionDataDelega
         newRequest request: URLRequest,
         completionHandler: @escaping (URLRequest?) -> Void
     ) {
-        guard let item = byTaskID[task.taskIdentifier],
-              let redirectURL = request.url,
-              let path = URLComponents(url: redirectURL, resolvingAgainstBaseURL: false)?.percentEncodedPath,
-              Self.sameOrigin(item.originalURL, redirectURL),
-              Self.permits(path: path, method: request.httpMethod?.uppercased() ?? "GET") else {
-            completionHandler(nil)
-            return
-        }
-        completionHandler(request)
+        guard let item = byTaskID[task.taskIdentifier] else { completionHandler(nil); return }
+        completionHandler(HostRequest.redirect(task, to: request, within: item.route))
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
@@ -220,14 +218,14 @@ final class AppSchemeHandler: NSObject, WKURLSchemeHandler, URLSessionDataDelega
     /// The compatibility gate: holds the request while native asks the host's `/auth/info`, then
     /// proxies it if the range holds the app's protocol, or answers `409 incompatible` if not.
     /// A failed check fails the held requests as a network error and is not remembered.
-    private func holdUntilChecked(_ schemeTask: WKURLSchemeTask, hostID: String, baseURL: URL) {
+    private func holdUntilChecked(_ schemeTask: WKURLSchemeTask, hostID: String, infoURL: URL) {
         held.insert(ObjectIdentifier(schemeTask as AnyObject))
         if awaitingCheck[hostID] != nil {
             awaitingCheck[hostID]?.append(schemeTask)
             return
         }
         awaitingCheck[hostID] = [schemeTask]
-        var request = URLRequest(url: baseURL.appending(path: "auth/info"))
+        var request = URLRequest(url: infoURL)
         request.cachePolicy = .reloadIgnoringLocalCacheData
         infoSession.dataTask(with: request) { data, response, _ in
             let compatible: Bool? = (response as? HTTPURLResponse)?.statusCode == 200
@@ -269,17 +267,9 @@ final class AppSchemeHandler: NSObject, WKURLSchemeHandler, URLSessionDataDelega
 
     private static let contentSecurityPolicy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' muxen-app: blob: data:; media-src 'self' blob:; connect-src 'self' muxen-app: wss:; frame-src 'none'; object-src 'none'; base-uri 'none'"
 
-    private static func permits(path: String, method: String) -> Bool {
-        path == "/auth/info" && method == "GET"
-            || path == "/complete"
-            || path.hasPrefix("/fs/")
-    }
-
-    private static func sameOrigin(_ lhs: URL, _ rhs: URL) -> Bool {
-        guard let left = URLComponents(url: lhs, resolvingAgainstBaseURL: false),
-              let right = URLComponents(url: rhs, resolvingAgainstBaseURL: false) else { return false }
-        return left.scheme?.lowercased() == right.scheme?.lowercased()
-            && left.host?.lowercased() == right.host?.lowercased()
-            && left.port == right.port
+    /// The daemon routes the page may reach through the proxy, and the one `path` falls within; nil refuses it.
+    private static func route(path: String, method: String) -> String? {
+        let routes = method == "GET" ? ["/auth/info", "/complete", "/fs/"] : ["/complete", "/fs/"]
+        return routes.first { HostRequest.path(path, isWithin: $0) }
     }
 }

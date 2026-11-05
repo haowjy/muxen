@@ -6,10 +6,30 @@ import SwiftUI
 import MuxenKit
 import UIKit
 
-enum TokenAccess {
-    case token(String)
+/// A native request to a saved host's daemon, as the scheme handler's proxy makes it (ios-shell.md "Where the web UI
+/// comes from"): the host's `baseURL` with a percent-encoded path sent unchanged, and its token as `Authorization: Bearer`.
+enum HostRequest {
+    case ready(URLRequest, token: String)
+    case noHost
     case locked
     case notEnrolled
+
+    /// The one redirect rule for native requests to a daemon: follow only to the request's own origin, and only within
+    /// `route`. nil refuses the redirect, and the 3xx is the answer.
+    static func redirect(_ task: URLSessionTask, to request: URLRequest, within route: String) -> URLRequest? {
+        guard let from = task.originalRequest?.url.flatMap({ URLComponents(url: $0, resolvingAgainstBaseURL: false) }),
+              let to = request.url.flatMap({ URLComponents(url: $0, resolvingAgainstBaseURL: false) }),
+              from.scheme?.lowercased() == to.scheme?.lowercased(),
+              from.host?.lowercased() == to.host?.lowercased(),
+              from.port == to.port,
+              path(to.percentEncodedPath, isWithin: route) else { return nil }
+        return request
+    }
+
+    /// A route is an exact path, or every path under one that ends in `/`.
+    static func path(_ path: String, isWithin route: String) -> Bool {
+        route.hasSuffix("/") ? path.hasPrefix(route) : path == route
+    }
 }
 
 struct AddHostRequest: Identifiable {
@@ -142,11 +162,23 @@ final class MuxenAppModel: ObservableObject {
         return try? JSONDecoder().decode(JSONValue.self, from: data)
     }
 
-    func token(for hostID: String) -> TokenAccess {
-        guard hosts.contains(where: { $0.id == hostID }) else { return .notEnrolled }
+    /// `path` (percent-encoded, sent unchanged) and `query` on a saved host's daemon. nil: the host isn't saved.
+    func url(on hostID: String, path: String, query: String? = nil) -> URL? {
+        guard let host = hosts.first(where: { $0.id == hostID }),
+              var components = URLComponents(string: host.baseURL) else { return nil }
+        components.percentEncodedPath = path
+        components.percentEncodedQuery = query
+        return components.url
+    }
+
+    /// That URL as a request carrying the host's token: every native request to a daemon starts here.
+    func request(on hostID: String, path: String, query: String? = nil) -> HostRequest {
+        guard let url = url(on: hostID, path: path, query: query) else { return .noHost }
         guard !isLocked, let tokens else { return .locked }
         guard let token = tokens[hostID] else { return .notEnrolled }
-        return .token(token)
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        return .ready(request, token: token)
     }
 
     func socket(for hostID: String) -> SocketReply {

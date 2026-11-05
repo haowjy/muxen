@@ -5038,3 +5038,18 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
   - Showing the alert for every download: a small file would flash it before the sheet.
   - Saving straight to Files (`UIDocumentPickerViewController` in export mode): the share sheet has Save to
     Files and also AirDrop and opening in another app, which the brief asked for.
+
+## Native requests to a daemon share one resolver and one redirect rule (2026-11-05)
+
+- **Decided:** 2026-11-05, on the phase 4 review (p555, findings 3 and 6).
+- **What:** the scheme handler's proxy, the uploader, the video player and Download each looked up the
+  host's `baseURL` and token themselves, and only the proxy refused a cross-origin redirect; Download
+  followed any. `MuxenAppModel.request(on:path:query:)` now builds every one (the `baseURL`, the
+  percent-encoded path unchanged, the Bearer token), and `HostRequest.redirect` is the one redirect rule:
+  the same origin, within the route the request was for. The video player can't take the rule, since
+  AVFoundation follows redirects itself with no hook; it drops `Authorization` on a cross-origin redirect
+  (checked on macOS), and a player plays what it gets, never as the app.
+- **Rejected:**
+  - Each session keeping its own copy of the check: four copies had already drifted to one.
+  - Loading video through an `AVAssetResourceLoaderDelegate` on a custom scheme so native's own session
+    fetches it: a Range-serving proxy in the app to police a redirect the daemon never sends.

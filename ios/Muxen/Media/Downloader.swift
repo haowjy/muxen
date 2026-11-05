@@ -40,13 +40,12 @@ final class Downloader: NSObject, URLSessionDownloadDelegate {
 
     var isBusy: Bool { job != nil }
 
-    /// Starts fetching `url` as `name`. `progress` gets the bytes so far and the size when the server sent one;
-    /// `completion` gets the saved file, which the caller deletes with `discard()`. Returns false while another runs.
-    func download(_ url: URL, name: String, token: String, rejectedToken: @escaping (String) -> Void, progress: @escaping (Int64, Int64?) -> Void, completion: @escaping (Result<URL, Error>) -> Void) -> Bool {
+    /// Starts `request` (a host's `/fs/raw/…`, carrying `token`), saving the file as `name`. `progress` gets the bytes so
+    /// far and the size when the server sent one; `completion` gets the saved file, which the caller deletes with
+    /// `discard()`. Returns false while another runs.
+    func download(_ request: URLRequest, name: String, token: String, rejectedToken: @escaping (String) -> Void, progress: @escaping (Int64, Int64?) -> Void, completion: @escaping (Result<URL, Error>) -> Void) -> Bool {
         guard job == nil else { return false }
         Self.discard()
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let task = session.downloadTask(with: request)
         job = Job(task: task, name: name, token: token, rejectedToken: rejectedToken, progress: progress, completion: completion)
         task.resume()
@@ -64,6 +63,10 @@ final class Downloader: NSObject, URLSessionDownloadDelegate {
         try? files.removeItem(at: folder)
         let partials = (try? files.contentsOfDirectory(at: files.temporaryDirectory, includingPropertiesForKeys: nil)) ?? []
         for partial in partials where partial.lastPathComponent.hasPrefix("CFNetworkDownload_") { try? files.removeItem(at: partial) }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+        completionHandler(HostRequest.redirect(task, to: request, within: "/fs/raw/"))
     }
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
