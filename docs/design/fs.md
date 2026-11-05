@@ -183,8 +183,8 @@ request it no longer needs ([browser-behaviors.md](client/browser-behaviors.md#f
   there are no cycles, and no walk wanders into `/proc`, a network mount or another disk. A
   directory whose relative path would pass 4,096 bytes with the root's is not queued: no route
   could open it.
-- **Kinds:** names and `d_type` only; `fstatat` (not following, relative to the root) is called only
-  for a `DT_UNKNOWN` entry, as listings do, so a filesystem without `d_type` is still walked.
+- **Kinds:** names and `d_type` only; `fstatat` (not following, relative to the folder being read) is
+  called only for a `DT_UNKNOWN` entry, as listings do, so a filesystem without `d_type` is still walked.
 - **Skipped by name:** `.git`, `node_modules` and `target` directories, and every name starting with
   `.` unless `hidden=1`. The root itself is never skipped, whatever its name. Non-UTF-8 names are
   neither matched nor entered (their path can't be sent back).

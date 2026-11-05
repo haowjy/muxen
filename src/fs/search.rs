@@ -98,17 +98,14 @@ pub fn search(
             let Ok(name) = std::str::from_utf8(name) else {
                 continue;
             };
-            path.clear();
-            if !at_root {
-                path.push_str(prefix);
-                path.push('/');
-            }
-            path.push_str(name);
             let file_type = match entry.file_type() {
-                // A filesystem without `d_type`.
+                // A filesystem without `d_type`: relative to the folder being read, so no
+                // component is resolved again.
                 FileType::Unknown => {
-                    let stat =
-                        rustix::fs::statat(&root.file, path.as_str(), AtFlags::SYMLINK_NOFOLLOW);
+                    let dir = entries.as_ref().expect("an entry was read from it");
+                    let stat = dir
+                        .fd()
+                        .and_then(|fd| rustix::fs::statat(fd, name, AtFlags::SYMLINK_NOFOLLOW));
                     match stat {
                         Ok(stat) => FileType::from_raw_mode(stat.st_mode),
                         Err(_) => continue,
@@ -116,6 +113,12 @@ pub fn search(
                 }
                 known => known,
             };
+            path.clear();
+            if !at_root {
+                path.push_str(prefix);
+                path.push('/');
+            }
+            path.push_str(name);
             let dir = file_type == FileType::Directory;
             if dir && SKIPPED.contains(&name) {
                 continue;
