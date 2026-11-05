@@ -779,7 +779,7 @@ web/           one Preact app embedded by the daemon and bundled into the iOS ap
   ui/
     tokens/       primitives.css, semantic.css, components.css, fonts.css
     primitives/   Button, IconButton, Tooltip, TextField, SearchField, Dialog (sheet,
-                  popover and menu variants), Disclosure, Row, RovingList, TabStrip, Banner, Toast,
+                  popover and menu variants), Disclosure, Row, OptionRow, TabStrip, Banner, Toast,
                   StatusBand, EmptyState, Spinner, Icon, LineInput
     store.ts, theme.ts, hostProblem.ts
   sw/             service worker and the Vite plugin that builds it, after the main bundle

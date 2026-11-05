@@ -6,7 +6,6 @@ import { TitleBar } from "../../ui/primitives/DialogBars";
 import { EmptyState } from "../../ui/primitives/EmptyState";
 import { Icon, type IconName } from "../../ui/primitives/Icon";
 import { IconButton } from "../../ui/primitives/IconButton";
-import { RovingList } from "../../ui/primitives/RovingList";
 import { OptionRow, Row } from "../../ui/primitives/Row";
 import { Spinner } from "../../ui/primitives/Spinner";
 import { StatusBand } from "../../ui/primitives/StatusBand";
@@ -72,12 +71,12 @@ export function Gallery() {
         <SearchField label="Find a session or window" placeholder="Find a session or window" value={query} onInput={setQuery} />
       </Section>
       <Section title="Rows">
-        <RovingList label="Sessions" class={styles.stack}>
-          <Row roving icon="sessions" label="muxen" meta="2 windows" selected />
-          <Row roving icon="sessions" label="notes" meta="1 window" />
-          <Row roving icon="folder" label="src" meta="Folder" trailing="chevron" />
-          <Row roving icon="file" label="README.md" meta="2 KB" trailing="chevron" />
-        </RovingList>
+        <div class={styles.stack}>
+          <Row icon="sessions" label="muxen" meta="2 windows" selected />
+          <Row icon="sessions" label="notes" meta="1 window" />
+          <Row icon="folder" label="src" meta="Folder" trailing="chevron" />
+          <Row icon="file" label="README.md" meta="2 KB" trailing="chevron" />
+        </div>
         <div role="listbox" aria-label="Files" aria-activedescendant="gallery-option-0" tabIndex={0} class={styles.stack}>
           <OptionRow id="gallery-option-0" icon="folder" label="src" trailing="chevron" selected />
           <OptionRow icon="file" label="README.md" meta="2 KB" trailing="chevron" />

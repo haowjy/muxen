@@ -15,8 +15,6 @@ export interface RowProps extends Omit<ButtonHTMLAttributes, "icon" | "label"> {
   trailing?: IconName;
   /** An open tab, a selected file: marked by fill, not hue. */
   selected?: boolean;
-  /** Joins the arrow-key roving of the surrounding `RovingList`. */
-  roving?: boolean;
 }
 
 function Slots({ icon, label, mark, meta, trailing }: { icon: IconName; label: ComponentChildren; mark?: ComponentChildren; meta?: ComponentChildren; trailing?: IconName | undefined }) {
@@ -32,9 +30,9 @@ function Slots({ icon, label, mark, meta, trailing }: { icon: IconName; label: C
 }
 
 /** One list row with fixed slots, so session, window, folder, file and tab rows line up. */
-export function Row({ icon, label, mark, meta, trailing, selected, roving, class: className, ...rest }: RowProps) {
+export function Row({ icon, label, mark, meta, trailing, selected, class: className, ...rest }: RowProps) {
   return (
-    <button type="button" data-roving={roving ? "" : undefined} {...rest} class={cx(styles.row, selected && styles.selected, className as string | undefined)}>
+    <button type="button" {...rest} class={cx(styles.row, selected && styles.selected, className as string | undefined)}>
       <Slots icon={icon} label={label} mark={mark} meta={meta} trailing={trailing} />
     </button>
   );
