@@ -57,25 +57,23 @@ pub fn search(
     let below = Below::new(root)?;
     let mut queue = Queue::new(caps.queue);
     let mut best = Best::new(pattern.is_glob());
-    // The relative path of the directory being read ("" at the root), and of each entry.
+    // The relative path of the directory being read, and of each entry. The root is "",
+    // which no directory below it can be.
     let (mut current, mut path) = (Vec::new(), String::new());
     let mut read = 0;
     let mut stopped = None;
-    let mut at_root = true;
     'walk: loop {
         let prefix = std::str::from_utf8(&current).expect("queued from a str");
-        let opened = below
-            .open(if at_root { "." } else { prefix })
-            .and_then(|fd| Ok(Dir::new(fd)?));
+        let opened = below.open(prefix).and_then(|fd| Ok(Dir::new(fd)?));
         let mut entries = match opened {
             Ok(entries) => Some(entries),
-            Err(error) if at_root => return Err(error),
+            Err(error) if prefix.is_empty() => return Err(error),
             Err(_) => None,
         };
         while let Some(entry) = entries.as_mut().and_then(Dir::read) {
             let entry = match entry {
                 Ok(entry) => entry,
-                Err(error) if at_root => return Err(error.into()),
+                Err(error) if prefix.is_empty() => return Err(error.into()),
                 Err(_) => break,
             };
             let name = entry.file_name().to_bytes();
@@ -114,7 +112,7 @@ pub fn search(
                 known => known,
             };
             path.clear();
-            if !at_root {
+            if !prefix.is_empty() {
                 path.push_str(prefix);
                 path.push('/');
             }
@@ -137,7 +135,6 @@ pub fn search(
         if !queue.pop_into(&mut current) {
             break;
         }
-        at_root = false;
         if over() {
             stopped = Some(Stopped::Time);
             break;
@@ -179,7 +176,9 @@ impl<'a> Below<'a> {
         })
     }
 
+    /// `relative` is "" for the root itself.
     fn open(&self, relative: &str) -> io::Result<OwnedFd> {
+        let relative = if relative.is_empty() { "." } else { relative };
         let flags = OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC;
         #[cfg(target_os = "linux")]
         if self.openat2.get() {
