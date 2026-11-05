@@ -186,7 +186,7 @@ export function PathField({ session, rest, onEditing, onOpen }: Props) {
             loadingRest={loadingRest}
             onOpen={open}
             onUp={(to) => { setText(to); resetSaid(); }}
-            onRetry={() => { if (view.ask) { browser.folders.drop(view.ask.path); void browser.folders.load(view.ask.path, view.ask.hidden); } }}
+            onRetry={() => { if (view.ask) void browser.folders.load(view.ask.path, view.ask.hidden); }}
             onLoadRest={loadRest}
           />
         </div>

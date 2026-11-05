@@ -137,7 +137,7 @@ export class FileBrowser extends Store<FilesView> {
     // Listing `~` names home itself; any other place needs it asked for, once.
     if (want.kind === "file" || want.path !== HOME) void this.home().catch(() => undefined);
     if (want.kind === "dir") {
-      if (dir?.path !== want.path || error) return this.load(want);
+      if (dir?.path !== want.path || error || !this.folders.peek(dir.path, dir.hidden)) return this.load(want);
       if (place.kind !== "dir" || place.path !== want.path) this.go({ place: want, loading: false });
       return Promise.resolve();
     }
@@ -212,8 +212,10 @@ export class FileBrowser extends Store<FilesView> {
   }
 
   /** Lists `place` from its first page, or shows the pages held (unless `refresh`). */
-  private load(place: { kind: "dir"; path: string }, refresh = false): Promise<void> {
-    const { hidden, dir } = this.snapshot;
+  private load(want: { kind: "dir"; path: string }, refresh = false): Promise<void> {
+    const { hidden, dir, home } = this.snapshot;
+    // Folders are held by canonical path: `~` is home once the host has said.
+    const place = want.path === HOME && home !== null ? { ...want, path: home } : want;
     const cached = refresh ? null : this.folders.peek(place.path, hidden);
     if (cached) {
       this.go({ place: { ...place, path: cached.path }, dir: { path: cached.path, hidden }, loading: false, error: null, ...(place.path === HOME && { home: cached.path }) });

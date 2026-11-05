@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeFs, type FakeTree } from "../platform/test/fs";
 import { Folders, MAX_ENTRIES, SETTLE_MS } from "./folders";
-import type { Entry, Listing } from "./api";
 
 const many = (n: number): string[] => Array.from({ length: n }, (_, i) => `/home/j/repos/d${String(i).padStart(3, "0")}`);
 const tree = (extra: string[] = []): FakeTree => ({
@@ -15,8 +14,6 @@ function setup(extra: string[] = [], page = 3) {
   return { fs, folders: new Folders(fs) };
 }
 const record = (f: Folders, path: string) => f.snapshot.held.get(`0${path}`);
-const entries = (n: number): Entry[] => Array.from({ length: n }, (_, i) => ({ name: `f${String(i)}`, kind: "file", link: false }));
-const listing = (path: string, n: number): Listing => ({ path, parent: null, total: n, offset: 0, truncated: false, entries: entries(n) });
 
 describe("Folders", () => {
   beforeEach(() => { vi.useFakeTimers(); });
@@ -104,18 +101,21 @@ describe("Folders", () => {
     expect(folders.peek("/home/j/repos", false)?.entries).toHaveLength(4);
   });
 
-  it("bounds what it holds by entries in all, least recently used first, and never drops a pinned folder", () => {
-    const { folders } = setup();
-    const put = (path: string): void => { (folders as unknown as { put: (p: string, h: boolean, l: object) => void }).put(path, false, { listing: listing(path, MAX_ENTRIES * 0.4) }); };
-    put("/a");
-    put("/b");
+  it("bounds what it holds by entries in all, least recently used first, and never drops a pinned folder", async () => {
+    const kids = (dir: string): string[] => Array.from({ length: MAX_ENTRIES * 0.4 }, (_, i) => `${dir}/d${String(i)}`);
+    const { folders } = setup([...["/a", "/b", "/c"].flatMap((d) => [d, ...kids(d)])], MAX_ENTRIES);
+    await folders.first("/a", false);
+    await folders.first("/b", false);
     folders.pin([{ path: "/a", hidden: false }]);
-    put("/c");
+    await folders.first("/c", false);
     // a is the oldest but pinned, so b goes; c, the one just loaded, stays
     expect(folders.peek("/a", false)).not.toBeNull();
     expect(folders.peek("/b", false)).toBeNull();
     expect(folders.peek("/c", false)).not.toBeNull();
+    // a folder on screen is listed again in place, never removed
     folders.drop("/a");
-    expect(folders.peek("/a", false)).toBeNull();
+    expect(folders.peek("/a", false)).not.toBeNull();
+    await folders.settled("/a", false);
+    expect(folders.peek("/a", false)).not.toBeNull();
   });
 });

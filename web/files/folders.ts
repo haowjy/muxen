@@ -7,7 +7,9 @@ export const SETTLE_MS = 250;
 /**
  * Entries held across every folder before the least recently used unpinned one goes. An entry is a
  * name and a few facts, about 200 bytes, so this is a few MB in a phone's web view. Every folder
- * costs one more than its entries, so a thousand empty folders are bounded too.
+ * costs one more than its entries, so a thousand empty folders are bounded too. It is not a hard
+ * cap: the pinned folders and the one just written stay whatever they weigh, and each host has its
+ * own `Folders`, so N servers can hold N times this.
  */
 export const MAX_ENTRIES = 10_000;
 /** The cache key of one listing; `hidden` listings are kept apart (`hidden=1` is a different scan). */
@@ -31,10 +33,12 @@ export interface FoldersView {
 /**
  * What one host's folders have told us: one record per folder (and per hidden-files setting) holding
  * every page loaded so far, for browsing, the path field and whatever else draws a folder. The
- * records are bounded by `MAX_ENTRIES` in all, least recently used first, and a pinned folder (one on
- * screen) is never dropped. Holding a page costs no request when it is shown again on a tab switch or
- * a Back. `drop` clears a folder a refresh or an upload changed. The path field's folder is asked
- * for once typing settles, never once per keystroke.
+ * records are bounded by `MAX_ENTRIES` in all, least recently used first. A pinned folder (one on
+ * screen) is never removed, so a screen that names one always finds its record: `drop` of a pinned
+ * folder lists it again in place, its old pages staying up until the new ones land. Holding a page
+ * costs no request when it is shown again on a tab switch or a Back. The path field's folder is asked
+ * for once typing settles, never once per keystroke. Records are keyed by canonical path; `~` is the
+ * browser's to resolve (it knows home) before it asks here.
  */
 export class Folders extends Store<FoldersView> {
   private timer: ReturnType<typeof setTimeout> | undefined;
@@ -58,13 +62,18 @@ export class Folders extends Store<FoldersView> {
   ask(target: { path: string; hidden: boolean } | null): void {
     clearTimeout(this.timer);
     if (!target) return;
-    const record = this.snapshot.held.get(folderKey(target.path, target.hidden));
-    // A listing that failed for want of a connection is asked for again: it may be back.
-    if (record && (record.loading || record.listing || (record.error && record.error.code !== "network"))) {
+    if (this.answered(target.path, target.hidden)) {
       this.put(target.path, target.hidden, {});
       return;
     }
-    this.timer = setTimeout(() => { void this.load(target.path, target.hidden); }, SETTLE_MS);
+    // Checked again when the timer fires: Go may have listed the folder meanwhile.
+    this.timer = setTimeout(() => { if (!this.answered(target.path, target.hidden)) void this.load(target.path, target.hidden); }, SETTLE_MS);
+  }
+
+  /** The folder is held, under way, or refused for a reason a second ask would not change. A failure for want of a connection is asked again: it may be back. */
+  private answered(path: string, hidden: boolean): boolean {
+    const record = this.snapshot.held.get(folderKey(path, hidden));
+    return !!record && (record.loading || !!record.listing || (!!record.error && record.error.code !== "network"));
   }
 
   /** Lists `path` now (Go cannot wait out the settle), or joins the listing under way. The refusal is the record's, not thrown. */
@@ -94,13 +103,12 @@ export class Folders extends Store<FoldersView> {
 
   /**
    * Replaces `path`'s pages with its first page, fresh from the host (a first visit, a refresh), and
-   * returns the listing; the pages held stay in view until it lands. The daemon answers with the
-   * canonical path, which `asked` may only name (`~`): both keys hold it.
+   * returns the listing; the pages held stay in view until it lands. The record is the canonical
+   * path's, which the daemon names (`path` may be `~`).
    */
   async first(path: string, hidden: boolean): Promise<Listing> {
     const listing = await this.api.list(path, 0, hidden);
     this.put(listing.path, hidden, { listing, error: null });
-    if (path !== listing.path) this.put(path, hidden, { listing });
     return listing;
   }
 
@@ -125,12 +133,13 @@ export class Folders extends Store<FoldersView> {
     }
   }
 
-  /** A refresh or an upload changed `path`. */
+  /** A refresh or an upload changed `path`: its pages go, or if it is on screen they are replaced when the new ones land. */
   drop(path: string): void {
     const held = new Map(this.snapshot.held);
-    held.delete(folderKey(path, false));
-    held.delete(folderKey(path, true));
+    const shown = [false, true].filter((hidden) => this.pinned.has(folderKey(path, hidden)));
+    for (const hidden of [false, true]) if (!shown.includes(hidden)) held.delete(folderKey(path, hidden));
     this.update({ held });
+    for (const hidden of shown) void this.load(path, hidden);
   }
 
   /** Merges `patch` into the folder's record and makes it the newest, then makes room. */
