@@ -15,7 +15,9 @@ enum HostRequest {
     case notEnrolled
 
     /// The one redirect rule for native requests to a daemon: follow only to the request's own origin, and only within
-    /// `route`. nil refuses the redirect, and the 3xx is the answer.
+    /// `route`. nil refuses the redirect, and the 3xx is the answer. URLSession drops `Authorization` from a redirect even
+    /// to the same origin, so a followed one carries the original's again: without it the daemon's 401 would revoke a
+    /// good token.
     static func redirect(_ task: URLSessionTask, to request: URLRequest, within route: String) -> URLRequest? {
         guard let from = task.originalRequest?.url.flatMap({ URLComponents(url: $0, resolvingAgainstBaseURL: false) }),
               let to = request.url.flatMap({ URLComponents(url: $0, resolvingAgainstBaseURL: false) }),
@@ -23,7 +25,9 @@ enum HostRequest {
               from.host?.lowercased() == to.host?.lowercased(),
               from.port == to.port,
               path(to.percentEncodedPath, isWithin: route) else { return nil }
-        return request
+        var next = request
+        next.setValue(task.originalRequest?.value(forHTTPHeaderField: "Authorization"), forHTTPHeaderField: "Authorization")
+        return next
     }
 
     /// A route is an exact path, or every path under one that ends in `/`.

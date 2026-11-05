@@ -140,7 +140,9 @@ way: `MuxenAppModel.request(on:path:query:)` resolves the saved host to its `bas
 percent-encoded path unchanged, and adds the host's token, or answers that the host isn't saved,
 the app is locked, or the host has no token. One redirect rule, `HostRequest.redirect`, covers the
 URLSessions: follow only to the request's own origin and only within the route it was for (the
-proxy's permitted route, `/fs/upload`, `/fs/raw/`); otherwise the 3xx is the answer. The video
+proxy's permitted route, `/fs/upload`, `/fs/raw/`); otherwise the 3xx is the answer. A followed
+redirect carries the request's `Authorization` again: URLSession drops it even on the same origin,
+and the daemon's `401` would then revoke a good token. The video
 player can't take the rule: AVFoundation follows redirects itself, with no hook. It drops the
 `Authorization` header on a cross-origin redirect (checked on macOS), and the player only plays
 what it gets.
