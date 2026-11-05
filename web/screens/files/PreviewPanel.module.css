@@ -1,4 +1,1 @@
 .panel { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
-/* The toggle reads on while the panel shows: the accent, on the pressed fill. */
-.on { color: var(--color-accent); background: var(--color-bg-pressed); }
-.toggle { flex: none; }

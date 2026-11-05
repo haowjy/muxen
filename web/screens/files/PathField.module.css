@@ -5,7 +5,7 @@
   align-items: center;
   gap: 2px;
   min-height: var(--header-height);
-  padding: var(--space-1) var(--files-inset);
+  padding: var(--space-1) calc(var(--files-inset) + var(--files-end, 0px)) var(--space-1) var(--files-inset);
   border-bottom: 1px solid var(--color-border);
 }
 .said { padding: var(--space-2) var(--files-inset) 0; font-size: var(--text-small); color: var(--color-status-error); }

@@ -26,8 +26,6 @@ interface Props {
   folder?: string | undefined;
   /** In the Preview panel: opens the file full width. */
   onExpand?: (() => void) | undefined;
-  /** The header line's last control (the Preview toggle). */
-  end?: ComponentChildren;
   onLink: (target: LinkTarget) => void;
   /** Shown instead of the viewer, and the actions, while the file can't be shown yet (loading, refused). */
   children?: ComponentChildren;
@@ -36,9 +34,9 @@ interface Props {
 /**
  * A file, under one header line: Back named for its folder, the name and size, the viewer's controls, then Copy
  * path, Download and Insert ▾. The phone's line is Back, the name, and the actions as icons. In the desktop's Preview
- * panel there is no Back: the line ends with the expand button and the panel's toggle.
+ * panel there is no Back: the line ends with the expand button, and leaves room for the panel's toggle (FilesPane's).
  */
-export function FileView({ session, file, back, folder: within, onExpand, end, onLink, children }: Props) {
+export function FileView({ session, file, back, folder: within, onExpand, onLink, children }: Props) {
   const app = useApp();
   const phone = useAppView((v) => v.viewport.layout === "phone");
   // "Open as text" is one file's: the view stays mounted from file to file (Wrap lines carries over), so it names the file.
@@ -88,7 +86,6 @@ export function FileView({ session, file, back, folder: within, onExpand, end, o
             <IconButton icon="expand" label="Open full width" onClick={onExpand} />
           </>
         )}
-        {end}
         {!children && phone && kind === "code" && (
           <IconButton icon="more" label="File options" aria-haspopup="menu" aria-expanded={menu !== null} onClick={(e) => { setMenu(menu ? null : e.currentTarget); }} />
         )}

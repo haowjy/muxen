@@ -36,8 +36,6 @@ interface Props {
   /** Whether the path field is being edited; its matches are then the list. */
   finding: boolean;
   onFinding: (editing: boolean) => void;
-  /** The header line's last control, when the Preview panel is off (its toggle). */
-  end?: ComponentChildren;
 }
 
 /**
@@ -45,7 +43,7 @@ interface Props {
  * list (the outline on a desktop), scrolled where the tab left it. It stays mounted under a file full width, so Back
  * returns to it as it was.
  */
-export function ListPane({ session, tab, view, pages, showing, pasteable, body, outline, selection, onSelect, up, onOpen, finding, onFinding, end }: Props) {
+export function ListPane({ session, tab, view, pages, showing, pasteable, body, outline, selection, onSelect, up, onOpen, finding, onFinding }: Props) {
   const app = useApp();
   const { browser } = session;
   const phone = useAppView((v) => v.viewport.layout === "phone");
@@ -75,7 +73,6 @@ export function ListPane({ session, tab, view, pages, showing, pasteable, body, 
           onEditing={onFinding}
           onOpen={onOpen}
           actions={<FolderActions session={session} path={pages?.path ?? place.path} pasteable={pasteable} loading={loading} />}
-          end={end}
         />
       )}
       {!finding && <UploadPanel session={session} onPreview={(path) => { onOpen({ kind: "file", path }); }} />}

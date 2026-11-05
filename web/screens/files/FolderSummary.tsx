@@ -1,4 +1,3 @@
-import type { ComponentChildren } from "preact";
 import { useEffect } from "preact/hooks";
 import type { Entry, Listing } from "../../files/api";
 import { describeError, type FileRef } from "../../files/browser";
@@ -31,8 +30,6 @@ interface Props {
   record: Held | null;
   /** The folder the list starts at: no "Go into" for it, and others are named relative to it. */
   root: string;
-  /** The header line's last control (the Preview toggle). */
-  end: ComponentChildren;
   onOpen: (place: FilesPlace) => void;
   onLink: (target: LinkTarget) => void;
 }
@@ -50,7 +47,7 @@ function contents(listing: Listing): string {
  * The Preview panel on a folder (the one selected, or the list's own when nothing is): one header line with Copy
  * path and Insert, then its README rendered if it has one, else what it holds, when it changed, where it is.
  */
-export function FolderSummary({ session, path, entry, record, root, end, onOpen, onLink }: Props) {
+export function FolderSummary({ session, path, entry, record, root, onOpen, onLink }: Props) {
   const { browser } = session;
   const home = useStore(browser, (s) => s.home);
   const hidden = useStore(browser, (s) => s.hidden);
@@ -113,7 +110,6 @@ export function FolderSummary({ session, path, entry, record, root, end, onOpen,
         </h2>
         <CopyButton value={path} label="Copy path" icon="copy" />
         <InsertButton path={path} />
-        {end}
       </header>
       {body}
     </div>

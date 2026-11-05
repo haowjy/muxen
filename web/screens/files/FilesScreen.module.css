@@ -33,6 +33,22 @@
 :root[data-layout="desktop"] .list { --files-inset: var(--space-2); }
 :root[data-layout="desktop"] .list .scroll { padding: var(--space-2) var(--space-1) var(--space-4); }
 .split[data-panel] > .list { flex: none; width: var(--files-list-w); }
+/* The Preview toggle (one element, whichever bar is under it) sits at the header line's right end, a rule before it,
+   so it stays on the same pixels with the panel on or off. The column at the right, the list's or the panel's, reads
+   --files-end and its header bar leaves that much room: the rule, the button and the bars' 2px gaps. */
+.end {
+  position: absolute;
+  top: 0;
+  right: var(--space-2);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: var(--header-height);
+}
+.split[data-end] > :last-child { --files-end: calc(var(--space-4) + 1px + var(--size-target) + 4px); }
+/* The toggle reads on while the panel shows: the accent, on the pressed fill. */
+.toggle { flex: none; }
+.on { color: var(--color-accent); background: var(--color-bg-pressed); }
 /* A folder's name for assistive technology: the path line and the tab say it on screen. */
 .hiddenTitle { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: var(--space-4) var(--files-inset); scroll-padding: var(--space-1); }

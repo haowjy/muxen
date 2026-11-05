@@ -4970,7 +4970,10 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
   came from, else, after a reload, its own folder.
 - **Rejected:** an × on the panel (it closed one file, not the panel: "it doesn't actually close"); the
   toggle in the list's bar always (with the panel on it would sit mid-window, and turning the panel off
-  would leave the pointer over nothing); `aria-pressed` on it (with the name saying what a click does it
+  would leave the pointer over nothing); a copy of the toggle in each bar it might end (it held its place
+  only while three bars kept the same height, padding and right inset, and was remounted on every toggle;
+  replaced after review by one control at the header's right end that the bar under it leaves room for);
+  `aria-pressed` on it (with the name saying what a click does it
   reads "Hide preview, pressed"); a read per selection move (a held arrow key would read every file it
   passes); full-width Back as "up to the file's folder" (from a root's outline, a nested file's folder is
   not where you were).

@@ -8,15 +8,17 @@ import type { FilesTab } from "../../workspace/state";
 import type { LinkTarget } from "../../files/render/markdown";
 import type { FilesPlace } from "../../platform/types";
 import { useStore } from "../../ui/store";
+import { cx } from "../../ui/cx";
 import { Button } from "../../ui/primitives/Button";
 import { EmptyState } from "../../ui/primitives/EmptyState";
+import { IconButton } from "../../ui/primitives/IconButton";
 import { Spinner } from "../../ui/primitives/Spinner";
 import { Divider } from "./Divider";
 import { MissingFolder, type OutlineProps } from "./FolderList";
 import { FileView } from "./FileView";
 import { PASTE, useFilesKey, type Chord } from "./keymap";
 import { ListPane } from "./ListPane";
-import { PreviewPanel, PreviewToggle } from "./PreviewPanel";
+import { PreviewPanel } from "./PreviewPanel";
 import { readPaste } from "../terminal/paste";
 import { pasteIntoFolder, type FilesSession } from "./session";
 import { useTabOutline } from "./tabOutline";
@@ -119,12 +121,8 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
   useFilesKey(PREVIEW, toggle, !phone && place.kind === "dir");
   const max = Math.max(LIST_MIN_PX, Math.round(windowWidth * LIST_MAX_SHARE));
   const width = Math.round(Math.max(LIST_MIN_PX, Math.min(max, stored ?? listDefault(windowWidth))));
-  const toggleControl = (sep: boolean) => (!phone && place.kind === "dir" ? (
-    <>
-      {sep && <span class={bar.sep} />}
-      <PreviewToggle on={preview} onToggle={toggle} />
-    </>
-  ) : null);
+  // One toggle on the header line's right end over both layouts of the split: the bar under it leaves it room.
+  const toggleShown = !phone && place.kind === "dir" && view.home !== null;
 
   // A file full width: Back returns to the list it was opened from (history Back), else, after a reload, its folder.
   const backTo = place.kind === "file" ? (phone ? up?.path ?? null : app.router.folderBelow(tab.id, place.file.path) ?? up?.path ?? null) : null;
@@ -161,7 +159,7 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
     <div ref={files} class={styles.files} style={{ "--files-list-w": `${String(width)}px` }}>
       {place.kind === "dir" && <h1 class={styles.hiddenTitle}>{title}</h1>}
       {/* The list stays mounted under a file, so Back returns to it as it was. */}
-      <div class={styles.split} hidden={place.kind === "file"} data-panel={panel || undefined}>
+      <div class={styles.split} hidden={place.kind === "file"} data-panel={panel || undefined} data-end={toggleShown || undefined}>
         <ListPane
           session={session}
           tab={tab.id}
@@ -177,7 +175,6 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
           onOpen={open}
           finding={finding}
           onFinding={setFinding}
-          end={panel ? null : toggleControl(true)}
         />
         {panel && (
           <>
@@ -190,10 +187,16 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
               onWidth={(px) => { setStored(px); app.view.set("listWidth", px); }}
               onReset={() => { setStored(null); app.view.set("listWidth", null); }}
             />
-            <PreviewPanel session={session} root={pages} selection={tree.selection} hidden={hidden} held={held} toggle={toggleControl(true)} fileToggle={toggleControl(false)} onOpen={open} onLink={onLink} />
+            <PreviewPanel session={session} root={pages} selection={tree.selection} hidden={hidden} held={held} onOpen={open} onLink={onLink} />
           </>
         )}
       </div>
+      {toggleShown && (
+        <div class={styles.end}>
+          <span class={bar.sep} />
+          <IconButton icon="panel" label={preview ? "Hide preview" : "Show preview"} aria-keyshortcuts="Space" class={cx(styles.toggle, preview && styles.on)} onClick={toggle} />
+        </div>
+      )}
       {place.kind === "file" && (
         <FileView session={session} file={place.file} back={back} onLink={onLink}>
           {body ? <div class={styles.scroll}>{body}</div> : undefined}
