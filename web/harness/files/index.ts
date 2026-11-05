@@ -5,16 +5,16 @@
 import type { FilesPlace } from "../../platform/types";
 import type { Fixture, Fixtures } from "../fixture";
 import { LISTING, savedPlus } from "../shared";
-import { ETC, findTree, FIND_ROOT, HOME, REPO, serveTree, type FilesFs } from "./fakes";
+import { BIG, BIG_PAGE, bigTree, ETC, findTree, FIND_ROOT, HOME, REPO, serveTree, type FilesFs } from "./fakes";
 import type { FakeTree } from "../../platform/test/fs";
 
-const at = (place: FilesPlace, tree?: FakeTree, configure?: (fs: FilesFs) => void): Fixture => ({
+const at = (place: FilesPlace, tree?: FakeTree, configure?: (fs: FilesFs) => void, page?: number): Fixture => ({
   options: () => ({ workspace: savedPlus({ kind: "files", id: "files-1", host: "h-pop", place }, "files-1") }),
   openActive: true,
   daemon: (d) => {
     d.listing = LISTING;
     d.watch = "ok";
-    serveTree(d, tree, configure);
+    serveTree(d, tree, configure, page);
   },
 });
 
@@ -42,6 +42,8 @@ export const fixtures: Fixtures = {
   filesFindDenied: at({ kind: "dir", path: FIND_ROOT }, findTree(), (fs) => { fs.denied.add(`${FIND_ROOT}/docs`); }),
   filesFindOffline: at({ kind: "dir", path: FIND_ROOT }, findTree(), (fs) => { fs.unreachable.add(`${FIND_ROOT}/src`); }),
   filesFindCapped: at({ kind: "dir", path: FIND_ROOT }, findTree(), (fs) => { fs.capped.add(`${FIND_ROOT}/web`); }),
+  /** A folder over 200 entries: the first page holds the three subfolders and the first files. */
+  filesBig: at({ kind: "dir", path: BIG }, bigTree(), undefined, BIG_PAGE),
   /** The folder refuses to list. */
   filesDenied: at({ kind: "dir", path: REPO }, undefined, (fs) => { fs.denied.add(REPO); }),
 };

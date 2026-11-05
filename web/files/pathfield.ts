@@ -1,21 +1,9 @@
 // The path field's completion model (browser-behaviors.md "Files"), apart from the DOM and the
 // network: typed text and the folder listings held so far in, rows and what each key does out.
 // `folders.ts` holds and fetches the listings; the screen draws what this returns.
-import type { HttpRefusal } from "../net/http";
 import { join, parentOf } from "./paths";
 import { shorten } from "./format";
-
-/** One folder's subfolder names as the daemon sorted them, and whether the scan stopped short. */
-export interface FolderNames {
-  names: string[];
-  /** Past the page limit or the daemon's scan cap: more folders may exist than are listed. */
-  capped: boolean;
-}
-
-export type FolderState = { status: "loading" } | { status: "error"; error: HttpRefusal } | ({ status: "ready" } & FolderNames);
-
-/** The cache key of one listing; `hidden` listings are kept apart (`hidden=1` is a different scan). */
-export const folderKey = (path: string, hidden: boolean): string => `${hidden ? "1" : "0"}${path}`;
+import { folderKey, type FolderState } from "./folders";
 
 /** Typed text split at its last `/`. */
 export interface Typed {

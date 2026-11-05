@@ -89,6 +89,14 @@ export function findTree(): FakeTree {
   };
 }
 
+/** A folder of 3 subfolders and 450 files, over the daemon's page of 200: Show more, and narrowing what is loaded. */
+export const BIG = `${HOME}/big`;
+export const BIG_PAGE = 200;
+export function bigTree(): FakeTree {
+  const files = Object.fromEntries(Array.from({ length: 450 }, (_, i) => [`${BIG}/file-${String(i + 1).padStart(3, "0")}.txt`, TEXT]));
+  return { home: HOME, dirs: ["/", "/home", HOME, BIG, `${BIG}/alpha`, `${BIG}/beta`, `${BIG}/gamma`, `${HOME}/other`], files: { ...files, [`${BIG}/zeta-notes.md`]: MD } };
+}
+
 const CONTENT: Record<string, string> = {
   [`${REPO}/README.md`]: README,
   [`${REPO}/Cargo.toml`]: '[package]\nname = "muxen"\nversion = "0.1.0"\n',
@@ -127,8 +135,8 @@ export class FilesFs extends FakeFs {
 }
 
 /** Serves a tree over the fake daemon's `/fs` routes; the real app browses it through its own HTTP client. */
-export function serveTree(daemon: FakeDaemon, tree: FakeTree = filesTree(), configure?: (fs: FilesFs) => void): void {
-  const fs = new FilesFs(tree, 8);
+export function serveTree(daemon: FakeDaemon, tree: FakeTree = filesTree(), configure?: (fs: FilesFs) => void, page = 8): void {
+  const fs = new FilesFs(tree, page);
   configure?.(fs);
   daemon.fs = serveFs(fs);
 }

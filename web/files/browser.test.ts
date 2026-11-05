@@ -20,6 +20,9 @@ function setup(t = tree()) {
   return { fs, browser };
 }
 
+/** The pages the browser shows: its folder's record. */
+const pagesOf = (browser: FileBrowser) => browser.snapshot.dir && browser.folders.peek(browser.snapshot.dir.path, browser.snapshot.dir.hidden);
+
 describe("FileBrowser", () => {
   it("opens ~ as the home the host names; lists directories first, pages on demand, and keeps hidden files out until asked", async () => {
     const { browser, fs } = setup();
@@ -27,19 +30,19 @@ describe("FileBrowser", () => {
     expect(browser.snapshot.place).toEqual({ kind: "dir", path: "/home/j" });
     expect(browser.snapshot.home).toBe("/home/j");
     await browser.follow({ kind: "dir", path: "/home/j/repo" });
-    expect(browser.snapshot.pages?.entries.map((e) => e.name)).toEqual(["src", "README.md", "a.ts"]);
+    expect(pagesOf(browser)?.entries.map((e) => e.name)).toEqual(["src", "README.md", "a.ts"]);
     await browser.more();
-    expect(browser.snapshot.pages?.entries.map((e) => e.name)).toEqual(["src", "README.md", "a.ts", "b.png", "c.rs"]);
+    expect(pagesOf(browser)?.entries.map((e) => e.name)).toEqual(["src", "README.md", "a.ts", "b.png", "c.rs"]);
     await browser.more(); // nothing left: no request
     expect(fs.calls.filter((c) => c.startsWith("list"))).toEqual(["list ~ 0", "list /home/j/repo 0", "list /home/j/repo 3"]);
     await browser.toggleHidden();
-    expect(browser.snapshot.pages?.entries.map((e) => e.name)).toContain(".git");
+    expect(pagesOf(browser)?.entries.map((e) => e.name)).toContain(".git");
   });
 
   it("opens a listed file from the listing it came from, and returns to it without relisting", async () => {
     const { browser, fs } = setup();
     await browser.follow({ kind: "dir", path: "/home/j/repo" });
-    const readme = browser.snapshot.pages?.entries.find((e) => e.name === "README.md");
+    const readme = pagesOf(browser)?.entries.find((e) => e.name === "README.md");
     if (!readme) throw new Error("no README");
     const place = entryPlace("/home/j/repo", readme);
     expect(place).toEqual({ kind: "file", path: "/home/j/repo/README.md" });
@@ -62,24 +65,24 @@ describe("FileBrowser", () => {
     fs.release();
     await slow;
     expect(browser.snapshot.place).toEqual({ kind: "dir", path: "/home/j/up" });
-    expect(browser.snapshot.pages?.path).toBe("/home/j/up");
+    expect(pagesOf(browser)?.path).toBe("/home/j/up");
   });
 
   it("lists a folder outside home, and a vanished folder has no stale entries and still a way up", async () => {
     const { browser } = setup();
     await browser.follow({ kind: "dir", path: "/home/j/repo" });
     await browser.follow({ kind: "dir", path: "/etc" });
-    expect(browser.snapshot.pages?.path).toBe("/etc");
+    expect(pagesOf(browser)?.path).toBe("/etc");
     await browser.follow({ kind: "dir", path: "/home/j/gone/deeper" });
     expect(browser.snapshot.error?.code).toBe("not_found");
-    expect(browser.snapshot.pages).toBeNull();
-    expect(parentPlace(browser.snapshot)).toEqual({ kind: "dir", path: "/home/j/gone" });
+    expect(pagesOf(browser)).toBeNull();
+    expect(parentPlace(browser.snapshot.place, pagesOf(browser))).toEqual({ kind: "dir", path: "/home/j/gone" });
     // up from a file and from home; `/` has no parent
     await browser.follow({ kind: "file", path: "/home/j/repo/src/main.rs" });
-    expect(parentPlace(browser.snapshot)).toEqual({ kind: "dir", path: "/home/j/repo/src" });
+    expect(parentPlace(browser.snapshot.place, pagesOf(browser))).toEqual({ kind: "dir", path: "/home/j/repo/src" });
     await browser.follow({ kind: "dir", path: "/home/j" });
-    expect(parentPlace(browser.snapshot)).toEqual({ kind: "dir", path: "/home" });
+    expect(parentPlace(browser.snapshot.place, pagesOf(browser))).toEqual({ kind: "dir", path: "/home" });
     await browser.follow({ kind: "dir", path: "/" });
-    expect(parentPlace(browser.snapshot)).toBeNull();
+    expect(parentPlace(browser.snapshot.place, pagesOf(browser))).toBeNull();
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { HttpRefusal } from "../net/http";
-import { accept, complete, folderKey, go, parseTyped, slashAccepts, type CompleteContext, type FolderState } from "./pathfield";
+import { folderKey, type FolderState } from "./folders";
+import { accept, complete, go, parseTyped, slashAccepts, type CompleteContext } from "./pathfield";
 
 const ready = (names: string[], capped = false): FolderState => ({ status: "ready", names, capped });
 

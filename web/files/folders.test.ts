@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeFs, type FakeTree } from "../platform/test/fs";
-import { Folders, KEPT, MAX_PAGES, SETTLE_MS } from "./folders";
-import { folderKey } from "./pathfield";
+import { Folders, MAX_ENTRIES, SETTLE_MS, stateOf } from "./folders";
+import type { Entry, Listing } from "./api";
 
 const many = (n: number): string[] => Array.from({ length: n }, (_, i) => `/home/j/repos/d${String(i).padStart(3, "0")}`);
 const tree = (extra: string[] = []): FakeTree => ({
@@ -14,7 +14,9 @@ function setup(extra: string[] = [], page = 3) {
   const fs = new FakeFs(tree(extra), page);
   return { fs, folders: new Folders(fs) };
 }
-const held = (f: Folders, path: string) => f.snapshot.held.get(folderKey(path, false))?.names ?? undefined;
+const state = (f: Folders, path: string) => stateOf(f.snapshot.held.get(`0${path}`));
+const entries = (n: number): Entry[] => Array.from({ length: n }, (_, i) => ({ name: `f${String(i)}`, kind: "file", link: false }));
+const listing = (path: string, n: number): Listing => ({ path, parent: null, total: n, offset: 0, truncated: false, entries: entries(n) });
 
 describe("Folders", () => {
   beforeEach(() => { vi.useFakeTimers(); });
@@ -28,7 +30,7 @@ describe("Folders", () => {
     expect(fs.calls).toEqual([]);
     await vi.advanceTimersByTimeAsync(1);
     expect(fs.calls).toEqual(["list /home/j/repos 0"]);
-    expect(held(folders, "/home/j/repos")).toMatchObject({ status: "ready", names: ["muxen"] });
+    expect(state(folders, "/home/j/repos")).toMatchObject({ status: "ready", names: ["muxen"] });
   });
 
   it("does not ask again for a folder it holds or has under way", async () => {
@@ -44,7 +46,7 @@ describe("Folders", () => {
     folders.ask({ path: "/home/j/repos", hidden: false });
     await vi.advanceTimersByTimeAsync(SETTLE_MS);
     expect(fs.calls).toHaveLength(1);
-    // a settled waits for a fetch under way instead of asking again, and the first page is cached until a refresh drops it
+    // a settled waits for a fetch under way instead of asking again, and the pages are held until a refresh drops them
     fs.hold = true;
     const loading = folders.load("/home/j/repos/muxen", false);
     const taken = folders.settled("/home/j/repos/muxen", false);
@@ -58,17 +60,12 @@ describe("Folders", () => {
     expect(fs.calls).toHaveLength(2);
   });
 
-  it("follows a page of folders with the next, up to the page limit, then says it is capped; it stops at the page that holds the last folder", async () => {
-    const small = setup(many(5), 4);
-    await small.folders.load("/home/j/repos", false);
-    expect(small.fs.calls).toEqual(["list /home/j/repos 0", "list /home/j/repos 4"]);
-    expect(held(small.folders, "/home/j/repos")).toMatchObject({ capped: false });
-    const { fs, folders } = setup(many(40), 4);
+  it("pages a folder for its subfolders until it holds them all, in one record the browsing list shares", async () => {
+    const { fs, folders } = setup(many(5), 4);
     await folders.load("/home/j/repos", false);
-    expect(fs.calls).toHaveLength(MAX_PAGES);
-    const state = held(folders, "/home/j/repos");
-    expect(state).toMatchObject({ status: "ready", capped: true });
-    expect(state?.status === "ready" && state.names).toHaveLength(MAX_PAGES * 4);
+    expect(fs.calls).toEqual(["list /home/j/repos 0", "list /home/j/repos 4"]);
+    expect(state(folders, "/home/j/repos")).toMatchObject({ status: "ready", capped: false });
+    expect(folders.peek("/home/j/repos", false)?.entries).toHaveLength(6);
   });
 
   it("asks again for a folder whose listing failed for want of a connection, not for one that is missing", async () => {
@@ -76,10 +73,10 @@ describe("Folders", () => {
     const ask = async (): Promise<void> => { folders.ask({ path: "/home/j/repos", hidden: false }); await vi.advanceTimersByTimeAsync(SETTLE_MS); };
     fs.offline = true;
     await ask();
-    expect(held(folders, "/home/j/repos")).toMatchObject({ status: "error" });
+    expect(state(folders, "/home/j/repos")).toMatchObject({ status: "error" });
     fs.offline = false;
     await ask();
-    expect(held(folders, "/home/j/repos")).toMatchObject({ status: "ready" });
+    expect(state(folders, "/home/j/repos")).toMatchObject({ status: "ready" });
     folders.ask({ path: "/home/j/nope", hidden: false });
     await vi.advanceTimersByTimeAsync(SETTLE_MS);
     folders.ask({ path: "/home/j/nope", hidden: false });
@@ -87,22 +84,35 @@ describe("Folders", () => {
     expect(fs.calls.filter((c) => c.includes("nope"))).toHaveLength(1);
   });
 
-  it("keeps the 32 most recent folders and drops a refreshed one", () => {
-    const { folders } = setup();
-    for (let i = 0; i < KEPT + 3; i++) folders.seed({ path: `/p${String(i)}`, parent: null, total: 0, offset: 0, truncated: false, entries: [] }, false);
-    expect(folders.snapshot.held.size).toBe(KEPT);
-    expect(held(folders, "/p0")).toBeUndefined();
-    folders.drop("/p10");
-    expect(held(folders, "/p10")).toBeUndefined();
+  it("appends the next page to what is held, and not a page that was asked for before a refresh", async () => {
+    const { fs, folders } = setup(many(5), 4);
+    await folders.first("/home/j/repos", false);
+    expect(folders.peek("/home/j/repos", false)?.entries).toHaveLength(4);
+    await folders.more("/home/j/repos", false);
+    expect(folders.peek("/home/j/repos", false)?.entries).toHaveLength(6);
+    await folders.more("/home/j/repos", false); // nothing left: no request
+    expect(fs.calls).toHaveLength(2);
+    fs.hold = true;
+    const late = folders.more("/home/j/repos", false);
+    fs.hold = false;
+    await folders.first("/home/j/repos", false);
+    fs.release();
+    await late;
+    expect(folders.peek("/home/j/repos", false)?.entries).toHaveLength(4);
   });
 
-  it("seeds from a listing that holds all its folders, not from a partial page of folders", () => {
+  it("bounds what it holds by entries in all, least recently used first, and never drops a pinned folder", () => {
     const { folders } = setup();
-    const entry = (name: string, kind: "dir" | "file") => ({ name, kind, link: false });
-    const listing = (entries: ReturnType<typeof entry>[], total: number) => ({ path: "/a", parent: null, total, offset: 0, truncated: false, entries });
-    folders.seed(listing([entry("x", "dir")], 5), false);
-    expect(held(folders, "/a")).toBeUndefined();
-    folders.seed(listing([entry("x", "dir"), entry("f", "file")], 5), false);
-    expect(held(folders, "/a")).toMatchObject({ names: ["x"] });
+    const put = (path: string): void => { (folders as unknown as { put: (p: string, h: boolean, l: object) => void }).put(path, false, { listing: listing(path, MAX_ENTRIES * 0.4) }); };
+    put("/a");
+    put("/b");
+    folders.pin([{ path: "/a", hidden: false }]);
+    put("/c");
+    // a is the oldest but pinned, so b goes; c, the one just loaded, stays
+    expect(folders.peek("/a", false)).not.toBeNull();
+    expect(folders.peek("/b", false)).toBeNull();
+    expect(folders.peek("/c", false)).not.toBeNull();
+    folders.drop("/a");
+    expect(folders.peek("/a", false)).toBeNull();
   });
 });

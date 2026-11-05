@@ -5,7 +5,7 @@ import { samePlace, type FilesPlace } from "../platform/types";
 import { hostProblem, type HostProblem } from "../ui/hostProblem";
 import { Store } from "../ui/store";
 import { baseName, join, parentOf } from "./paths";
-import { Folders, KEPT } from "./folders";
+import { Folders } from "./folders";
 import { Recent } from "./recent";
 
 /** A file to view: from a listing, or from a path (a Markdown link, a reload) and a probe. */
@@ -24,8 +24,12 @@ export type Place = { kind: "dir"; path: string } | { kind: "file"; file: FileRe
 /** The folder a new Files tab opens: the host's home, which only the host can name. Listing it names the canonical home too. */
 const HOME = "~";
 
-/** A directory's pages loaded so far. */
-export interface Pages extends Listing {
+/** Files opened by path and probed, kept per host so returning to one costs no second probe. */
+const PROBED_KEPT = 32;
+
+/** A folder in `Folders`' records: its canonical path and the hidden-files setting its pages were listed under. */
+export interface FolderRef {
+  path: string;
   hidden: boolean;
 }
 
@@ -33,8 +37,8 @@ export interface FilesView {
   place: Place;
   /** The canonical `$HOME`, once the host has said: `~` names it, and paths are shown relative to it. */
   home: string | null;
-  /** The directory under the place: the dir itself, or a viewed file's folder when it was opened from there. */
-  pages: Pages | null;
+  /** The folder under the place whose pages `folders` holds for the screen: the dir itself, or a viewed file's folder when it was opened from there. */
+  dir: FolderRef | null;
   loading: boolean;
   /** Why the place couldn't load; the screen offers to try again. */
   error: HttpRefusal | null;
@@ -58,10 +62,9 @@ export function entryPlace(dir: string, entry: Entry): FilesPlace | null {
 }
 
 /** The place `[<]` goes to: up a level, or out of a viewer; null at `/`. A folder that failed to list has no parent from the daemon: the path's own. */
-export function parentPlace(view: Pick<FilesView, "place" | "pages">): FilesPlace | null {
-  const { place, pages } = view;
+export function parentPlace(place: Place, listing: Listing | null): FilesPlace | null {
   if (place.kind === "file") return { kind: "dir", path: parentOf(place.file.path) };
-  if (pages?.path === place.path) return pages.parent === null ? null : { kind: "dir", path: pages.parent };
+  if (listing?.path === place.path) return listing.parent === null ? null : { kind: "dir", path: listing.parent };
   return place.path.startsWith("/") && place.path !== "/" ? { kind: "dir", path: parentOf(place.path) } : null;
 }
 
@@ -71,8 +74,8 @@ export function placeOf(place: Place): FilesPlace {
 }
 
 /**
- * The file manager's state, apart from the DOM: the home folder, the directory pages loaded for
- * the place on screen, and that place. The active Files tab owns where the user is (its place,
+ * The file manager's state, apart from the DOM: the home folder, the directory under the place on
+ * screen (its pages are `folders`'), and that place. The active Files tab owns where the user is (its place,
  * written from browser history); `follow` brings this state to it. Nothing is fetched until a place
  * needs it, and only the page in view (plan.md "Bandwidth"); a folder whose first page the host's
  * `folders` cache holds, and a file already probed, are shown again without a request.
@@ -80,16 +83,16 @@ export function placeOf(place: Place): FilesPlace {
 export class FileBrowser extends Store<FilesView> {
   /** The host's file API, which the viewers read through too. */
   readonly api: FsApi;
-  /** The path field's subfolder listings; browsing seeds them. */
+  /** Every folder's pages loaded so far: browsing, the path field and the screen's list share them. */
   readonly folders: Folders;
   /** Bumped on every navigation, so an answer for a place already left is dropped. */
   private seq = 0;
   /** Files opened by path (a link, a reload) and probed: returning to one costs no second probe. */
-  private readonly probed = new Recent<FileRef>(KEPT);
+  private readonly probed = new Recent<FileRef>(PROBED_KEPT);
   private asked: Promise<string> | null = null;
 
   constructor(opts: BrowserOptions) {
-    super({ place: { kind: "dir", path: HOME }, home: opts.home ?? null, pages: null, loading: true, error: null, hidden: opts.hidden, fresh: null });
+    super({ place: { kind: "dir", path: HOME }, home: opts.home ?? null, dir: null, loading: true, error: null, hidden: opts.hidden, fresh: null });
     this.api = opts.api;
     this.folders = new Folders(opts.api);
   }
@@ -100,7 +103,6 @@ export class FileBrowser extends Store<FilesView> {
     if (home !== null) return Promise.resolve(home);
     this.asked ??= this.listing(HOME, false).then(
       (listing) => {
-        this.folders.loaded(listing, false, HOME);
         this.update({ home: listing.path });
         return listing.path;
       },
@@ -111,7 +113,7 @@ export class FileBrowser extends Store<FilesView> {
 
   /** A folder's first page: the fetch the path field has under way, else a request. */
   private async listing(path: string, hidden: boolean): Promise<Listing> {
-    return (await this.folders.settled(path, hidden)) ?? this.api.list(path, 0, hidden);
+    return (await this.folders.settled(path, hidden)) ?? this.folders.first(path, hidden);
   }
 
   /**
@@ -131,11 +133,11 @@ export class FileBrowser extends Store<FilesView> {
   }
 
   private show(want: FilesPlace): Promise<void> {
-    const { place, pages, error } = this.snapshot;
+    const { place, dir, error } = this.snapshot;
     // Listing `~` names home itself; any other place needs it asked for, once.
     if (want.kind === "file" || want.path !== HOME) void this.home().catch(() => undefined);
     if (want.kind === "dir") {
-      if (pages?.path !== want.path || error) return this.load(want);
+      if (dir?.path !== want.path || error) return this.load(want);
       if (place.kind !== "dir" || place.path !== want.path) this.go({ place: want, loading: false });
       return Promise.resolve();
     }
@@ -152,8 +154,7 @@ export class FileBrowser extends Store<FilesView> {
   async reload(): Promise<void> {
     const { place } = this.snapshot;
     if (place.kind === "dir") {
-      this.folders.drop(place.path);
-      await this.load(place);
+      await this.load(place, true);
     } else {
       this.probed.delete(place.file.path);
       await this.openFile(place.file.path);
@@ -162,18 +163,10 @@ export class FileBrowser extends Store<FilesView> {
 
   /** The next page, when the list scrolls near its end. */
   async more(): Promise<void> {
-    const { pages, loading } = this.snapshot;
-    if (!pages || loading || pages.entries.length >= pages.total) return;
-    const offset = pages.entries.length;
-    await this.run(
-      { loading: true },
-      () => this.api.list(pages.path, offset, pages.hidden),
-      (next) => {
-        const grown = { ...pages, total: next.total, truncated: next.truncated, entries: [...pages.entries, ...next.entries] };
-        this.folders.seed(grown, grown.hidden);
-        this.update({ pages: grown, loading: false });
-      },
-    );
+    const { dir, loading } = this.snapshot;
+    const pages = dir && this.folders.peek(dir.path, dir.hidden);
+    if (!dir || !pages || loading || pages.entries.length >= pages.total) return;
+    await this.run({ loading: true }, () => this.folders.more(dir.path, dir.hidden), () => { this.update({ loading: false }); });
   }
 
   async toggleHidden(): Promise<void> {
@@ -184,29 +177,31 @@ export class FileBrowser extends Store<FilesView> {
 
   /** An upload landed at `path`: relist if it is in the folder on screen. */
   async uploaded(path: string): Promise<void> {
-    this.folders.drop(parentOf(path));
     this.probed.delete(path);
     const { place } = this.snapshot;
-    if (place.kind !== "dir" || place.path !== parentOf(path)) return;
+    // The folder on screen is replaced when it has been listed again, so its rows stay up meanwhile.
+    if (place.kind !== "dir" || place.path !== parentOf(path)) {
+      this.folders.drop(parentOf(path));
+      return;
+    }
     await this.reload();
     if (this.snapshot.place.kind === "dir" && this.snapshot.place.path === parentOf(path)) this.update({ fresh: path });
   }
 
   private openFile(path: string): Promise<void> {
     const dir = parentOf(path);
-    const { pages, hidden } = this.snapshot;
-    // The folder the file sits in, if its listing is on screen or cached: it stays under the preview, and names the file.
-    const cached = this.folders.peek(dir, hidden);
-    const keep = pages?.path === dir ? pages : cached && { ...cached, hidden };
-    const entry = keep?.entries.find((e) => e.name === baseName(path) && e.kind === "file");
+    const { dir: shown, hidden } = this.snapshot;
+    // The folder the file sits in, if its listing is on screen or held: it stays under the preview, and names the file.
+    const keep: FolderRef | null = shown?.path === dir ? shown : this.folders.peek(dir, hidden) && { path: dir, hidden };
+    const entry = keep && this.folders.peek(keep.path, keep.hidden)?.entries.find((e) => e.name === baseName(path) && e.kind === "file");
     const file = entry
       ? { path, name: entry.name, size: entry.size ?? null, mtime: entry.mtime ?? null, mime: entry.mime ?? null }
       : this.probed.get(path);
     if (file) {
-      this.go({ place: { kind: "file", file }, pages: keep ?? null, error: null, loading: false });
+      this.go({ place: { kind: "file", file }, dir: keep, error: null, loading: false });
       return Promise.resolve();
     }
-    return this.run({ place: { kind: "file", file: { path, name: baseName(path), size: null, mtime: null, mime: null } }, pages: keep ?? null, loading: true, error: null }, () => this.api.probe(path), (probe) => {
+    return this.run({ place: { kind: "file", file: { path, name: baseName(path), size: null, mtime: null, mime: null } }, dir: keep, loading: true, error: null }, () => this.api.probe(path), (probe) => {
       // A probe that finds a folder (a link led here): list it instead.
       if (probe.kind === "dir") return this.load({ kind: "dir", path });
       const file = { path, name: baseName(path), size: probe.size, mtime: null, mime: probe.mime };
@@ -216,24 +211,29 @@ export class FileBrowser extends Store<FilesView> {
     });
   }
 
-  /** Lists `place` from its first page, or shows the cached first page. */
-  private load(place: { kind: "dir"; path: string }): Promise<void> {
-    const { hidden } = this.snapshot;
-    const cached = this.folders.peek(place.path, hidden);
+  /** Lists `place` from its first page, or shows the pages held (unless `refresh`). */
+  private load(place: { kind: "dir"; path: string }, refresh = false): Promise<void> {
+    const { hidden, dir } = this.snapshot;
+    const cached = refresh ? null : this.folders.peek(place.path, hidden);
     if (cached) {
-      this.go({ place: { ...place, path: cached.path }, pages: { ...cached, hidden }, loading: false, error: null, ...(place.path === HOME && { home: cached.path }) });
+      this.go({ place: { ...place, path: cached.path }, dir: { path: cached.path, hidden }, loading: false, error: null, ...(place.path === HOME && { home: cached.path }) });
       return Promise.resolve();
     }
     // The same folder's pages stay up (greyed by `loading`) while it reloads; another folder's go.
     return this.run(
-      { place, pages: this.snapshot.pages?.path === place.path ? this.snapshot.pages : null, loading: true, error: null },
-      () => this.listing(place.path, hidden),
+      { place, dir: dir?.path === place.path ? dir : null, loading: true, error: null },
+      () => (refresh ? this.folders.first(place.path, hidden) : this.listing(place.path, hidden)),
       // The daemon answers with the canonical path; the place follows it, and a listing of `~` is the host's home.
       (listing) => {
-        this.folders.loaded(listing, hidden, place.path);
-        this.update({ place: { ...place, path: listing.path }, pages: { ...listing, hidden }, loading: false, ...(place.path === HOME && { home: listing.path }) });
+        this.update({ place: { ...place, path: listing.path }, dir: { path: listing.path, hidden }, loading: false, ...(place.path === HOME && { home: listing.path }) });
       },
     );
+  }
+
+  /** The folder under the place is the one on screen: it stays held. */
+  protected override update(patch: Partial<FilesView>): void {
+    super.update(patch);
+    if ("dir" in patch) this.folders.pin(patch.dir ? [patch.dir] : []);
   }
 
   /** A navigation that needs no answer. */
@@ -255,10 +255,10 @@ export class FileBrowser extends Store<FilesView> {
   }
 
   private fail(error: unknown): void {
-    const { place, pages } = this.snapshot;
+    const { place, dir } = this.snapshot;
     // Another folder's entries mustn't stand in for the one that failed.
-    const stale = place.kind === "dir" && pages?.path !== place.path;
-    this.update({ loading: false, error: error instanceof HttpRefusal ? error : new HttpRefusal(0, "internal"), ...(stale && { pages: null }) });
+    const stale = place.kind === "dir" && dir?.path !== place.path;
+    this.update({ loading: false, error: error instanceof HttpRefusal ? error : new HttpRefusal(0, "internal"), ...(stale && { dir: null }) });
   }
 }
 

@@ -95,7 +95,11 @@ const decodePath = (encoded: string): string => encoded.split("/").map(decodeURI
 export function serveFs(fs: FakeFs): NonNullable<FakeDaemon["fs"]> {
   const page = (query: URLSearchParams): [number, boolean] => [Number(query.get("offset") ?? 0), query.get("hidden") === "1"];
   const route = async ({ method, path, query }: Parameters<NonNullable<FakeDaemon["fs"]>>[0]): Promise<Response> => {
-    const at = (prefix: string): string => decodePath(path.slice(prefix.length));
+    // `~` and `~/…` ride bare after the route's `/` (the client's `url`).
+    const at = (prefix: string): string => {
+      const rest = decodePath(path.slice(prefix.length));
+      return rest.startsWith("/~") ? rest.slice(1) : rest;
+    };
     if (method === "GET" && path.startsWith("/fs/list/")) return json(200, await fs.list(at("/fs/list"), ...page(query)));
     if (method === "GET" && path.startsWith("/fs/raw/")) {
       const target = at("/fs/raw");

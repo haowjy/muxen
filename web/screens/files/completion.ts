@@ -3,6 +3,7 @@
 // highlight and the keys; the caller owns the text, the caret and what a chosen folder does.
 import { useEffect, useId, useRef, useState } from "preact/hooks";
 import { accept, complete, go, slashAccepts, type CompleteContext, type Completion, type CompletionRow } from "../../files/pathfield";
+import { stateOf } from "../../files/folders";
 import { useStore } from "../../ui/store";
 import { rowId } from "./CompletionList";
 import type { FilesSession } from "./session";
@@ -33,7 +34,7 @@ export function useCompletion({ session, text, setText, onOpen, enterOpens }: Op
 
   // A form asks for the host's home, which `~` names, itself: no Files tab has opened it.
   useEffect(() => { void browser.home().catch(() => undefined); }, [browser]);
-  const ctx: CompleteContext | null = home === null ? null : { home, showHidden, folder: (key) => held.get(key)?.names ?? undefined };
+  const ctx: CompleteContext | null = home === null ? null : { home, showHidden, folder: (key) => stateOf(held.get(key)) };
   const c: Completion | null = ctx && text !== null ? complete(text, ctx) : null;
   const highlighted = c && (c.rows.find((row) => row.name === chosen) ?? c.predicted);
 
@@ -57,7 +58,7 @@ export function useCompletion({ session, text, setText, onOpen, enterOpens }: Op
     if ("wait" in result && c.ask) {
       await browser.folders.load(c.ask.path, c.ask.hidden);
       if (latest.current !== text) return;
-      const arrived: CompleteContext = { ...ctx, folder: (key) => browser.folders.snapshot.held.get(key)?.names ?? undefined };
+      const arrived: CompleteContext = { ...ctx, folder: (key) => stateOf(browser.folders.snapshot.held.get(key)) };
       // The highlight is read again: before the listing arrived there was no prediction to Go to.
       const now = complete(text, arrived);
       result = go(text, row ?? now.rows.find((r) => r.name === chosen) ?? now.predicted, arrived);

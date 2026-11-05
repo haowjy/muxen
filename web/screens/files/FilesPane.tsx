@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { useApp } from "../../app/context";
 import { describeError, parentPlace } from "../../files/browser";
+import { folderKey } from "../../files/folders";
 import { baseName, parentOf } from "../../files/paths";
 import type { FilesTab } from "../../workspace/state";
 import type { LinkTarget } from "../../files/render/markdown";
@@ -29,7 +30,9 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
   const { browser } = session;
   const view = useStore(browser, (s) => s);
   const wanted = tab.place;
-  const { place, pages, home, loading, error } = view;
+  const { place, dir, home, loading, error } = view;
+  // The folder under the place: its pages are `Folders`' record, shared with the path field.
+  const pages = useStore(browser.folders, (s) => (dir ? s.held.get(folderKey(dir.path, dir.hidden))?.listing ?? null : null));
   const scroller = useRef<HTMLDivElement>(null);
   // While the path field is being typed in, its completions are the list.
   const [finding, setFinding] = useState(false);
@@ -62,7 +65,7 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
   }, [app, session, folderShown]);
 
   const open = (to: FilesPlace): void => { app.openPlace(to); };
-  const up = parentPlace(view);
+  const up = parentPlace(place, pages);
   const listed = pages !== null && (place.kind === "dir" ? pages.path === place.path : pages.path === parentOf(place.file.path));
   const listingVisible = place.kind === "dir" && listed && !error && !finding;
 
