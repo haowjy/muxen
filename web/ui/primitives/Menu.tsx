@@ -10,6 +10,12 @@ export interface MenuItem {
   icon?: IconName;
   /** The window the tab shows: filled. */
   selected?: boolean;
+  /** A setting the row turns on and off: a check in the glyph's slot while on (`menuitemcheckbox`). */
+  checked?: boolean;
+  /** Quiet text at the row's end: its shortcut (`⌘I`) or a fact about it (`19 KB`). */
+  hint?: string;
+  /** Can't be chosen now: muted, and a click does nothing. `hint` says why, when it can. */
+  disabled?: boolean;
   /** Ends something: the danger colour. */
   danger?: boolean;
   onSelect: () => void;
@@ -24,6 +30,8 @@ export interface MenuSection {
 interface MenuProps {
   /** The control it hangs from: it opens on the side with more room, above the keyboard. */
   anchor: HTMLElement;
+  /** Opens at this point (a right-click's, in client px) instead of against the anchor's edges. */
+  at?: { x: number; y: number } | undefined;
   label: string;
   sections: MenuSection[];
   onClose: () => void;
@@ -39,14 +47,14 @@ const GAP_PX = 8;
  * `<dialog>`: a modal would take focus and lower the keyboard. Every row cancels its pointerdown,
  * like a dock control. A press outside, Escape (focus returns to the anchor), or a chosen row closes it.
  */
-export function Menu({ anchor, label, sections, onClose, focusFirst }: MenuProps) {
+export function Menu({ anchor, at, label, sections, onClose, focusFirst }: MenuProps) {
   const ref = useRef<HTMLDivElement>(null);
   const focus = useFocus();
 
   useLayoutEffect(() => {
     const menu = ref.current;
     if (!menu) return;
-    const rect = anchor.getBoundingClientRect();
+    const rect = at ? { top: at.y, bottom: at.y, left: at.x } : anchor.getBoundingClientRect();
     const root = document.documentElement;
     const { clientWidth, clientHeight } = root;
     // The keyboard is a system window over the page: nothing drawn under it shows. Only the space above it counts.
@@ -59,10 +67,10 @@ export function Menu({ anchor, label, sections, onClose, focusFirst }: MenuProps
     menu.style.bottom = up ? `${String(clientHeight - rect.top + GAP_PX)}px` : "";
     menu.style.left = `${String(Math.max(GAP_PX, Math.min(rect.left, clientWidth - menu.offsetWidth - GAP_PX)))}px`;
     if (focusFirst) {
-      const first = menu.querySelector<HTMLElement>("button");
+      const first = menu.querySelector<HTMLElement>("button:not([aria-disabled])");
       if (first) focus.focusElement(first);
     }
-  }, [anchor]);
+  }, [anchor, at?.x, at?.y]);
 
   useEffect(() => {
     const away = (e: PointerEvent): void => {
@@ -81,7 +89,7 @@ export function Menu({ anchor, label, sections, onClose, focusFirst }: MenuProps
         return;
       }
       if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-      const rows = [...(ref.current?.querySelectorAll<HTMLElement>("button") ?? [])];
+      const rows = [...(ref.current?.querySelectorAll<HTMLElement>("button:not([aria-disabled])") ?? [])];
       const at = rows.indexOf(document.activeElement as HTMLElement);
       const next = rows[(at + (e.key === "ArrowDown" ? 1 : -1) + rows.length) % rows.length];
       if (next && ref.current?.contains(document.activeElement)) {
@@ -106,14 +114,17 @@ export function Menu({ anchor, label, sections, onClose, focusFirst }: MenuProps
             <button
               key={item.label}
               type="button"
-              role="menuitem"
-              class={cx(styles.item, item.selected && styles.selected, item.danger && styles.danger)}
+              role={item.checked === undefined ? "menuitem" : "menuitemcheckbox"}
+              aria-checked={item.checked}
+              aria-disabled={item.disabled || undefined}
+              class={cx(styles.item, item.selected && styles.selected, item.danger && styles.danger, item.disabled && styles.disabled)}
               onPointerDown={(e) => { e.preventDefault(); }}
-              onClick={() => { onClose(); item.onSelect(); }}
+              onClick={() => { if (item.disabled) return; onClose(); item.onSelect(); }}
             >
-              {/* Rows without a glyph keep its slot, so the labels line up. */}
-              {item.icon ? <Icon name={item.icon} size={20} class={styles.icon} /> : <span class={styles.icon} />}
+              {/* Rows without a glyph keep its slot, so the labels line up. A setting's check takes the slot. */}
+              {item.checked ? <Icon name="check" size={20} class={cx(styles.icon, styles.check)} /> : item.icon ? <Icon name={item.icon} size={20} class={styles.icon} /> : <span class={styles.icon} />}
               <span class={styles.text}>{item.label}</span>
+              {item.hint !== undefined && <span class={styles.hint}>{item.hint}</span>}
             </button>
           ))}
         </div>

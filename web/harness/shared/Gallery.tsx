@@ -6,6 +6,7 @@ import { TitleBar } from "../../ui/primitives/DialogBars";
 import { EmptyState } from "../../ui/primitives/EmptyState";
 import { Icon, type IconName } from "../../ui/primitives/Icon";
 import { IconButton } from "../../ui/primitives/IconButton";
+import { Menu } from "../../ui/primitives/Menu";
 import { OptionRow, Row } from "../../ui/primitives/Row";
 import { Spinner } from "../../ui/primitives/Spinner";
 import { StatusBand } from "../../ui/primitives/StatusBand";
@@ -41,6 +42,8 @@ export function Gallery() {
   const [query, setQuery] = useState("");
   const [code, setCode] = useState("7KQ4");
   const [name, setName] = useState("");
+  const [menu, setMenu] = useState<HTMLElement | null>(null);
+  const [checked, setChecked] = useState(true);
   return (
     <main class={styles.gallery}>
       <h1 class={styles.title}>Primitives</h1>
@@ -82,6 +85,30 @@ export function Gallery() {
           <OptionRow icon="file" label="README.md" meta="2 KB" trailing="chevron" />
           <OptionRow icon="file" label="odd-name" meta="Name can't be opened" disabled />
         </div>
+      </Section>
+      <Section title="Menu">
+        <div class={styles.wrap}>
+          <Button icon="more" aria-haspopup="menu" aria-expanded={menu !== null} onClick={(e) => { setMenu(menu ? null : e.currentTarget); }}>Open menu</Button>
+        </div>
+        {menu && (
+          <Menu
+            anchor={menu}
+            label="Folder options"
+            focusFirst={false}
+            onClose={() => { setMenu(null); }}
+            sections={[
+              { items: [{ label: "Copy path", icon: "copy", onSelect: () => undefined }] },
+              { items: [{ label: "Show hidden files", checked, hint: "⇧⌘.", onSelect: () => { setChecked(!checked); } }] },
+              {
+                title: "Insert path into",
+                items: [
+                  { label: "muxen agent", icon: "terminal", hint: "⌘I", onSelect: () => undefined },
+                  { label: "notes shell", icon: "terminal", hint: "Restoring", disabled: true, onSelect: () => undefined },
+                ],
+              },
+            ]}
+          />
+        )}
       </Section>
       <Section title="Tab strip">
         <TabStrip pills={PILLS} active={active} onSelect={setActive} onClose={() => undefined} onMenu={() => undefined} />

@@ -1,6 +1,8 @@
 import {
-  Check, ChevronDown, ChevronLeft, ChevronRight, CircleX, Equal, ExternalLink, File, Film, Folder, House, Image, Keyboard,
-  ClipboardPaste, KeyboardOff, List, Plus, RotateCw, Search, Server, Settings, Terminal, TriangleAlert, Upload, X, type LucideIcon,
+  Check, ChevronDown, ChevronLeft, ChevronRight, CircleX, ClipboardCopy, Copy, Download, Ellipsis, Equal, ExternalLink, Eye, File,
+  FileBraces, FileCode, FileCog, FileDigit, FileImage, FileLock, FileMusic, FileTerminal, FileText, FileVideoCamera, Film, Folder,
+  House, Image, Keyboard, ClipboardPaste, KeyboardOff, List, Plus, RotateCw, Search, Server, Settings, SquarePlus, Terminal,
+  TriangleAlert, Upload, WrapText, X, type LucideIcon,
 } from "lucide-preact";
 
 /** muxen's icon names, each a Lucide icon. */
@@ -33,6 +35,26 @@ const ICONS = {
   external: ExternalLink,
   /** All tabs: the tab list. */
   tabs: List,
+  copy: Copy,
+  /** Copies a file's text, not its path. */
+  copyText: ClipboardCopy,
+  download: Download,
+  /** More actions: ⋯. */
+  more: Ellipsis,
+  wrap: WrapText,
+  open: Eye,
+  newTab: SquarePlus,
+  // A file's kind, by its name: Files rows and headers.
+  fileText: FileText,
+  fileCode: FileCode,
+  fileData: FileBraces,
+  fileConfig: FileCog,
+  fileLock: FileLock,
+  fileScript: FileTerminal,
+  fileImage: FileImage,
+  fileVideo: FileVideoCamera,
+  fileAudio: FileMusic,
+  fileBinary: FileDigit,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

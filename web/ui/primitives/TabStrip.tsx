@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { cx } from "../cx";
 import { useFocusRef } from "../focus";
+import { useLongPress } from "../longPress";
 import { BellDot } from "./BellDot";
 import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
@@ -35,11 +36,6 @@ interface TabStripProps {
   /** The pill's menu was asked for: a long press, a right click, Shift+F10 or the menu key. `anchor` is the pill's button. */
   onMenu: (id: string, anchor: HTMLElement) => void;
 }
-
-/** A touch held this long on a pill asks for its menu. */
-const LONG_PRESS_MS = 450;
-/** A touch that moves further than this is a scroll, not a press. */
-const SLOP = 8;
 
 /**
  * The terminal's tabs: buttons marked with `aria-current`, a separate close button shown on the
@@ -85,13 +81,7 @@ export function TabStrip({ pills, active, onSelect, onClose, onMenu }: TabStripP
 /** One pill. The active one's select button is the focus target `tabs`, where Ctrl+Shift+F leaves the terminal. */
 function PillView({ pill, active, onSelect, onClose, onMenu }: { pill: Pill; active: boolean; onSelect: (id: string) => void; onClose: (id: string) => void; onMenu: TabStripProps["onMenu"] }) {
   const focusRef = useFocusRef(active ? "tabs" : undefined);
-  const hold = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null);
-  /** The press already opened the menu: the click that ends it selects nothing. */
-  const opened = useRef(false);
-  const stop = (): void => {
-    if (hold.current) clearTimeout(hold.current.timer);
-    hold.current = null;
-  };
+  const press = useLongPress<HTMLButtonElement>(({ anchor }) => { onMenu(pill.id, anchor); });
   return (
     <div class={cx(styles.pill, active && styles.active)} data-tone={pill.tone}>
       <button
@@ -102,21 +92,12 @@ function PillView({ pill, active, onSelect, onClose, onMenu }: { pill: Pill; act
         aria-haspopup="menu"
         aria-label={`${pill.full}, ${pill.state}${pill.bell ? ", bell rang" : ""}`}
         title={pill.full}
-        onPointerDown={(e) => {
-          opened.current = false;
-          if (e.pointerType !== "touch") return;
-          const anchor = e.currentTarget;
-          hold.current = { x: e.clientX, y: e.clientY, timer: setTimeout(() => { hold.current = null; opened.current = true; onMenu(pill.id, anchor); }, LONG_PRESS_MS) };
-        }}
-        onPointerMove={(e) => { if (hold.current && Math.hypot(e.clientX - hold.current.x, e.clientY - hold.current.y) > SLOP) stop(); }}
-        onPointerUp={stop}
-        onPointerCancel={stop}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          stop();
-          if (!opened.current) onMenu(pill.id, e.currentTarget);
-        }}
-        onClick={() => { if (!opened.current) onSelect(pill.id); opened.current = false; }}
+        onPointerDown={press.onPointerDown}
+        onPointerMove={press.onPointerMove}
+        onPointerUp={press.onPointerUp}
+        onPointerCancel={press.onPointerCancel}
+        onContextMenu={press.onContextMenu}
+        onClick={() => { if (!press.swallowClick()) onSelect(pill.id); }}
       >
         <Icon name={pill.kind === "files" ? "folder" : "terminal"} size={16} class={styles.kind} />
         <span class={styles.session}>{pill.session}</span>

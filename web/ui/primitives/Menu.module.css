@@ -31,4 +31,9 @@
 .selected { background: var(--color-bg-selected); font-weight: var(--weight-medium); }
 .danger { color: var(--color-status-error); }
 .icon { flex: none; width: 20px; height: 20px; color: var(--color-text-muted); }
-.text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A shortcut or a fact, at the row's end: quiet, and never what ellipsizes. */
+.hint { flex: none; margin-inline-start: var(--space-3); font-size: var(--text-meta); font-variant-numeric: tabular-nums; color: var(--color-text-muted); }
+.check { color: var(--color-accent); }
+.disabled { color: var(--color-text-muted); cursor: default; }
+.disabled:hover { background: none; }
