@@ -1,16 +1,17 @@
-import { useEffect, useId, useRef, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import type { Entry, Listing } from "../../files/api";
 import { formatSize } from "../../files/format";
-import { move, outline, type Move, type OutlineRow } from "../../files/outline";
+import { outline, type OutlineRow } from "../../files/outline";
 import { baseName } from "../../files/paths";
 import type { FilesPlace } from "../../platform/types";
 import { Button } from "../../ui/primitives/Button";
 import { EmptyState } from "../../ui/primitives/EmptyState";
 import type { IconName } from "../../ui/primitives/Icon";
 import { useFocusRef } from "../../ui/focus";
-import { OptionRow, Row } from "../../ui/primitives/Row";
+import { OptionRow } from "../../ui/primitives/Row";
 import { Spinner } from "../../ui/primitives/Spinner";
 import type { OutlineView } from "./session";
+import { useListbox } from "./useListbox";
 import styles from "./FolderList.module.css";
 
 function iconFor(entry: Entry): IconName {
@@ -27,46 +28,26 @@ function metaFor(entry: Entry): string | undefined {
   return entry.kind === "file" && entry.size !== undefined ? formatSize(entry.size) : undefined;
 }
 
-/** The first row of a folder list, and of its completions: one step up, named for the folder it goes to. */
-export function UpRow({ label, name, onOpen, ...rest }: { label: string; name: string; onOpen: () => void; onMouseDown?: (e: MouseEvent) => void }) {
-  return <Row {...rest} icon="back" label={label} aria-label={`Up to ${name}`} class={styles.item} onClick={onOpen} />;
+interface RowListProps {
+  rows: readonly OutlineRow[];
+  selected: string | null;
+  optionId: (key: string) => string;
+  /** The entry just added by an upload or a paste: marked. */
+  fresh?: string | null | undefined;
+  /** The up row's text; the folder it goes to, by default. */
+  upLabel?: string;
+  onOpen: (place: FilesPlace) => void;
+  onUp?: () => void;
 }
 
-/** A folder that was moved or deleted since the tab last showed it: only the way up remains. */
-export function MissingFolder({ parent }: { parent?: { name: string; onOpen: () => void } }) {
-  return (
-    <div class={styles.wrap}>
-      {parent && <div class={styles.list}><UpRow label={parent.name} name={parent.name} onOpen={parent.onOpen} /></div>}
-      <EmptyState icon="folder" title="This folder no longer exists" />
-    </div>
-  );
-}
-
-/** What a key does in the list: a selection move, opening the selected row, or going up. */
-export function listKey(e: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey">): Move | "open" | "goUp" | null {
-  if (e.altKey || e.shiftKey) return null;
-  const cmd = e.metaKey || e.ctrlKey;
-  if (e.key === "ArrowUp" && cmd) return "goUp";
-  if (cmd) return null;
-  switch (e.key) {
-    case "ArrowDown": return "down";
-    case "ArrowUp": return "up";
-    case "Home": return "first";
-    case "End": return "last";
-    case "Enter": return "open";
-    case "Backspace": return "goUp";
-    default: return null;
-  }
-}
-
-/** The rows of a listbox, as options: the caller's container holds the focus and names the selected one by `${listId}-${index}`. */
-export function RowList({ rows, selected, listId, fresh, upLabel, onOpen, onUp }: { rows: OutlineRow[]; selected: string | null; listId: string; fresh?: string | null | undefined; /** The up row's text; the folder it goes to, by default. */ upLabel?: string; onOpen: (place: FilesPlace) => void; onUp?: () => void }) {
+/** The rows of a listbox, as options: the caller's container holds the focus and names the selected one by `optionId(selected)`. */
+export function RowList({ rows, selected, optionId, fresh, upLabel, onOpen, onUp }: RowListProps) {
   const upName = baseName(rows[0]?.kind === "up" ? (rows[0].place?.path ?? "") : "");
   return (
     <>
-      {rows.map((row, at) => {
+      {rows.map((row) => {
         const { entry, place } = row;
-        const common = { key: row.key, id: rowId(listId, at), class: styles.item, selected: row.key === selected || (entry !== null && entry.name === fresh) };
+        const common = { key: row.key, id: optionId(row.key), class: styles.item, selected: row.key === selected };
         if (!entry) return <OptionRow {...common} icon="back" label={upLabel ?? upName} aria-label={`Up to ${upName}`} onClick={() => { onUp?.(); }} />;
         return (
           <OptionRow
@@ -85,7 +66,52 @@ export function RowList({ rows, selected, listId, fresh, upLabel, onOpen, onUp }
   );
 }
 
-export const rowId = (listId: string, at: number): string => `${listId}-${String(at)}`;
+interface FolderListboxProps {
+  rows: readonly OutlineRow[];
+  selected: string | null;
+  fresh?: string | null | undefined;
+  onSelect: (selection: string | null) => void;
+  onOpen: (place: FilesPlace) => void;
+  /** A key is about to open a place: the next list takes the keys on. */
+  onKeyNavigate: () => void;
+  /** The first row: up to the enclosing folder. Absent at `/`. */
+  onUp?: (() => void) | undefined;
+}
+
+/** A folder's rows as the page's one focusable listbox, which stays when the folder has no rows, so the keys work there too. */
+function FolderListbox({ rows, selected, fresh, onSelect, onOpen, onKeyNavigate, onUp }: FolderListboxProps) {
+  const ref = useFocusRef("list");
+  const goUp = onUp && (() => { onKeyNavigate(); onUp(); });
+  const box = useListbox({
+    rows,
+    selected,
+    onSelect,
+    onOpen: (row) => {
+      if (!row.place) return;
+      onKeyNavigate();
+      if (row.kind === "up") onUp?.();
+      else onOpen(row.place);
+    },
+    ...(goUp && { onUp: goUp }),
+  });
+  return (
+    <div ref={ref} role="listbox" aria-label="Contents" tabIndex={0} aria-activedescendant={box.activeId} class={styles.list} onKeyDown={box.onKeyDown}>
+      <RowList rows={rows} selected={selected} optionId={box.optionId} fresh={fresh} onOpen={onOpen} {...(onUp && { onUp })} />
+    </div>
+  );
+}
+
+/** A folder that was moved or deleted since the tab last showed it: only the way up remains. */
+export function MissingFolder({ parent, onKeyNavigate }: { parent?: { path: string; onOpen: () => void }; onKeyNavigate: () => void }) {
+  const [selection, setSelection] = useState<string | null>(null);
+  const { rows, selected } = outline({ root: "", parent: parent?.path ?? null, expanded: new Set(), held: () => null, filter: "", selection });
+  return (
+    <div class={styles.wrap}>
+      <FolderListbox rows={rows} selected={selected} onSelect={setSelection} onOpen={() => undefined} onKeyNavigate={onKeyNavigate} onUp={parent?.onOpen} />
+      <EmptyState icon="folder" title="This folder no longer exists" />
+    </div>
+  );
+}
 
 export interface DirListProps {
   /** The pages held of the folder shown. */
@@ -111,32 +137,11 @@ export function DirList({ pages, hidden, loading, fresh, onOpen, view: initial, 
   const { entries, total, truncated } = pages;
   const [view, setView] = useState(initial);
   const { rows, selected } = outline({ root: pages.path, parent: onUp ? (pages.parent ?? null) : null, expanded: view.expanded, held: (path) => (path === pages.path ? pages : null), filter: "", selection: view.selection });
-  const listId = useId();
-  const listRef = useFocusRef("list");
-  const idOf = (key: string | null): string | undefined => { const at = rows.findIndex((r) => r.key === key); return at < 0 ? undefined : rowId(listId, at); };
   const select = (selection: string | null): void => {
     const next = { ...view, selection };
     setView(next);
     onView(next);
   };
-  useEffect(() => { const id = idOf(selected); if (id) document.getElementById(id)?.scrollIntoView({ block: "nearest" }); }, [selected]);
-
-  const openRow = (key: string | null): void => {
-    const row = rows.find((r) => r.key === key);
-    if (!row?.place) return;
-    onKeyNavigate();
-    if (row.kind === "up") onUp?.();
-    else onOpen(row.place);
-  };
-  const onKeyDown = (e: KeyboardEvent): void => {
-    const action = listKey(e);
-    if (action === null) return;
-    e.preventDefault();
-    if (action === "open") openRow(selected);
-    else if (action === "goUp") { if (onUp) { onKeyNavigate(); onUp(); } }
-    else select(move(rows, selected, action).selection);
-  };
-  const upName = baseName(pages.parent ?? "");
   const more = entries.length < total;
   const sentinel = useRef<HTMLDivElement>(null);
   const latest = useRef(onMore);
@@ -155,17 +160,8 @@ export function DirList({ pages, hidden, loading, fresh, onOpen, view: initial, 
 
   return (
     <div ref={wrap} class={styles.wrap} aria-busy={loading}>
-      {entries.length === 0 && (
-        <>
-          {onUp && <UpRow label={upName} name={upName} onOpen={onUp} />}
-          <EmptyState icon="folder" title="This folder is empty">{hidden ? undefined : "Hidden files are not shown."}</EmptyState>
-        </>
-      )}
-      {entries.length > 0 && (
-        <div ref={listRef} role="listbox" aria-label="Contents" tabIndex={0} aria-activedescendant={idOf(selected)} class={styles.list} onKeyDown={onKeyDown}>
-          <RowList rows={rows} selected={selected} listId={listId} fresh={fresh} onOpen={onOpen} {...(onUp && { onUp })} />
-        </div>
-      )}
+      <FolderListbox rows={rows} selected={selected} fresh={fresh} onSelect={select} onOpen={onOpen} onKeyNavigate={onKeyNavigate} onUp={onUp} />
+      {entries.length === 0 && <EmptyState icon="folder" title="This folder is empty">{hidden ? undefined : "Hidden files are not shown."}</EmptyState>}
       {more && (
         <div ref={sentinel} class={styles.more}>
           {loading ? <Spinner label="Loading more" /> : <Button variant="quiet" onClick={onMore}>Show more ({String(total - entries.length)} left)</Button>}

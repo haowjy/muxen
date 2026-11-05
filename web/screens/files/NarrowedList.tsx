@@ -6,6 +6,7 @@ import { Button } from "../../ui/primitives/Button";
 import { EmptyState } from "../../ui/primitives/EmptyState";
 import { Spinner } from "../../ui/primitives/Spinner";
 import { RowList } from "./FolderList";
+import type { Listbox } from "./useListbox";
 import styles from "./FolderList.module.css";
 import find from "./PathField.module.css";
 
@@ -13,7 +14,7 @@ interface Props {
   view: FieldView;
   home: string;
   hostName: string;
-  listId: string;
+  box: Listbox;
   /** The rest of a folder's pages is being asked for. */
   loadingRest: boolean;
   /** A tap on a row opens it. */
@@ -30,7 +31,7 @@ interface Props {
  * focus from the field, which keeps the keyboard up until the place opens. When the folder is not held
  * in full the list says its matches come from the pages loaded, and offers the rest.
  */
-export function NarrowedList({ view, home, hostName, listId, loadingRest, onOpen, onUp, onRetry, onLoadRest }: Props) {
+export function NarrowedList({ view, home, hostName, box, loadingRest, onOpen, onUp, onRetry, onLoadRest }: Props) {
   const { typed, record, out, up } = view;
   if (!typed) return <p class={find.note}>Type a path that starts with ~ or /.</p>;
   if (record?.error) {
@@ -40,14 +41,14 @@ export function NarrowedList({ view, home, hostName, listId, loadingRest, onOpen
   const where = shorten(typed.parent, home);
   const matches = out.rows.filter((row) => row.kind !== "up").length;
   const unseen = listing !== null && out.rootLoaded === "some";
-  const cut = listing !== null && (listing.truncated || listing.entries.length >= listing.total);
+  const cut = listing !== null && listing.truncated;
   return (
     <div class={styles.wrap} aria-busy={listing === null}>
       {listing === null && <p class={find.where}><Spinner label="Loading the folder" /><span>Loading</span></p>}
       {out.rows.length > 0 && (
         // Taken without taking focus from the field, so the keyboard doesn't drop before the open.
-        <div id={listId} role="listbox" aria-label="Matches" class={styles.list} onMouseDown={(e) => { e.preventDefault(); }}>
-          <RowList rows={out.rows} selected={out.selected} listId={listId} upLabel=".." onOpen={onOpen} onUp={() => { if (up !== null) onUp(up); }} />
+        <div id={box.id} role="listbox" aria-label="Matches" class={styles.list} onMouseDown={(e) => { e.preventDefault(); }}>
+          <RowList rows={out.rows} selected={out.selected} optionId={box.optionId} upLabel=".." onOpen={onOpen} onUp={() => { if (up !== null) onUp(up); }} />
         </div>
       )}
       {listing !== null && matches === 0 && (

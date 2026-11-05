@@ -1,16 +1,15 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { useApp, useOverlay } from "../../app/context";
 import { describeError } from "../../files/browser";
 import { HttpRefusal } from "../../net/http";
-import { move } from "../../files/outline";
 import { enter, fieldView, type FieldContext } from "../../files/pathfield";
 import type { FilesPlace } from "../../platform/types";
 import { Button } from "../../ui/primitives/Button";
 import { PathInput } from "../../ui/primitives/PathInput";
 import { useStore } from "../../ui/store";
-import { rowId } from "./FolderList";
 import { NarrowedList } from "./NarrowedList";
 import type { FilesSession } from "./session";
+import { useListbox } from "./useListbox";
 import pane from "./FilesScreen.module.css";
 import styles from "./PathField.module.css";
 
@@ -44,7 +43,6 @@ export function PathField({ session, rest, onEditing, onOpen }: Props) {
   /** Why Enter opened nothing. */
   const [said, setSaid] = useState<string | null>(null);
   const [loadingRest, setLoadingRest] = useState(false);
-  const listId = useId();
   const latest = useRef(text);
   latest.current = text;
   const editing = text !== null;
@@ -58,11 +56,8 @@ export function PathField({ session, rest, onEditing, onOpen }: Props) {
   // The folder the field names is listed once typing settles; leaving cancels a pending one.
   const ask = view?.ask ?? null;
   useEffect(() => { browser.folders.ask(ask); }, [browser, ask?.path, ask?.hidden]);
-  const selected = view?.out.selected ?? null;
-  useEffect(() => {
-    const at = view?.out.rows.findIndex((row) => row.key === selected) ?? -1;
-    if (at >= 0) document.getElementById(rowId(listId, at))?.scrollIntoView({ block: "nearest" });
-  }, [listId, selected]);
+  const rows = view?.out.rows ?? [];
+  const box = useListbox({ rows, selected: view?.out.selected ?? null, onSelect: setSelection, keys: "arrows" });
 
   const resetSaid = (): void => { setSelection(null); setSaid(null); };
   /** The field is at rest again and the keyboard is down; the history entry is the caller's. */
@@ -144,8 +139,8 @@ export function PathField({ session, rest, onEditing, onOpen }: Props) {
           label="Go to path"
           placeholder="Go to path"
           value={text ?? rest}
-          listId={view && view.out.rows.length > 0 ? listId : undefined}
-          activeId={selected !== null && view ? rowId(listId, view.out.rows.findIndex((row) => row.key === selected)) : undefined}
+          listId={rows.length > 0 ? box.id : undefined}
+          activeId={box.activeId}
           onInput={(value) => { resetSaid(); setText(value); }}
           inputRef={input}
           focusTarget="path"
@@ -165,10 +160,7 @@ export function PathField({ session, rest, onEditing, onOpen }: Props) {
             } else if (editing && e.key === "Enter") {
               e.preventDefault();
               void submit();
-            } else if (view && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
-              e.preventDefault();
-              setSelection(move(view.out.rows, selected, e.key === "ArrowDown" ? "down" : "up").selection);
-            }
+            } else if (view) box.onKeyDown(e);
           }}
         />
         {editing && (
@@ -182,7 +174,7 @@ export function PathField({ session, rest, onEditing, onOpen }: Props) {
             view={view}
             home={home}
             hostName={session.hostName}
-            listId={listId}
+            box={box}
             loadingRest={loadingRest}
             onOpen={open}
             onUp={(to) => { setText(to); resetSaid(); }}

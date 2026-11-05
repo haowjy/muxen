@@ -34,7 +34,7 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
   // The folder under the place: its pages are `Folders`' record, shared with the path field.
   const pages = useStore(browser.folders, (s) => (dir ? s.held.get(folderKey(dir.path, dir.hidden))?.listing ?? null : null));
   const scroller = useRef<HTMLDivElement>(null);
-  // While the path field is being typed in, its completions are the list.
+  // While the path field is being typed in, the path field's matches are the list.
   const [finding, setFinding] = useState(false);
 
   // The one cancellation for answers that land late: this effect's token is current only while the pane still wants this place.
@@ -92,7 +92,7 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
     // A folder that vanished (moved, deleted) still has a way up.
     const gone = place.kind === "dir" && error.code === "not_found";
     body = gone ? (
-      <MissingFolder {...(up && { parent: { name: baseName(up.path), onOpen: () => { app.toPlace(up); } } })} />
+      <MissingFolder onKeyNavigate={() => { app.focus.keepKeyboardOn("list"); }} {...(up && { parent: { path: up.path, onOpen: () => { app.toPlace(up); } } })} />
     ) : (
       <EmptyState icon="alert" title={describeError(error, session.hostName)} action={<Button onClick={() => { void browser.reload(); }}>Try again</Button>} />
     );
