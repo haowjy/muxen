@@ -1,6 +1,5 @@
 import type { ComponentChildren } from "preact";
 import { useEffect } from "preact/hooks";
-import { useApp } from "../../app/context";
 import type { Entry, Listing } from "../../files/api";
 import { describeError, type FileRef } from "../../files/browser";
 import type { Held } from "../../files/folders";
@@ -14,9 +13,8 @@ import { Icon } from "../../ui/primitives/Icon";
 import { Spinner } from "../../ui/primitives/Spinner";
 import { useStore } from "../../ui/store";
 import { CopyButton, InsertButton } from "./FileActions";
-import { startUpload, type FilesSession } from "./session";
+import type { FilesSession } from "./session";
 import { MarkdownViewer, useText } from "./TextViewers";
-import actions from "./FileActions.module.css";
 import bar from "./FileView.module.css";
 import viewers from "./Viewers.module.css";
 import styles from "./FolderSummary.module.css";
@@ -50,10 +48,9 @@ function contents(listing: Listing): string {
 
 /**
  * The Preview panel on a folder (the one selected, or the list's own when nothing is): one header line with Copy
- * path, Upload and Insert, then its README rendered if it has one, else what it holds, when it changed, where it is.
+ * path and Insert, then its README rendered if it has one, else what it holds, when it changed, where it is.
  */
 export function FolderSummary({ session, path, entry, record, root, end, onOpen, onLink }: Props) {
-  const app = useApp();
   const { browser } = session;
   const home = useStore(browser, (s) => s.home);
   const hidden = useStore(browser, (s) => s.hidden);
@@ -115,7 +112,6 @@ export function FolderSummary({ session, path, entry, record, root, end, onOpen,
           {readmeRef && listing && <span class={bar.facts}>{contents(listing)}</span>}
         </h2>
         <CopyButton value={path} label="Copy path" icon="copy" />
-        <Button variant="quiet" class={actions.tool} icon="upload" onClick={() => { startUpload(app, session); }}><span class={actions.label}>Upload</span></Button>
         <InsertButton path={path} />
         {end}
       </header>
