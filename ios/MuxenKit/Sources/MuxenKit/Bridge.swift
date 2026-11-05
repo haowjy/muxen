@@ -8,7 +8,7 @@ public enum BridgeDirection: String, Codable, Sendable {
 public enum BridgeMessageType: String, CaseIterable, Codable, Sendable {
     case ready, socket, hostRejected, recreateWebView, saveWorkspace
     case draftGet, draftPut, draftDelete, draftList, copy, readPasteboard, pasteInto, haptic
-    case pickMedia, playVideo, manageHosts, setPreference, openURL, backSwipe, editMenu, ack
+    case pickMedia, playVideo, download, manageHosts, setPreference, openURL, backSwipe, editMenu, ack
     case viewport, lifecycle, hosts, upload, menuCopy, menuPaste
 
     public var direction: BridgeDirection {
@@ -35,6 +35,7 @@ public enum BridgeMessageType: String, CaseIterable, Codable, Sendable {
         case .haptic: ["kind"]
         case .setPreference: ["name", "value"]
         case .playVideo: ["host", "path"]
+        case .download: ["url", "name"]
         case .openURL: ["url"]
         case .ack: ["id"]
         case .viewport: ["viewport"]

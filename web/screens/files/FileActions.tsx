@@ -7,6 +7,7 @@ import { Button } from "../../ui/primitives/Button";
 import { Icon } from "../../ui/primitives/Icon";
 import { IconButton } from "../../ui/primitives/IconButton";
 import { Menu } from "../../ui/primitives/Menu";
+import type { AppController } from "../../app/controller";
 import { copyText } from "./copy";
 import { insertSection, useInsert } from "./insert";
 import { useChordLabel, useFilesKey, type Chord } from "./keymap";
@@ -77,12 +78,16 @@ export function CopyButton({ value, label, icon, compact, note }: { value: strin
   );
 }
 
-/** Download, where the platform can save a file: the browser's own download of `/fs/raw`. `big` is the one a file muxen can't show offers, with its size. */
+/** Saves the file at `url` (`rawUrl`) through the platform, and says a failure in the notice. */
+export async function download(app: AppController, url: string, name: string): Promise<void> {
+  const failure = await app.platform.download(url, name);
+  if (failure !== null) app.notify(`Couldn't download ${name}: ${failure}`);
+}
+
+/** Download: the platform's save of `/fs/raw` (the browser's download, the app's share sheet). `big` is the one a file muxen can't show offers, with its size. */
 export function DownloadButton({ url, name, size, compact, big }: { url: string; name: string; size: string | null; compact?: boolean; big?: boolean }) {
   const app = useApp();
-  const { download } = app.platform;
-  if (!download) return null;
-  const save = (): void => { download(url, name); };
+  const save = (): void => { void download(app, url, name); };
   if (big) return <Button variant="primary" class={styles.big} icon="download" onClick={save}>{size === null ? "Download" : `Download ${size}`}</Button>;
   return compact
     ? <IconButton icon="download" label="Download" onClick={save} />

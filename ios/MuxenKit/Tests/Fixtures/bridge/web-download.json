@@ -1,0 +1,12 @@
+{
+  "direction": "webToNative",
+  "message": {
+    "type": "download",
+    "url": "muxen-app://h-host-01/fs/raw/home/jimmy/build%20log.tar.gz",
+    "name": "build log.tar.gz"
+  },
+  "reply": {
+    "error": "The download failed (HTTP 404).",
+    "code": "not_found"
+  }
+}

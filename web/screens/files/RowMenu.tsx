@@ -4,6 +4,7 @@ import { Menu, type MenuSection } from "../../ui/primitives/Menu";
 import { routeWorkspace } from "../../workspace/state";
 import { insertSection, useInsert } from "./insert";
 import { copyPath } from "./copy";
+import { download } from "./FileActions";
 import type { RowMenuAsk } from "./FolderList";
 import type { FilesSession } from "./session";
 
@@ -25,7 +26,6 @@ export function RowMenu({ session, row, at, list, onClose }: Props) {
   const { choices, insert } = useInsert(place?.path ?? "", null);
   if (!place || !entry) return null;
   const dir = place.kind === "dir";
-  const { download } = app.platform;
   const sections: MenuSection[] = [
     {
       items: [
@@ -36,11 +36,11 @@ export function RowMenu({ session, row, at, list, onClose }: Props) {
     {
       items: [
         { label: "Copy path", icon: "copy", onSelect: () => { void copyPath(app, place.path, session.browser.snapshot.home); } },
-        ...(!dir && download ? [{
+        ...(!dir ? [{
           label: "Download",
           icon: "download" as const,
           ...(entry.size !== undefined && { hint: formatSize(entry.size) }),
-          onSelect: () => { download(session.browser.api.rawUrl(place.path), entry.name); },
+          onSelect: () => { void download(app, session.browser.api.rawUrl(place.path), entry.name); },
         }] : []),
       ],
     },

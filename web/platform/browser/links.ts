@@ -24,7 +24,7 @@ export function openInApp(origin: string, code: string | null): void {
 }
 
 /** The browser's own download: a same-origin `<a download>` on `/fs/raw`, which its CSP `sandbox` header doesn't stop in Chromium (Safari unchecked). */
-export function download(url: string, name: string): void {
+export function download(url: string, name: string): Promise<null> {
   const a = document.createElement("a");
   a.href = url;
   a.download = name;
@@ -32,4 +32,5 @@ export function download(url: string, name: string): void {
   document.body.append(a);
   a.click();
   a.remove();
+  return Promise.resolve(null);
 }

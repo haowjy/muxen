@@ -53,7 +53,7 @@ function MediaViewer({ session, file }: { session: FilesSession; file: FileRef }
   );
 }
 
-/** A file muxen has no viewer for: what it is, and a big Download (where the platform has one), else Open as text. */
+/** A file muxen has no viewer for: what it is, and a big Download and Open as text. */
 function Unsupported({ session, file, onAsText }: { session: FilesSession; file: FileRef; onAsText: () => void }) {
   const home = useStore(session.browser, (s) => s.home);
   const size = file.size !== null ? formatSize(file.size) : null;

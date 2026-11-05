@@ -1,7 +1,7 @@
 import Foundation
 
 public enum BridgeContract {
-    public static let version = 10
+    public static let version = 11
 }
 
 /// Where the page asks for native's edit menu: client points, which are the web view's points.

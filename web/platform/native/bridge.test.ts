@@ -37,6 +37,7 @@ const calls: Record<string, (b: Bridge, m: Fixture["message"]) => unknown> = {
   pasteInto: (b, m) => b.pasteInto(m["host"] as string, m["id"] as string, m["dir"] as string),
   pickMedia: (b, m) => { b.pickMedia(m["id"] as string, m["host"] as string); },
   playVideo: (b, m) => { b.playVideo(m["host"] as string, m["path"] as string); },
+  download: (b, m) => b.download(m["url"] as string, m["name"] as string),
   setPreference: (b, m) => b.setPreference(m["name"] as "appearance", m["value"] as never),
   manageHosts: (b) => { b.manageHosts(); },
   openURL: (b, m) => { b.openURL(m["url"] as string); },

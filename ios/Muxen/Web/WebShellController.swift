@@ -11,6 +11,9 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
     private let schemeHandler: AppSchemeHandler
     private let haptics = Haptics()
     private let uploader = Uploader()
+    private let downloader = Downloader()
+    /// What a download shows over the page: its progress alert, then the share sheet. A lock dismisses it.
+    private weak var downloadScreen: UIViewController?
     private var webView: MuxenWebView!
     private var webViewConstraints: [NSLayoutConstraint] = []
     /// How much of the web view's bottom a docked keyboard covers, and how long it takes to get there.
@@ -114,7 +117,10 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
 
     /// A native screen over the page (lock, server list, Face ID) takes the keyboard down.
     func coverNativeScreen(_ covered: Bool) {
-        if covered { view.endEditing(true) }
+        guard covered else { return }
+        view.endEditing(true)
+        // A downloaded file must not stay offered over the lock screen.
+        if model.isLocked { endDownload() }
     }
 
     func send(_ event: NativeEvent) {
@@ -354,6 +360,8 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
                 let path: String = try request.field("path")
                 playVideo(host: host, path: path)
                 reply(NSNull(), nil)
+            case .download:
+                download(try request.field("url"), name: try request.field("name"), reply: reply)
             case .openURL:
                 let value: String = try request.field("url")
                 guard let url = URL(string: value), ["https", "http", "mailto"].contains(url.scheme?.lowercased() ?? "") else { throw BridgeError.malformed }
@@ -484,6 +492,94 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         let controller = AVPlayerViewController()
         controller.player = player
         present(controller, animated: true) { player.play() }
+    }
+
+    /// Files' Download: `url` is the page's own `muxen-app://h-{host}/fs/raw/…`, resolved as the scheme handler
+    /// resolves it. `reply` waits for the share sheet to close; the web says an `error` in its notice.
+    private func download(_ value: String, name: String, reply: @escaping (Any?, String?) -> Void) {
+        let fail = { (error: String, code: String?) in
+            var failure: [String: Any] = ["error": error]
+            if let code { failure["code"] = code }
+            reply(failure, nil)
+        }
+        guard let page = URLComponents(string: value), page.scheme == "muxen-app",
+              let pageHost = page.host, pageHost.hasPrefix("h-"),
+              page.percentEncodedPath.hasPrefix("/fs/raw/"), page.query == nil, page.fragment == nil,
+              let host = model.hosts.first(where: { $0.id == String(pageHost.dropFirst(2)) }),
+              var target = URLComponents(string: host.baseURL) else {
+            fail("Couldn't find this file's server.", nil)
+            return
+        }
+        guard case .token(let token) = model.token(for: host.id) else {
+            fail("Unlock muxen to download.", nil)
+            return
+        }
+        target.percentEncodedPath = page.percentEncodedPath
+        // UIKit drops a present while another is up, and one download runs at a time.
+        guard let url = target.url, presentedViewController == nil, !downloader.isBusy else {
+            fail("Close what's open, then download again.", nil)
+            return
+        }
+        let progress = UIAlertController(title: "Downloading \(name)", message: "Starting", preferredStyle: .alert)
+        progress.addAction(UIAlertAction(title: "Cancel", style: .cancel) { [weak self] _ in self?.downloader.cancel() })
+        let bytes = { (count: Int64) in ByteCountFormatter.string(fromByteCount: count, countStyle: .file) }
+        _ = downloader.download(url, name: name, token: token, rejectedToken: { [weak model = self.model] rejected in
+            model?.rejectedToken(for: host.id, token: rejected)
+        }, progress: { written, total in
+            let text = total.map { "\(bytes(written)) of \(bytes($0))" } ?? bytes(written)
+            if progress.message != text { progress.message = text }
+        }, completion: { [weak self] result in
+            guard let self else { Downloader.discard(); reply(NSNull(), nil); return }
+            // The alert dismisses itself on Cancel; any other end takes it down before the sheet goes up.
+            self.dismissDownloadScreen {
+                switch result {
+                case .success(let file): self.share(file, reply: reply)
+                case .failure(DownloadFailure.cancelled): reply(NSNull(), nil)
+                case .failure(let error): fail(error.localizedDescription, (error as? DownloadFailure)?.code)
+                }
+            }
+        })
+        // A small file goes straight to the sheet: the alert shows only for a download still running after 0.5 s.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self, self.downloader.isBusy, self.presentedViewController == nil, !self.model.isLocked else { return }
+            self.downloadScreen = progress
+            self.present(progress, animated: true)
+        }
+    }
+
+    private func share(_ file: URL, reply: @escaping (Any?, String?) -> Void) {
+        guard !model.isLocked else { Downloader.discard(); reply(NSNull(), nil); return }
+        let sheet = UIActivityViewController(activityItems: [file], applicationActivities: nil)
+        // Cleared on its first call: the lock calls it too, and a reply handler must run once.
+        sheet.completionWithItemsHandler = { [weak sheet] _, _, _, _ in
+            sheet?.completionWithItemsHandler = nil
+            Downloader.discard()
+            reply(NSNull(), nil)
+        }
+        sheet.popoverPresentationController?.sourceView = view
+        sheet.popoverPresentationController?.sourceRect = CGRect(x: view.bounds.midX, y: view.bounds.midY, width: 1, height: 1)
+        downloadScreen = sheet
+        present(sheet, animated: true)
+    }
+
+    private func dismissDownloadScreen(then next: @escaping () -> Void) {
+        guard let screen = downloadScreen, screen.presentingViewController != nil, !screen.isBeingDismissed else { next(); return }
+        // A dismiss while the alert is still animating in is dropped, so it waits for the presentation to end.
+        if screen.isBeingPresented, let coordinator = screen.transitionCoordinator {
+            coordinator.animate(alongsideTransition: nil) { _ in screen.dismiss(animated: true, completion: next) }
+        } else {
+            screen.dismiss(animated: true, completion: next)
+        }
+    }
+
+    /// The lock's end to a download: the fetch stops, and the alert or the sheet goes with its file.
+    private func endDownload() {
+        downloader.cancel()
+        if let sheet = downloadScreen as? UIActivityViewController, sheet.presentingViewController != nil {
+            sheet.dismiss(animated: false) { sheet.completionWithItemsHandler?(nil, false, nil, nil) }
+        } else {
+            downloadScreen?.dismiss(animated: false)
+        }
     }
 
     private static func jpegData(_ image: UIImage) -> Data? {

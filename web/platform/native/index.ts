@@ -1,10 +1,11 @@
 // Assembles the native Platform (client-architecture.md §5, ios-shell.md "The bridge"). Only
 // main.tsx imports this. Native owns tokens, drafts, uploads and the
 // pasteboard; this adapter forwards to the bridge and turns its events into PlatformEvents.
-import { Bridge, installReceiver, webkitPost, type Post } from "./bridge";
+import { Bridge, installReceiver, webkitPost, type DownloadFailure, type Post } from "./bridge";
 import { createNativeTransport } from "./transport";
 import { createNativeUploads } from "./uploads";
 import { createViewStore } from "../viewStore";
+import { refusalWords } from "../../net/refusalWords";
 import type { BootResult, Platform, PlatformEvent, Preferences, SavedWorkspaces } from "../types";
 
 const EMPTY_WORKSPACE: SavedWorkspaces = { version: 5, workspaces: [] };
@@ -74,6 +75,11 @@ export function createNativePlatform(post: Post = webkitPost): Platform {
     },
     shortcuts: "apple",
     openURL: (url) => { bridge.openURL(url); },
+    download: async (url, name) => {
+      const failure = await bridge.download(url, name).catch((): DownloadFailure => ({ error: "The app couldn't start the download." }));
+      if (failure === null) return null;
+      return failure.code === undefined ? failure.error : refusalWords(failure.code);
+    },
     playVideo: (handle, path) => {
       bridge.playVideo(handle, path);
       return "handled";

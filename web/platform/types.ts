@@ -249,8 +249,11 @@ export interface Platform {
   shortcuts: "apple" | "other";
   /** http(s) and mailto: only. */
   openURL(url: string): void;
-  /** Saves the file at `url` (a same-origin `/fs/raw` URL) as `name`, through the platform's own downloads. Absent where a page's download goes nowhere (the app's web view). */
-  download?: (url: string, name: string) => void;
+  /**
+   * Saves the file at `url` (the files API's `rawUrl`) as `name`: the browser's own download, or in the app a native fetch
+   * and the share sheet. Resolves when the platform is done with it: null, or the words for why it failed.
+   */
+  download(url: string, name: string): Promise<string | null>;
   playVideo(handle: string, path: string): "handled" | "inline";
   haptic(kind: HapticKind): void;
   /** Whether the platform's own back swipe may run (native: WebKit's left-edge swipe, which pops the page's history). Browser: no-op, since Safari owns the edge swipe. */

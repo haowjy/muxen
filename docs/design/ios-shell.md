@@ -5,7 +5,7 @@
 > UI rules below. Subsystem invariants remain in force; touch, clipboard and the phone
 > dock retain explicit device gates.
 
-The native shell and web adapter implement bridge v10; the device-only checks below still
+The native shell and web adapter implement bridge v11; the device-only checks below still
 need Jimmy's iPhone.
 
 muxen's phone client is a Swift app: a `WKWebView` runs the web UI (terminal, tabs,
@@ -552,8 +552,9 @@ wildcard development profile has none (Distribution).
 2. `Downloader` streams the body to one temporary file (`URLSessionDownloadTask`, an ephemeral session,
    no cache), never a whole-file buffer. Its request timeout is 30 s between bytes, the daemon's raw
    stall deadline ([fs.md](fs.md#constants)): a fetch that stalls longer fails as stalled. One download
-   at a time; the temporary folder (`tmp/Downloads/`) is emptied before each, so a crash's leftovers
-   go with the next one.
+   at a time. Before each, and after a failure, native empties `tmp/Downloads/` and deletes the
+   partial file URLSession keeps in `tmp/` after a failed download (`CFNetworkDownload_*`, kept for
+   a resume muxen never makes), so a crash's leftovers go with the next one.
 3. A download still running after 0.5 s shows a native alert, "Downloading {name}", with the bytes so
    far and the size ("4.2 MB of 40 MB") and Cancel; a small file goes straight to the sheet. Cancel
    ends the request and replies `null`.

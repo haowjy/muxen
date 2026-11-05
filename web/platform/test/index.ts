@@ -327,7 +327,10 @@ export function createTestPlatform(options: TestPlatformOptions = {}): TestPlatf
     },
     shortcuts: options.shortcuts ?? "apple",
     openURL: (url) => { platform.opened.push(url); },
-    download: (url, name) => { platform.downloads.push(`${name} <- ${url}`); },
+    download: (url, name) => {
+      platform.downloads.push(`${name} <- ${url}`);
+      return Promise.resolve(null);
+    },
     playVideo: () => "inline",
     haptic: (kind) => { platform.haptics.push(kind); },
     setBackSwipe: (enabled) => { platform.backSwipes.push(enabled); },

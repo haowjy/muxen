@@ -4,7 +4,7 @@
 import type { DraftRecord, MenuRect, HostEntry, Lifecycle, Preferences, SavedWorkspaces, TabKey, Viewport } from "../types";
 
 /** Bumped with every incompatible change here and in ios/MuxenKit/.../Bridge.swift. */
-export const BRIDGE_VERSION = 10;
+export const BRIDGE_VERSION = 11;
 
 export interface Boot {
   bridgeVersion: number;
@@ -21,6 +21,12 @@ export type SocketReply = { url: string; token: string } | { locked: true } | { 
 export type PasteboardReply = { text: string } | { uploading: string } | "empty" | "denied";
 /** Native uploads what it finds (image or text) itself, so it never answers `text`. */
 export type PasteIntoReply = { uploading: string } | "empty" | "denied";
+
+/** How a `download` ended badly; it answers null when the share sheet closed or the user cancelled. `code` is the daemon's refusal code, `error` the fallback words. */
+export interface DownloadFailure {
+  error: string;
+  code?: string;
+}
 
 /** `id` is the one the page sent with `pickMedia` or `readPasteboard`. `cancelled` ends a pick whose picker was dismissed. */
 export interface UploadMsg {
@@ -170,6 +176,11 @@ export class Bridge {
 
   playVideo(host: string, path: string): void {
     this.fire({ type: "playVideo", host, path });
+  }
+
+  /** Native fetches the `/fs/raw` file `url` names, shows its progress, then the share sheet; replies when that closes. */
+  download(url: string, name: string): Promise<DownloadFailure | null> {
+    return this.post({ type: "download", url, name }) as Promise<DownloadFailure | null>;
   }
 
   /** Native keeps the choice, applies it (appearance to its own chrome, relock to its lock) and answers with every preference. */
