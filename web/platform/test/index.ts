@@ -97,6 +97,8 @@ export interface TestPlatform extends Platform {
   /** Every socket the app opened, newest last. */
   links: FakeLink[];
   clipboardWrites: string[];
+  /** What `download` was asked to save, as `name <- url`. */
+  downloads: string[];
   opened: string[];
   haptics: HapticKind[];
   /** Every `setBackSwipe` call, newest last. */
@@ -224,6 +226,7 @@ export function createTestPlatform(options: TestPlatformOptions = {}): TestPlatf
     fetch: daemonFetch(daemon),
     links: [],
     clipboardWrites: [],
+    downloads: [],
     opened: [],
     haptics: [],
     backSwipes: [],
@@ -320,6 +323,7 @@ export function createTestPlatform(options: TestPlatformOptions = {}): TestPlatf
       read: () => Promise.resolve("empty"),
     },
     openURL: (url) => { platform.opened.push(url); },
+    download: (url, name) => { platform.downloads.push(`${name} <- ${url}`); },
     playVideo: () => "inline",
     haptic: (kind) => { platform.haptics.push(kind); },
     setBackSwipe: (enabled) => { platform.backSwipes.push(enabled); },

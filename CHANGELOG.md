@@ -5,6 +5,7 @@ version section on release.
 
 ## [Unreleased]
 
+- A file in Files has one header line: Back to its folder, its name and size, then Copy path, Download and Insert into terminal. Copy path copies the full path and shows a check where you clicked. Download saves any file through the browser (not yet in the iPhone app). Insert into terminal lists this server's terminal tabs, the last one you used first; Cmd/Ctrl+I inserts into that one. An upload's Insert offer is the same menu.
 - Files puts each folder on one header line: the path, then its controls. A desktop keeps Upload, Paste and Refresh as icons beside a ⋯ menu; on the phone they move into ⋯, beside Copy path and Show hidden files (Cmd/Ctrl+Shift+. on a desktop). The path reads as plain text; click or tap it and the last folder is selected, so Delete goes to the folder above (Enter there, or Esc/Cancel to stay). On a desktop `/` jumps to the path.
 - Files tells folders from files at a glance: folders have a blue icon and a heavier name, files an icon for their kind (text, code, data, image, video, binary). Only folders end in a chevron, and only on the phone. On a desktop each row shows its size and how long ago it changed (`43m`, `6d`), brighter when it changed today; hover for the exact time. The row that goes up a folder reads `..`.
 - Files remembers Show hidden files on each device, for every folder and tab, and after a reload. Each server's Files starts from it. Clear local data forgets it.

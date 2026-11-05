@@ -17,3 +17,14 @@ export function canOpenApp(): boolean {
 export function openInApp(origin: string, code: string | null): void {
   location.assign(`muxen://add?host=${encodeURIComponent(origin)}${code === null ? "" : `&code=${encodeURIComponent(code)}`}`);
 }
+
+/** The browser's own download: a same-origin `<a download>` on `/fs/raw`, which its CSP `sandbox` header doesn't stop in Chromium (Safari unchecked). */
+export function download(url: string, name: string): void {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.rel = "noopener";
+  document.body.append(a);
+  a.click();
+  a.remove();
+}

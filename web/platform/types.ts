@@ -247,6 +247,8 @@ export interface Platform {
   clipboard: Clipboard;
   /** http(s) and mailto: only. */
   openURL(url: string): void;
+  /** Saves the file at `url` (a same-origin `/fs/raw` URL) as `name`, through the platform's own downloads. Absent where a page's download goes nowhere (the app's web view). */
+  download?: (url: string, name: string) => void;
   playVideo(handle: string, path: string): "handled" | "inline";
   haptic(kind: HapticKind): void;
   /** Whether the platform's own back swipe may run (native: WebKit's left-edge swipe, which pops the page's history). Browser: no-op, since Safari owns the edge swipe. */

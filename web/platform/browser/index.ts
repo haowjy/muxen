@@ -7,7 +7,7 @@ import { createBrowserPreferences } from "./preferences";
 import { createBrowserViewport } from "./viewport";
 import { readLifecycle, watchLifecycle } from "./lifecycle";
 import { clipboard } from "./clipboard";
-import { canOpenApp, openInApp, openURL } from "./links";
+import { canOpenApp, download, openInApp, openURL } from "./links";
 import { createPwa } from "./pwa";
 import { restart } from "./restart";
 import type { Platform, PlatformEvent } from "../types";
@@ -55,6 +55,7 @@ export function createBrowserPlatform(): Platform {
     uploads: createBrowserUploads(),
     clipboard,
     openURL,
+    download,
     ...(canOpenApp() && { openInApp }),
     playVideo: () => "inline",
     haptic: () => undefined,

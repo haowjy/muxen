@@ -2,35 +2,45 @@
 // captured when the action began, with no Enter. If that tab is gone, nothing is sent
 // anywhere else. The terminal lane decides whether the tab takes it (`Terminals.insertPath`).
 import type { AppController } from "../../app/controller";
-import { useApp, useAppView } from "../../app/context";
+import { useApp } from "../../app/context";
 import { hasControlChars } from "../../tabs/input";
 import { useStore } from "../../ui/store";
 import { labelOf } from "../../workspace/labels";
-import { terminalTabOf } from "../../workspace/state";
+import type { Workspace } from "../../workspace/state";
 import { terminalsOf } from "../terminal/terminals";
 
-export interface InsertTarget {
+/** A terminal tab Insert can offer: what it is called, and why it can't take a path now (still restoring, not connected). */
+export interface InsertChoice {
   id: string;
-  /** The session and window, as the tab's pill names it. */
   label: string;
-  /** Why Insert can't type into it now: a path typed after a long outage would land in whatever is then on screen. */
   blocked: string | null;
 }
 
-/** The tab named `id` if it is open and proven (not just restored from a saved workspace). Insert waits for its watch while it is connecting, and is `blocked` once its connection failed. */
-export function insertTarget(app: AppController, id: string | null): InsertTarget | null {
-  const tab = terminalTabOf(app.snapshot.workspace, id);
-  if (!tab || tab.restoring) return null;
-  return { id: tab.id, label: labelOf(tab, null).full, blocked: terminalsOf(app).canInsert(tab.id) ? null : "That tab isn't connected" };
+/**
+ * The terminal tabs of `workspace` a path can go to: `first` (the tab the offer is for, else the workspace's last
+ * terminal tab) leads, then the others in tab order. The first is the default, where Cmd/Ctrl+I sends it.
+ */
+export function insertChoices(app: AppController, workspace: Workspace | null, first: string | null): InsertChoice[] {
+  if (!workspace) return [];
+  const lead = first ?? workspace.lastTerminal;
+  const terminals = terminalsOf(app);
+  const tabs = workspace.tabs.flatMap((t) => (t.kind === "terminal" ? [t] : []));
+  const ordered = [...tabs.filter((t) => t.id === lead), ...tabs.filter((t) => t.id !== lead)];
+  return ordered.map((tab) => ({
+    id: tab.id,
+    label: labelOf(tab, null).full,
+    blocked: tab.restoring ? "Restoring" : terminals.canInsert(tab.id) ? null : "Not connected",
+  }));
 }
 
-/** {@link insertTarget}, re-read when the tabs, the host names or that tab's connection change. */
-export function useInsertTarget(id: string | null): InsertTarget | null {
+/** {@link insertChoices}, re-read when the tabs or a tab's connection change. */
+export function useInsertChoices(workspace: Workspace | null, first: string | null): InsertChoice[] {
   const app = useApp();
   const terminals = terminalsOf(app);
-  useAppView((v) => v.workspace);
-  useStore(terminals, () => id !== null && terminals.canInsert(id));
-  return insertTarget(app, id);
+  const ids = workspace?.tabs.flatMap((t) => (t.kind === "terminal" ? [t.id] : [])) ?? [];
+  // Redrawn when a tab's eligibility changes, not on every change the terminals make.
+  useStore(terminals, () => ids.map((id) => (terminals.canInsert(id) ? "1" : "0")).join(""));
+  return insertChoices(app, workspace, first);
 }
 
 /** Sends `path` to the tab `id` and shows it. When the tab can't take it, the terminal lane says why and nothing is sent. */

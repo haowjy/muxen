@@ -10,12 +10,11 @@ import { useStore } from "../../ui/store";
 import { Button } from "../../ui/primitives/Button";
 import { FolderActions } from "./FolderActions";
 import { EmptyState } from "../../ui/primitives/EmptyState";
-import { IconButton } from "../../ui/primitives/IconButton";
 import { Spinner } from "../../ui/primitives/Spinner";
 import { shorten } from "../../files/format";
 import { DirList, MissingFolder } from "./FolderList";
 import { PathField } from "./PathField";
-import { Preview } from "./Preview";
+import { FileView } from "./FileView";
 import { readPaste } from "../terminal/paste";
 import { pasteIntoFolder, scrollKey, type FilesSession } from "./session";
 import { UploadPanel } from "./UploadPanel";
@@ -107,15 +106,6 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
 
   return (
     <div class={styles.files}>
-      {place.kind === "file" && (
-        <header class={styles.header}>
-          {up && <IconButton icon="back" label="Back to folder" onClick={() => { app.toPlace(up); }} />}
-          <div class={styles.heading}>
-            <h1 class={styles.title}>{title}</h1>
-            <p class={styles.crumb} title={place.file.path}>{shorten(place.file.path, home)}</p>
-          </div>
-        </header>
-      )}
       {place.kind === "dir" && <h1 class={styles.hiddenTitle}>{title}</h1>}
       {place.kind === "dir" && home !== null && (
         <PathField
@@ -152,10 +142,12 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
           />
         </div>
       )}
-      {place.kind === "file" && !error && !(loading && place.file.mime === null && place.file.size === null) && (
-        <Preview session={session} file={place.file} onLink={onLink} />
+      {place.kind === "file" && (
+        <FileView session={session} file={place.file} up={up} onUp={() => { if (up) app.toPlace(up); }} onLink={onLink}>
+          {body ? <div class={styles.scroll}>{body}</div> : undefined}
+        </FileView>
       )}
-      {body && !finding && <div class={styles.scroll}>{body}</div>}
+      {place.kind === "dir" && body && !finding && <div class={styles.scroll}>{body}</div>}
     </div>
   );
 }

@@ -1,16 +1,3 @@
-.preview { display: flex; flex: 1; flex-direction: column; min-height: 0; }
-.bar {
-  display: flex;
-  flex: none;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2) var(--space-3);
-  padding: var(--space-3) var(--files-inset);
-  border-bottom: 1px solid var(--color-border);
-}
-.facts { display: flex; flex: 1; flex-wrap: wrap; gap: var(--space-1) var(--space-3); font-size: var(--text-small); color: var(--color-text-muted); }
-.facts span { white-space: nowrap; }
-.facts:empty { display: none; }
 .viewer { position: relative; display: flex; flex: 1; flex-direction: column; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .loading { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); padding: var(--space-8) 0; color: var(--color-text-muted); }
 .note { padding: var(--space-3) var(--files-inset) 0; font-size: var(--text-small); color: var(--color-text-muted); text-wrap: pretty; }
@@ -87,6 +74,3 @@
 .meta dt { color: var(--color-text-muted); }
 .meta dd { margin: 0; overflow-wrap: anywhere; }
 .mono { font-family: var(--font-mono); }
-
-/* A toggle button shows its state: the quiet button gains a fill while pressed. */
-.toggle[aria-pressed="true"] { background: var(--color-bg-selected); color: var(--color-text); }

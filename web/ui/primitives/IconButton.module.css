@@ -13,3 +13,7 @@
 .button:hover { background: var(--color-bg-hover); color: var(--color-text); }
 .button[aria-current="page"] { background: var(--color-bg-selected); color: var(--color-text); }
 .button:disabled { opacity: 0.5; }
+.button[aria-expanded="true"] { background: var(--color-bg-hover); color: var(--color-text); }
+/* A menu's opener: the icon, then a ▾. */
+.menu { display: inline-flex; align-items: center; gap: 2px; width: auto; padding: 0 6px 0 8px; }
+.caret { width: 14px; height: 14px; }

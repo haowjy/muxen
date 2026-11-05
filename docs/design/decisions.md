@@ -4782,3 +4782,24 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
   (Jimmy: misplaced); selecting the whole path on a click (an earlier call the same day, overridden by
   "select the last folder"); keeping the folder name as a heading above the path (the tab and the path say
   it; the line is one row on the phone).
+
+### One Insert control lists the terminal tabs; Copy path and Download on every file
+
+- **Decided:** 2026-11-05, Jimmy ("Insert path should let him choose the terminal. Copy path button";
+  "Download for any file (a .webp had no preview and no easy download)"; "Put the preview header on one
+  line"), settled in review p529 (no new state for the Insert menu).
+- **What:** **Insert into terminal ▾** opens this server's terminal tabs: the default first (an upload's own
+  tab for its offer, else the workspace's last terminal tab), then the others in tab order; still-restoring
+  or failed tabs are listed disabled with the reason. Cmd/Ctrl+I sends to the default. The same control is
+  the file header's and the upload offer's. A file's header is one line with Back named for its folder, the
+  name and size, the viewer's controls, Copy path, Download and Insert. Copy path confirms in place for
+  1.6 s; a menu's copy confirms with a notice. Download is an optional platform capability (`download`):
+  the browser's same-origin `<a download>` on `/fs/raw`; the app lacks it until its share-sheet route.
+  **Supersedes** "the target is the workspace's last terminal tab" as the only target, and "insertion is
+  disabled with 'Open a terminal tab first', shown beside the button" (the menu says it). The two-line
+  preview header (name, then path) and the separate Insert bar under it are gone.
+- **Rejected:** a split button (insert into the default, ▾ for the rest: two targets in one control, the
+  click-model problem C fixed in rows); naming the default tab on the button ("Insert path into muxen
+  agent" outgrows a one-line header on the phone); listing each terminal's working folder (needs
+  `pane_current_path` sent to the client; out of scope); a Download link the page builds itself (environment
+  checks belong in `platform/`, and the app's web view would show a dead button).

@@ -1,4 +1,3 @@
-import { useApp } from "../../app/context";
 import { baseName } from "../../files/paths";
 import type { UploadItem } from "../../files/uploads";
 import { useStore } from "../../ui/store";
@@ -6,14 +5,12 @@ import { Button } from "../../ui/primitives/Button";
 import { Icon } from "../../ui/primitives/Icon";
 import { IconButton } from "../../ui/primitives/IconButton";
 import { Spinner } from "../../ui/primitives/Spinner";
-import { insertPath, useInsertTarget } from "./insert";
+import { InsertButton } from "./FileActions";
 import type { FilesSession } from "./session";
 import styles from "./UploadPanel.module.css";
 
 function Item({ session, item, onPreview }: { session: FilesSession; item: UploadItem; onPreview: (path: string) => void }) {
-  const app = useApp();
-  // The offer follows the tab the upload began in, never the one active now.
-  const target = useInsertTarget(item.target);
+  // The offer leads with the tab the upload began in, never the one active now.
   const dismiss = (): void => { session.uploads.dismiss(item.id); };
 
   if (item.state === "uploading") {
@@ -45,14 +42,7 @@ function Item({ session, item, onPreview }: { session: FilesSession; item: Uploa
       <div class={styles.text}>
         <p class={styles.title} role="status">Saved {baseName(item.path)}</p>
         <div class={styles.actions}>
-          <Button
-            variant="primary"
-            icon="terminal"
-            disabledReason={target ? (target.blocked ?? undefined) : item.target === null ? "Open a terminal tab first" : "That tab was closed"}
-            onClick={() => { if (insertPath(app, item.target ?? "", item.path)) dismiss(); }}
-          >
-            {target ? `Insert path into ${target.label}` : "Insert path"}
-          </Button>
+          <InsertButton path={item.path} first={item.target} onInserted={dismiss} />
           <Button variant="quiet" onClick={() => { onPreview(item.path); }}>Preview</Button>
         </div>
       </div>
