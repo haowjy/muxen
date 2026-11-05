@@ -21,9 +21,18 @@ export interface FilesSession {
   uploads: UploadTracker;
   /** Scroll position by Files tab and folder path (`scrollKey`), so Back finds the list where it was. */
   scroll: Recent<number>;
+  /** The folders expanded and the row selected, by Files tab and folder path (`scrollKey`): view state, never history or the workspace. */
+  outlines: Recent<OutlineView>;
 }
 
-/** Scrolls kept per host: the least recently set go first, so closed tabs' do not pile up. */
+/** What a Files tab keeps of how it shows a folder's rows. */
+export interface OutlineView {
+  expanded: ReadonlySet<string>;
+  /** The selected row's key (`files/outline.ts`); null when nothing is. */
+  selection: string | null;
+}
+
+/** Scrolls and outline views kept per host: the least recently set go first, so closed tabs' do not pile up. */
 const SCROLLS_KEPT = 64;
 
 /** Two tabs may show the same folder, each scrolled its own way. */
@@ -50,6 +59,7 @@ export function filesSession(app: AppController, host: HostClient): FilesSession
     browser,
     uploads: new UploadTracker((path) => { void browser.uploaded(path); }),
     scroll: new Recent(SCROLLS_KEPT),
+    outlines: new Recent(SCROLLS_KEPT),
   };
   sessions.set(host.fs, session);
   return session;

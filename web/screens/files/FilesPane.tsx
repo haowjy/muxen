@@ -135,6 +135,9 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
             loading={loading}
             fresh={view.fresh !== null && parentOf(view.fresh) === pages.path ? baseName(view.fresh) : null}
             onOpen={open}
+            view={session.outlines.get(scrollKey(tab.id, pages.path)) ?? { expanded: new Set(), selection: null }}
+            onView={(next) => { session.outlines.set(scrollKey(tab.id, pages.path), next); }}
+            onKeyNavigate={() => { app.focus.keepKeyboardOn("list"); }}
             onMore={() => { void browser.more(); }}
             onToggleHidden={() => { void browser.toggleHidden(); }}
             {...(up?.kind === "dir" && { onUp: () => { app.toPlace(up); } })}

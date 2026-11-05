@@ -13,6 +13,8 @@
   transition: background var(--duration-1) var(--ease-out);
 }
 .row:hover { background: var(--color-bg-hover); }
+.disabled { color: var(--color-text-muted); cursor: default; }
+.disabled:hover { background: var(--color-bg-raised); }
 .selected { background: var(--color-bg-selected); font-weight: var(--weight-medium); }
 .leading { display: inline-flex; flex: none; color: var(--color-text-muted); }
 .label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -1,16 +1,16 @@
-import type { VNode } from "preact";
-import { useEffect, useRef } from "preact/hooks";
+import { useEffect, useId, useRef, useState } from "preact/hooks";
 import type { Entry, Listing } from "../../files/api";
 import { formatSize } from "../../files/format";
-import { outline, UP } from "../../files/outline";
+import { move, outline, type Move } from "../../files/outline";
 import { baseName } from "../../files/paths";
 import type { FilesPlace } from "../../platform/types";
 import { Button } from "../../ui/primitives/Button";
 import { EmptyState } from "../../ui/primitives/EmptyState";
 import type { IconName } from "../../ui/primitives/Icon";
-import { Row } from "../../ui/primitives/Row";
-import { RovingList } from "../../ui/primitives/RovingList";
+import { useFocusRef } from "../../ui/focus";
+import { OptionRow, Row } from "../../ui/primitives/Row";
 import { Spinner } from "../../ui/primitives/Spinner";
+import type { OutlineView } from "./session";
 import styles from "./FolderList.module.css";
 
 function iconFor(entry: Entry): IconName {
@@ -28,8 +28,8 @@ function metaFor(entry: Entry): string | undefined {
 }
 
 /** The first row of a folder list, and of its completions: one step up, named for the folder it goes to. */
-export function UpRow({ label, name, roving, onOpen, ...rest }: { label: string; name: string; roving?: boolean; onOpen: () => void; onMouseDown?: (e: MouseEvent) => void }) {
-  return <Row {...(roving && { roving })} {...rest} icon="back" label={label} aria-label={`Up to ${name}`} class={styles.item} onClick={onOpen} />;
+export function UpRow({ label, name, onOpen, ...rest }: { label: string; name: string; onOpen: () => void; onMouseDown?: (e: MouseEvent) => void }) {
+  return <Row {...rest} icon="back" label={label} aria-label={`Up to ${name}`} class={styles.item} onClick={onOpen} />;
 }
 
 /** A folder that was moved or deleted since the tab last showed it: only the way up remains. */
@@ -42,7 +42,22 @@ export function MissingFolder({ parent }: { parent?: { name: string; onOpen: () 
   );
 }
 
-const NOTHING: ReadonlySet<string> = new Set();
+/** What a key does in the list: a selection move, opening the selected row, or going up. */
+export function listKey(e: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey">): Move | "open" | "goUp" | null {
+  if (e.altKey || e.shiftKey) return null;
+  const cmd = e.metaKey || e.ctrlKey;
+  if (e.key === "ArrowUp" && cmd) return "goUp";
+  if (cmd) return null;
+  switch (e.key) {
+    case "ArrowDown": return "down";
+    case "ArrowUp": return "up";
+    case "Home": return "first";
+    case "End": return "last";
+    case "Enter": return "open";
+    case "Backspace": return "goUp";
+    default: return null;
+  }
+}
 
 export interface DirListProps {
   /** The pages held of the folder shown. */
@@ -52,6 +67,11 @@ export interface DirListProps {
   /** The entry just added by an upload or a paste: marked, and scrolled into view. */
   fresh?: string | null;
   onOpen: (place: FilesPlace) => void;
+  /** The folders expanded and the row selected, as the tab last left them; changes go to `onView`. */
+  view: OutlineView;
+  onView: (view: OutlineView) => void;
+  /** A key is about to open a place: the next list takes the keys on. */
+  onKeyNavigate: () => void;
   onMore: () => void;
   onToggleHidden: () => void;
   /** The first row: up to the enclosing folder. Absent at `/`. */
@@ -59,11 +79,36 @@ export interface DirListProps {
 }
 
 /** The folder's rows as the outline draws them with nothing expanded: one flat list. */
-export function DirList({ pages, hidden, loading, fresh, onOpen, onMore, onToggleHidden, onUp }: DirListProps) {
+export function DirList({ pages, hidden, loading, fresh, onOpen, view: initial, onView, onKeyNavigate, onMore, onToggleHidden, onUp }: DirListProps) {
   const { entries, total, truncated } = pages;
-  const rows = outline({ root: pages.path, parent: onUp ? (pages.parent ?? null) : null, expanded: NOTHING, held: (path) => (path === pages.path ? pages : null), filter: "", selection: null }).rows;
+  const [view, setView] = useState(initial);
+  const { rows, selected } = outline({ root: pages.path, parent: onUp ? (pages.parent ?? null) : null, expanded: view.expanded, held: (path) => (path === pages.path ? pages : null), filter: "", selection: view.selection });
+  const listId = useId();
+  const listRef = useFocusRef("list");
+  const idOf = (key: string | null): string | undefined => { const at = rows.findIndex((r) => r.key === key); return at < 0 ? undefined : `${listId}-${String(at)}`; };
+  const select = (selection: string | null): void => {
+    const next = { ...view, selection };
+    setView(next);
+    onView(next);
+  };
+  useEffect(() => { const id = idOf(selected); if (id) document.getElementById(id)?.scrollIntoView({ block: "nearest" }); }, [selected]);
+
+  const openRow = (key: string | null): void => {
+    const row = rows.find((r) => r.key === key);
+    if (!row?.place) return;
+    onKeyNavigate();
+    if (row.kind === "up") onUp?.();
+    else onOpen(row.place);
+  };
+  const onKeyDown = (e: KeyboardEvent): void => {
+    const action = listKey(e);
+    if (action === null) return;
+    e.preventDefault();
+    if (action === "open") openRow(selected);
+    else if (action === "goUp") { if (onUp) { onKeyNavigate(); onUp(); } }
+    else select(move(rows, selected, action).selection);
+  };
   const upName = baseName(pages.parent ?? "");
-  const up = (roving: boolean): VNode => <UpRow key={UP} {...(roving && { roving })} label={upName} name={upName} onOpen={() => { onUp?.(); }} />;
   const more = entries.length < total;
   const sentinel = useRef<HTMLDivElement>(null);
   const latest = useRef(onMore);
@@ -84,21 +129,20 @@ export function DirList({ pages, hidden, loading, fresh, onOpen, onMore, onToggl
     <div ref={wrap} class={styles.wrap} aria-busy={loading}>
       {entries.length === 0 && (
         <>
-          {onUp && up(false)}
+          {onUp && <UpRow label={upName} name={upName} onOpen={onUp} />}
           <EmptyState icon="folder" title="This folder is empty">{hidden ? undefined : "Hidden files are not shown."}</EmptyState>
         </>
       )}
       {entries.length > 0 && (
-        <RovingList label="Contents" class={styles.list}>
-          {rows.map((row) => {
-            if (!row.entry) return up(true);
+        <div ref={listRef} role="listbox" aria-label="Contents" tabIndex={0} aria-activedescendant={idOf(selected)} class={styles.list} onKeyDown={onKeyDown}>
+          {rows.map((row, at) => {
             const { entry, place } = row;
+            const common = { key: row.key, id: `${listId}-${String(at)}`, class: styles.item, selected: row.key === selected || (entry !== null && entry.name === fresh) };
+            if (!entry) return <OptionRow {...common} icon="back" label={upName} aria-label={`Up to ${upName}`} onClick={() => { onUp?.(); }} />;
             return (
-              <Row
-                key={row.key}
-                {...(entry.name === fresh && { selected: true, "data-fresh": "" })}
-                roving
-                class={styles.item}
+              <OptionRow
+                {...common}
+                {...(entry.name === fresh && { "data-fresh": "" })}
                 icon={iconFor(entry)}
                 label={entry.name}
                 meta={metaFor(entry)}
@@ -108,7 +152,7 @@ export function DirList({ pages, hidden, loading, fresh, onOpen, onMore, onToggl
               />
             );
           })}
-        </RovingList>
+        </div>
       )}
       {more && (
         <div ref={sentinel} class={styles.more}>
