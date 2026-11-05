@@ -11,5 +11,5 @@
 /* Button's label span holds the text and, for Insert, its ▾: one centred row. */
 .tool > span { display: inline-flex; align-items: center; gap: 4px; }
 /* The one big Download, for a file muxen can't show: the accent's other use on this screen. */
-.big { min-height: 40px; padding: 0 18px; font-size: var(--text-body); }
+.big { min-height: 40px; padding: 0 var(--space-5); font-size: var(--text-body); }
 :root[data-layout="phone"] .big { width: 100%; min-height: 50px; border-radius: var(--radius-3); }

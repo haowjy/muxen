@@ -19,5 +19,5 @@
 .line .input { font-family: var(--font-mono); }
 .line .input:not(:focus) { border-color: transparent; background: transparent; cursor: text; }
 .line .input:not(:focus):hover { background: var(--color-bg-hover); }
-.line .input::selection { background: color-mix(in oklch, var(--color-accent) 45%, transparent); color: var(--color-text); }
+.line .input::selection { background: var(--color-bg-text-selected); color: var(--color-text); }
 :root[data-density="compact"] .line .input { height: 28px; padding: 0 var(--space-2); border-radius: 6px; font-size: var(--text-small); line-height: 26px; }

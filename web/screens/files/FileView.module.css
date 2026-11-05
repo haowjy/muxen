@@ -12,7 +12,7 @@
 }
 :root[data-layout="phone"] .bar { height: var(--toolbar-height); padding: 0 var(--space-1); }
 .back { min-height: 28px; max-width: 16rem; padding: 0 var(--space-2) 0 var(--space-1); gap: 2px; font-size: var(--text-small); color: var(--color-text); }
-.sep { flex: none; width: 1px; height: 16px; margin: 0 6px; background: var(--color-border); }
+.sep { flex: none; width: 1px; height: var(--space-4); margin: 0 var(--space-2); background: var(--color-border); }
 .name {
   display: flex;
   flex: 1 1 auto;
@@ -28,4 +28,4 @@
 .text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .facts { flex: none; font-size: var(--text-meta); font-weight: 400; font-variant-numeric: tabular-nums; color: var(--color-text-muted); }
 /* A toggle shows its state: the accent while on. */
-.toggle[aria-pressed="true"] { color: var(--color-accent); background: color-mix(in oklch, var(--color-accent) 14%, transparent); }
+.toggle[aria-pressed="true"] { color: var(--color-accent); background: var(--color-bg-pressed); }

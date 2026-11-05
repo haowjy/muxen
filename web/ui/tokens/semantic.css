@@ -18,10 +18,16 @@
 
   --color-text: light-dark(var(--gray-12), var(--gray-1));
   --color-text-muted: light-dark(var(--gray-8), var(--gray-5));
+  /* Quieter than muted, for what sits beside the text without being read (a code frame's line numbers). */
+  --color-text-faint: color-mix(in oklch, var(--color-text-muted) 60%, transparent);
   --color-border: light-dark(var(--gray-3), var(--gray-9));
   --color-accent: light-dark(var(--blue-7), var(--blue-9));
   /* A folder icon's fill, under its accent stroke: folders are Files' only coloured icons. */
   --color-folder-fill: color-mix(in oklch, var(--color-accent) 22%, transparent);
+  /* A toggle button while on, under its accent glyph. */
+  --color-bg-pressed: color-mix(in oklch, var(--color-accent) 14%, transparent);
+  /* Selected text in a field that shows what a click selected (the path line's last folder): stronger than the system's. */
+  --color-bg-text-selected: color-mix(in oklch, var(--color-accent) 45%, transparent);
   --color-on-accent: light-dark(oklch(0.99 0 0), oklch(0.2 0.03 245));
   /* On a destructive action's fill, which is red in both themes. */
   --color-on-danger: oklch(0.99 0 0);
