@@ -1,6 +1,6 @@
 # fs
 
-The file API's core ([fs.md](../../docs/design/fs.md)): `open`, listings, raw
+The file API's core ([fs.md](../../docs/design/fs.md)): `open`, listings, search, raw
 reads and uploads. Plain functions over files re-read per
 request; no cache, no cursor, no descriptor kept between requests. It knows nothing of
 axum: `http/fs.rs` parses requests, takes slots and builds responses. `mod.rs` holds
@@ -16,10 +16,16 @@ Rules the code relies on, which are easy to break:
   (`src/complete/`) opens through it too, and reads names
   with `list::Scan`; `check_shape` is also `/complete`'s `cwd` check.
 - Every blocking call runs on the fs lane (`Slots::lane`, see `src/blocking.rs`), which
-  moves the thread's permit into the closure; the scan and raw slots wait in that
+  moves the thread's permit into the closure; the scan, search and raw slots wait in that
   lane's queue. clippy forbids `spawn_blocking`, and tokio's `fs` feature is off
   (`tokio::fs::File`'s buffer grows to 2 MiB). Take an fs thread last and release it
   before waiting for any other slot.
+- Search opens each directory below its root only through `search::Below`, relative to the
+  root's descriptor: `openat2` with `RESOLVE_BENEATH | NO_SYMLINKS | NO_XDEV` on Linux,
+  `O_NOFOLLOW_ANY` and a device check on macOS. One directory is open at a time (two
+  descriptors with the root's), and the search permit moves into the lane closure with the
+  walk, so an aborted search can't overlap the next. The matcher lives only here: the client
+  draws `hits` and never matches.
 - An upload's `dir` opens through `fs::open` like a read; without it, uploads read `config.toml`'s `uploads_dir` on every request (`upload::open_dir`); a file
   that exists and doesn't parse fails them with `config_unavailable`. Nothing in the
   daemon writes `config.toml`: Jimmy edits it by hand.
@@ -39,5 +45,6 @@ Rules the code relies on, which are easy to break:
   upload name, or `config.toml`'s text: a parse error is logged by line number, never
   by the parser's message, which quotes the text.
 
-Tests: `open.rs` (links, FIFOs, the swapped component), `list.rs`, `raw.rs`
+Tests: `open.rs` (links, FIFOs, the swapped component), `list.rs`, `search.rs` (the
+matcher; the walk's skips, caps and errors on a temp tree), `raw.rs`
 (Range, ETag), `mime.rs` (the allowlist), `upload.rs`; `tests/http_fs.rs` and `tests/http_auth.rs` over a real socket.

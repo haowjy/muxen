@@ -14,6 +14,7 @@ pub mod list;
 pub mod mime;
 mod open;
 pub mod raw;
+pub mod search;
 mod slots;
 pub mod upload;
 

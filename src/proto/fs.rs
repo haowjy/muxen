@@ -63,3 +63,39 @@ pub struct Uploaded {
     pub path: String,
     pub size: u64,
 }
+
+/// `GET /fs/search/{*path}`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct Search {
+    /// The canonical root.
+    pub path: String,
+    /// Best first, at most 50.
+    pub matches: Vec<Match>,
+    /// Entries read, skipped ones included.
+    pub read: u32,
+    /// The cap that ended the walk; null: it covered everything.
+    pub stopped: Option<Stopped>,
+}
+
+/// A listing's entry, found below the search's root.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct Match {
+    #[serde(flatten)]
+    #[ts(flatten)]
+    pub entry: Entry,
+    /// Relative to the root, `/`-separated.
+    pub path: String,
+    /// `[start, end)` runs of `path` that matched, in UTF-16 code units.
+    pub hits: Vec<[u16; 2]>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum Stopped {
+    /// 100,000 entries read.
+    Entries,
+    /// 500 ms.
+    Time,
+    /// The queue of folders still to read filled; folders past it weren't queued.
+    Queue,
+}

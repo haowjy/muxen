@@ -1,5 +1,5 @@
 //! The file API's limits (fs.md "Constants", "Limits and the memory ceiling"): 1 scan,
-//! 2 raw responses, 1 upload, waited for in the fs lane's queue (`crate::blocking`), so a
+//! 1 search, 2 raw responses, 1 upload, waited for in the fs lane's queue (`crate::blocking`), so a
 //! slow disk stalls the file manager without holding memory or starving auth and pastes
 //! of threads. Blocking calls run on `lane`.
 
@@ -11,6 +11,7 @@ use super::FsError;
 use crate::blocking::{Lane, PermitPool};
 
 const SCANS: usize = 1;
+const SEARCHES: usize = 1;
 const RAW_RESPONSES: usize = 2;
 const UPLOADS: usize = 1;
 
@@ -20,6 +21,7 @@ pub struct Slots {
     /// The fs lane: every blocking call, `lane.run(work).await??`.
     pub lane: Lane,
     scan: PermitPool,
+    search: PermitPool,
     raw: PermitPool,
     upload: Arc<Semaphore>,
 }
@@ -28,6 +30,7 @@ impl Slots {
     pub fn new(lane: Lane) -> Self {
         Self {
             scan: lane.permits(SCANS),
+            search: lane.permits(SEARCHES),
             raw: lane.permits(RAW_RESPONSES),
             upload: Arc::new(Semaphore::new(UPLOADS)),
             lane,
@@ -37,6 +40,12 @@ impl Slots {
     /// The scan slot, for one directory listing.
     pub async fn scan(&self) -> Result<OwnedSemaphorePermit, FsError> {
         Ok(self.scan.acquire().await?)
+    }
+
+    /// The search slot, its own so a listing never waits behind a walk. The walk's lane
+    /// closure holds it, so an aborted search frees it only when its walk ends.
+    pub async fn search(&self) -> Result<OwnedSemaphorePermit, FsError> {
+        Ok(self.search.acquire().await?)
     }
 
     /// A raw-response slot, held by the response's producer until it ends.

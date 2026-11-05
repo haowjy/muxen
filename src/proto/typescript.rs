@@ -11,7 +11,7 @@ use std::path::Path;
 use ts_rs::{Config, TS, TypeVisitor};
 
 use super::complete::{Chip, ChipSource, CompleteRequest, Completion};
-use super::fs::{Entry, EntryKind, Listing, Uploaded};
+use super::fs::{Entry, EntryKind, Listing, Match, Search, Stopped, Uploaded};
 use super::*;
 
 const PATH: &str = "web/proto/generated/messages.ts";
@@ -50,6 +50,9 @@ fn declarations(config: &Config) -> Vec<(TypeId, String)> {
         declare::<Listing>(config),
         declare::<Entry>(config),
         declare::<EntryKind>(config),
+        declare::<Search>(config),
+        declare::<Match>(config),
+        declare::<Stopped>(config),
         declare::<Uploaded>(config),
         declare::<CompleteRequest>(config),
         declare::<Completion>(config),
@@ -113,6 +116,7 @@ fn generated_typescript_is_current() {
     dependencies::<ClientMsg>(&mut needed);
     dependencies::<ServerMsg>(&mut needed);
     dependencies::<Listing>(&mut needed);
+    dependencies::<Search>(&mut needed);
     dependencies::<CompleteRequest>(&mut needed);
     dependencies::<Completion>(&mut needed);
     dependencies::<ErrorBody>(&mut needed);

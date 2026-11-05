@@ -140,32 +140,40 @@ impl Scan {
     /// The page entry, with size and time from a `stat` (following links).
     fn entry(&self, dir: &Opened, scanned: &Scanned) -> Entry {
         let name = self.name(scanned);
+        let stat = match scanned.kind {
+            EntryKind::Broken => None,
+            _ => rustix::fs::statat(&dir.file, name, AtFlags::empty()).ok(),
+        };
         let text = String::from_utf8_lossy(name.to_bytes()).into_owned();
-        let utf8 = std::str::from_utf8(name.to_bytes())
+        let mut entry = described(text, scanned.kind, scanned.link, stat.as_ref());
+        entry.utf8 = std::str::from_utf8(name.to_bytes())
             .is_err()
             .then_some(false);
-        let mut entry = Entry {
-            name: text,
-            kind: scanned.kind,
-            link: scanned.link,
-            size: None,
-            mtime: None,
-            mime: None,
-            utf8,
-        };
-        if scanned.kind == EntryKind::Broken {
-            return entry;
-        }
-        if let Ok(stat) = rustix::fs::statat(&dir.file, name, AtFlags::empty()) {
-            let (size, mtime) = size_and_time(&stat);
-            entry.mtime = Some(mtime);
-            if scanned.kind == EntryKind::File {
-                entry.size = Some(size);
-                entry.mime = Some(mime::for_name(&entry.name).to_owned());
-            }
-        }
         entry
     }
+}
+
+/// An entry as the wire has it, `kind` already after following; size, time and type from
+/// `stat` (following links), when there is one.
+pub(super) fn described(name: String, kind: EntryKind, link: bool, stat: Option<&Stat>) -> Entry {
+    let mut entry = Entry {
+        name,
+        kind,
+        link,
+        size: None,
+        mtime: None,
+        mime: None,
+        utf8: None,
+    };
+    if let Some(stat) = stat {
+        let (size, mtime) = size_and_time(stat);
+        entry.mtime = Some(mtime);
+        if kind == EntryKind::File {
+            entry.size = Some(size);
+            entry.mime = Some(mime::for_name(&entry.name).to_owned());
+        }
+    }
+    entry
 }
 
 /// The kind after following a link, and whether the entry is one. `None`: it vanished.
@@ -187,7 +195,7 @@ fn kind_of(dir: &Opened, name: &CStr, file_type: FileType) -> Option<(EntryKind,
     }
 }
 
-fn kind(file_type: FileType) -> EntryKind {
+pub(super) fn kind(file_type: FileType) -> EntryKind {
     match file_type {
         FileType::Directory => EntryKind::Dir,
         FileType::RegularFile => EntryKind::File,

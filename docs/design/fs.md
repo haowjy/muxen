@@ -160,7 +160,8 @@ Entry   = { name: string,
 
 ### `GET /fs/search/{*path}`
 
-Query: `q` (required, 1 to 256 bytes), `hidden=0|1` (default 0). Files' Search: the files and
+Query: `q` (required, 1 to 256 bytes, not only spaces), `hidden=0|1` (default 0); `/fs/search/`
+searches `/`. Files' Search: the files and
 folders below a folder whose path, relative to it, matches `q`. `fs::open(…, Dir)` on the root, then
 one **walk** that streams every entry it reads through the matcher and keeps only the best 50.
 Nothing is kept between requests. The client sends the query once typing pauses 250 ms and aborts a
@@ -182,8 +183,8 @@ request it no longer needs ([browser-behaviors.md](client/browser-behaviors.md#f
   there are no cycles, and no walk wanders into `/proc`, a network mount or another disk. A
   directory whose relative path would pass 4,096 bytes with the root's is not queued: no route
   could open it.
-- **Kinds:** names and `d_type` only; `fstatat` (not following) is called only for a `DT_UNKNOWN`
-  entry, as listings do, so a filesystem without `d_type` is still walked.
+- **Kinds:** names and `d_type` only; `fstatat` (not following, relative to the root) is called only
+  for a `DT_UNKNOWN` entry, as listings do, so a filesystem without `d_type` is still walked.
 - **Skipped by name:** `.git`, `node_modules` and `target` directories, and every name starting with
   `.` unless `hidden=1`. The root itself is never skipped, whatever its name. Non-UTF-8 names are
   neither matched nor entered (their path can't be sent back).
@@ -195,8 +196,9 @@ request it no longer needs ([browser-behaviors.md](client/browser-behaviors.md#f
   counted; when it is full the walk stops queueing, keeps reading what is queued, and answers
   `stopped: "queue"`. The deadline and the cancel flag are checked every 1,024 entries and
   between directories; one stalled filesystem call can't be interrupted.
-- **Host cost:** on pop-os, warm, a 67,000-entry repo walks in 70 ms and 100,000 entries of `~` take
-  about 150 ms of one core unconstrained, about 300 ms under the unit's `CPUQuota=50%`. That is the
+- **Host cost:** measured on pop-os, warm, through the route: a 67,000-entry repo walks in 50 to 65 ms,
+  and 100,000 entries of `~` or `~/gitrepos` take 60 to 120 ms of one core unconstrained, 155 to 250 ms
+  under the unit's `CPUQuota=50%`. That is the
   bound per settled query, shared with the rest of muxen inside the unit's quota. The walk doesn't
   change its thread's priority: an unprivileged thread can't lower its nice again (`RLIMIT_NICE` is
   0), so a lane thread would stay deprioritised for every later listing.
@@ -226,14 +228,15 @@ doesn't match an NFC query.
   match, then a backward pass from its end that tightens it to the shortest window. The score adds,
   per matched scalar, a bonus at a segment or word start (after `/`, `_`, `-`, `.` or a space, or a
   lowercase-to-uppercase change), a bonus for following the previous matched scalar, a bonus for
-  matching in the last segment, and subtracts the gaps between matched scalars and a fixed amount
-  per folder level, so nearer files rank first.
+  matching in the last segment, and subtracts the gaps between matched scalars.
   Terms are matched independently and in any order, and may share scalars; the path's score is the
-  sum of its terms' scores, and the terms' hit runs are merged. Score only depends on `q` and the
+  sum of its terms' scores less a fixed amount per folder level, counted once, so nearer files rank
+  first; the terms' hit runs are merged. Score only depends on `q` and the
   path; ties go to the shorter path, then bytes. Positions are computed again for the final 50 only,
   so the walk keeps scores, not hits. The cost is linear
   in the path per entry, and only paths that pass the subsequence check are scored.
-- The best 50 are kept in a heap as the walk goes, then `fstatat` (following links) is called on
+- The best 50 are kept in order as the walk goes (a sorted list of at most 50: an entry that can't
+  beat the 50th costs one comparison), then `fstatat` (following links) is called on
   those 50 only, so a result means what a listing entry means.
 
 ```text
@@ -483,7 +486,7 @@ without a disk.
 | `fs/open.rs` | `fs::open`, `fs::check_dir`, the platform descriptor-path lookup |
 | `fs/slots.rs` | scan, search, raw-response and upload permits, with waits counted against the fs lane |
 | `fs/list.rs` | the scan; pure sort and page |
-| `fs/search.rs` | the walk; the pure matcher (glob and fuzzy scoring) and the best-50 heap |
+| `fs/search.rs` | the walk; the pure matcher (glob and fuzzy scoring) and the best 50 |
 | `fs/raw.rs` | pure `parse_range` and `If-Range`; the chunk producer; ETags come from `files::Stamp` |
 | `fs/mime.rs` | the extension table |
 | `fs/upload.rs` | pure name generation; part file, flush, rename, the in-flight record and its cleanup |
@@ -522,10 +525,10 @@ part file at an offset.
   buffers are counted ([daemon-core.md §6](daemon-core.md#6-limits-and-the-memory-ceiling)).
   The budget run must read the unit's `memory.peak`, which counts kernel buffers and
   page cache, not the daemon's RSS.
-- **Untested on macOS.** The `F_GETPATH` descriptor-path lookup and the `RENAME_EXCL`
-  no-replace rename are written but have been neither built nor run: no Apple target is
-  installed on the dev box, and CI builds macOS only at release. Run the fs tests on the
-  Mac before relying on them there. On a platform that is neither Linux nor Apple the
-  descriptor-path lookup fails closed.
+- **Unit-tested only on macOS.** The fs tests pass on the Mac (APFS, 2026-11-05): the
+  `F_GETPATH` descriptor-path lookup, the `RENAME_EXCL` no-replace rename and search's
+  `O_NOFOLLOW_ANY` walk. None has served a phone from a Mac LaunchAgent yet, and CI builds
+  macOS only at release, so rerun the fs tests on the Mac after changing them. On a platform
+  that is neither Linux nor Apple the descriptor-path lookup fails closed.
 - **How many concurrent ranges AVFoundation opens** per video decides whether 2 raw
   slots are enough; the spike records it.

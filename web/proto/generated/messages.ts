@@ -252,6 +252,70 @@ utf8?: boolean, };
 export type EntryKind = "dir" | "file" | "other" | "broken";
 
 /**
+ * `GET /fs/search/{*path}`.
+ */
+export type Search = {
+/**
+ * The canonical root.
+ */
+path: string,
+/**
+ * Best first, at most 50.
+ */
+matches: Array<Match>,
+/**
+ * Entries read, skipped ones included.
+ */
+read: number,
+/**
+ * The cap that ended the walk; null: it covered everything.
+ */
+stopped: Stopped | null, };
+
+/**
+ * A listing's entry, found below the search's root.
+ */
+export type Match = {
+/**
+ * Relative to the root, `/`-separated.
+ */
+path: string,
+/**
+ * `[start, end)` runs of `path` that matched, in UTF-16 code units.
+ */
+hits: Array<[number, number]>,
+/**
+ * U+FFFD in place of bytes that aren't UTF-8.
+ */
+name: string,
+/**
+ * After following a symlink.
+ */
+kind: EntryKind,
+/**
+ * The entry itself is a symlink.
+ */
+link: boolean,
+/**
+ * Files.
+ */
+size?: number,
+/**
+ * Unix seconds; absent for `broken`.
+ */
+mtime?: number,
+/**
+ * Files: the type `/fs/raw` would send.
+ */
+mime?: string,
+/**
+ * `false` for a name that isn't UTF-8, which can't be opened; absent otherwise.
+ */
+utf8?: boolean, };
+
+export type Stopped = "entries" | "time" | "queue";
+
+/**
  * `201` from `POST /fs/upload`. Swift mirrors it by hand.
  */
 export type Uploaded = {

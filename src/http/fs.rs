@@ -5,6 +5,7 @@
 
 use std::path::Path as FilePath;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use axum::body::Body;
 use axum::extract::rejection::{PathRejection, QueryRejection};
@@ -20,6 +21,7 @@ use super::{Ctx, Refusal};
 use crate::files::Stamp;
 use crate::fs::list::{self, Filter};
 use crate::fs::raw::{self, Span};
+use crate::fs::search::{self, Pattern};
 use crate::fs::upload::{self, MAX_UPLOAD, Naming};
 use crate::fs::{FsError, Want, mime};
 use crate::proto::HttpError;
@@ -32,6 +34,8 @@ pub(super) fn routes() -> Router<Arc<Ctx>> {
         // `{*path}` doesn't match an empty path: `/` is its own route.
         .route("/fs/list/", get(listing))
         .route("/fs/list/{*path}", get(listing))
+        .route("/fs/search/", get(searched))
+        .route("/fs/search/{*path}", get(searched))
         .route("/fs/raw/{*path}", get(raw))
         // The handler checks the cap itself, up front and as the body arrives.
         .route(
@@ -44,6 +48,14 @@ pub(super) fn routes() -> Router<Arc<Ctx>> {
 struct ListQuery {
     #[serde(default)]
     offset: u32,
+    /// `0` or `1`.
+    #[serde(default)]
+    hidden: u8,
+}
+
+#[derive(Debug, Deserialize)]
+struct SearchQuery {
+    q: String,
     /// `0` or `1`.
     #[serde(default)]
     hidden: u8,
@@ -90,6 +102,51 @@ async fn listing(
     .await;
     debug!(%path, offset = query.offset, ok = listed.is_ok(), "listed");
     respond(&path, listed.map(|listing| Json(listing).into_response()))
+}
+
+/// The best matches below a folder, holding the search slot until the walk ends.
+async fn searched(
+    State(ctx): State<Arc<Ctx>>,
+    path: WirePath,
+    query: Result<Query<SearchQuery>, QueryRejection>,
+) -> Response {
+    let (Some(path), Ok(Query(query))) = (wire_path(path), query) else {
+        return respond("", Err(FsError::BadRequest));
+    };
+    let Some(pattern) = Pattern::parse(&query.q).filter(|_| query.hidden <= 1) else {
+        return respond(&path, Err(FsError::BadRequest));
+    };
+    let filter = Filter {
+        hidden: query.hidden == 1,
+    };
+    // Dropped with this future when the client aborts: the walk stops at its next check.
+    let cancel = Cancel(Arc::new(AtomicBool::new(false)));
+    let found = async {
+        let slot = ctx.fs.search().await?;
+        let (asked, home, cancel) = (path.clone(), ctx.app.home.clone(), cancel.0.clone());
+        ctx.fs
+            .lane
+            .run(move || {
+                let _slot = slot;
+                let root = crate::fs::open(&asked, &home, Want::Dir)?;
+                search::search(&root, &pattern, filter, &search::CAPS, &cancel).map_err(FsError::io)
+            })
+            .await?
+    }
+    .await;
+    if let Ok(found) = &found {
+        debug!(root = %found.path, read = found.read, stopped = ?found.stopped, "searched");
+    }
+    respond(&path, found.map(|found| Json(found).into_response()))
+}
+
+/// Sets its flag when dropped.
+struct Cancel(Arc<AtomicBool>);
+
+impl Drop for Cancel {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Relaxed);
+    }
 }
 
 /// A file's bytes, or one range of them, holding a raw-response slot until the body
