@@ -10,3 +10,6 @@
 .status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 /* Button's label span holds the text and, for Insert, its ▾: one centred row. */
 .tool > span { display: inline-flex; align-items: center; gap: 4px; }
+/* The one big Download, for a file muxen can't show: the accent's other use on this screen. */
+.big { min-height: 40px; padding: 0 18px; font-size: var(--text-body); }
+:root[data-layout="phone"] .big { width: 100%; min-height: 50px; border-radius: var(--radius-3); }

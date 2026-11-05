@@ -4803,3 +4803,17 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
   agent" outgrows a one-line header on the phone); listing each terminal's working folder (needs
   `pane_current_path` sent to the client; out of scope); a Download link the page builds itself (environment
   checks belong in `platform/`, and the app's web view would show a dead button).
+
+### The code frame: numbered lines, a Wrap lines switch, Copy text; a big Download for what muxen can't show
+
+- **Decided:** 2026-11-05, Jimmy ("make text display prettier", JSON and plain text especially; "Download for
+  any file"), built from C's code view and no-preview card.
+- **What:** code and text run edge to edge on the sunken surface with line numbers in a sticky gutter
+  (CSS counters, so a copy or a selection never takes them); Wrap lines is a switch in the header (⋯ on the
+  phone); Copy text copies the text read, saying so when that is only the first 1 MiB. The phone adds a
+  facts line (language, lines, size, age). Markdown is set at a 72ch measure. A binary file gets a card with
+  its facts and a big Download, with Open as text beside it. **Supersedes** the Wrap lines button in the
+  Insert bar and "binary files (Open as text)" as the whole offer.
+- **Rejected:** numbers as text in each line (a copy would take them); a separate gutter column (it drifts
+  from wrapped lines); a JSON pretty-printer (changes what the file says; the frame and colours were the
+  ask); Shiki's own line-number transformer (a second render path beside the plain one).

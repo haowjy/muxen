@@ -19,23 +19,50 @@
   --shiki-token-inserted: var(--term-green);
   --shiki-token-deleted: var(--term-red);
   --shiki-token-changed: var(--term-yellow);
+  flex: 1;
   margin: 0;
-  padding: var(--space-3) var(--files-inset) var(--space-6);
+  padding: 10px 0 var(--space-7);
   overflow-x: auto;
-  font: var(--text-small) / 1.55 var(--font-mono);
+  font: 12.5px / 1.7 var(--font-mono);
   color: var(--color-text);
   tab-size: 4;
+  counter-reset: line;
 }
 /* A focusable scroller as wide as its viewer: the ring sits inside. */
 .code:focus-visible { outline-offset: -2px; }
-.code :global(.line) { display: block; min-height: 1.55em; white-space: pre; }
-.wrap :global(.line) { white-space: pre-wrap; overflow-wrap: anywhere; }
+/* Each line: its number in a gutter that stays put while the line scrolls, then the text. The numbers are
+   generated content, so a copy or a selection never takes them. */
+.code :global(.line) { display: flex; min-width: max-content; min-height: 1.7em; counter-increment: line; }
+.code :global(.line)::before {
+  content: counter(line);
+  position: sticky;
+  left: 0;
+  flex: none;
+  width: 6ch;
+  padding-right: 2.5ch;
+  text-align: right;
+  color: color-mix(in oklch, var(--color-text-muted) 60%, transparent);
+  background: var(--color-bg-sunken);
+  user-select: none;
+}
+.code :global(.text) { padding-right: var(--space-7); white-space: pre; }
+.wrap :global(.line) { min-width: 0; }
+.wrap :global(.text) { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+:root[data-layout="phone"] .code { padding-top: var(--space-1); font-size: 12px; }
+:root[data-layout="phone"] .code :global(.line)::before { width: 4.5ch; padding-right: 2ch; }
+/* Code runs edge to edge on the sunken surface, under the header's one rule. */
+.sunken { flex: 1; background: var(--color-bg-sunken); }
+/* The phone's facts above the code; a desktop's header has the size. */
+.facts { display: none; }
+:root[data-layout="phone"] .facts { display: flex; gap: 14px; padding: 10px var(--space-4) 6px; font-size: var(--text-small); font-variant-numeric: tabular-nums; color: var(--color-text-muted); }
 
 /* Markdown, from a document that is untrusted: element styles only, since the sanitizer strips classes. */
-.md { padding: var(--space-3) var(--files-inset) var(--space-6); font-size: var(--text-body); line-height: 1.55; overflow-wrap: anywhere; }
+/* A readable measure, centred, on both layouts. */
+.md { width: 100%; max-width: 72ch; margin: 0 auto; padding: 28px 40px 48px; font-size: var(--text-body); line-height: 1.65; overflow-wrap: anywhere; }
+:root[data-layout="phone"] .md { padding: 18px var(--space-4) 40px; }
 .md > :first-child { margin-top: 0; }
 .md h1, .md h2, .md h3, .md h4 { margin: 1.4em 0 0.5em; font-weight: var(--weight-bold); line-height: 1.25; text-wrap: balance; }
-.md h1 { font-size: var(--text-title); }
+.md h1 { font-size: 24px; letter-spacing: -0.01em; }
 .md h2 { font-size: var(--text-heading); padding-bottom: var(--space-2); border-bottom: 1px solid var(--color-border); }
 .md h3, .md h4 { font-size: var(--text-body); }
 .md p, .md ul, .md ol, .md pre, .md table, .md blockquote { margin: 0 0 0.9em; }
@@ -74,3 +101,15 @@
 .meta dt { color: var(--color-text-muted); }
 .meta dd { margin: 0; overflow-wrap: anywhere; }
 .mono { font-family: var(--font-mono); }
+
+/* A file muxen can't show: what it is, then the big Download. */
+.unsupported { display: flex; flex: 1; justify-content: center; align-items: flex-start; overflow: auto; padding: 12vh var(--space-7) var(--space-8); }
+:root[data-layout="phone"] .unsupported { padding: var(--space-8) var(--space-5); }
+.card { display: flex; flex-direction: column; gap: 18px; width: 100%; max-width: 26rem; }
+.cardTitle { display: flex; align-items: center; gap: 10px; margin: 0; font-size: var(--text-heading); font-weight: var(--weight-bold); overflow-wrap: anywhere; }
+.cardIcon { flex: none; color: var(--color-text-muted); }
+.why { margin: -12px 0 0; font-size: var(--text-small); color: var(--color-text-muted); }
+.card .meta { gap: 6px 20px; }
+.card .meta dd { font-variant-numeric: tabular-nums; }
+.cardActions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+:root[data-layout="phone"] .cardActions { flex-direction: column; align-items: stretch; }

@@ -1,6 +1,6 @@
 import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
-import { useAppView } from "../../app/context";
+import { useApp, useAppView } from "../../app/context";
 import type { FileRef } from "../../files/browser";
 import { formatSize, formatTime } from "../../files/format";
 import { viewerFor } from "../../files/kinds";
@@ -11,9 +11,11 @@ import { Button } from "../../ui/primitives/Button";
 import { Icon } from "../../ui/primitives/Icon";
 import { IconButton } from "../../ui/primitives/IconButton";
 import { Menu } from "../../ui/primitives/Menu";
-import { CopyPathButton, DownloadButton, InsertButton } from "./FileActions";
-import { fileIcon } from "./FolderList";
+import { CopyButton, DownloadButton, InsertButton } from "./FileActions";
+import { fileIcon } from "./fileIcon";
+import { copyText } from "./copy";
 import { Preview } from "./Preview";
+import { TEXT_LIMIT, useText } from "./TextViewers";
 import type { FilesSession } from "./session";
 import styles from "./FileView.module.css";
 
@@ -33,6 +35,7 @@ interface Props {
  * path, Download and Insert ▾. The phone's line is Back, the name, and the actions as icons.
  */
 export function FileView({ session, file, up, onUp, onLink, children }: Props) {
+  const app = useApp();
   const phone = useAppView((v) => v.viewport.layout === "phone");
   const [asText, setAsText] = useState(false);
   const [wrap, setWrap] = useState(phone);
@@ -41,6 +44,10 @@ export function FileView({ session, file, up, onUp, onLink, children }: Props) {
   const size = file.size !== null ? formatSize(file.size) : null;
   const folder = up ? baseName(up.path) || "/" : null;
   const url = session.browser.api.rawUrl(file.path);
+  const text = useText(session.browser.api, file.path, !children && (kind === "code" || kind === "markdown"));
+  // Copy text copies what was read: a file past the first MiB copies only that much, and says so.
+  const loaded = kind === "code" && text.kind === "done" ? text.value : null;
+  const copyNote = loaded?.truncated ? `Copied the first ${formatSize(TEXT_LIMIT)} of ${file.name}` : null;
 
   return (
     <div class={styles.view}>
@@ -56,13 +63,14 @@ export function FileView({ session, file, up, onUp, onLink, children }: Props) {
         </h1>
         {!children && kind === "code" && !phone && (
           <>
-            <IconButton icon="wrap" label={wrap ? "Don't wrap lines" : "Wrap lines"} aria-pressed={wrap} class={styles.toggle} onClick={() => { setWrap(!wrap); }} />
+            <IconButton icon="wrap" label="Wrap lines" aria-pressed={wrap} class={styles.toggle} onClick={() => { setWrap(!wrap); }} />
+            {loaded && <CopyButton value={loaded.text} label="Copy text" icon="copyText" compact note={copyNote} />}
             <span class={styles.sep} />
           </>
         )}
         {!children && (
           <>
-            <CopyPathButton path={file.path} compact={phone} />
+            <CopyButton value={file.path} label="Copy path" icon="copy" compact={phone} />
             <DownloadButton url={url} name={file.name} size={size} compact={phone} />
             <InsertButton path={file.path} compact={phone} shortcut />
           </>
@@ -71,10 +79,21 @@ export function FileView({ session, file, up, onUp, onLink, children }: Props) {
           <IconButton icon="more" label="File options" aria-haspopup="menu" aria-expanded={menu !== null} onClick={(e) => { setMenu(menu ? null : e.currentTarget); }} />
         )}
         {menu && (
-          <Menu anchor={menu} label="File options" focusFirst={false} onClose={() => { setMenu(null); }} sections={[{ items: [{ label: "Wrap lines", checked: wrap, onSelect: () => { setWrap(!wrap); } }] }]} />
+          <Menu
+            anchor={menu}
+            label="File options"
+            focusFirst={false}
+            onClose={() => { setMenu(null); }}
+            sections={[{
+              items: [
+                { label: "Wrap lines", checked: wrap, onSelect: () => { setWrap(!wrap); } },
+                { label: "Copy text", icon: "copyText", disabled: loaded === null, onSelect: () => { if (loaded) void copyText(app, loaded.text).then((ok) => { if (ok) app.notify(copyNote ?? `Copied the text of ${file.name}`); }); } },
+              ],
+            }]}
+          />
         )}
       </header>
-      {children ?? <Preview session={session} file={file} kind={kind} plain={asText} wrap={wrap} onAsText={() => { setAsText(true); }} onLink={onLink} />}
+      {children ?? <Preview session={session} file={file} text={text} kind={kind} plain={asText} wrap={wrap} onAsText={() => { setAsText(true); }} onLink={onLink} />}
     </div>
   );
 }

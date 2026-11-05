@@ -6,8 +6,8 @@ import { linkTarget, renderMarkdown, type LinkTarget } from "../../files/render/
 import { mountDiagrams } from "../../files/render/diagrams";
 import { lazyImages } from "../../files/images";
 import { useAppView } from "../../app/context";
-import { formatSize } from "../../files/format";
-import { languageFor } from "../../files/kinds";
+import { formatAge, formatSize } from "../../files/format";
+import { languageFor, type Language } from "../../files/kinds";
 import { HttpRefusal } from "../../net/http";
 import { EmptyState } from "../../ui/primitives/EmptyState";
 import { Spinner } from "../../ui/primitives/Spinner";
@@ -15,23 +15,24 @@ import { cx } from "../../ui/cx";
 import styles from "./Viewers.module.css";
 
 /** The code and Markdown viewers read at most this much, with Range (fs.md "Text previews"). */
-const TEXT_LIMIT = 1024 * 1024;
+export const TEXT_LIMIT = 1024 * 1024;
 
-type Loaded<T> = { kind: "loading" } | { kind: "done"; value: T } | { kind: "error"; error: HttpRefusal };
+export type Loaded<T> = { kind: "loading" } | { kind: "done"; value: T } | { kind: "error"; error: HttpRefusal };
 
-/** A file's first MiB as text, fetched once per path and abandoned when the viewer closes. */
-function useText(api: FsApi, path: string): Loaded<TextPreview> {
-  const [state, setState] = useState<Loaded<TextPreview>>({ kind: "loading" });
+/** A file's first MiB as text, fetched once per path while `wanted` (a text viewer is showing) and abandoned when it closes. The file's header copies it. */
+export function useText(api: FsApi, path: string, wanted: boolean): Loaded<TextPreview> {
+  const [state, setState] = useState<{ path: string; loaded: Loaded<TextPreview> } | null>(null);
   useEffect(() => {
+    if (!wanted) return undefined;
     const abort = new AbortController();
-    setState({ kind: "loading" });
     api.text(path, TEXT_LIMIT, abort.signal).then(
-      (value) => { setState({ kind: "done", value }); },
-      (error: unknown) => { if (!abort.signal.aborted) setState({ kind: "error", error: error instanceof HttpRefusal ? error : new HttpRefusal(0, "internal") }); },
+      (value) => { setState({ path, loaded: { kind: "done", value } }); },
+      (error: unknown) => { if (!abort.signal.aborted) setState({ path, loaded: { kind: "error", error: error instanceof HttpRefusal ? error : new HttpRefusal(0, "internal") } }); },
     );
     return () => { abort.abort(); };
-  }, [api, path]);
-  return state;
+  }, [api, path, wanted]);
+  // Another file's text, from before a switch, is never this one's.
+  return state?.path === path ? state.loaded : { kind: "loading" };
 }
 
 function Loading({ what }: { what: string }) {
@@ -49,8 +50,27 @@ function Truncated({ preview }: { preview: TextPreview }) {
 }
 
 /** Source and text, coloured by Shiki when the extension is on the allowlist and the file is small. */
-export function CodeViewer({ api, file, wrap, plain, describe }: { api: FsApi; file: FileRef; wrap: boolean; plain: boolean; describe: (e: HttpRefusal) => string }) {
-  const text = useText(api, file.path);
+/** What the phone shows above the code: the language, the lines, the size and the age. A desktop's header has the size. */
+const LANGUAGE_NAMES: Record<Language, string> = {
+  bash: "Shell", c: "C", diff: "Diff", go: "Go", javascript: "JavaScript", json: "JSON", markdown: "Markdown", python: "Python",
+  rust: "Rust", swift: "Swift", toml: "TOML", tsx: "TypeScript JSX", typescript: "TypeScript", yaml: "YAML",
+};
+
+function Facts({ file, source, plain }: { file: FileRef; source: string; plain: boolean }) {
+  const lang = plain ? null : languageFor(file.name);
+  const lines = source === "" ? 0 : source.split("\n").length - (source.endsWith("\n") ? 1 : 0);
+  return (
+    <p class={styles.facts}>
+      <span>{lang ? LANGUAGE_NAMES[lang] : "Text"}</span>
+      <span>{lines === 1 ? "1 line" : `${lines.toLocaleString()} lines`}</span>
+      {file.size !== null && <span>{formatSize(file.size)}</span>}
+      {file.mtime !== null && <span>{formatAge(file.mtime, Date.now())} ago</span>}
+    </p>
+  );
+}
+
+/** Source and text, numbered, edge to edge; coloured by Shiki when the extension is on the allowlist and the file is small. */
+export function CodeViewer({ text, file, wrap, plain, describe }: { text: Loaded<TextPreview>; file: FileRef; wrap: boolean; plain: boolean; describe: (e: HttpRefusal) => string }) {
   const ref = useRef<HTMLElement>(null);
   useEffect(() => {
     const code = ref.current;
@@ -66,7 +86,8 @@ export function CodeViewer({ api, file, wrap, plain, describe }: { api: FsApi; f
   if (text.kind === "loading") return <Loading what="Loading the file" />;
   if (text.kind === "error") return <Failed error={text.error} describe={describe} />;
   return (
-    <div class={styles.text}>
+    <div class={cx(styles.text, styles.sunken)}>
+      <Facts file={file} source={text.value.text} plain={plain} />
       <Truncated preview={text.value} />
       {text.value.text === "" && <p class={styles.note}>This file is empty.</p>}
       <pre class={cx(styles.code, wrap && styles.wrap)} tabIndex={0} aria-label={`Contents of ${file.name}`}><code ref={ref} /></pre>
@@ -75,8 +96,7 @@ export function CodeViewer({ api, file, wrap, plain, describe }: { api: FsApi; f
 }
 
 /** Rendered Markdown. Links to files open here; links to the web leave the app. */
-export function MarkdownViewer({ api, file, onLink, describe }: { api: FsApi; file: FileRef; onLink: (target: LinkTarget) => void; describe: (e: HttpRefusal) => string }) {
-  const text = useText(api, file.path);
+export function MarkdownViewer({ api, text, file, onLink, describe }: { api: FsApi; text: Loaded<TextPreview>; file: FileRef; onLink: (target: LinkTarget) => void; describe: (e: HttpRefusal) => string }) {
   const [html, setHtml] = useState<string | null>(null);
   const article = useRef<HTMLElement>(null);
   const scheme = useAppView((v) => v.viewport.scheme);

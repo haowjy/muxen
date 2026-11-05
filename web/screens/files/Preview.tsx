@@ -1,14 +1,19 @@
 import { useEffect, useState } from "preact/hooks";
 import { useApp } from "../../app/context";
-import { formatSize, formatTime } from "../../files/format";
+import { formatSize, formatTime, shorten } from "../../files/format";
 import { describeError, type FileRef } from "../../files/browser";
 import type { ViewerKind } from "../../files/kinds";
 import type { LinkTarget } from "../../files/render/markdown";
 import type { HttpRefusal } from "../../net/http";
 import { Button } from "../../ui/primitives/Button";
+import { Icon } from "../../ui/primitives/Icon";
+import { useStore } from "../../ui/store";
+import { DownloadButton } from "./FileActions";
+import { fileIcon } from "./fileIcon";
 import { ImageViewer } from "./ImageViewer";
 import type { FilesSession } from "./session";
-import { CodeViewer, MarkdownViewer } from "./TextViewers";
+import type { TextPreview } from "../../files/api";
+import { CodeViewer, MarkdownViewer, type Loaded } from "./TextViewers";
 import styles from "./Viewers.module.css";
 
 function Meta({ file }: { file: FileRef }) {
@@ -48,22 +53,41 @@ function MediaViewer({ session, file }: { session: FilesSession; file: FileRef }
   );
 }
 
+/** A file muxen has no viewer for: what it is, and a big Download (where the platform has one), else Open as text. */
+function Unsupported({ session, file, onAsText }: { session: FilesSession; file: FileRef; onAsText: () => void }) {
+  const home = useStore(session.browser, (s) => s.home);
+  const size = file.size !== null ? formatSize(file.size) : null;
+  return (
+    <div class={styles.unsupported}>
+      <div class={styles.card}>
+        <h2 class={styles.cardTitle}><Icon name={fileIcon(file.name, file.mime)} size={20} class={styles.cardIcon} /><span>{file.name}</span></h2>
+        <p class={styles.why}>muxen can't preview this kind of file.</p>
+        <dl class={styles.meta}>
+          {file.mime && <><dt>Type</dt><dd>{file.mime}</dd></>}
+          {size !== null && <><dt>Size</dt><dd>{size}</dd></>}
+          {file.mtime !== null && <><dt>Modified</dt><dd>{formatTime(file.mtime)}</dd></>}
+          <dt>Path</dt><dd class={styles.mono}>{shorten(file.path, home)}</dd>
+        </dl>
+        <div class={styles.cardActions}>
+          <DownloadButton big url={session.browser.api.rawUrl(file.path)} name={file.name} size={size} />
+          <Button variant="quiet" onClick={onAsText}>Open as text</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** The viewer for `kind`, under the file's header (`FileView`), which owns the viewer's controls. */
-export function Preview({ session, file, kind, plain, wrap, onAsText, onLink }: { session: FilesSession; file: FileRef; kind: ViewerKind; plain: boolean; wrap: boolean; onAsText: () => void; onLink: (target: LinkTarget) => void }) {
+export function Preview({ session, file, text, kind, plain, wrap, onAsText, onLink }: { session: FilesSession; file: FileRef; text: Loaded<TextPreview>; kind: ViewerKind; plain: boolean; wrap: boolean; onAsText: () => void; onLink: (target: LinkTarget) => void }) {
   const describe = (error: HttpRefusal): string => describeError(error, session.hostName);
   const api = session.browser.api;
   return (
     <div class={styles.viewer}>
-      {kind === "code" && <CodeViewer key={file.path} api={api} file={file} wrap={wrap} plain={plain} describe={describe} />}
-      {kind === "markdown" && <MarkdownViewer key={file.path} api={api} file={file} onLink={onLink} describe={describe} />}
+      {kind === "code" && <CodeViewer key={file.path} text={text} file={file} wrap={wrap} plain={plain} describe={describe} />}
+      {kind === "markdown" && <MarkdownViewer key={file.path} api={api} text={text} file={file} onLink={onLink} describe={describe} />}
       {kind === "image" && <ImageViewer key={file.path} url={api.rawUrl(file.path)} name={file.name} />}
       {kind === "media" && <MediaViewer key={file.path} session={session} file={file} />}
-      {kind === "binary" && (
-        <div class={styles.panel}>
-          <Meta file={file} />
-          <Button onClick={onAsText}>Open as text</Button>
-        </div>
-      )}
+      {kind === "binary" && <Unsupported session={session} file={file} onAsText={onAsText} />}
     </div>
   );
 }

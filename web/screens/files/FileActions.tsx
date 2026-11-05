@@ -83,8 +83,11 @@ export function InsertButton({ path, first = null, compact, shortcut, onInserted
   );
 }
 
-/** Copy path: the absolute path, confirmed in place by a check for 1.6 s (and "Copied", where there is room). */
-export function CopyPathButton({ path, compact }: { path: string; compact?: boolean }) {
+/**
+ * A copy button: copies `value` and confirms in place with a check for 1.6 s ("Copied", where there is room), so
+ * nothing else on screen moves. `note`, when set, is said as well: what was copied isn't all there is.
+ */
+export function CopyButton({ value, label, icon, compact, note }: { value: string; label: string; icon: "copy" | "copyText"; compact?: boolean; note?: string | null }) {
   const app = useApp();
   const [copied, setCopied] = useState(false);
   useEffect(() => {
@@ -92,23 +95,30 @@ export function CopyPathButton({ path, compact }: { path: string; compact?: bool
     const timer = setTimeout(() => { setCopied(false); }, COPIED_MS);
     return () => { clearTimeout(timer); };
   }, [copied]);
-  const copy = (): void => { void copyText(app, path).then((ok) => { if (ok) setCopied(true); }); };
+  const copy = (): void => {
+    void copyText(app, value).then((ok) => {
+      if (!ok) return;
+      setCopied(true);
+      if (note) app.notify(note);
+    });
+  };
   return (
     <>
       {compact
-        ? <IconButton icon={copied ? "check" : "copy"} label={copied ? "Copied" : "Copy path"} class={copied ? styles.copied : undefined} onClick={copy} />
-        : <Button variant="quiet" class={cx(styles.tool, copied && styles.copied)} icon={copied ? "check" : "copy"} title={path} onClick={copy}><span class={styles.label}>{copied ? "Copied" : "Copy path"}</span></Button>}
-      <span class={styles.status} role="status">{copied ? "Copied the path" : ""}</span>
+        ? <IconButton icon={copied ? "check" : icon} label={copied ? "Copied" : label} class={copied ? styles.copied : undefined} onClick={copy} />
+        : <Button variant="quiet" class={cx(styles.tool, copied && styles.copied)} icon={copied ? "check" : icon} onClick={copy}><span class={styles.label}>{copied ? "Copied" : label}</span></Button>}
+      <span class={styles.status} role="status">{copied && !note ? "Copied" : ""}</span>
     </>
   );
 }
 
-/** Download, where the platform can save a file: the browser's own download of `/fs/raw`. */
-export function DownloadButton({ url, name, size, compact }: { url: string; name: string; size: string | null; compact?: boolean }) {
+/** Download, where the platform can save a file: the browser's own download of `/fs/raw`. `big` is the one a file muxen can't show offers, with its size. */
+export function DownloadButton({ url, name, size, compact, big }: { url: string; name: string; size: string | null; compact?: boolean; big?: boolean }) {
   const app = useApp();
   const { download } = app.platform;
   if (!download) return null;
   const save = (): void => { download(url, name); };
+  if (big) return <Button variant="primary" class={styles.big} icon="download" onClick={save}>{size === null ? "Download" : `Download ${size}`}</Button>;
   return compact
     ? <IconButton icon="download" label="Download" onClick={save} />
     : <Button variant="quiet" class={styles.tool} icon="download" {...(size !== null && { title: `Download ${size}` })} onClick={save}><span class={styles.label}>Download</span></Button>;

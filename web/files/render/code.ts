@@ -31,16 +31,25 @@ async function highlighterFor(lang: Language): Promise<HighlighterCore> {
   return h;
 }
 
-/** One `<span class="line">` per line (a block, so copying keeps the breaks), the text set as text. */
+/** A line's box: `<span class="line">` (a block, so copying keeps the breaks, numbered by the viewer's CSS) holding one `<span class="text">`. */
+function lineBox(): { line: HTMLSpanElement; text: HTMLSpanElement } {
+  const line = document.createElement("span");
+  line.className = "line";
+  const text = document.createElement("span");
+  text.className = "text";
+  line.append(text);
+  return { line, text };
+}
+
+/** One line box per line, the text set as text. */
 export function plainLines(text: string): DocumentFragment {
   const out = document.createDocumentFragment();
   const lines = text.split("\n");
   if (lines.at(-1) === "") lines.pop();
-  for (const line of lines) {
-    const span = document.createElement("span");
-    span.className = "line";
-    span.textContent = line;
-    out.append(span);
+  for (const content of lines) {
+    const { line, text: box } = lineBox();
+    box.textContent = content;
+    out.append(line);
   }
   return out;
 }
@@ -56,16 +65,15 @@ export async function highlightedLines(text: string, lang: Language): Promise<Do
   const { tokens } = h.codeToTokens(text, { lang, theme: "muxen", tokenizeMaxLineLength: LINE_MAX });
   if (tokens.at(-1)?.length === 0) tokens.pop();
   const out = document.createDocumentFragment();
-  for (const line of tokens) {
-    const span = document.createElement("span");
-    span.className = "line";
-    for (const token of line) {
+  for (const tokensOfLine of tokens) {
+    const { line, text: box } = lineBox();
+    for (const token of tokensOfLine) {
       const part = document.createElement("span");
       if (token.color) part.style.color = token.color;
       part.textContent = token.content;
-      span.append(part);
+      box.append(part);
     }
-    out.append(span);
+    out.append(line);
   }
   return out;
 }
