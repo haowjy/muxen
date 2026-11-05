@@ -11,6 +11,8 @@ interface FieldProps {
   value: string;
   /** Called with the new text on every edit. */
   onInput: (value: string) => void;
+  /** Return, or leaving the field: a value that saves when it is done, not on every edit. */
+  onCommit?: () => void;
   placeholder?: string;
   name?: string;
   disabled?: boolean;
@@ -25,7 +27,7 @@ interface FieldProps {
 }
 
 /** A labelled single-line field. With SearchField, the only place an `<input>` lives for screens (lint rule 1). */
-export function TextField({ label, value, onInput, hint, error, focusTarget, class: className, ...rest }: FieldProps) {
+export function TextField({ label, value, onInput, onCommit, hint, error, focusTarget, class: className, ...rest }: FieldProps) {
   const id = useId();
   const focusRef = useFocusRef(focusTarget);
   const attach = useCallback((el: HTMLInputElement | null) => {
@@ -42,6 +44,10 @@ export function TextField({ label, value, onInput, hint, error, focusTarget, cla
         id={id}
         value={value}
         onInput={(e) => { onInput(e.currentTarget.value); }}
+        {...(onCommit && {
+          onBlur: onCommit,
+          onKeyDown: (e: TargetedKeyboardEvent<HTMLInputElement>) => { if (e.key === "Enter" && !e.isComposing) onCommit(); },
+        })}
         class={styles.input}
         aria-invalid={error ? true : undefined}
         aria-describedby={note ? `${id}-note` : undefined}

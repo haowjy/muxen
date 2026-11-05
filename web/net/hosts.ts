@@ -1,4 +1,5 @@
 import { httpFsApi, type FsApi } from "../files/api";
+import { httpSettingsApi, type SettingsApi } from "./settings";
 import type { HostEntry, Lifecycle, Transport } from "../platform/types";
 import { CloseCode } from "../proto/generated/messages";
 import { backoffMs } from "../tabs/connection";
@@ -31,6 +32,8 @@ export interface HostClient {
   /** The one WebSocket all its tabs share. */
   readonly socket: Host;
   readonly fs: FsApi;
+  /** Its config.toml's live keys (Settings' section for this server). */
+  readonly settings: SettingsApi;
 }
 
 export interface HostsOptions {
@@ -188,6 +191,7 @@ export class HostRegistry {
         checkingSince: entry.pageOrigin === null ? null : this.now(),
         socket,
         fs: httpFsApi(this.opts.transport.httpBase(handle), this.fetchFn),
+        settings: httpSettingsApi(this.opts.transport.httpBase(handle), this.fetchFn),
       },
       attempt: 0,
       timer: undefined,
@@ -203,7 +207,7 @@ export class HostRegistry {
     return this.opts.now?.() ?? Date.now();
   }
 
-  private patch(slot: Slot, change: Partial<Omit<HostClient, "socket" | "fs">>): void {
+  private patch(slot: Slot, change: Partial<Omit<HostClient, "socket" | "fs" | "settings">>): void {
     slot.client = { ...slot.client, ...change };
     this.applyRunning();
     this.emit();

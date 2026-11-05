@@ -2,6 +2,7 @@
 // import it (lint rule 4). The daemon is faked at two seams, so the real code above runs:
 // HTTP (`fetch`, which answers /auth/*) and the socket (a FakeLink that welcomes and answers
 // listings and watches). Nothing here knows which environment it stands in for.
+import { defaultSettings, serveSettings, type FakeSettings } from "./settings";
 import { tabId } from "../tabKey";
 import { FakeLink } from "./host";
 import { UploadScript } from "./uploads";
@@ -67,6 +68,8 @@ export interface FakeDaemon {
   /** Answers `/fs/*` requests (`serveFs` serves a tree); `undefined` falls through to a 404. */
   /** `signal` is the request's: a route that waits (a search) ends on an abort, as a real fetch does. */
   fs?: (request: { method: string; path: string; query: URLSearchParams; body: string | null; signal: AbortSignal | null }) => Response | Promise<Response> | undefined;
+  /** `/settings` and `/settings/reload`: the defaults, saved as the daemon saves them. */
+  settings: FakeSettings;
   /** Requests seen, `"METHOD /path?query"`, in order. */
   requests: string[];
 }
@@ -123,6 +126,7 @@ export function defaultDaemon(): FakeDaemon {
     refusedReason: "routes",
     code: "7KQ4XM2P",
     listing: null,
+    settings: { running: defaultSettings() },
     requests: [],
   };
 }
@@ -153,9 +157,10 @@ function daemonFetch(daemon: FakeDaemon): typeof fetch {
         daemon.node = "notEnrolled";
         return Promise.resolve(new Response(null, { status: 204 }));
       default: {
+        const body = typeof init?.body === "string" ? init.body : null;
         const answer = url.pathname.startsWith("/fs/")
-          ? daemon.fs?.({ method, path: url.pathname, query: url.searchParams, body: typeof init?.body === "string" ? init.body : null, signal: init?.signal ?? null })
-          : undefined;
+          ? daemon.fs?.({ method, path: url.pathname, query: url.searchParams, body, signal: init?.signal ?? null })
+          : serveSettings(daemon.settings, method, url.pathname, body);
         return Promise.resolve(answer ?? json(404, { error: "not_found" }));
       }
     }

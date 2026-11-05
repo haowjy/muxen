@@ -3,8 +3,9 @@
 // Escape and focus return to the gear are the router's and `Dialog`'s already, and a route would
 // add a Route, a hash and a saved form for a screen that never holds state). Servers, this
 // device (Remove this device, where the host admits it as a tailnet node), the keyboard, Clear
-// local data, and the preferences the platform keeps: appearance, terminal text size and, in the
-// app, when Face ID asks again. Each destructive action confirms in its own overlay, so Back from
+// local data, the preferences the platform keeps: appearance, terminal text size and, in the
+// app, when Face ID asks again; and a section per server for what its config.toml keeps
+// (`ServerSection`). Each destructive action confirms in its own overlay, so Back from
 // the confirmation returns here.
 import type { ComponentChildren } from "preact";
 import { useId, useState } from "preact/hooks";
@@ -16,6 +17,7 @@ import { Choice } from "../../ui/primitives/Choice";
 import { Dialog } from "../../ui/primitives/Dialog";
 import { TitleBar } from "../../ui/primitives/DialogBars";
 import { ScreenBar } from "../../ui/primitives/ScreenBar";
+import { ServerSection } from "./ServerSection";
 import styles from "./Settings.module.css";
 
 const APPEARANCES: Array<{ value: Appearance; label: string }> = [
@@ -124,6 +126,7 @@ export function Settings() {
                 <Choice label="Ask for Face ID" options={RELOCKS} value={preferences.relock} onChange={setRelock} />
               </Section>
             )}
+            {hosts.map((host) => <ServerSection key={host.entry.handle} host={host} />)}
             {manageHosts && (
               <Section
                 title="Servers"

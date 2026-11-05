@@ -147,7 +147,8 @@ program = "tmux"         # an absolute path if the unit's PATH doesn't find it
 muxen reads the file when it starts. After a hand edit, `systemctl --user reload muxen`
 (on a Mac, `kill -HUP` muxen's pid) applies `uploads_dir` and `search_skip` at once; the
 other keys wait for a restart, and a file that doesn't parse changes nothing (the log says
-where).
+where). Settings in the app shows and edits `uploads_dir` and `search_skip` for each server,
+and offers Reload config.toml after a hand edit.
 
 With neither socket key, muxen uses tmux's default socket, which tmux finds through
 `TMUX_TMPDIR`. A foreground run inherits it. A systemd user unit doesn't see variables

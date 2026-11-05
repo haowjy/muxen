@@ -1,6 +1,6 @@
 import type { ErrorBody, HttpError } from "../proto/generated/messages";
 
-// The generic client for a host's HTTP origin (the file API, /complete).
+// The generic client for a host's HTTP origin (the file API, /settings, /complete).
 
 /**
  * The daemon's generated codes, plus the client's own: `network` when nothing answered,
@@ -10,7 +10,8 @@ export type RefusalCode = HttpError | "network" | "incompatible" | `http_${strin
 
 /** A refusal: the daemon's `{"error": code}` ({@link ErrorBody}), or one of the client's codes. */
 export class HttpRefusal extends Error {
-  constructor(readonly status: number, readonly code: RefusalCode) {
+  /** `detail` is the daemon's, where it says more (`config_unavailable`: "line 3, column 7"). */
+  constructor(readonly status: number, readonly code: RefusalCode, readonly detail?: string) {
     super(code);
   }
 }
@@ -32,8 +33,10 @@ export async function send(target: string, init: RequestInit = {}, retries = BUS
       throw new HttpRefusal(0, "network");
     }
     if (res.ok) return res;
-    const code = await res.json().then((b: unknown) => (b as Partial<ErrorBody> | null)?.error, () => undefined);
-    const err = new HttpRefusal(res.status, typeof code === "string" ? code : `http_${String(res.status)}`);
+    const body = await res.json().then((b: unknown) => b as Partial<ErrorBody> | null, () => null);
+    const code = body?.error;
+    const detail = typeof body?.detail === "string" ? body.detail : undefined;
+    const err = new HttpRefusal(res.status, typeof code === "string" ? code : `http_${String(res.status)}`, detail);
     if (err.code !== "busy" || attempt >= retries) throw err;
     const wait = Number(res.headers.get("Retry-After")) || 1;
     await new Promise((resolve) => setTimeout(resolve, wait * 1000));

@@ -8,8 +8,8 @@ import type { FakeDaemon } from ".";
 /** What an aborted `fetch` rejects with. */
 export const aborted = (): DOMException => new DOMException("The operation was aborted.", "AbortError");
 
-/** Folders the daemon's search walk never enters (`src/fs/search/mod.rs` `SKIPPED`). */
-const SKIPPED = [".git", "node_modules", "target"];
+/** Folders the daemon's search walk lists but doesn't enter: the default `search_skip`. */
+const SKIPPED = ["node_modules"];
 
 export interface FakeTree {
   home: string;
@@ -65,7 +65,7 @@ export class FakeFs implements FsApi {
 
   /**
    * A stand-in for the daemon's search walk (fs.md "GET /fs/search"): every entry below `root`, skipping what the walk
-   * skips (dotted names unless `hidden`; folders named `.git`, `node_modules` or `target`, themselves and all below),
+   * skips (dotted names unless `hidden`; what is below a folder named `node_modules`, the folder itself listed),
    * matched by a plain subsequence per term (fuzzy) or a glob, nearer first. Close enough to draw; the real ranking is
    * the daemon's.
    */
@@ -73,7 +73,7 @@ export class FakeFs implements FsApi {
     if (!this.tree.dirs.includes(root)) throw new HttpRefusal(404, this.tree.files[root] ? "not_a_directory" : "not_found");
     const prefix = root === "/" ? "/" : `${root}/`;
     const skipped = (rel: string): boolean => rel.split("/").some((seg, i, all) =>
-      (!hidden && seg.startsWith(".")) || (SKIPPED.includes(seg) && (i < all.length - 1 || this.tree.dirs.includes(prefix + rel))));
+      (!hidden && seg.startsWith(".")) || (SKIPPED.includes(seg) && i < all.length - 1));
     const below = [...this.tree.dirs, ...Object.keys(this.tree.files)].filter((p) => p.startsWith(prefix) && p !== root).map((p) => p.slice(prefix.length)).filter((rel) => !skipped(rel));
     const glob = /[*?]/.test(q);
     const matches: { rel: string; hits: [number, number][] }[] = [];

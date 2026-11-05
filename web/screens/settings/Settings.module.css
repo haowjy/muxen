@@ -7,3 +7,15 @@
 .actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
 /* A destructive action reads as one: the error colour on its label. */
 .danger { color: var(--color-status-error); }
+/* A server's settings: its fields stack under its heading, each a label, a note and controls. */
+.field { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-2); align-self: stretch; max-width: 32rem; margin-top: var(--space-2); }
+.label { margin: 0; font-size: var(--text-small); font-weight: var(--weight-bold); }
+.reset { align-self: flex-start; }
+.patterns { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border: 1px solid var(--color-border); border-radius: var(--radius-2); }
+.pattern { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding-inline: var(--space-3) var(--space-1); min-height: 40px; }
+.pattern + .pattern { border-top: 1px solid var(--color-border); }
+.pattern code { font-family: var(--font-mono); font-size: var(--text-small); overflow-wrap: anywhere; }
+.detail code { font-family: var(--font-mono); }
+.notice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); font-size: var(--text-small); }
+.loading { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-small); color: var(--color-text-muted); }
+.unreachable { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); }
