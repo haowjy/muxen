@@ -60,9 +60,14 @@ export function useTabOutline(session: FilesSession, tab: string, root: string |
       expand(folders.reduce((all: readonly string[], folder) => withExpanded(all, folder, true, root), open));
       select(path);
       setRevealed(entry ? { path, entry } : null);
-      // Each level at once, ahead of the outline's other folders: the row is what the user asked for.
+      // Each level at once, ahead of the outline's other folders: the row is what the user asked for. A refused page
+      // (busy is already retried) stops that level; its folder row offers the rest as for any folder.
       const { hidden } = session.browser.snapshot;
-      [root, ...folders].forEach((folder, i) => { void session.browser.folders.rest(folder, hidden, baseName(folders[i] ?? path)); });
+      [root, ...folders].forEach((folder, i) => {
+        const next = folders[i];
+        const until = next === undefined ? { name: baseName(path), dir: entry?.kind === "dir" } : { name: baseName(next), dir: true };
+        session.browser.folders.rest(folder, hidden, until).catch(() => undefined);
+      });
     },
     known: revealed?.path === selection ? revealed : null,
   };

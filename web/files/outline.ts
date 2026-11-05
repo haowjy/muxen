@@ -95,7 +95,7 @@ export function entryPlace(dir: string, entry: Entry): FilesPlace | null {
 export const UP = "..";
 
 /** Matches as the daemon sorts: ASCII letters folded, nothing else. */
-const fold = (s: string): string => s.replace(/[A-Z]/g, (c) => c.toLowerCase());
+export const fold = (s: string): string => s.replace(/[A-Z]/g, (c) => c.toLowerCase());
 
 export const loadedOf = (listing: Listing | null): Loaded =>
   !listing ? "none" : listing.entries.length >= listing.total && !listing.truncated ? "all" : "some";

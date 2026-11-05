@@ -1,6 +1,7 @@
 import { HttpRefusal } from "../net/http";
 import { Store } from "../ui/store";
 import type { FsApi, Listing } from "./api";
+import { fold } from "./outline";
 
 /** Typing pauses this long before a folder is asked for. */
 export const SETTLE_MS = 250;
@@ -13,8 +14,8 @@ export const SETTLE_MS = 250;
  */
 export const MAX_ENTRIES = 10_000;
 /**
- * First pages asked of the host at once. The daemon scans one folder at a time and refuses a request past a few
- * waiting (`busy`), so a burst (Show hidden over 30 open folders, a reveal down a deep path) waits here instead.
+ * Pages asked of the host at once. The daemon scans one folder at a time and refuses a request past a few waiting
+ * (`busy`), so a burst (Show hidden over 30 open folders, a reveal down a deep path of big folders) waits here instead.
  */
 export const LISTINGS_AT_ONCE = 2;
 /** The cache key of one listing; `hidden` listings are kept apart (`hidden=1` is a different scan). */
@@ -54,7 +55,7 @@ export class Folders extends Store<FoldersView> {
   private serial = 0;
   /** The folders each owner has on screen (the browser's place, the outline's open folders, the Preview panel's folder). */
   private readonly pins = new Map<string, Set<string>>();
-  /** First pages under way, at most `LISTINGS_AT_ONCE`; the rest wait their turn, by folder, the ones asked `behind` last. */
+  /** Pages under way, at most `LISTINGS_AT_ONCE`; the rest wait their turn, by folder, the ones asked `behind` last. */
   private running = 0;
   private readonly waiting: { key: string; go: () => void; behind: boolean }[] = [];
 
@@ -160,15 +161,18 @@ export class Folders extends Store<FoldersView> {
 
   /**
    * Every page of `path` not yet held, one request after another: the path field's "Load the rest". With `until`, only
-   * until that name is held: a reveal needs its row, which a folder of more than a page may sort past the first. The
-   * first page is asked for (ahead of the outline's) if none is held.
+   * until that name is held or the pages have sorted past where it would be (it is gone): a reveal needs its row, which
+   * a folder of more than a page may sort past the first. `until.dir` unknown is given as false: a file sorts after the
+   * folder of the same name, so the paging stops no earlier. The first page is asked for (ahead of the outline's) if
+   * none is held. A refused page rejects.
    */
-  async rest(path: string, hidden: boolean, until?: string): Promise<void> {
+  async rest(path: string, hidden: boolean, until?: { name: string; dir: boolean }): Promise<void> {
     if (!this.peek(path, hidden)) await this.load(path, hidden);
     for (;;) {
       const have = this.peek(path, hidden);
       if (!have || have.entries.length >= have.total || have.truncated) return;
-      if (until !== undefined && have.entries.some((e) => e.name === until)) return;
+      const last = have.entries.at(-1);
+      if (until && last && (have.entries.some((e) => e.name === until.name) || sortsBefore(until, { name: last.name, dir: last.kind === "dir" }))) return;
       await this.more(path, hidden);
       // A page that added nothing (the daemon's total moved) ends the loop instead of asking again.
       if ((this.peek(path, hidden)?.entries.length ?? 0) <= have.entries.length) return;
@@ -184,7 +188,7 @@ export class Folders extends Store<FoldersView> {
     for (const hidden of shown) void this.relist(path, hidden);
   }
 
-  /** Runs `ask` once fewer than `LISTINGS_AT_ONCE` first pages are under way; a finished one hands its turn on. */
+  /** Runs `ask` once fewer than `LISTINGS_AT_ONCE` pages are under way; a finished one hands its turn on. */
   private async turn<T>(key: string, behind: boolean, ask: () => Promise<T>): Promise<T> {
     if (this.running < LISTINGS_AT_ONCE) this.running++;
     else await new Promise<void>((go) => { this.waiting.push({ key, go, behind }); });
@@ -242,7 +246,7 @@ export class Folders extends Store<FoldersView> {
     const have = this.peek(path, hidden);
     if (!have || have.entries.length >= have.total) return;
     const ticket = this.begin(folderKey(path, hidden));
-    const next = await this.api.list(path, have.entries.length, hidden);
+    const next = await this.turn(folderKey(path, hidden), false, () => this.api.list(path, have.entries.length, hidden));
     // A newer request began, or the folder was dropped, while this page was on its way: it belongs to the old pages.
     const now = this.peek(path, hidden);
     if (!this.landed(folderKey(path, hidden), ticket) || now !== have) return;
@@ -251,3 +255,22 @@ export class Folders extends Store<FoldersView> {
 }
 
 const weigh = (record: Held): number => 1 + (record.listing?.entries.length ?? 0);
+
+/**
+ * Whether `a` sorts before `b` in a listing, as the daemon sorts (`src/fs/list.rs`): folders first, then the name's
+ * UTF-8 bytes with ASCII letters folded, ties by bytes. A name that is not UTF-8 comes lossy and may sort elsewhere.
+ */
+function sortsBefore(a: { name: string; dir: boolean }, b: { name: string; dir: boolean }): boolean {
+  if (a.dir !== b.dir) return a.dir;
+  const folded = compareBytes(fold(a.name), fold(b.name));
+  return (folded === 0 ? compareBytes(a.name, b.name) : folded) < 0;
+}
+
+const utf8 = new TextEncoder();
+
+function compareBytes(a: string, b: string): number {
+  const x = utf8.encode(a);
+  const y = utf8.encode(b);
+  for (let i = 0; i < Math.min(x.length, y.length); i++) if (x[i] !== y[i]) return (x[i] ?? 0) - (y[i] ?? 0);
+  return x.length - y.length;
+}
