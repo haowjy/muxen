@@ -4985,3 +4985,20 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
   than centred as phase 1's column was: centred, the rows would jump sideways on every toggle and start
   away from the path that names their folder. Rejected: a cap with the panel on too (the divider is the
   user's own width).
+
+### Search in Files: a desktop click looks, a file shown is a file opened
+
+- **Decided:** 2026-11-05, the Files phase 3 build (p550), where the Search spec and mockup C left it open.
+- **What:** on a desktop a click on a result selects it and the Preview panel follows it, as a click in
+  the outline does; Enter or a double-click closes Search and reveals the row in the outline. The phone
+  opens a result on a tap. A file counts as opened for the recents when it shows, the Preview panel
+  included; the recents keep a path, its type and when it was opened, and a recent row shows that time,
+  not a size. Search's field ends with Cancel on both layouts, as the path field does. Search's history
+  entry names the folder it searches, and the host's Files session keeps one Search per tab and folder.
+- **Rejected:** a desktop click that reveals at once (the panel could not show a result before you
+  leave Search, and it would differ from the outline's click); recording only files opened full width
+  (on a desktop with the panel on, most reading happens there and the recents would stay nearly empty);
+  a stored size on a recent (stale once the file changes: missing data shows as missing); mockup C's ×
+  inside the desktop field (the path field, already shipped, ends with Cancel); one Search per tab with
+  no folder (a Back onto Search's entry renders once with the folder it left before the place follows,
+  which replaced the kept Search with an empty one).

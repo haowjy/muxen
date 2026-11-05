@@ -282,7 +282,7 @@ Each Files tab presents one folder list under one header line. At rest the line 
 ```text
 phone, at rest                           phone, the path line tapped (keyboard up)
 ┌──────────────────────────────────┐     ┌──────────────────────────────────┐
-│ ~/repos/muxen/                 ⋯ │     │ [ ~/repos/▒muxen/▒     ] Cancel  │  last folder selected
+│ ~/repos/muxen/               ⌕ ⋯ │     │ [ ~/repos/▒muxen/▒     ] Cancel  │  last folder selected
 │ ▢ ..                             │     │ ▢ ..                             │
 │ ▣ docs                         › │     │ ▣ docs                         › │
 │ ▣ src                          › │     │ ▣ src                          › │
@@ -293,10 +293,10 @@ phone, at rest                           phone, the path line tapped (keyboard u
 └──────────────────────────────────┘     └──────────────────────────────────┘
 
 desktop, at rest
-│ ~/repos/muxen/                       [Upload] [Paste] [Refresh] [⋯] │
+│ ~/repos/muxen/              [Search] [Upload] [Paste] [Refresh] [⋯] │
 ```
 
-**The header line.** One line per folder, on both layouts: the path line, then the folder's controls. A desktop shows Upload, Paste and Refresh as icons, then ⋯. The phone's line has room for the path and ⋯ only, so Upload, Paste and Refresh are in ⋯ there. ⋯ (Folder options) holds Copy path first, then Show hidden files (a check while on; on a desktop its shortcut beside it, as Cmd/Ctrl+Shift+. toggles it with no menu open). The folder's name is the page's heading for assistive technology; on screen the tab and the path say it.
+**The header line.** One line per folder, on both layouts: the path line, then the folder's controls. A desktop shows Search, Upload, Paste and Refresh as icons, then ⋯. The phone's line has room for the path, Search and ⋯ only, so Upload, Paste and Refresh are in ⋯ there. ⋯ (Folder options) holds Copy path first, then Show hidden files (a check while on; on a desktop its shortcut beside it, as Cmd/Ctrl+Shift+. toggles it with no menu open). The folder's name is the page's heading for assistive technology; on screen the tab and the path say it.
 
 **The path line** is one plain string at rest, in mono: the folder's path (`~/…` under `$HOME`) with its trailing `/` (`/` at the top), exactly the text the field starts with. Nothing in it is a link or a button, and there is no copy icon after it (Jimmy: "it should just be 1 line string"; ⋯ › Copy path copies the folder's path). A click or tap anywhere on it makes it the field, with the last folder's name and its `/` selected (`muxen/` in `~/repos/muxen/`), so Delete leaves `~/repos/` and the list shows that folder; typing replaces the selection and narrows. Nothing in the list is highlighted at first, so Enter right away stays where it is, with no new history entry. iOS places the caret at the tap point after focus, so the selection is set again on the next frame and once more after the tap settles (taps while already editing place the caret normally). Editing is a history entry, so Back ends it before it leaves the folder; Cancel beside the field restores the path and stays, as Escape and Back do. Hiding the keyboard, or a tap elsewhere, only lowers it: the edit and its text stay, with Cancel, and a tap on the field resumes typing. The path line has no keyboard shortcut: a click is the way in. `/` is left for Search, and Cmd+L is not taken: whether Chrome and Safari let a page have it is unchecked on real browsers, and the address bar is the browser's. The field turns autocorrect, auto-capitalization and spellcheck off and sets `enterkeyhint="go"`. It keeps the ordinary text keyboard: the iPhone's URL keyboard has `/` on its first layer but no space bar, and folder names can hold spaces.
 
@@ -325,7 +325,7 @@ desktop, panel on                                                  desktop, pane
 
 **The list's keyboard (desktop).** The folder list is one control that holds focus (a click on a row focuses it, Tab reaches it); its rows are items of it, not focusable themselves, and the selected row is named by `aria-activedescendant` and filled. ArrowDown and ArrowUp move the selection over the rows on screen and stop at the ends (from nothing, Down takes the first row and Up the last), Home and End take the first and last. ArrowRight opens a closed folder, else moves to its first row; ArrowLeft closes an open folder, else moves to the folder holding the row. Enter goes into the selected row (or acts on an open folder's last row: Show more, Try again), and Backspace or Cmd/Ctrl+ArrowUp goes up one folder. The folder the key opened (or its parent) takes the keys, so Enter and Backspace can be chained. On the phone a tap opens a row without selecting it, so a phone shows no selection. The rules are `files/outline.ts`'s (pure, with the rows to draw and the selection moves); `FolderList.tsx` wires keys and focus.
 
-**Shortcuts (desktop).** Files' shortcuts (Cmd/Ctrl+I on a file, Cmd/Ctrl+Shift+. and Cmd/Ctrl+V on a folder, Space for the Preview panel, Escape out of a file full width) are one keymap, `screens/files/keymap.ts`, with one rule for when keys are free: no dialog or menu is open, no text field has focus (unless the shortcut is one a field allows), and nothing earlier claimed the key. Every Files shortcut registers there; a key two components register goes to the one mounted last. A shortcut is written for the keyboard: ⌘ and ⇧ on a Mac, iPad or iPhone, Ctrl and Shift elsewhere (`Platform.shortcuts`, `useChordLabel`), and is shown only beside the control whose shortcut it is: the default tab in a file's own Insert ▾ menu shows ⌘I, the upload offer's and a row's menu don't.
+**Shortcuts (desktop).** Files' shortcuts (Cmd/Ctrl+I on a file, Cmd/Ctrl+Shift+. and Cmd/Ctrl+V on a folder, `/` and Cmd/Ctrl+P for Search, Space for the Preview panel, Escape out of a file full width or Search) are one keymap, `screens/files/keymap.ts`, with one rule for when keys are free: no dialog or menu is open, no text field has focus (unless the shortcut is one a field allows), and nothing earlier claimed the key. Every Files shortcut registers there; a key two components register goes to the one mounted last. A shortcut is written for the keyboard: ⌘ and ⇧ on a Mac, iPad or iPhone, Ctrl and Shift elsewhere (`Platform.shortcuts`, `useChordLabel`), and is shown only beside the control whose shortcut it is: the default tab in a file's own Insert ▾ menu shows ⌘I, the upload offer's and a row's menu don't.
 
 **Narrowing.** While the field is being edited, the list shows the rows of the typed parent folder (the folder the text names through its last `/`) whose names match the typed last segment, folders and files alike, ASCII case folded as the daemon sorts them. The name typed whole comes first, then names that start with the segment, then names that contain it, each in the daemon's order. The first row is `..`, which steps the field to the parent folder (`~/repos/` becomes `~/`; `~/` becomes `/home/`) and is absent at `/`; it takes a tap like the other rows. There is no line naming the parent: the field says where you are. While the last segment is empty (right after a `/`) the list shows all of the parent's rows and none is selected; once a character is typed the first match is selected. There is no ghost text and no accepting a name into the field: Tab and `/` are typed as they are. ArrowDown and ArrowUp (the focus stays in the field) move the selection, including onto the `..` row. A tap on a row opens it and ends editing, a folder as a folder and a file as a file. The row takes the tap without taking focus from the field, so the keyboard stays up until the place opens. Typing a path to another folder (`~/repos/many/fo`) narrows that folder's rows once its listing has arrived. A name starting with `.` asks for the hidden listing, whatever the toggle says.
 
@@ -341,34 +341,52 @@ desktop, panel on                                                  desktop, pane
 
 **Search** finds files and folders below the folder on screen, by name, at any depth (Jimmy: "a
 separate 'search' to 'search' for a file"; he chose fuzzy, a glob when `*` or `?` is typed, and recents
-when empty). It is its own place, not the path line: the magnifier in the folder's header line on
-both layouts, and on a desktop `/` or Cmd/Ctrl+P (registered in Files' keymap, so they don't fire while
-typing; Cmd/Ctrl+P is taken from the browser's Print only while Files has the keys). Opening it is a
-history entry over the folder, so Back closes it, and Escape too.
+when empty). It is its own place, not the path line: the magnifier, the first control after the path on
+the folder's header line on both layouts (on the phone between the path and ⋯; shown while the folder's
+rows are, not while it loads, is refused or is gone), and on a desktop `/` or
+Cmd/Ctrl+P (registered in Files' keymap, so they don't fire while typing; Cmd/Ctrl+P is taken from the
+browser's Print only while Files has the keys, and pressed in Search's field it stays there). Opening it
+is a history entry over the folder, naming that folder, so Back closes it, and Escape and Cancel too.
+While it is open its field is the header line and its rows replace the folder's, which stay as they were
+underneath. A Search is kept per tab and folder (`screens/files/session.ts`), so a Back onto its entry
+finds the query, the rows and the scroll as they were.
 
-- **The field** says what it searches ("Search ~/repos/muxen"), turns autocorrect, auto-capitalization
-  and spellcheck off (iOS would capitalize the first letter and turn on case-sensitive matching), and
-  shows which mode the text is in: Fuzzy, or Glob once it has `*` or `?`. Matching is the daemon's
+- **The field** says what it searches ("Search ~/repos/muxen"), starts with the magnifier, turns
+  autocorrect, auto-capitalization and spellcheck off (iOS would capitalize the first letter and turn on
+  case-sensitive matching), has the keyboard's Search key, and shows which mode the text is in at its
+  end: Fuzzy, or Glob (in the accent) once it has `*` or `?`. Matching is the daemon's
   ([fs.md](../fs.md#get-fssearchpath)): fuzzy terms separated by spaces, smart case, nearer files first.
+  Cancel ends it on both layouts, as it ends the path field. The field takes the keyboard inside the tap
+  on the magnifier.
 - **Asking.** The query is sent after typing pauses 250 ms, as the path field's listing is; a request
   the field has moved past is aborted, and its answer, if it lands, is never shown. Until the new
-  answer arrives the previous results stay, quieted. Hidden files are searched while the folder's Show
-  hidden files is on.
-- **Results** are rows like a folder's: icon, name with the matched letters marked, and the folder it
-  is in, relative to the searched one, in mono, quiet. They are the daemon's best 50, best first. A tap
-  (or Enter on the selected row; ArrowUp and ArrowDown move it while the field keeps the keys) opens it:
-  a folder is entered, a file is opened (on the phone full screen; Back returns to the results, with
-  the query and scroll kept). On a desktop with the outline (Files phase 2), Enter instead closes Search
-  and reveals the row in the outline, its folders expanded.
+  answer arrives the previous rows (the recents, at first) stay, quieted, under "Searching". Text that
+  returns to what the rows answer asks nothing. Hidden files are searched while the folder's Show
+  hidden files is on, and a change to it searches again. A query past the daemon's 256 bytes is not
+  sent; the list says "A search can be at most 256 bytes long."
+- **Results** are rows like a folder's: icon, name with the matched letters marked (the accent, and
+  heavier), and the folder it is in, relative to the searched one, in mono, quiet; on the phone that
+  folder is a second line (the searched folder's name for a row directly in it), with the age at the
+  row's end. They are the daemon's best 50, best first, under "3 matches" ("The best 50 matches" at
+  50). Each new answer selects its first row. ArrowUp and ArrowDown move the selection while the field
+  keeps the keys; Enter acts on it (Enter pressed before the answer lands acts on the answer). On the
+  phone a tap (or Go) opens the row: a folder is entered, a file opened full screen; Back returns to
+  the results, with the query and scroll kept. On a desktop a click selects the row and the Preview
+  panel follows it, as in the outline; Enter or a double-click closes Search and reveals the row in the
+  outline, its folders opened and the list holding the keys.
 - **Stopped.** When the walk stopped at a cap the list ends with one line: "Searched the first
-  100,000 entries. Search from a deeper folder to see the rest." (or "…stopped after half a second…"),
-  never as an error. Nothing matched and the walk covered everything: "Nothing below ~/repos matches
-  x".
+  100,000 entries.", "Search stopped after half a second." or "Search stopped: too many folders to keep
+  track of.", each followed by "Search from a deeper folder to see the rest.", never as an error. With
+  no rows above it, "Nothing matches x in what was searched." comes first. Nothing matched and the walk
+  covered everything: "Nothing below ~/repos matches x".
 - **Recents.** With the field empty, Search lists the files opened on this device from this host below
-  the searched folder, most recent first, up to 20 (view memory, per host; Clear local data forgets
-  them). Opening a file anywhere in Files records it. With none: "Files you open show here."
-- **Errors** read as a listing's do, in plain words with Try again; offline, the field stays and says
-  the host can't be reached.
+  the searched folder, most recent first, under "Opened recently", each with how long ago it was opened
+  (the row has no size: the file may have changed since). The host keeps its 20 most recent (view
+  memory, per host id; Clear local data forgets them). A file is opened when it shows: full width, full
+  screen on the phone, or in the Preview panel. The phone selects none of them (a tap is the way in); a
+  desktop selects the first, and the panel shows it. With none: "Files you open show here."
+- **Errors** read as a listing's do, in plain words with Try again, in place of the rows; offline, the
+  field stays and the list says the host can't be reached. The Preview panel shows the folder meanwhile.
 
 **Browsing by tap** is unchanged at rest:
 
@@ -389,7 +407,7 @@ history entry over the folder, so Back closes it, and Escape too.
 
 ## Persistence and input
 
-- Small view settings are remembered per device, apart from the workspace: Show hidden files, the Files Preview panel's on or off and its divider's width; Search recents go in the same place. One typed owner, `app/viewMemory.ts`, over `PlatformStorage.view` (the page's localStorage, read synchronously at boot, never sent to native; blocked storage keeps the value for the page's life). A server's Files reads it when that server's Files first opens in a page life, so a toggle made on another server shows there after a reload. A value another build wrote that doesn't parse is the default.
+- Small view settings are remembered per device, apart from the workspace: Show hidden files, the Files Preview panel's on or off and its divider's width, and the files opened per host (Search's recents). One typed owner, `app/viewMemory.ts`, over `PlatformStorage.view` (the page's localStorage, read synchronously at boot, never sent to native; blocked storage keeps the value for the page's life). A server's Files reads it when that server's Files first opens in a page life, so a toggle made on another server shows there after a reload. A value another build wrote that doesn't parse is the default.
 - Navigation between Home, the tab overview and tabs preserves open tabs and process state. Each Files tab retains its own folder or preview, including across reload, locally on that device.
 - Home/list refresh runs on entry and on debounced sessionsChanged while visible; there is no polling or network search per keystroke. Fetch when Open session opens, when a long-press menu opens without a listing newer than the last `sessionsChanged`, and on reconnect, and prune tabs only from authoritative listings for the matching host and tmux endpoint. A listing from the same endpoint decides all that endpoint's tabs, including live tabs: matching sessions from the same tmux run remain; a different run at that endpoint closes the old run's tabs. A scratch endpoint is never touched by the main-endpoint listing, and a null listing (no server) decides nothing. One notice reports closures. The hub serializes one-shot requests and answers an overlapping request with `busy`, so a listing cannot straddle a window-creation reply. Explicit user retry handles list errors.
 - Restore terminal tabs after reload using validated session identities and Files tabs with their own host and saved folder or preview. An unavailable session must not be silently replaced with a same-named session from another server. A workspace saved before tabs followed sessions (format version 1, window tabs) is discarded whole at boot, and so are drafts keyed by its window tabs: muxen starts at Home with no tabs. Each workspace's last terminal tab is saved too, so Insert path after a reload still goes where it went before, and so is its server's home folder (learned from the listing of `~` that Open files makes anyway), so a Files tab at home reads "~" at once.

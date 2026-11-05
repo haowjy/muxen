@@ -1,5 +1,5 @@
 import type { ComponentChildren } from "preact";
-import { useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 import { useApp, useAppView } from "../../app/context";
 import type { FileRef } from "../../files/browser";
 import { formatSize, formatTime } from "../../files/format";
@@ -53,6 +53,9 @@ export function FileView({ session, file, back, folder: within, onExpand, onLink
   // Copy text copies what was read: a file past the first MiB copies only that much, and says so.
   const loaded = kind === "code" && text.kind === "done" ? text.value : null;
   const copyNote = loaded?.truncated ? `Copied the first ${formatSize(TEXT_LIMIT)} of ${file.name}` : null;
+  // Shown is opened: Search's recents list it first.
+  const shown = !children;
+  useEffect(() => { if (shown) session.opened(file); }, [session, file.path, shown]);
 
   return (
     <div class={styles.view}>

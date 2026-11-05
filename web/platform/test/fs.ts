@@ -2,6 +2,7 @@
 // browser model's tests: any listed directory opens, dirs sort first, pages of `page` entries. Paths are already canonical.
 import { HttpRefusal } from "../../net/http";
 import type { Entry, FsApi, Listing } from "../../files/api";
+import type { Match, Search } from "../../proto/generated/messages";
 import type { FakeDaemon } from ".";
 
 export interface FakeTree {
@@ -48,8 +49,44 @@ export class FakeFs implements FsApi {
     return Promise.resolve({ text: "", size: 0, truncated: false });
   }
 
+  search(path: string, q: string, hidden: boolean): Promise<Search> {
+    return this.answer(`search ${path} ${q}`, () => this.found(path === "~" ? this.tree.home : path, q, hidden));
+  }
+
   rawUrl(path: string): string {
     return `fake://h/fs/raw${path}`;
+  }
+
+  /**
+   * A stand-in for the daemon's search walk (fs.md "GET /fs/search"): every entry below `root`, skipping what the walk
+   * skips, matched by a plain subsequence per term (fuzzy) or a glob, nearer first. Close enough to draw; the real
+   * ranking is the daemon's.
+   */
+  private found(root: string, q: string, hidden: boolean): Search {
+    if (!this.tree.dirs.includes(root)) throw new HttpRefusal(404, this.tree.files[root] ? "not_a_directory" : "not_found");
+    const prefix = root === "/" ? "/" : `${root}/`;
+    const skipped = (rel: string): boolean => rel.split("/").some((seg, i, all) => (!hidden && seg.startsWith(".")) || (i < all.length - 1 && [".git", "node_modules", "target"].includes(seg)));
+    const below = [...this.tree.dirs, ...Object.keys(this.tree.files)].filter((p) => p.startsWith(prefix) && p !== root).map((p) => p.slice(prefix.length)).filter((rel) => !skipped(rel));
+    const glob = /[*?]/.test(q);
+    const matches: { rel: string; hits: [number, number][] }[] = [];
+    for (const rel of below) {
+      const hits = glob ? globHits(q, rel) : fuzzyHits(q, rel);
+      if (hits) matches.push({ rel, hits });
+    }
+    matches.sort((a, b) => a.rel.split("/").length - b.rel.split("/").length || a.rel.length - b.rel.length || (a.rel < b.rel ? -1 : 1));
+    const entry = (rel: string): Entry => {
+      const path = prefix + rel;
+      const name = rel.slice(rel.lastIndexOf("/") + 1);
+      const stat = this.tree.stats?.[path];
+      if (this.tree.dirs.includes(path)) return { name, kind: "dir", link: false, ...(stat?.mtime !== undefined && { mtime: stat.mtime }) };
+      return { name, kind: "file", link: false, size: stat?.size ?? 10, mtime: stat?.mtime ?? 0, mime: this.tree.files[path] ?? "" };
+    };
+    return {
+      path: root,
+      matches: matches.slice(0, 50).map(({ rel, hits }): Match => ({ ...entry(rel), path: rel, hits })),
+      read: below.length,
+      stopped: null,
+    };
   }
 
   private listing(path: string, offset: number, hidden: boolean): Listing {
@@ -88,6 +125,57 @@ export class FakeFs implements FsApi {
   }
 }
 
+/** Each term of `q` (split on spaces) as a subsequence, in the last segment if it fits there, else the whole path; smart case. */
+function fuzzyHits(q: string, rel: string): [number, number][] | null {
+  const fold = q === q.toLowerCase();
+  const text = fold ? rel.toLowerCase() : rel;
+  const hit = new Set<number>();
+  for (const term of q.split(" ").filter(Boolean)) {
+    const at = (from: number): number[] | null => {
+      const found: number[] = [];
+      let i = from;
+      for (const ch of fold ? term.toLowerCase() : term) {
+        i = text.indexOf(ch, i);
+        if (i < 0) return null;
+        found.push(i++);
+      }
+      return found;
+    };
+    const found = at(rel.lastIndexOf("/") + 1) ?? at(0);
+    if (!found) return null;
+    for (const i of found) hit.add(i);
+  }
+  return runsOf([...hit].sort((a, b) => a - b));
+}
+
+/** `*` and `?` within a segment, `**` across them; with no `/`, against the last segment. The hits are the literal runs. */
+function globHits(q: string, rel: string): [number, number][] | null {
+  const segment = !q.includes("/");
+  const base = segment ? rel.lastIndexOf("/") + 1 : 0;
+  const text = rel.slice(base);
+  let source = "";
+  for (const part of q.split(/(\*\*\/?|\*|\?)/)) {
+    if (part === "") continue;
+    if (part.startsWith("**")) source += part.endsWith("/") ? "(?:.*/)?" : ".*";
+    else if (part === "*") source += "[^/]*";
+    else if (part === "?") source += "[^/]";
+    else source += `(${part.replace(/[.+^${}()|[\]\\]/g, "\\$&")})`;
+  }
+  const m = new RegExp(`^${source}$`, q === q.toLowerCase() ? "di" : "d").exec(text);
+  if (!m?.indices) return null;
+  return m.indices.slice(1).flatMap((r) => (r ? [[r[0] + base, r[1] + base] as [number, number]] : []));
+}
+
+const runsOf = (at: number[]): [number, number][] => {
+  const runs: [number, number][] = [];
+  for (const i of at) {
+    const last = runs[runs.length - 1];
+    if (last && last[1] === i) last[1] = i + 1;
+    else runs.push([i, i + 1]);
+  }
+  return runs;
+};
+
 const json = (status: number, body: unknown): Response =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
@@ -108,6 +196,7 @@ export function serveFs(fs: FakeFs): NonNullable<FakeDaemon["fs"]> {
       return rest.startsWith("/~") ? rest.slice(1) : rest;
     };
     if (method === "GET" && path.startsWith("/fs/list/")) return json(200, await fs.list(at("/fs/list"), ...page(query)));
+    if (method === "GET" && path.startsWith("/fs/search/")) return json(200, await fs.search(at("/fs/search"), query.get("q") ?? "", query.get("hidden") === "1"));
     if (method === "GET" && path.startsWith("/fs/raw/")) {
       const target = at("/fs/raw");
       const probed = await fs.probe(target);

@@ -111,10 +111,11 @@ export class FocusController extends Store<FocusView> implements FocusPort {
     else this.targets.get(owner)?.blur();
   }
 
-  /** A Files tab's keyboard control: its path field takes the keyboard when it is down, and gives it up when it is up. */
+  /** A Files tab's keyboard control: its field (Search's while it is open, else the path field) takes the keyboard when it is down, and gives it up when it is up. */
   toggleFilesKeyboard(up: boolean): void {
-    if (up) this.targets.get("path")?.blur();
-    else this.focusTarget("path", true);
+    const field = this.targets.has("search") ? "search" : "path";
+    if (up) this.targets.get(field)?.blur();
+    else this.focusTarget(field, true);
   }
 
   /**

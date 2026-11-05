@@ -22,6 +22,8 @@ interface Props {
   /** The folder the list starts at, and its pages. */
   root: Listing;
   selection: string | null;
+  /** The selected row's entry when no listing held holds it (Search's results). */
+  known?: { path: string; entry: Entry } | null;
   hidden: boolean;
   held: ReadonlyMap<string, Held>;
   onOpen: (place: FilesPlace) => void;
@@ -33,9 +35,9 @@ interface Props {
  * list's own folder with nothing, `..` or a row's end selected). It follows the selection once it settles, so the
  * reads of the rows passed over are never made, and a viewer's read for a row left is aborted (`useText`).
  */
-export function PreviewPanel({ session, root, selection, hidden, held, onOpen, onLink }: Props) {
+export function PreviewPanel({ session, root, selection, known, hidden, held, onOpen, onLink }: Props) {
   const listingOf = (path: string): Listing | null => (path === root.path ? root : held.get(folderKey(path, hidden))?.listing ?? null);
-  const entryOf = (path: string): Entry | null => listingOf(parentOf(path))?.entries.find((e) => e.name === baseName(path)) ?? null;
+  const entryOf = (path: string): Entry | null => (known?.path === path ? known.entry : listingOf(parentOf(path))?.entries.find((e) => e.name === baseName(path)) ?? null);
   /** A file row shows its viewer, a folder row its summary; anything else (nothing, `..`, a folder's end) the root's. */
   const shownFor = (key: string | null): Shown => {
     const entry = key === null || key === UP ? null : entryOf(key);

@@ -18,7 +18,7 @@ import { useListbox } from "./useListbox";
 import styles from "./FolderList.module.css";
 
 /** Why a row can't be opened, said where its size would be. */
-function whyNot(entry: Entry): string | null {
+export function whyNot(entry: Entry): string | null {
   if (entry.utf8 === false) return "Name can't be opened";
   if (entry.kind === "broken") return "Broken link";
   if (entry.kind === "other") return "Not a file";

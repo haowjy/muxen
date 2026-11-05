@@ -1,8 +1,9 @@
-import type { Ref, TargetedFocusEvent, TargetedKeyboardEvent } from "preact";
+import type { ComponentChildren, Ref, TargetedFocusEvent, TargetedKeyboardEvent } from "preact";
 import { useCallback } from "preact/hooks";
 import { cx } from "../cx";
 import { useFocusRef, type FocusTarget } from "../focus";
 import { applyFieldSettings } from "./fieldSettings";
+import { Icon } from "./Icon";
 import styles from "./PathInput.module.css";
 
 interface PathInputProps {
@@ -25,6 +26,10 @@ interface PathInputProps {
   "data-initial-focus"?: string;
   /** At rest it reads as a line of text, not a box; focused, it is the field. */
   line?: boolean;
+  /** Files' Search: a magnifier before the text, the keyboard's Search key, and the UI font, as a query is not a path. */
+  search?: boolean;
+  /** Inside the field's end, after the text: a quiet note on what the text is (Search's mode). */
+  end?: ComponentChildren;
   class?: string;
 }
 
@@ -33,7 +38,7 @@ interface PathInputProps {
  * URL keyboard has no space bar and folder names hold spaces, with a Go key, and no autocorrect,
  * capitals or spellcheck: a path is not prose.
  */
-export function PathInput({ label, value, onInput, inputRef, listId, activeId, focusTarget, line, class: className, ...rest }: PathInputProps) {
+export function PathInput({ label, value, onInput, inputRef, listId, activeId, focusTarget, line, search, end, class: className, ...rest }: PathInputProps) {
   const registered = useFocusRef(focusTarget);
   // Stable: a new ref callback each render would withdraw and register the field every time.
   const attach = useCallback(
@@ -46,10 +51,11 @@ export function PathInput({ label, value, onInput, inputRef, listId, activeId, f
     [registered, inputRef],
   );
   return (
-    <div class={cx(styles.field, line && styles.line, className)}>
+    <div class={cx(styles.field, line && styles.line, search && styles.search, className)}>
+      {search && <Icon name="search" size={16} class={styles.glass} />}
       <input
         type="text"
-        enterkeyhint="go"
+        enterkeyhint={search ? "search" : "go"}
         aria-autocomplete="list"
         aria-controls={listId}
         aria-activedescendant={activeId}
@@ -60,6 +66,7 @@ export function PathInput({ label, value, onInput, inputRef, listId, activeId, f
         class={styles.input}
         ref={attach}
       />
+      {end !== undefined && <span class={styles.end}>{end}</span>}
     </div>
   );
 }

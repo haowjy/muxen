@@ -2,6 +2,7 @@
 // what the viewers read).
 import { HttpRefusal } from "../../net/http";
 import type { FakeDaemon } from "../../platform/test";
+import type { Stopped } from "../../proto/generated/messages";
 import { FakeFs, serveFs, type FakeTree } from "../../platform/test/fs";
 
 const README = `# muxen
@@ -152,6 +153,20 @@ export class FilesFs extends FakeFs {
   unreachable = new Set<string>();
   /** Paths whose listing the daemon says it cut short at its scan cap. */
   capped = new Set<string>();
+
+  /** How searches go wrong: refused, or the network drops them. */
+  searchFails: "denied" | "offline" | null = null;
+  /** A search for a query this matches never answers, for the quieted rows of a slow answer. */
+  searchHangs: (q: string) => boolean = () => false;
+  /** The cap the search walk says it stopped at. */
+  searchStopped: Stopped | null = null;
+
+  override async search(path: string, q: string, hidden: boolean): ReturnType<FakeFs["search"]> {
+    if (this.searchFails === "denied") throw new HttpRefusal(403, "denied");
+    if (this.searchFails === "offline") throw new TypeError("Failed to fetch");
+    if (this.searchHangs(q)) return new Promise(() => undefined);
+    return { ...(await super.search(path, q, hidden)), stopped: this.searchStopped };
+  }
 
   override async list(path: string, offset: number, hidden: boolean): ReturnType<FakeFs["list"]> {
     return this.guarded(path, await super.list(path, offset, hidden));

@@ -21,6 +21,10 @@ export interface Chord {
 /** Cmd/Ctrl+V, served by the `paste` event: only it carries the clipboard, and the Edit menu's Paste fires it too. */
 export const PASTE: Chord = { key: "v", mod: true };
 
+/** Opens Search: `/`, and Cmd/Ctrl+P, taken from the browser's Print only while Files has the keys. */
+export const SEARCH: Chord = { key: "p", mod: true };
+export const SEARCH_SLASH: Chord = { key: "/" };
+
 type Run = (e: KeyboardEvent | ClipboardEvent) => void;
 interface Binding { chord: Chord; run: { current: Run } }
 

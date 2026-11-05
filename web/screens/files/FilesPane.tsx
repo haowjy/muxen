@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "preact/hooks";
-import { useApp, useAppView } from "../../app/context";
+import { useApp, useAppView, useOverlay } from "../../app/context";
 import { describeError, parentPlace } from "../../files/browser";
 import { folderKey } from "../../files/folders";
+import type { FileSearch, Found } from "../../files/search";
 import { baseName, parentOf } from "../../files/paths";
 import type { FilesTab } from "../../workspace/state";
 import type { LinkTarget } from "../../files/render/markdown";
@@ -64,6 +65,11 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
 
   const root = place.kind === "dir" && listed ? pages.path : null;
   const tree = useTabOutline(session, tab.id, root);
+  // Search is open while its history entry is the current one; the tab's own, so Back to its results finds them as they were.
+  // The entry names the folder it searches: on a Back to it, the folder may not have caught up for a render.
+  const overlay = useOverlay("files", "search");
+  const search = overlay.open && root !== null && overlay.params?.["root"] === root ? session.search(tab.id, root) : null;
+  const found = useSelectedFound(search);
 
   // Back from a file full width lands on the list with the file selected, its folders open.
   const lastFile = useRef<string | null>(null);
@@ -126,6 +132,7 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
           pages={listed ? pages : null}
           tree={tree}
           up={up}
+          search={search}
           onOpen={open}
         />
         {panel && (
@@ -139,7 +146,7 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
               onWidth={(px) => { setStored(px); app.view.set("listWidth", px); }}
               onReset={() => { setStored(null); app.view.set("listWidth", null); }}
             />
-            <PreviewPanel session={session} root={pages} selection={tree.selection} hidden={hidden} held={held} onOpen={open} onLink={onLink} />
+            <PreviewPanel session={session} root={pages} selection={search ? found?.path ?? null : tree.selection} known={found} hidden={hidden} held={held} onOpen={open} onLink={onLink} />
           </>
         )}
       </div>
@@ -156,4 +163,15 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
       )}
     </div>
   );
+}
+
+/** Search's selected row, for the Preview panel to follow; null with Search closed, failed, or nothing selected. */
+function useSelectedFound(search: FileSearch | null): Found | null {
+  const [, rerender] = useState(0);
+  useEffect(() => search?.subscribe(() => { rerender((n) => n + 1); }), [search]);
+  if (!search) return null;
+  const { selected, shown, error } = search.snapshot;
+  // A failed search shows no rows: the panel shows the folder.
+  if (error) return null;
+  return shown.rows.find((f) => f.path === selected) ?? null;
 }

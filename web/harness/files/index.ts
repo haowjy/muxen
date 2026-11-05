@@ -8,6 +8,7 @@ import { LISTING, savedPlus } from "../shared";
 import { BIG, BIG_PAGE, bigTree, ETC, findTree, FIND_ROOT, HOME, REPO, serveTree, type FilesFs } from "./fakes";
 import type { FakeTree } from "../../platform/test/fs";
 import type { AppController } from "../../app/controller";
+import type { ViewState } from "../../app/viewMemory";
 import { filesSession, scrollKey } from "../../screens/files/session";
 
 /** A desktop outline as a tab would have left it: these folders open (oldest first), this row selected; `preview: false` with the Preview panel off. */
@@ -30,6 +31,42 @@ const at = (place: FilesPlace, tree?: FakeTree, configure?: (fs: FilesFs) => voi
     d.listing = LISTING;
     d.watch = "ok";
     serveTree(d, tree, configure, page);
+  },
+});
+
+/** Files this device opened from the fake host, the most recent first; the last is outside `~/muxen`, so Search there leaves it out. */
+const OPENED = (): ViewState["opened"] => {
+  const now = Math.floor(Date.now() / 1000);
+  const file = (path: string, mime: string, minutes: number) => ({ path, mime, at: now - minutes * 60 });
+  return {
+    "h-pop": [
+      file(`${REPO}/docs/plan.md`, "text/markdown; charset=utf-8", 12),
+      file(`${REPO}/bench-results.json`, "text/plain; charset=utf-8", 25),
+      file(`${REPO}/shot.png`, "image/png", 180),
+      file(`${REPO}/src/main.rs`, "text/plain; charset=utf-8", 240),
+      file(`${ETC}/hosts`, "text/plain; charset=utf-8", 600),
+      file(`${REPO}/notes/note-03.txt`, "text/plain; charset=utf-8", 2 * 24 * 60),
+    ],
+  };
+};
+
+/**
+ * Search open over `~/muxen` with `text` typed (asked for as the app starts), and the device's recents unless `fresh`.
+ * `then` is typed a moment later, for an answer still on its way over the last one's rows.
+ */
+const searching = (text: string, { fresh = false, configure, then }: { fresh?: boolean; configure?: (fs: FilesFs) => void; then?: string } = {}): Fixture => ({
+  ...at({ kind: "dir", path: REPO }, undefined, configure),
+  overlay: { screen: "files", name: "search", params: { root: REPO } },
+  start: (app: AppController) => {
+    if (!fresh) app.view.set("opened", OPENED());
+    // Once the folder is listed and the host has said who it is, as a magnifier tap finds them.
+    setTimeout(() => {
+      const host = app.hosts.all()[0];
+      if (!host) return;
+      const search = filesSession(app, host).search("files-1", REPO);
+      if (text !== "") search.type(text);
+      if (then !== undefined) setTimeout(() => { search.type(then); }, 800);
+    }, 300);
   },
 });
 
@@ -70,6 +107,21 @@ export const fixtures: Fixtures = {
   filesPanelOff: outlined(at({ kind: "dir", path: REPO }), [`${REPO}/src`, `${REPO}/notes`], `${REPO}/src/main.rs`, false),
   /** Open folders that are loading (`src` never answers), refused (`docs`) and empty. */
   filesOutlineStates: outlined(at({ kind: "dir", path: REPO }, undefined, (fs) => { fs.hanging.add(`${REPO}/src`); fs.denied.add(`${REPO}/docs`); }), [`${REPO}/src`, `${REPO}/docs`, `${REPO}/empty`]),
+  /** Search, field empty: the files opened on this device below the folder. */
+  filesSearch: searching(""),
+  /** Search, field empty, on a device that has opened nothing. */
+  filesSearchFresh: searching("", { fresh: true }),
+  /** Typed, the answer not here yet: the recents stay, quieted. */
+  filesSearchTyping: searching("md", { configure: (fs) => { fs.searchHangs = () => true; } }),
+  filesSearchFuzzy: searching("md"),
+  filesSearchGlob: searching("*.txt"),
+  /** The walk stopped at its entry cap. */
+  filesSearchStopped: searching("note", { configure: (fs) => { fs.searchStopped = "entries"; } }),
+  filesSearchNothing: searching("zqx"),
+  filesSearchDenied: searching("md", { configure: (fs) => { fs.searchFails = "denied"; } }),
+  filesSearchOffline: searching("md", { configure: (fs) => { fs.searchFails = "offline"; } }),
+  /** The answer for "md" is up; "md zz" never answers, so its rows stay, quieted. */
+  filesSearchSlow: searching("md", { configure: (fs) => { fs.searchHangs = (q) => q.includes("zz"); }, then: "md zz" }),
   /** The folder refuses to list. */
   filesDenied: at({ kind: "dir", path: REPO }, undefined, (fs) => { fs.denied.add(REPO); }),
 };

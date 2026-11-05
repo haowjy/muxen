@@ -2,6 +2,7 @@
 // for TypeScript like the WebSocket messages; keep them in step with fs.md "Routes".
 
 import { BUSY_RETRIES, HttpRefusal, send } from "../net/http";
+import type { Search } from "../proto/generated/messages";
 
 export interface Entry {
   name: string;
@@ -43,6 +44,8 @@ export interface FsApi {
   list(path: string, offset: number, hidden: boolean): Promise<Listing>;
   probe(path: string): Promise<Probe>;
   text(path: string, limit: number, signal?: AbortSignal): Promise<TextPreview>;
+  /** The best 50 files and folders below `path` whose relative path matches `q` (fs.md "GET /fs/search"). */
+  search(path: string, q: string, hidden: boolean, signal: AbortSignal): Promise<Search>;
   /** The URL an `<img>` loads a file from. */
   rawUrl(path: string): string;
 }
@@ -114,6 +117,8 @@ export function httpFsApi(origin: string, fetchFn?: typeof fetch): FsApi {
         truncated: size !== null ? size > bytes.length : bytes.length >= limit,
       };
     },
+
+    search: (path, q, hidden, signal) => json<Search>(url("search", path, `?q=${encodeURIComponent(q)}&hidden=${hidden ? "1" : "0"}`), { signal }),
 
     rawUrl: (path) => url("raw", path),
   };

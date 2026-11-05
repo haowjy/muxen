@@ -3,7 +3,15 @@
 // settings native acts on. A value that is missing or unreadable (another build wrote it) is the default.
 import type { ViewStore } from "../platform/types";
 
-/** Every remembered setting and its type. Later: Search recents. */
+/** A file this device opened in Files, for Search's recents. */
+export interface OpenedFile {
+  path: string;
+  mime: string | null;
+  /** Unix seconds. */
+  at: number;
+}
+
+/** Every remembered setting and its type. */
 export interface ViewState {
   /** Files shows hidden files. */
   showHidden: boolean;
@@ -11,15 +19,26 @@ export interface ViewState {
   preview: boolean;
   /** The desktop Files list's width beside the Preview panel, in CSS px, as the divider left it; null: the default. */
   listWidth: number | null;
+  /** The files opened in Files, by host id, the most recent first. */
+  opened: Readonly<Record<string, readonly OpenedFile[]>>;
 }
 
-const DEFAULTS: ViewState = { showHidden: false, preview: true, listWidth: null };
+const DEFAULTS: ViewState = { showHidden: false, preview: true, listWidth: null, opened: {} };
+
+const isOpened = (v: unknown): v is OpenedFile => {
+  const o = v as Partial<Record<keyof OpenedFile, unknown>> | null;
+  return typeof o === "object" && o !== null && typeof o.path === "string" && o.path.startsWith("/") && (o.mime === null || typeof o.mime === "string") && typeof o.at === "number";
+};
 
 /** One reader per setting, since what is stored is text another build may have written. */
 const READ: { [K in keyof ViewState]: (stored: unknown) => ViewState[K] | undefined } = {
   showHidden: (stored) => (typeof stored === "boolean" ? stored : undefined),
   preview: (stored) => (typeof stored === "boolean" ? stored : undefined),
   listWidth: (stored) => (typeof stored === "number" && Number.isFinite(stored) && stored > 0 ? stored : undefined),
+  // A host's list that doesn't parse is dropped, not the others'.
+  opened: (stored) => (typeof stored === "object" && stored !== null && !Array.isArray(stored)
+    ? Object.fromEntries(Object.entries(stored).filter((e): e is [string, OpenedFile[]] => Array.isArray(e[1]) && e[1].every(isOpened)))
+    : undefined),
 };
 
 export class ViewMemory {

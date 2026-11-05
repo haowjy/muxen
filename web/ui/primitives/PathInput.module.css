@@ -21,3 +21,9 @@
 .line .input:not(:focus):hover { background: var(--color-bg-hover); }
 .line .input::selection { background: var(--color-bg-text-selected); color: var(--color-text); }
 :root[data-density="compact"] .line .input { height: 28px; padding: 0 var(--space-2); border-radius: 6px; font-size: var(--text-small); line-height: 26px; }
+/* Search: a magnifier inside the start, room for the mode at the end; the UI font, as a query is not a path. */
+.search .input { padding-inline: calc(var(--space-3) + 16px + var(--space-2)) calc(var(--space-3) + 3.5rem); }
+.glass { position: absolute; top: 50%; left: var(--space-3); translate: 0 -50%; color: var(--color-text-muted); pointer-events: none; }
+.end { position: absolute; top: 50%; right: var(--space-2); translate: 0 -50%; display: flex; pointer-events: none; }
+:root[data-density="compact"] .search .input { padding-inline: calc(var(--space-2) + 16px + 6px) calc(var(--space-2) + 3.5rem); }
+:root[data-density="compact"] .glass { left: var(--space-2); }

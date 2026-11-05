@@ -3,10 +3,12 @@
 // when you go to the terminal or another tab; the active tab's own place, held by the
 // workspace, is what the browser follows when you come back.
 import type { AppController } from "../../app/controller";
+import type { OpenedFile } from "../../app/viewMemory";
 import type { FsApi, TextPreview } from "../../files/api";
-import { FileBrowser } from "../../files/browser";
+import { FileBrowser, type FileRef } from "../../files/browser";
 import { baseName } from "../../files/paths";
 import { Recent } from "../../files/recent";
+import { FileSearch, type Found } from "../../files/search";
 import { UploadTracker } from "../../files/uploads";
 import type { HostClient } from "../../net/hosts";
 import type { Pasted, UploadEvent } from "../../platform/types";
@@ -30,10 +32,19 @@ export interface FilesSession {
   selections: Recent<string>;
   /** The text read last (`useText`), by path and modification time: one, since each can be a MiB. */
   texts: Recent<TextPreview>;
+  /** This device opened `file` (full width, on the phone, or in the Preview panel): Search's recents list it first. */
+  opened: (file: FileRef) => void;
+  /** The tab's Search below `root`: the one it left there, so Back to its results finds them as they were, unless `fresh`. */
+  search: (tab: string, root: string, fresh?: boolean) => FileSearch;
 }
 
 /** Scrolls, expanded folders and selections kept per host: the least recently set go first, so closed tabs' do not pile up. */
 const SCROLLS_KEPT = 64;
+
+/** Files opened, per host, that Search lists when its field is empty. */
+const OPENED_KEPT = 20;
+/** Searches kept per host, by Files tab and the folder searched: each that Back may return to. */
+const SEARCHES_KEPT = 8;
 
 /** Two tabs may show the same folder, each scrolled its own way. */
 export const scrollKey = (tab: string, path: string): string => `${tab}\n${path}`;
@@ -59,6 +70,9 @@ export function filesSession(app: AppController, host: HostClient): FilesSession
     told = home;
     app.dispatch({ type: "homeKnown", host: host.hostId, home });
   });
+  const searches = new Recent<FileSearch>(SEARCHES_KEPT);
+  // `host` is the client as it was when the session began: its id may have been learned since.
+  const hostId = (): string | null => app.hosts.get(host.entry.handle)?.hostId ?? null;
   const session: FilesSession = {
     handle: host.entry.handle,
     get hostName() { return app.hosts.get(host.entry.handle)?.name ?? "the server"; },
@@ -68,9 +82,38 @@ export function filesSession(app: AppController, host: HostClient): FilesSession
     expanded: new Recent(SCROLLS_KEPT),
     selections: new Recent(SCROLLS_KEPT),
     texts: new Recent(1),
+    opened: (file) => {
+      const id = hostId();
+      if (id === null) return;
+      const all = app.view.get("opened");
+      const before = (all[id] ?? []).filter((f) => f.path !== file.path);
+      const now = { path: file.path, mime: file.mime, at: Math.floor(Date.now() / 1000) };
+      app.view.set("opened", { ...all, [id]: [now, ...before].slice(0, OPENED_KEPT) });
+    },
+    search: (tab, root, fresh = false) => {
+      const kept = searches.get(scrollKey(tab, root));
+      if (kept && !fresh) return kept;
+      kept?.stop();
+      const id = hostId();
+      const made = new FileSearch(host.fs, root, browser.snapshot.hidden, recentsBelow(id === null ? [] : app.view.get("opened")[id] ?? [], root));
+      searches.set(scrollKey(tab, root), made);
+      return made;
+    },
   };
   sessions.set(host.fs, session);
   return session;
+}
+
+/** The files opened below `root`, as Search's rows. */
+function recentsBelow(opened: readonly OpenedFile[], root: string): Found[] {
+  const prefix = root === "/" ? "/" : `${root}/`;
+  return opened.filter((f) => f.path.startsWith(prefix)).map((f) => ({
+    path: f.path,
+    rel: f.path.slice(prefix.length),
+    hits: [],
+    entry: { name: baseName(f.path), kind: "file", link: false, ...(f.mime !== null && { mime: f.mime }) },
+    opened: f.at,
+  }));
 }
 
 /**

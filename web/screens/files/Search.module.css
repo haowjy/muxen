@@ -1,0 +1,44 @@
+/* The field's mode: Fuzzy quiet, Glob in the accent, as a glob reads its * and ? apart from letters. */
+.mode {
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--color-bg-hover);
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: var(--weight-medium);
+  line-height: 18px;
+}
+.glob { background: var(--color-bg-pressed); color: var(--color-accent); }
+
+/* What the rows are, above them: quiet, and the spinner beside it while an answer is on its way. */
+.label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 20px;
+  padding: 0 var(--space-3) 0 var(--space-2);
+  font-size: var(--text-meta);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-muted);
+}
+.note { padding: 0 var(--space-2); font-size: var(--text-small); color: var(--color-text-muted); text-wrap: pretty; }
+/* The last answer, while the next is on its way. */
+.quiet { opacity: 0.5; transition: opacity var(--duration-1) var(--ease-out); }
+
+/* A result: the name, then the folder it is in, in mono and quiet. */
+.text { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; overflow: hidden; white-space: nowrap; }
+.name { flex: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.dir { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-mono); font-size: var(--text-meta); font-weight: 400; color: var(--color-text-muted); }
+/* The letters the daemon matched: the accent, and heavier, so they read without colour too. */
+.hit { background: none; color: var(--color-accent); font-weight: var(--weight-bold); }
+.dir .hit { font-weight: var(--weight-medium); }
+
+/* Phone: two lines, the name over its folder; the age at the end, as Search is how you get back to a file. */
+:root[data-layout="phone"] .found { height: 58px; }
+:root[data-layout="phone"] .text { flex-direction: column; align-items: stretch; gap: 2px; }
+:root[data-layout="phone"] .name { flex: initial; }
+:root[data-layout="phone"] .dir { font-size: var(--text-small); }
+:root[data-layout="phone"] .found .age { display: block; font-size: var(--text-small); }
+:root[data-layout="phone"] .found .size { display: none; }
+:root[data-layout="phone"] .label, :root[data-layout="phone"] .note { padding: var(--space-3) var(--space-4) 0; }
