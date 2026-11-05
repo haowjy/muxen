@@ -52,17 +52,19 @@ to the reads that already had no scope; the single-device-token argument above c
 ([decisions.md](decisions.md#paste-into-an-open-folder-2026-11-02)). `uploads_dir` is only
 the default, for the terminal's pasted images and Files' Upload.
 
-**Uploads re-read `uploads_dir` on every request**, as auth re-reads `auth.toml`
-([auth.md](auth.md#state-on-disk)): the file is small, so a hand edit applies to the next
-upload with no watcher, cache or restart. They read the path `Config::load` resolved at
-startup (`--config`, else the default), kept in `App`, with the same rule: a missing
-default file means the defaults. **Search re-reads `search_skip`** the same way, inside its lane closure. **A file that can't be read
-or parsed falls back to the last good one:** the daemon keeps the live keys (`uploads_dir`,
-`search_skip`) from the last read that parsed, at startup or later, and uses those, logging the parse
-error at `warn` once per change of the file (by `files::Stamp`). Only with no good read since startup
-does an upload answer `503 config_unavailable`, and a search use the default patterns. So a typo saved
-in an editor never stops uploads or search; the fix applies at the next read. Listing and raw
-reads don't read the config. The other config keys are still read once, at startup.
+**`config.toml` is read once, at startup, and again only on a reload**, as nginx and sshd do. The
+daemon holds the live keys (`uploads_dir`, `search_skip`) in memory; uploads and search read that copy,
+never the file. A **reload** is SIGHUP (`systemctl --user reload muxen`, the unit's `ExecReload`) or
+Settings' **Reload config.toml** (`POST /settings/reload`). It reads and parses the whole file first:
+if it doesn't parse, nothing changes, the running config stays, and the error is logged at `warn` and
+answered (`503 config_unavailable` with the parser's line and column in `detail`). If it parses, the
+live keys take the new values at once, and a restart-only key that differs from the running value
+(`name`, `memory_budget_mib`, `[tmux]`, `[complete]`) is reported, not applied: logged, and listed in
+the answer's `restartNeeded`. A Settings save writes the file and then updates the copy in memory, so
+its change needs no reload. A hand edit does nothing until a reload; the file and the running config
+can differ until then, and Settings shows the running values with "config.toml has changed since it
+was loaded" and the Reload button when the file's `files::Stamp` differs from the one last loaded or
+written. Listing and raw reads don't use the config.
 
 ## Path resolution: `fs::open`
 
@@ -428,12 +430,14 @@ auth layers. The code is `src/config/` (the writer beside the loader), not `src/
 
 ```text
 ServerSettings = { searchSkip: [string] | null,   // null: no key, the default applies
+                   fileChanged: bool,             // the file differs from what is running
                    uploadsDir: string | null,
                    defaults: { searchSkip: [string], uploadsDir: string } }   // the daemon's own
 SettingsChange = { searchSkip?: [string] | null, uploadsDir?: string | null }
 ```
 
-- **Keys:** `search_skip` (top level) and `uploads_dir`. A key that is absent means the default
+- **Values are the running config's,** not the file's (they differ after a hand edit until a reload;
+  GET also answers `fileChanged: bool`). **Keys:** `search_skip` (top level) and `uploads_dir`. A key that is absent means the default
   (`["node_modules"]`, `"~/.muxen-uploads"`); `defaults` carries them so the client keeps no copy.
   `searchSkip: []` is a set key that skips nothing; `null` is no key, the default.
 - **`POST`** takes a `SettingsChange`: a field left out is unchanged, `null` removes the key, a value
@@ -453,6 +457,10 @@ SettingsChange = { searchSkip?: [string] | null, uploadsDir?: string | null }
   re-stat the original and rename, retrying up to 3 times if it changed. A file that exists but doesn't
   parse is never written: `503 config_unavailable`. A missing file is created with only the keys set,
   its directory with mode 0700 if absent (this covers a `--config` path deleted after startup).
+- **`POST /settings/reload`** reloads as SIGHUP does and answers `{ settings: ServerSettings,
+  restartNeeded: [string] }`, or `503 config_unavailable` with the parse error, the running config
+  unchanged. A save on a file that changed by hand since it was loaded first reloads it (so the save
+  never overwrites a hand edit with stale values), and fails the same way if it doesn't parse.
 - **Concurrent saves:** the last write wins. The client sends one save at a time per server and draws
   the answer, so its own taps can't reorder; two devices saving at the same moment can lose one change,
   which Settings' next open shows. Accepted: one user, rare, visible.

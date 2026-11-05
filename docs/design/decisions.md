@@ -1465,12 +1465,15 @@ are Jimmy's ([Files](#files-view-and-upload-now-three-write-operations-in-v2)).
   under `~`, cargo's `target/` among them, while a folder merely named `target` stays searchable.
   `node_modules` writes no tag, so it is the one default pattern. A skipped folder is listed, not
   entered, so Search still finds `node_modules` or `target` themselves and a tap goes in.
-- **Re-read, with the last good copy (Jimmy: "could we at least remember the last one if it breaks").**
-  The live keys stay re-read per request, so a hand edit or a Settings save applies at once with one
-  source of truth (the file); loading once was weighed and kept rejected (a hand edit would need a
-  restart, and Settings would show a copy that can differ from the file). A read that doesn't parse
-  uses the keys from the last read that did, so an editor's half-saved typo never stops uploads or
-  search. This replaces uploads' fail-closed `503` except when no read has parsed since startup.
+- **Read once, reloaded on demand (Jimmy: "i feel like we should just, at startup, read config once, and
+  then they need to 'reload it'... and then if it breaks it, it doesn't reload... this is standard...
+  no?").** `config.toml` is read at startup and on a reload (SIGHUP, `systemctl --user reload muxen`, or
+  Settings' Reload button); a reload that doesn't parse changes nothing and says why; Settings saves
+  apply in memory at once. This supersedes "fs reads `roots` from `config.toml` on every request" (and
+  its uploads re-read). Rejected: re-reading per request with a last-good fallback (a silent fallback
+  hides the error, and each key would follow its own rule); re-reading per request failing closed (a
+  typo stops uploads). `auth.toml` keeps its per-check read: enrolment on another device must apply at
+  once.
 - **Rejected:** keeping `target` by name (hides ordinary folders of that name); honouring `.gitignore`
   with the `ignore` crate (a dependency and a rule set for what two defaults and a tag cover; possible
   later); skipping nothing but hidden (results flooded by dependencies and build files, and `~`'s cap
@@ -1478,7 +1481,7 @@ are Jimmy's ([Files](#files-view-and-upload-now-three-write-operations-in-v2)).
   hand edits only (Jimmy wants it in the app). The keys that apply only at a restart stay hand edits:
   shown in the app they would need a restart step, and a wrong tmux socket set from the phone would cut
   off the screen that fixes it.
-- **Supersedes:** "skipped by name" in the decision below, and the deletion of the `config.toml` writer
+- **Supersedes:** "fs reads `roots` from `config.toml` on every request"; "skipped by name" in the decision below, and the deletion of the `config.toml` writer
   in "No favorites (2026-10-30)": a writer returns for `search_skip` and `uploads_dir`.
 
 ### Search walks per query and sends only the best 50 (2026-11-05)

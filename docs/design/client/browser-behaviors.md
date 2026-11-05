@@ -139,9 +139,12 @@ Search skips is a list: one row per pattern with Remove, an Add field, and Reset
 defaults (shown only while the list differs from them). Removing every row skips nothing. A pattern is a
 folder name, or a glob with `*` and `?` over a folder's name alone. The keys that apply only at a restart
 (`name`, `memory_budget_mib`, `[tmux]`, `[complete]`) stay hand edits. A save that fails says why in plain
-words beside the field and keeps the typed value; leaving Settings mid-save lets the save finish. A
-server that can't be reached shows "Can't reach <server name>" in place of its values, with Try again;
-a `config.toml` that doesn't parse shows "config.toml on <server name> doesn't parse. Fix it there."
+words beside the field and keeps the typed value; leaving Settings mid-save lets the save finish. The
+section shows the server's running values. When its `config.toml` was edited by hand since it was
+loaded, the section says "config.toml has changed since muxen loaded it" with **Reload config.toml**,
+which applies it, or shows the parse error ("config.toml doesn't parse: line 3, column 7…") and leaves
+the running values, or lists restart-only keys that changed ("Restart muxen to apply: memory_budget_mib").
+A server that can't be reached shows "Can't reach <server name>" in place of its values, with Try again.
 
 **Where a launch opens.** A launch (a reload, a bookmark, a copied link, or the app after iOS
 killed it) opens the place the page's address names, else the route last shown, saved with the
