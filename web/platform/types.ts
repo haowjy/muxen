@@ -141,10 +141,18 @@ export interface DraftStore {
   list(): Promise<DraftRecord[]>;
 }
 
+/** Small per-device view settings as text, read synchronously (`app/viewMemory.ts` owns the keys and their types). */
+export interface ViewStore {
+  get(key: string): string | null;
+  set(key: string, value: string): void;
+  clear(): void;
+}
+
 export interface PlatformStorage {
   /** Coalesced; the latest wins. */
   saveWorkspace(ws: SavedWorkspaces): void;
   drafts: DraftStore;
+  view: ViewStore;
   clearLocalData(): Promise<void>;
 }
 

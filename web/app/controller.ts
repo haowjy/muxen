@@ -14,6 +14,7 @@ import { activeTab, allTabs, initialWorkspace, reduce, savedRoute, savedWorkspac
 import { FocusController } from "./focus";
 import { ListingFetcher } from "./listing";
 import { Persist } from "./persist";
+import { ViewMemory } from "./viewMemory";
 import { hashOf, launchOf, underHome, type Launch } from "./address";
 import { browserHistory, enrolCodeFromHash, Router, type Entry, type Overlay } from "./router";
 
@@ -58,6 +59,8 @@ export class AppController extends Store<AppView> {
   readonly router: Router;
   readonly focus: FocusController;
   readonly persist: Persist;
+  /** What this device remembers of how screens look (Show hidden). */
+  readonly view: ViewMemory;
   readonly listing: ListingFetcher;
   readonly sessions: SessionsCache;
   readonly bells: BellMarks;
@@ -122,6 +125,7 @@ export class AppController extends Store<AppView> {
       },
       ...(options.fetchFn && { fetchFn: options.fetchFn }),
     });
+    this.view = new ViewMemory(platform.storage.view);
     this.persist = new Persist(platform.storage, () => savedWorkspaces(this.snapshot.workspace), () => this.bells.toSave(this.hosts.all().map((h) => h.hostId)), () => savedRoute(this.snapshot.workspace));
     this.persist.provideHostName(() => this.hosts.all()[0]?.name ?? null);
     this.listing = new ListingFetcher({

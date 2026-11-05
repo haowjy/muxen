@@ -3,6 +3,7 @@
 // tab key. Every write is one small record. A page writes its workspace only while it has
 // focus, so the saved workspace is the one from the page used last.
 import { isTabKey, tabId } from "../tabKey";
+import { createViewStore } from "../viewStore";
 import type { DraftRecord, DraftStore, PlatformEvent, PlatformStorage, SavedWorkspaces, TabKey } from "../types";
 
 const DB_NAME = "muxen";
@@ -137,6 +138,7 @@ export function createBrowserStorage(): BrowserStorage {
     },
   };
 
+  const view = createViewStore();
   const storage: PlatformStorage = {
     saveWorkspace(ws) {
       pending = ws;
@@ -151,8 +153,10 @@ export function createBrowserStorage(): BrowserStorage {
       }
     },
     drafts,
+    view,
     async clearLocalData() {
       memory.drafts.clear();
+      view.clear();
       pending = null;
       const handle = await db();
       if (!handle) return;

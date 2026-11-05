@@ -104,6 +104,8 @@ export interface TestPlatform extends Platform {
   restarts: string[];
   savedWorkspaces: SavedWorkspaces[];
   drafts: Map<string, DraftRecord>;
+  /** The view settings kept on this device (`storage.view`). */
+  views: Map<string, string>;
   /** What `install.installed()` reports, when the capability is offered. */
   installed: boolean;
 }
@@ -228,6 +230,7 @@ export function createTestPlatform(options: TestPlatformOptions = {}): TestPlatf
     restarts: [],
     savedWorkspaces: [],
     drafts: new Map(),
+    views: new Map(),
     installed: false,
 
     boot: (): Promise<BootResult> => Promise.resolve({ hosts, workspace: options.workspace ?? null, viewport, preferences, lifecycle }),
@@ -300,8 +303,10 @@ export function createTestPlatform(options: TestPlatformOptions = {}): TestPlatf
         },
         list: () => Promise.resolve([...platform.drafts.values()]),
       },
+      view: { get: (key) => platform.views.get(key) ?? null, set: (key, value) => { platform.views.set(key, value); }, clear: () => { platform.views.clear(); } },
       clearLocalData: () => {
         platform.drafts.clear();
+        platform.views.clear();
         platform.savedWorkspaces.length = 0;
         return Promise.resolve();
       },

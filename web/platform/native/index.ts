@@ -4,12 +4,14 @@
 import { Bridge, installReceiver, webkitPost, type Post } from "./bridge";
 import { createNativeTransport } from "./transport";
 import { createNativeUploads } from "./uploads";
+import { createViewStore } from "../viewStore";
 import type { BootResult, Platform, PlatformEvent, Preferences, SavedWorkspaces } from "../types";
 
 const EMPTY_WORKSPACE: SavedWorkspaces = { version: 5, workspaces: [] };
 
 export function createNativePlatform(post: Post = webkitPost): Platform {
   const bridge = new Bridge(post);
+  const view = createViewStore();
   const uploads = createNativeUploads(bridge);
   const listeners = new Set<(event: PlatformEvent) => void>();
   let booted = false;
@@ -57,7 +59,9 @@ export function createNativePlatform(post: Post = webkitPost): Platform {
         delete: (key) => bridge.draftDelete(key),
         list: () => bridge.draftList(),
       },
+      view,
       async clearLocalData() {
+        view.clear();
         const records = await bridge.draftList();
         await Promise.all(records.map((r) => bridge.draftDelete(r.key)));
         bridge.saveWorkspace(EMPTY_WORKSPACE);

@@ -5,6 +5,7 @@ version section on release.
 
 ## [Unreleased]
 
+- Files remembers Show hidden files on each device, for every folder, tab and server, and after a reload. Clear local data forgets it.
 - Files' path field now narrows the folder's rows as you type, files as well as folders (names that start with what you typed first, then names that contain it). Enter opens the first match, or the row you picked with ↑ and ↓. Typing a path to another folder lists that folder, and in a folder with more entries than were loaded the list offers Load the rest. The ghost text and the Tab and `/` accept are gone.
 - Files has keyboard control on a desktop: ↑ ↓ Home End move a selection through the list, Enter opens the selected row, and Backspace or Cmd/Ctrl+↑ goes up a folder.
 - On the phone, Settings is back at the top of Home, in its header, as on a desktop. Settings, Open session and the tab list put Back at their top left too; only a terminal or Files tab keeps ‹ at the bottom, in its tab row.

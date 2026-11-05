@@ -44,10 +44,16 @@ export function filesSession(app: AppController, host: HostClient): FilesSession
   const existing = sessions.get(host.fs);
   if (existing) return existing;
   const known = app.snapshot.workspace.workspaces.find((w) => w.host === host.hostId)?.home ?? null;
-  const browser = new FileBrowser({ api: host.fs, hidden: false, home: known });
+  const browser = new FileBrowser({ api: host.fs, hidden: app.view.get("showHidden"), home: known });
   // The workspace keeps the host's home, so a Files tab there is labelled "~" on every screen and after a reload.
   let told = known;
+  let remembered = browser.snapshot.hidden;
   browser.subscribe(() => {
+    // Show hidden is kept per device, not per host or tab.
+    if (browser.snapshot.hidden !== remembered) {
+      remembered = browser.snapshot.hidden;
+      app.view.set("showHidden", remembered);
+    }
     const { home } = browser.snapshot;
     if (home === told || home === null || host.hostId === null) return;
     told = home;
