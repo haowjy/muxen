@@ -56,10 +56,10 @@ export function NarrowedList({ view, home, hostName, box, loadingRest, onOpen, o
       )}
       {unseen && cut && <p class={styles.note}>This folder is too big to list in full. Matches are from what was listed.</p>}
       {unseen && !cut && (
-        <p class={styles.note}>
-          Matches are from the first {listing.entries.length.toLocaleString()} of {listing.total.toLocaleString()} entries.{" "}
-          <Button variant="quiet" busy={loadingRest} onMouseDown={(e) => { e.preventDefault(); }} onClick={onLoadRest}>Load the rest</Button>
-        </p>
+        <>
+          <p class={styles.note}>Matches are from the first {listing.entries.length.toLocaleString()} of {listing.total.toLocaleString()} entries.</p>
+          <Button variant="quiet" class={styles.action} busy={loadingRest} onMouseDown={(e) => { e.preventDefault(); }} onClick={onLoadRest}>Load the rest</Button>
+        </>
       )}
     </div>
   );
