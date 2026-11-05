@@ -24,6 +24,8 @@ export const fixtures: Fixtures = {
   filesFolder: at({ kind: "dir", path: REPO }),
   filesMarkdown: at({ kind: "file", path: `${REPO}/README.md` }),
   filesCode: at({ kind: "file", path: `${REPO}/src/main.rs` }),
+  /** JSON, with a line longer than the window: the code view's numbers and wrapping. */
+  filesJson: at({ kind: "file", path: `${REPO}/bench-results.json` }),
   filesImage: at({ kind: "file", path: `${REPO}/shot.png` }),
   filesVideo: at({ kind: "file", path: `${REPO}/demo.mp4` }),
   filesBinary: at({ kind: "file", path: `${REPO}/muxen.bin` }),

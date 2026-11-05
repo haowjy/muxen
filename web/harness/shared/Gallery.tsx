@@ -7,7 +7,7 @@ import { EmptyState } from "../../ui/primitives/EmptyState";
 import { Icon, type IconName } from "../../ui/primitives/Icon";
 import { IconButton } from "../../ui/primitives/IconButton";
 import { Menu } from "../../ui/primitives/Menu";
-import { OptionRow, Row } from "../../ui/primitives/Row";
+import { Row } from "../../ui/primitives/Row";
 import { Spinner } from "../../ui/primitives/Spinner";
 import { StatusBand } from "../../ui/primitives/StatusBand";
 import { TabStrip, type Pill } from "../../ui/primitives/TabStrip";
@@ -79,11 +79,6 @@ export function Gallery() {
           <Row icon="sessions" label="notes" meta="1 window" />
           <Row icon="folder" label="src" meta="Folder" trailing="chevron" />
           <Row icon="file" label="README.md" meta="2 KB" trailing="chevron" />
-        </div>
-        <div role="listbox" aria-label="Files" aria-activedescendant="gallery-option-0" tabIndex={0} class={styles.stack}>
-          <OptionRow id="gallery-option-0" icon="folder" label="src" trailing="chevron" selected />
-          <OptionRow icon="file" label="README.md" meta="2 KB" trailing="chevron" />
-          <OptionRow icon="file" label="odd-name" meta="Name can't be opened" disabled />
         </div>
       </Section>
       <Section title="Menu">

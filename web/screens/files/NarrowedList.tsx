@@ -5,6 +5,7 @@ import type { FilesPlace } from "../../platform/types";
 import { Button } from "../../ui/primitives/Button";
 import { EmptyState } from "../../ui/primitives/EmptyState";
 import { Spinner } from "../../ui/primitives/Spinner";
+import { cx } from "../../ui/cx";
 import { RowList } from "./FolderList";
 import type { Listbox } from "./useListbox";
 import styles from "./FolderList.module.css";
@@ -47,8 +48,8 @@ export function NarrowedList({ view, home, hostName, box, loadingRest, onOpen, o
       {listing === null && <p class={find.where}><Spinner label="Loading the folder" /><span>Loading</span></p>}
       {out.rows.length > 0 && (
         // Taken without taking focus from the field, so the keyboard doesn't drop before the open.
-        <div id={box.id} role="listbox" aria-label="Matches" class={styles.list} onMouseDown={(e) => { e.preventDefault(); }}>
-          <RowList rows={out.rows} selected={out.selected} optionId={box.optionId} upLabel=".." onOpen={onOpen} onUp={() => { if (up !== null) onUp(up); }} />
+        <div id={box.id} role="listbox" aria-label="Matches" class={cx(styles.list, styles.keyed)} onMouseDown={(e) => { e.preventDefault(); }}>
+          <RowList rows={out.rows} selected={out.selected} optionId={box.optionId} onOpen={onOpen} onUp={() => { if (up !== null) onUp(up); }} />
         </div>
       )}
       {listing !== null && matches === 0 && (

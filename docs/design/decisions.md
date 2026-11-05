@@ -4733,3 +4733,25 @@ keyboard" (this day's earlier call, when the app was to match Safari).
   request per keystroke or per pause for matches in an unloaded page (a round trip each; Load the rest is one tap and
   pages through the existing `more()`); matching only the first 200 entries without saying so (misses files in any
   big folder).
+
+## Files redesign, phase 1: chrome and rows (2026-11-05)
+
+Jimmy picked mockup C (`ui-polish/mockups/C-revised/`: "overall i think its good... we can probably start
+building it immediately"); the audit's later lines win where they differ from C. Phase 1 is the rows, the
+one-line headers, the path line, Copy path, Download, Insert, the row menu, the code frame and pull to
+refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search is phase 3.
+
+### Folders and files read apart; the up row is `..`
+
+- **Decided:** 2026-11-05, Jimmy ("Folders look like files; every row has `>`"; "how do i go 'up' to the
+  prior folder? where is the '..' ?"), built from C.
+- **What:** a folder has the only coloured icon (accent stroke over a 22% accent fill) and a medium-weight
+  name; a file has a muted icon for its kind and a regular name. Files never get a chevron; folders get one
+  on the phone only, where a tap drills in. A desktop row is 28px with size and a short age (`3h`, `6d`) in
+  tight columns beside the name; a phone row is 48px with the size alone. The up row reads `..`, styled as
+  a folder, first in every listing but `/`. **Supersedes** from "A parent row and path field navigate
+  Files" the “‹ parent” label (the row stays, as `..`), and the spec's "matching navigation treatment"
+  rule that gave Files rows the session rows' look and a chevron on every row.
+- **Rejected:** a chevron on every row (Jimmy's complaint); dates as "Today 13:47" / "27 Oct" (a ragged
+  column, C critique 5); a Kind column and zebra stripes (C's Preview-off table, phase 2's, not this
+  list); keeping `OptionRow` in `ui/primitives` for one caller whose look no longer matches `Row` (deleted).

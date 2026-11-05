@@ -1,22 +1,74 @@
 .wrap { display: flex; flex-direction: column; gap: var(--space-3); }
-/* One grouped list: the rows share a border and are told apart by hairlines, since a folder can hold 200. */
+/* The rows, flush: told apart by hover and selection fills on a desktop, by hairlines on the phone. */
 .list {
+  --files-row-height: 28px;
+  --files-icon: 16px;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-2);
-  background: var(--color-bg-raised);
-  overflow: hidden;
+  outline: none;
 }
-/* The list clips its rounded corners, and the rows are flush with its edges: rings sit inside. */
-.list :focus-visible { outline-offset: -2px; }
-.list .item {
-  border: 0;
+:root[data-layout="phone"] .list { --files-row-height: 48px; --files-icon: 20px; }
+.list:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 2px; border-radius: var(--radius-2); }
+
+/* Desktop: name, then tight right-aligned size and age columns, so a date sits by its name. */
+.row {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--files-icon) minmax(0, 1fr) 4.25rem 2.75rem;
+  column-gap: var(--space-2);
+  align-items: center;
+  height: var(--files-row-height);
+  padding: 0 var(--space-3) 0 var(--space-2);
+  border-radius: var(--radius-1);
+  font-size: var(--text-small);
+  color: var(--color-text);
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.row:hover { background: var(--color-bg-hover); }
+.selected, .selected:hover { background: var(--color-bg-selected-idle); }
+/* The selection is blue while the keys move it: the list holds focus, or the path field drives it. */
+.list:focus .selected, .keyed .selected { background: var(--color-bg-selected); }
+.row[data-fresh] { background: var(--color-bg-selected); }
+.keyed { cursor: default; }
+/* Folders, then a breath, then files. */
+.row[data-kind="dir"] + .row[data-kind="file"] { margin-top: 6px; }
+.icon { display: grid; place-items: center; width: var(--files-icon); height: var(--files-icon); color: var(--color-text-muted); }
+.icon svg { width: var(--files-icon); height: var(--files-icon); stroke-width: 1.75; }
+/* Folders are the only coloured icons: the accent's stroke over a fill of it. */
+.folder svg { color: var(--color-accent); fill: var(--color-folder-fill); }
+.up .folder svg { fill: none; }
+.name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dir .name { font-weight: var(--weight-medium); }
+.up .name { font-family: var(--font-mono); font-weight: var(--weight-medium); letter-spacing: 0.05em; }
+.dotted .name, .dotted .icon { opacity: 0.55; }
+.size, .age { overflow: hidden; text-align: right; white-space: nowrap; font-size: var(--text-meta); font-variant-numeric: tabular-nums; color: var(--color-text-muted); }
+.recent { color: var(--color-text); }
+.why { grid-column: span 2; overflow: hidden; text-align: right; white-space: nowrap; text-overflow: ellipsis; font-size: var(--text-meta); color: var(--color-text-muted); }
+.disabled { color: var(--color-text-muted); }
+.disabled:hover { background: none; }
+/* A desktop row has nothing to drill into: a click on a folder opens it, and there is no chevron. */
+.chevron { display: none; }
+
+/* Phone: one folder per screen. Folders end in a chevron; files show their size; ages stay off the row. */
+:root[data-layout="phone"] .row {
+  grid-template-columns: var(--files-icon) minmax(0, 1fr) auto;
+  column-gap: 14px;
+  padding: 0 var(--space-4);
   border-radius: 0;
-  border-bottom: 1px solid var(--color-border);
+  font-size: var(--text-body);
 }
-.list .item:last-child { border-bottom: 0; }
-.list .item[data-fresh] { background: var(--color-bg-selected); }
+:root[data-layout="phone"] .row::after { content: ""; position: absolute; left: 50px; right: 0; bottom: 0; height: 1px; background: var(--color-border); opacity: 0.7; }
+:root[data-layout="phone"] .row:hover { background: none; }
+:root[data-layout="phone"] .row.selected, :root[data-layout="phone"] .row[data-fresh] { background: var(--color-bg-selected); }
+:root[data-layout="phone"] .row[data-kind="dir"] + .row[data-kind="file"] { margin-top: 0; }
+:root[data-layout="phone"] .dir .name { font-weight: 500; }
+:root[data-layout="phone"] .size { font-size: var(--text-small); }
+:root[data-layout="phone"] .age, :root[data-layout="phone"] .dir .size { display: none; }
+:root[data-layout="phone"] .why { grid-column: auto; font-size: var(--text-small); }
+:root[data-layout="phone"] .chevron { display: block; width: 18px; height: 18px; color: var(--color-text-muted); opacity: 0.7; }
 .more { display: flex; justify-content: center; padding: var(--space-2) 0; }
 .note { font-size: var(--text-small); color: var(--color-text-muted); text-wrap: pretty; }
 /* A text-style button under the message it acts on: its label lines up with the message's text, not its padding. */

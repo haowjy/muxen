@@ -20,3 +20,16 @@ export function shorten(path: string, home: string | null): string {
   if (home && (path === home || path.startsWith(`${home}/`))) return `~${path.slice(home.length)}`;
   return path;
 }
+
+/** One short form for every age, so a column of them lines up: `12m`, `3h`, `6d`, `4mo`, `2y`. `now` in ms. */
+export function formatAge(unixSeconds: number, now: number): string {
+  const minutes = Math.max(0, Math.round((now / 1000 - unixSeconds) / 60));
+  if (minutes < 60) return `${String(Math.max(1, minutes))}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${String(hours)}h`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${String(days)}d`;
+  const months = Math.round(days / 30.4);
+  if (months < 12) return `${String(months)}mo`;
+  return `${String(Math.round(days / 365))}y`;
+}

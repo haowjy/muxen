@@ -1,4 +1,4 @@
-import type { ComponentChildren, ButtonHTMLAttributes, HTMLAttributes } from "preact";
+import type { ComponentChildren, ButtonHTMLAttributes } from "preact";
 import { cx } from "../cx";
 import { Icon, type IconName } from "./Icon";
 import styles from "./Row.module.css";
@@ -35,29 +35,5 @@ export function Row({ icon, label, mark, meta, trailing, selected, class: classN
     <button type="button" {...rest} class={cx(styles.row, selected && styles.selected, className as string | undefined)}>
       <Slots icon={icon} label={label} mark={mark} meta={meta} trailing={trailing} />
     </button>
-  );
-}
-
-export interface OptionRowProps extends Omit<HTMLAttributes<HTMLDivElement>, "icon" | "label"> {
-  icon: IconName;
-  label: ComponentChildren;
-  meta?: ComponentChildren;
-  trailing?: IconName;
-  /** The list's selection: filled, and announced. */
-  selected?: boolean;
-  /** Cannot be opened: it stays in the list and the selection can rest on it. */
-  disabled?: boolean;
-}
-
-/**
- * A {@link Row} that is an option of a listbox: not focusable itself. The listbox holds focus and
- * names the selected option (`aria-activedescendant`), so a selection can move while the focus
- * stays in the list or in a field above it.
- */
-export function OptionRow({ icon, label, meta, trailing, selected, disabled, class: className, ...rest }: OptionRowProps) {
-  return (
-    <div role="option" aria-selected={selected === true} aria-disabled={disabled === true ? true : undefined} {...rest} class={cx(styles.row, selected && styles.selected, disabled && styles.disabled, className as string | undefined)}>
-      <Slots icon={icon} label={label} meta={meta} trailing={trailing} />
-    </div>
   );
 }

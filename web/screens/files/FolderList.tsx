@@ -1,32 +1,50 @@
 import { Component } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { Entry, Listing } from "../../files/api";
-import { formatSize } from "../../files/format";
+import { formatAge, formatSize, formatTime } from "../../files/format";
 import { outline, type OutlineRow } from "../../files/outline";
 import { baseName } from "../../files/paths";
 import type { FilesPlace } from "../../platform/types";
+import { cx } from "../../ui/cx";
 import { Button } from "../../ui/primitives/Button";
 import { EmptyState } from "../../ui/primitives/EmptyState";
-import type { IconName } from "../../ui/primitives/Icon";
+import { Icon, type IconName } from "../../ui/primitives/Icon";
 import { useFocusRef } from "../../ui/focus";
-import { OptionRow } from "../../ui/primitives/Row";
 import { Spinner } from "../../ui/primitives/Spinner";
 import type { OutlineView } from "./session";
 import { useListbox } from "./useListbox";
 import styles from "./FolderList.module.css";
 
-function iconFor(entry: Entry): IconName {
-  if (entry.kind === "dir") return "folder";
-  const type = entry.mime ?? "";
-  return type.startsWith("image/") ? "image" : type.startsWith("video/") || type.startsWith("audio/") ? "film" : "file";
+/** A file's glyph by its extension, then its type. Folders are the only coloured icons, so a file's says what kind it is. */
+const BY_EXTENSION: Record<string, IconName> = {
+  md: "fileText", markdown: "fileText", txt: "fileText", rst: "fileText",
+  json: "fileData", jsonc: "fileData", csv: "fileData", xml: "fileData",
+  toml: "fileConfig", yaml: "fileConfig", yml: "fileConfig", ini: "fileConfig", conf: "fileConfig", cfg: "fileConfig", env: "fileConfig",
+  lock: "fileLock",
+  sh: "fileScript", bash: "fileScript", zsh: "fileScript", fish: "fileScript",
+  rs: "fileCode", ts: "fileCode", tsx: "fileCode", js: "fileCode", jsx: "fileCode", mjs: "fileCode", py: "fileCode", go: "fileCode",
+  c: "fileCode", h: "fileCode", swift: "fileCode", css: "fileCode", html: "fileCode",
+};
+
+export function fileIcon(name: string, mime: string | null | undefined): IconName {
+  const lower = name.toLowerCase();
+  const dot = lower.lastIndexOf(".");
+  const byName = dot >= 0 ? BY_EXTENSION[lower.slice(dot + 1)] : undefined;
+  if (byName) return byName;
+  const type = mime ?? "";
+  if (type.startsWith("image/")) return "fileImage";
+  if (type.startsWith("video/")) return "fileVideo";
+  if (type.startsWith("audio/")) return "fileAudio";
+  if (type.startsWith("text/")) return "fileText";
+  return type === "" ? "file" : "fileBinary";
 }
 
-/** What a row says on its right: a size for a file, and why anything unopenable can't be opened. */
-function metaFor(entry: Entry): string | undefined {
+/** Why a row can't be opened, said where its size would be. */
+function whyNot(entry: Entry): string | null {
   if (entry.utf8 === false) return "Name can't be opened";
   if (entry.kind === "broken") return "Broken link";
   if (entry.kind === "other") return "Not a file";
-  return entry.kind === "file" && entry.size !== undefined ? formatSize(entry.size) : undefined;
+  return null;
 }
 
 interface RowListProps {
@@ -35,8 +53,6 @@ interface RowListProps {
   optionId: (key: string) => string;
   /** The entry just added by an upload or a paste: marked. */
   fresh?: string | null | undefined;
-  /** The up row's text; the folder it goes to, by default. */
-  upLabel?: string;
   onOpen: (place: FilesPlace) => void;
   onUp?: () => void;
 }
@@ -46,47 +62,72 @@ interface FileRowProps {
   id: string;
   selected: boolean;
   fresh: boolean;
-  upLabel: string;
   upName: string;
-  /** The latest handlers, read when a row is tapped: a row is not redrawn for a new closure. */
-  act: { current: { onOpen: (place: FilesPlace) => void; onUp: (() => void) | undefined } };
+  /** The latest handlers, and the time ages count from, read when a row draws or is tapped: a row is not redrawn for a new closure. */
+  act: { current: { onOpen: (place: FilesPlace) => void; onUp: (() => void) | undefined; now: number } };
 }
 
-/** One option. Redrawn only when its own row, selection or mark changes, so an arrow key costs two rows, not the folder. */
+/**
+ * One option. Folders and files read apart at a glance: a folder has the coloured icon, a heavier name and, on the
+ * phone, a chevron; a file has its kind's muted icon and its size. Redrawn only when its own row, selection or mark
+ * changes, so an arrow key costs two rows, not the folder.
+ */
 class FileRow extends Component<FileRowProps> {
   override shouldComponentUpdate(next: FileRowProps): boolean {
     const p = this.props;
-    return next.row !== p.row || next.id !== p.id || next.selected !== p.selected || next.fresh !== p.fresh || next.upLabel !== p.upLabel || next.upName !== p.upName;
+    return next.row !== p.row || next.id !== p.id || next.selected !== p.selected || next.fresh !== p.fresh || next.upName !== p.upName;
   }
 
-  override render({ row, id, selected, fresh, upLabel, upName, act }: FileRowProps) {
+  override render({ row, id, selected, fresh, upName, act }: FileRowProps) {
     const { entry, place } = row;
-    const common = { id, class: styles.item, selected };
-    if (!entry) return <OptionRow {...common} icon="back" label={upLabel} aria-label={`Up to ${upName}`} onClick={() => { act.current.onUp?.(); }} />;
+    if (!entry) {
+      return (
+        <div id={id} role="option" aria-selected={selected} aria-label={`Up to ${upName}`} class={cx(styles.row, styles.up, selected && styles.selected)} onClick={() => { act.current.onUp?.(); }}>
+          <span class={cx(styles.icon, styles.folder)}><Icon name="folder" size={16} /></span>
+          <span class={styles.name}>..</span>
+        </div>
+      );
+    }
+    const dir = entry.kind === "dir";
+    const why = whyNot(entry);
+    const { now } = act.current;
     return (
-      <OptionRow
-        {...common}
+      <div
+        id={id}
+        role="option"
+        aria-selected={selected}
+        aria-disabled={place === null || undefined}
+        data-kind={dir ? "dir" : "file"}
         {...(fresh && { "data-fresh": "" })}
-        icon={iconFor(entry)}
-        label={entry.name}
-        meta={metaFor(entry)}
-        {...(place && { trailing: "chevron" as const })}
-        disabled={place === null}
+        class={cx(styles.row, dir && styles.dir, entry.name.startsWith(".") && styles.dotted, place === null && styles.disabled, selected && styles.selected)}
         onClick={() => { if (place) act.current.onOpen(place); }}
-      />
+      >
+        <span class={cx(styles.icon, dir && styles.folder)}><Icon name={dir ? "folder" : fileIcon(entry.name, entry.mime)} size={16} /></span>
+        <span class={styles.name}>{entry.name}</span>
+        {why !== null ? <span class={styles.why}>{why}</span> : (
+          <>
+            <span class={styles.size}>{entry.kind === "file" && entry.size !== undefined ? formatSize(entry.size) : ""}</span>
+            {/* Changed in the last day: full text colour, so what just changed stands out. */}
+            {entry.mtime !== undefined
+              ? <span class={cx(styles.age, now / 1000 - entry.mtime < 86_400 && styles.recent)} title={`Modified ${formatTime(entry.mtime)}`}>{formatAge(entry.mtime, now)}</span>
+              : <span class={styles.age} />}
+          </>
+        )}
+        {dir && place && <Icon name="chevron" size={16} class={styles.chevron} />}
+      </div>
     );
   }
 }
 
 /** The rows of a listbox, as options: the caller's container holds the focus and names the selected one by `optionId(selected)`. */
-export function RowList({ rows, selected, optionId, fresh, upLabel, onOpen, onUp }: RowListProps) {
-  const act = useRef({ onOpen, onUp });
-  act.current = { onOpen, onUp };
-  const upName = baseName(rows[0]?.kind === "up" ? (rows[0].place?.path ?? "") : "");
+export function RowList({ rows, selected, optionId, fresh, onOpen, onUp }: RowListProps) {
+  const act = useRef({ onOpen, onUp, now: Date.now() });
+  act.current = { onOpen, onUp, now: act.current.now };
+  const upName = baseName(rows[0]?.kind === "up" ? (rows[0].place?.path ?? "") : "") || "/";
   return (
     <>
       {rows.map((row) => (
-        <FileRow key={row.key} row={row} id={optionId(row.key)} selected={row.key === selected} fresh={row.entry !== null && row.entry.name === fresh} upLabel={upLabel ?? upName} upName={upName} act={act} />
+        <FileRow key={row.key} row={row} id={optionId(row.key)} selected={row.key === selected} fresh={row.entry !== null && row.entry.name === fresh} upName={upName} act={act} />
       ))}
     </>
   );

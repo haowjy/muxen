@@ -9,6 +9,8 @@ export interface FakeTree {
   /** Directory paths and file paths (with their mime); parents are implied. */
   dirs: string[];
   files: Record<string, string>;
+  /** Sizes and times (unix seconds) by path; a file without one is 10 bytes from 1970, a folder has no time. */
+  stats?: Record<string, { size?: number; mtime?: number }>;
 }
 
 export class FakeFs implements FsApi {
@@ -37,7 +39,7 @@ export class FakeFs implements FsApi {
       if (this.tree.dirs.includes(path)) return { kind: "dir" as const };
       const mime = this.tree.files[path];
       if (mime === undefined) throw new HttpRefusal(404, "not_found");
-      return { kind: "file" as const, mime, size: 10 };
+      return { kind: "file" as const, mime, size: this.tree.stats?.[path]?.size ?? 10 };
     });
   }
 
@@ -57,10 +59,15 @@ export class FakeFs implements FsApi {
       return p.startsWith(path === "/" ? "/" : `${path}/`) && p !== path && !rest.includes("/") ? rest : null;
     };
     const entries: Entry[] = [
-      ...this.tree.dirs.flatMap((d) => { const name = childOf(d); return name ? [{ name, kind: "dir" as const, link: false }] : []; }),
+      ...this.tree.dirs.flatMap((d) => {
+        const name = childOf(d);
+        const mtime = this.tree.stats?.[d]?.mtime;
+        return name ? [{ name, kind: "dir" as const, link: false, ...(mtime !== undefined && { mtime }) }] : [];
+      }),
       ...Object.entries(this.tree.files).flatMap(([f, mime]) => {
         const name = childOf(f);
-        return name ? [{ name, kind: "file" as const, link: false, size: 10, mtime: 0, mime }] : [];
+        const stat = this.tree.stats?.[f];
+        return name ? [{ name, kind: "file" as const, link: false, size: stat?.size ?? 10, mtime: stat?.mtime ?? 0, mime }] : [];
       }),
     ].filter((e) => hidden || !e.name.startsWith("."));
     return {

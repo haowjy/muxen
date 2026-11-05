@@ -5,6 +5,7 @@ version section on release.
 
 ## [Unreleased]
 
+- Files tells folders from files at a glance: folders have a blue icon and a heavier name, files an icon for their kind (text, code, data, image, video, binary). Only folders end in a chevron, and only on the phone. On a desktop each row shows its size and how long ago it changed (`43m`, `6d`), brighter when it changed today; hover for the exact time. The row that goes up a folder reads `..`.
 - Files remembers Show hidden files on each device, for every folder and tab, and after a reload. Each server's Files starts from it. Clear local data forgets it.
 - Files' path field now narrows the folder's rows as you type, files as well as folders (names that start with what you typed first, then names that contain it). Enter opens the first match, or the row you picked with ↑ and ↓. Typing a path to another folder lists that folder, and in a folder with more entries than were loaded the list offers Load the rest. The ghost text and the Tab and `/` accept are gone.
 - Files has keyboard control on a desktop: ↑ ↓ Home End move a selection through the list, Enter opens the selected row, and Backspace or Cmd/Ctrl+↑ goes up a folder.

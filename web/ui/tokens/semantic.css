@@ -9,6 +9,8 @@
   --color-bg-sunken: light-dark(var(--gray-0), #000);
   --color-bg-hover: light-dark(var(--gray-2), var(--gray-10));
   --color-bg-selected: light-dark(var(--blue-3), oklch(0.31 0.045 255));
+  /* The selection while the keys are elsewhere (a field, the viewer): neutral, not blue. */
+  --color-bg-selected-idle: color-mix(in oklch, var(--color-text) 9%, transparent);
   --color-shadow: oklch(0 0 0 / 0.3);
   --shadow-1: 0 4px 16px var(--color-shadow);
   --shadow-2: 0 8px 24px var(--color-shadow);
@@ -18,6 +20,8 @@
   --color-text-muted: light-dark(var(--gray-8), var(--gray-5));
   --color-border: light-dark(var(--gray-3), var(--gray-9));
   --color-accent: light-dark(var(--blue-7), var(--blue-9));
+  /* A folder icon's fill, under its accent stroke: folders are Files' only coloured icons. */
+  --color-folder-fill: color-mix(in oklch, var(--color-accent) 22%, transparent);
   --color-on-accent: light-dark(oklch(0.99 0 0), oklch(0.2 0.03 245));
   /* On a destructive action's fill, which is red in both themes. */
   --color-on-danger: oklch(0.99 0 0);
