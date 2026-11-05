@@ -316,6 +316,37 @@ desktop, at rest
 
 **Hidden files** are left out of the narrowed rows unless the typed segment starts with `.` (that folder is then asked for with `hidden=1`, cached separately) or the hidden-files toggle is on.
 
+**Search** finds files and folders below the folder on screen, by name, at any depth (Jimmy: "a
+separate 'search' to 'search' for a file"; he chose fuzzy, a glob when `*` or `?` is typed, and recents
+when empty). It is its own place, not the path line: the magnifier in the folder's header line on
+both layouts, and on a desktop `/` or Cmd/Ctrl+P (registered in Files' keymap, so they don't fire while
+typing; Cmd/Ctrl+P is taken from the browser's Print only while Files has the keys). Opening it is a
+history entry over the folder, so Back closes it, and Escape too.
+
+- **The field** says what it searches ("Search ~/repos/muxen"), turns autocorrect, auto-capitalization
+  and spellcheck off (iOS would capitalize the first letter and turn on case-sensitive matching), and
+  shows which mode the text is in: Fuzzy, or Glob once it has `*` or `?`. Matching is the daemon's
+  ([fs.md](../fs.md#get-fssearchpath)): fuzzy terms separated by spaces, smart case, nearer files first.
+- **Asking.** The query is sent after typing pauses 250 ms, as the path field's listing is; a request
+  the field has moved past is aborted, and its answer, if it lands, is never shown. Until the new
+  answer arrives the previous results stay, quieted. Hidden files are searched while the folder's Show
+  hidden files is on.
+- **Results** are rows like a folder's: icon, name with the matched letters marked, and the folder it
+  is in, relative to the searched one, in mono, quiet. They are the daemon's best 50, best first. A tap
+  (or Enter on the selected row; ArrowUp and ArrowDown move it while the field keeps the keys) opens it:
+  a folder is entered, a file is opened (on the phone full screen; Back returns to the results, with
+  the query and scroll kept). On a desktop with the outline (Files phase 2), Enter instead closes Search
+  and reveals the row in the outline, its folders expanded.
+- **Stopped.** When the walk stopped at a cap the list ends with one line: "Searched the first
+  100,000 entries. Search from a deeper folder to see the rest." (or "…stopped after half a second…"),
+  never as an error. Nothing matched and the walk covered everything: "Nothing below ~/repos matches
+  x".
+- **Recents.** With the field empty, Search lists the files opened on this device from this host below
+  the searched folder, most recent first, up to 20 (view memory, per host; Clear local data forgets
+  them). Opening a file anywhere in Files records it. With none: "Files you open show here."
+- **Errors** read as a listing's do, in plain words with Try again; offline, the field stays and says
+  the host can't be reached.
+
 **Browsing by tap** is unchanged at rest:
 
 - Opens the current folder as a list. Returning from terminal preserves folder/preview context.

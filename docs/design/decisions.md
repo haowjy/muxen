@@ -1448,6 +1448,30 @@ are Jimmy's ([Files](#files-view-and-upload-now-three-write-operations-in-v2)).
 - **Rejected:** byte-exact names in base64 on every entry and route (every client pays
   for a case that doesn't occur); hiding them (the directory would look wrong).
 
+### Search walks per query and sends only the best 50 (2026-11-05)
+
+- **Decided:** 2026-11-05, by the UX lead building Jimmy's Files Search ("search for a file (a glob? or
+  something? ... fuzzy search as well?) the search could have recent"; of the options put to him he
+  chose fuzzy, a glob when `*` or `?` is typed, and recents when the field is empty).
+- **What:** `GET /fs/search/{*path}?q=` walks below the folder on each settled query, breadth first
+  with one directory open at a time, matches as it reads, and answers the best 50 with their match
+  positions. Its own slot; caps of 100,000 entries or 500 ms, and a 1 MiB queue; no symlinks, no
+  other mounts; `.git`, `node_modules` and `target` skipped by name (a non-Rust folder called
+  `target` is skipped too). Nothing is cached. Recents are the client's, per device.
+- **Why:** measured on pop-os (warm, load about 1): `~` is 4.4 million entries, 4.7 s to walk and 59 MB
+  gzipped as a path list; a large repo (ComfyUI, 67,000 entries) is 70 ms and 400 KB gzipped. A
+  client-side index costs hundreds of KB to MB per folder on a spotty link and can't cover `~`; a
+  per-query walk costs a bounded burst on the host (about 150 ms of a core at broad roots) and a few
+  KiB on the wire, and holds no memory between requests, like listings. Breadth first means a capped
+  walk has covered everything down to some depth, and needs no stack of open directories.
+- **Rejected:** sending the folder's file index to the client and matching there (bytes; `~` can't fit);
+  a daemon-side index kept between queries (memory held on a busy host, plus a staleness rule); host
+  indexes (`git ls-files`, `plocate`, `mdfind`: each covers only some folders, and differs per host);
+  sharing the scan slot (a walk would stall browsing); depth first (a descriptor and buffer per level,
+  and a capped walk spends itself in whichever subtree comes first); lowering the walk thread's nice
+  (an unprivileged thread can't raise it back, so lane threads would stay slow); a tree-shaped wire
+  form (gzip already removes most of the repetition, and moot at 50 matches).
+
 ### Listings: one scan per page, sorted, paged by offset, nothing kept
 
 - **What:** each page re-reads the directory with names and `d_type`, `stat`ing only

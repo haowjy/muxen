@@ -1,4 +1,4 @@
-# File API: listing, raw reads, uploads
+# File API: listing, search, raw reads, uploads
 
 `src/fs/` serves the phone's file manager: directory listings, file bytes with Range
 for the viewers and the native video player, and uploads. It reads and, for an upload that names a folder, writes any path the daemon's user can: there is no scope.
@@ -20,9 +20,14 @@ auth is [auth.md](auth.md). Decisions and the alternatives rejected are in
 | listing page | 200 entries | the client asks for the next `offset` |
 | directory scan | 5,000 entries read or 1 MiB of names, whichever first; every entry read counts, hidden ones included | `truncated: true`; the rest isn't listed |
 | scans at once | 1 | wait |
+| search walk | 100,000 entries read or 500 ms, whichever first; every entry read counts | `stopped` says which; the matches so far are answered |
+| search queue | 1 MiB of relative paths still to read, offsets counted | stops queueing; `stopped: "queue"` |
+| searches at once | 1, its own slot | wait |
+| search matches | 50 | the best 50 by score |
+| search query | 256 bytes | `400 bad_request` |
 | raw responses at once | 2 | wait |
 | uploads at once | 1 | `503 busy` at once |
-| fs lane | 4 of the runtime's 8 blocking threads; includes scan and raw-response slot waits | wait up to 10 s |
+| fs lane | 4 of the runtime's 8 blocking threads; includes scan, search and raw-response slot waits | wait up to 10 s |
 | fs lane waiters | 8 across all fs slots and blocking calls | `503 busy` at once; timed-out requests get `Retry-After: 1` |
 | raw read and upload write chunk | 64 KiB | |
 | raw stall deadline | 30 s for the socket to take the next chunk | the response is aborted, its slot freed |
@@ -152,6 +157,99 @@ Entry   = { name: string,
 - **Hidden files:** dotfiles are left out unless `hidden=1`, which the file manager's
   toggle sets. A hidden directory opened by path lists normally. `.gitignore` rules
   are v2 (repo-viewer parity, [plan.md](plan.md#file-manager)).
+
+### `GET /fs/search/{*path}`
+
+Query: `q` (required, 1 to 256 bytes), `hidden=0|1` (default 0). Files' Search: the files and
+folders below a folder whose path, relative to it, matches `q`. `fs::open(…, Dir)` on the root, then
+one **walk** that streams every entry it reads through the matcher and keeps only the best 50.
+Nothing is kept between requests. The client sends the query once typing pauses 250 ms and aborts a
+request it no longer needs ([browser-behaviors.md](client/browser-behaviors.md#files)).
+
+**The walk** is breadth first, with one directory open at a time:
+
+- A queue holds the directories still to read, as paths relative to the root. The walk opens the
+  next one relative to the root's descriptor (read with `Dir::new` on that descriptor, never a copy
+  of it), streams its names and `d_type` through the matcher,
+  queueing its subdirectories as it goes, and closes it. At most two descriptors are open (the root and the one being read), whatever
+  the depth, and a capped walk has covered everything down to some depth, so a short path under the
+  root is never missed for a deep one.
+- **Opening** refuses symlinks in every component and never leaves the root's filesystem: on Linux
+  `openat2(root, rel, O_DIRECTORY | O_CLOEXEC, RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS |
+  RESOLVE_NO_XDEV)`, which refuses a same-device bind mount too (where `openat2` answers `ENOSYS`,
+  before Linux 5.6, the walk falls back to `openat` with `O_NOFOLLOW` and the device check below); on macOS `openat(root, rel, O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW_ANY)` and an
+  `fstat` whose device must equal the root's. A symlinked directory is matched but never entered, so
+  there are no cycles, and no walk wanders into `/proc`, a network mount or another disk. A
+  directory whose relative path would pass 4,096 bytes with the root's is not queued: no route
+  could open it.
+- **Kinds:** names and `d_type` only; `fstatat` (not following) is called only for a `DT_UNKNOWN`
+  entry, as listings do, so a filesystem without `d_type` is still walked.
+- **Skipped by name:** `.git`, `node_modules` and `target` directories, and every name starting with
+  `.` unless `hidden=1`. The root itself is never skipped, whatever its name. Non-UTF-8 names are
+  neither matched nor entered (their path can't be sent back).
+- **Errors below the root** (`EACCES`, `ENOENT` from a folder deleted mid-walk, `ELOOP`, `ENOTDIR`,
+  `EXDEV`, an `EIO` from `getdents`) skip that directory. Only an error on the root fails the request.
+- **Caps:** 100,000 entries read or 500 ms of wall time, whichever comes first; every entry read
+  counts, skipped ones too. The walk then answers what it matched and `stopped` names the cap. The
+  queue is one byte buffer of relative paths with their offsets, capped at 1 MiB with the offsets
+  counted; when it is full the walk stops queueing, keeps reading what is queued, and answers
+  `stopped: "queue"`. The deadline and the cancel flag are checked every 1,024 entries and
+  between directories; one stalled filesystem call can't be interrupted.
+- **Host cost:** on pop-os, warm, a 67,000-entry repo walks in 70 ms and 100,000 entries of `~` take
+  about 150 ms of one core unconstrained, about 300 ms under the unit's `CPUQuota=50%`. That is the
+  bound per settled query, shared with the rest of muxen inside the unit's quota. The walk doesn't
+  change its thread's priority: an unprivileged thread can't lower its nice again (`RLIMIT_NICE` is
+  0), so a lane thread would stay deprioritised for every later listing.
+- **The slot** is the search slot, its own, so a listing never waits behind a walk. Its permit moves
+  into the lane closure with the walk, as the raw producer's does: it is freed when the walk ends, not
+  when the request does, so aborted searches never overlap.
+- **Cancel:** the handler holds a guard that sets a flag when the response future is dropped (the
+  client aborted or went away); the walk sees it at its next check and stops.
+
+**Matching** works on the relative path's Unicode scalar values (`/`-separated, the root's own name
+not included). Case is folded for ASCII letters only, and only while `q` has no ASCII uppercase
+letter (smart case); other scalars match exactly. Names are not Unicode-normalised, so an NFD name
+doesn't match an NFC query.
+
+- **`q` containing `*` or `?` is a glob** (Jimmy chose "glob when `*`/`?` typed"). `*` matches any
+  run within one segment, `?` one scalar within a segment,
+  `**` matches any run of whole segments, zero included (`src/**/main.rs` matches `src/main.rs`); a
+  `**` not bounded by `/` or the pattern's ends is a `*`. `[` and every other character are literal;
+  there is no escape. A pattern with no `/` is matched, anchored at both ends, against the
+  last segment; one with `/`, anchored, against the whole relative path. The matcher is the
+  iterative one with two backtrack points (one for `*`, one for `**`), linear-time in practice and
+  never recursive. A glob match's `hits` are the runs its literal characters matched. Glob matches
+  rank by depth, then the last segment with ASCII case folded, then bytes.
+- **Anything else is fuzzy.** `q` is split on spaces into terms (a trailing space is ignored); every
+  term must appear in the path as a subsequence. Each term is aligned first within the last segment
+  and only then across the whole path. The alignment is fzf's v1: the leftmost forward subsequence
+  match, then a backward pass from its end that tightens it to the shortest window. The score adds,
+  per matched scalar, a bonus at a segment or word start (after `/`, `_`, `-`, `.` or a space, or a
+  lowercase-to-uppercase change), a bonus for following the previous matched scalar, a bonus for
+  matching in the last segment, and subtracts the gaps between matched scalars and a fixed amount
+  per folder level, so nearer files rank first.
+  Terms are matched independently and in any order, and may share scalars; the path's score is the
+  sum of its terms' scores, and the terms' hit runs are merged. Score only depends on `q` and the
+  path; ties go to the shorter path, then bytes. Positions are computed again for the final 50 only,
+  so the walk keeps scores, not hits. The cost is linear
+  in the path per entry, and only paths that pass the subsequence check are scored.
+- The best 50 are kept in a heap as the walk goes, then `fstatat` (following links) is called on
+  those 50 only, so a result means what a listing entry means.
+
+```text
+Search  = { path: string,                    // canonical root
+            matches: [Match],                // best first, at most 50
+            read: u32,                       // entries read
+            stopped: "entries" | "time" | "queue" | null }   // null: the walk covered everything
+Match   = Entry & { path: string,            // relative to the root, "/"-separated
+                    hits: [[u16, u16]] }     // [start, end) runs of matched text, in UTF-16 code units
+```
+
+`Match` carries a listing's [`Entry`](#get-fslistpath) fields (`name`, `kind` after following,
+`link`, `size`, `mtime`, `mime`), so the client opens a result as it opens a row. Its absolute path is
+the root's path, `/` (unless the root is `/`), and `path`. The client draws `hits` and never matches
+again, so the matcher lives in one place; `hits` are UTF-16 runs because that is how a JS string is
+indexed. An answer is at most 50 entries, a few KiB: a search costs the host's walk, not the network.
 
 ### `GET /fs/raw/{*path}`
 
@@ -332,7 +430,7 @@ File I/O runs on the four-thread fs lane in the 8-thread blocking pool
 ([plan.md](plan.md#resource-budget)). A slow disk can stall the file manager but cannot
 consume auth's two threads. Every wait but the upload flush has a deadline; at most 8
 callers wait across fs slots and blocking work. Nothing is held between requests: no
-listing cache, no cursor, no open descriptor.
+listing cache, no search index, no cursor, no open descriptor.
 
 **Shutdown must not wait on a stream.** `http::serve` gives its connection tasks a
 2 s grace, then calls `JoinSet::abort_all` and joins the aborted tasks before it
@@ -346,10 +444,11 @@ raw stream then ends in 2.0 s with exit 0.
 | Item | Bound | MB |
 |---|---|---|
 | directory scan | 1 × (1 MiB of names + 5,000 × 32 B) | 1.2 |
+| search walk | 1 × (1 MiB queue + one `getdents` buffer + 50 matches × 4 KiB) | 1.3 |
 | raw responses | 2 × (64 KiB chunk + channel + 16 KiB hyper write buffer) | 1.0 |
 | upload | 1 × (16 KiB hyper read buffer + 64 KiB chunk + 2 MiB of dirty pages between flushes) | 2.2 |
 | listing JSON | one page, 200 entries | 0.1 |
-| **file API, excluding raw responses** | scan, upload and listing page | **3.5** |
+| **file API, excluding raw responses** | scan, search, upload and listing page | **4.8** |
 
 Raw responses and kernel socket buffers have separate rows in the daemon's ceiling in
 [daemon-core.md §6](daemon-core.md#6-limits-and-the-memory-ceiling). HTTP/1 buffers are
@@ -366,7 +465,8 @@ which is why they have a row and why the flush interval is 2 MiB, not larger.
   size (a `dir` upload too).
 - **Refusals** (`denied`) at `warn` with the path
   asked for.
-- **Reads** (listings, raw ranges) at `debug` only: one video is dozens of requests.
+- **Reads** (listings, raw ranges) at `debug` only: one video is dozens of requests. A search
+  logs its root, entries read and `stopped` at `debug`; never `q`.
 - **Never** file contents, upload bytes, the client's upload `name` beyond its
   extension, or `config.toml`'s text (a parse error logs the line number, as auth
   does).
@@ -381,8 +481,9 @@ without a disk.
 |---|---|
 | `fs/mod.rs` | the `uploads_dir` read, `FsError` with its status and code |
 | `fs/open.rs` | `fs::open`, `fs::check_dir`, the platform descriptor-path lookup |
-| `fs/slots.rs` | scan, raw-response and upload permits, with waits counted against the fs lane |
+| `fs/slots.rs` | scan, search, raw-response and upload permits, with waits counted against the fs lane |
 | `fs/list.rs` | the scan; pure sort and page |
+| `fs/search.rs` | the walk; the pure matcher (glob and fuzzy scoring) and the best-50 heap |
 | `fs/raw.rs` | pure `parse_range` and `If-Range`; the chunk producer; ETags come from `files::Stamp` |
 | `fs/mime.rs` | the extension table |
 | `fs/upload.rs` | pure name generation; part file, flush, rename, the in-flight record and its cleanup |
