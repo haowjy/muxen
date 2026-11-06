@@ -2,6 +2,7 @@
 // box: the app root, which is `100svh` tall and so does not change when Safari's toolbars
 // collapse or the keyboard opens. `keyboard` is derived, with no timer.
 import type { Appearance, SafeArea, Viewport } from "../types";
+import { TEXT_BOX } from "../../ui/focus";
 
 /** Layout is `phone` when `min(width, stableHeight)` is under this many CSS px. */
 const PHONE_BELOW = 600;
@@ -20,7 +21,7 @@ function createProbe(): HTMLElement {
 }
 
 function isTextOwner(el: Element | null): boolean {
-  return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || (el instanceof HTMLElement && el.isContentEditable);
+  return el?.matches(TEXT_BOX) ?? false;
 }
 
 export interface BrowserViewport {

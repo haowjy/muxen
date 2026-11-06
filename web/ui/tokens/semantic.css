@@ -62,6 +62,8 @@
   --safe-left: env(safe-area-inset-left, 0px);
   /* How far the keyboard covers the bottom of the page; the platform sets it (ui/theme.ts). The dock, sheets and toasts rise by it. */
   --keyboard-inset: 0px;
+  /* How far what rides on the keyboard rises: the safe area under it is the keyboard's to cover. */
+  --keyboard-lift: max(0px, calc(var(--keyboard-inset) - var(--safe-bottom)));
   --keyboard-duration: 0ms;
   /* Duration and easing for whatever moves with the keyboard: `transition: translate var(--keyboard-timing)`. */
   --keyboard-timing: calc(var(--keyboard-duration) * var(--keyboard-motion)) var(--ease-keyboard);

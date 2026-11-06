@@ -38,7 +38,7 @@ function patternProblem(pattern: string, skips: readonly string[]): string | nul
 
 /** Why `dir` can't be the uploads folder, in words; null if it can. */
 function uploadsProblem(dir: string): string | null {
-  if (!dir.startsWith("/") && !dir.startsWith("~/")) return "Start with / or ~/.";
+  if (!dir.startsWith("/") && dir !== "~" && !dir.startsWith("~/")) return "Start with / or ~.";
   if (bytes(dir) > MAX_UPLOADS_DIR_BYTES) return "At most 4,096 bytes.";
   return null;
 }

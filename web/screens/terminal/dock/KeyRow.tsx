@@ -1,17 +1,14 @@
-// The dock's key row (client-architecture.md §7.4): one fixed row of the keys a phone keyboard
-// lacks, in a horizontal scroller. A tap never moves focus or lowers the keyboard (DockButton),
-// and a key acts on `pointerup` inside it. Where a key goes (tmux, or the compose box that holds
-// the keyboard) is `routeKey`'s decision; ctrl and alt arm the next key.
-import { useEffect, useRef } from "preact/hooks";
+// The dock's key row (client-architecture.md §7.4): the keys a phone keyboard lacks, on a KeyStrip.
+// Where a key goes (tmux, or the compose box that holds the keyboard) is `routeKey`'s decision;
+// ctrl and alt arm the next key.
 import { useApp } from "../../../app/context";
-import { DockButton } from "../../../ui/primitives/DockButton";
+import { KeyStrip } from "../../../ui/primitives/KeyStrip";
 import { useStore } from "../../../ui/store";
 import { routeKey, type RowKey } from "../../../touch/keyRoute";
 import { terminalsOf } from "../terminals";
-import styles from "./Dock.module.css";
 
 /** `aria` is set only where the visible label can't be read aloud as the key (the arrows, the caret chords). */
-type Spec =
+export type Spec =
   | { label: string; aria?: string; key: RowKey; repeat?: boolean }
   | { label: string; modifier: "ctrl" | "alt" };
 
@@ -21,7 +18,7 @@ type Spec =
 // The chords come last, past ⏎, so none sits in the first, easy-tap slots and ^Z (suspend) is
 // never beside Return; ^C, the most destructive, is the very last. ⇧tab (mode cycling) is rare
 // now and sits after the punctuation. ^S and ^Q are gone: ^S freezes a terminal with flow control on.
-const KEYS: Spec[] = [
+export const KEYS: Spec[] = [
   { label: "esc", key: { name: "Escape" } },
   { label: "tab", key: { name: "Tab" } },
   { label: "←", aria: "Left arrow", key: { name: "Left" }, repeat: true },
@@ -41,10 +38,6 @@ const KEYS: Spec[] = [
   { label: "^C", aria: "Control C", key: { name: "C-c" } },
 ];
 
-/** A held arrow repeats after this, then at this rate. */
-const REPEAT_AFTER_MS = 400;
-const REPEAT_EVERY_MS = 33;
-
 export function KeyRow() {
   const app = useApp();
   const terminals = terminalsOf(app);
@@ -52,88 +45,22 @@ export function KeyRow() {
   const armed = useStore(modifiers, (s) => s.armed);
   const owner = useStore(app.focus, (s) => s.owner);
 
-  // `terminals.key` routes against the live owner and armed state, not this render's: a held key fires from the render it was pressed in.
-  const send = (spec: Spec): void => {
-    if ("modifier" in spec) {
-      modifiers.toggle(spec.modifier);
-      return;
-    }
-    terminals.key(spec.key);
-  };
-
   if (owner === "none") return null; // the row is mounted only while typing
 
   return (
-    <div class={styles.keys} role="group" aria-label="Terminal keys">
-      {KEYS.map((spec) => (
-        <Key
-          key={spec.label}
-          spec={spec}
-          pressed={"modifier" in spec && armed === spec.modifier}
-          // The two destinations look different: a key whose tap lands in the compose box rather than in tmux.
-          acts={"key" in spec && routeKey(spec.key, owner, armed).route.to !== "terminal" ? "box" : undefined}
-          onPress={() => { send(spec); }}
-          onDown={() => { app.platform.haptic("modifier" in spec ? "modifier" : "key"); }}
-        />
-      ))}
-    </div>
-  );
-}
-
-interface KeyProps {
-  spec: Spec;
-  pressed: boolean;
-  acts: "box" | undefined;
-  onPress: () => void;
-  onDown: () => void;
-}
-
-function Key({ spec, pressed, acts, onPress, onDown }: KeyProps) {
-  // A ref: pressing ctrl re-renders its own key between the pointer going down and up.
-  const hold = useRef<{ delay?: ReturnType<typeof setTimeout>; every?: ReturnType<typeof setInterval>; repeated: boolean } | null>(null);
-  const stop = (): void => {
-    clearTimeout(hold.current?.delay);
-    clearInterval(hold.current?.every);
-    hold.current = null;
-  };
-  // The row unmounts when the keyboard goes down, with no pointerup: a held arrow must not outlive it.
-  useEffect(() => stop, []);
-  const repeat = "repeat" in spec && (spec.repeat ?? false);
-  return (
-    <DockButton
-      kind="key"
-      pressed={pressed}
-      aria-label={"aria" in spec ? spec.aria : undefined}
-      data-acts={acts}
-      aria-pressed={"modifier" in spec ? pressed : undefined}
-      onPointerDown={(e) => {
-        e.currentTarget.setPointerCapture(e.pointerId);
-        onDown();
-        stop();
-        const state: NonNullable<typeof hold.current> = { repeated: false };
-        hold.current = state;
-        if (repeat) {
-          state.delay = setTimeout(() => {
-            state.repeated = true;
-            onPress();
-            state.every = setInterval(onPress, REPEAT_EVERY_MS);
-          }, REPEAT_AFTER_MS);
-        }
-      }}
-      onPointerUp={(e) => {
-        const held = hold.current;
-        stop();
-        const box = e.currentTarget.getBoundingClientRect();
-        const inside = e.clientX >= box.left && e.clientX <= box.right && e.clientY >= box.top && e.clientY <= box.bottom;
-        if (held && !held.repeated && inside) onPress();
-      }}
-      // Fires after pointerup and pointercancel, and when the key is removed while held.
-      onLostPointerCapture={stop}
-      // Keyboard activation (Enter or Space on a focused key) has no pointer: `detail` is 0.
-      onClick={(e) => { if (e.detail === 0) onPress(); }}
-      onContextMenu={(e) => { e.preventDefault(); }}
-    >
-      {spec.label}
-    </DockButton>
+    <KeyStrip
+      label="Terminal keys"
+      keys={KEYS.map((spec) => ({
+        label: spec.label,
+        aria: "aria" in spec ? spec.aria : undefined,
+        repeat: "repeat" in spec && spec.repeat,
+        pressed: "modifier" in spec ? armed === spec.modifier : undefined,
+        // The two destinations look different: a key whose tap lands in the compose box rather than in tmux.
+        acts: "key" in spec && routeKey(spec.key, owner, armed).route.to !== "terminal" ? "box" : undefined,
+        // `terminals.key` routes against the live owner and armed state, not this render's: a held key fires from the render it was pressed in.
+        onPress: () => { if ("modifier" in spec) modifiers.toggle(spec.modifier); else terminals.key(spec.key); },
+        onDown: () => { app.platform.haptic("modifier" in spec ? "modifier" : "key"); },
+      }))}
+    />
   );
 }

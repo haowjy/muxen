@@ -46,12 +46,6 @@ for (const version of VERSIONS) {
       await openSessionRow(page, session);
       await painted(page);
     }
-    /** A reload opens Home: the workspace's row opens the tab it last showed, then the pill for `session`. */
-    async function reopen(page: Page, session: string): Promise<void> {
-      await page.getByRole("button", { name: /^pop-os/ }).first().click();
-      await page.getByRole("button", { name: new RegExp(`^${session}\\b`) }).click();
-      await painted(page);
-    }
     async function painted(page: Page): Promise<void> {
       await page.waitForFunction(() => { const host = document.querySelector("[data-rows], .xterm")?.parentElement; return host !== null && host !== undefined && !host.hasAttribute("data-blank"); });
     }
@@ -190,7 +184,7 @@ for (const version of VERSIONS) {
         server.onMessage((frame) => { ws.send(frame); });
       });
       await page.reload();
-      await reopen(page, s);
+      await painted(page); // a reload reopens the tab it last showed
       await toggle(page).click();
       const up = key(page, "Up arrow");
       const box = await up.boundingBox();
@@ -258,7 +252,7 @@ for (const version of VERSIONS) {
 
       await page.waitForTimeout(500);
       await page.reload();
-      await reopen(page, s);
+      await painted(page); // a reload reopens the tab it last showed
       await expect(draft(page)).toHaveValue("draft one");
     });
 

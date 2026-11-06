@@ -57,7 +57,7 @@
   z-index: var(--z-band);
   right: var(--space-3);
   bottom: var(--space-3);
-  translate: 0 calc(-1 * (var(--dock-above-height) + max(0px, var(--keyboard-inset) - var(--safe-bottom))));
+  translate: 0 calc(-1 * (var(--dock-above-height) + var(--keyboard-lift)));
   transition: translate var(--keyboard-timing);
   box-shadow: var(--shadow-1);
 }

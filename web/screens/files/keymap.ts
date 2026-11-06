@@ -4,6 +4,7 @@
 import { useEffect, useRef } from "preact/hooks";
 import { useApp } from "../../app/context";
 import { imeKey } from "../../ui/ime";
+import { TEXT_BOX } from "../../ui/focus";
 
 /** A shortcut. `mod` is Cmd or Ctrl (either is taken, on every platform). */
 export interface Chord {
@@ -41,7 +42,7 @@ function free(e: Event, chord: Chord): boolean {
   if (e.defaultPrevented || document.querySelector("dialog[open], [role=menu], [role=dialog]")) return false;
   const target = e.target;
   if (chord.inList) return target === document.body || (target instanceof HTMLElement && target.matches("[role=tree], [role=listbox]"));
-  return chord.inField === true || !(target instanceof HTMLElement && target.closest("input, textarea, [contenteditable]"));
+  return chord.inField === true || !(target instanceof HTMLElement && target.closest(TEXT_BOX));
 }
 
 function matches(e: KeyboardEvent, chord: Chord): boolean {

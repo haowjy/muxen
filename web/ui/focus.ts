@@ -23,6 +23,9 @@ const missing = (): never => {
   throw new Error("No focus controller: render inside <App> or the harness");
 };
 
+/** What holds a keyboard: every text box, the editor's contenteditable too. */
+export const TEXT_BOX = "input, textarea, [contenteditable]:not([contenteditable=false])";
+
 export const FocusContext = createContext<FocusPort>({
   register: missing,
   withdraw: missing,

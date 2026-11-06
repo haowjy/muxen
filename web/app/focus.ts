@@ -3,7 +3,7 @@
 // focus and its focus return run in the same dispatch that opened or closed it, because iOS
 // raises the keyboard only for a focus made during a user gesture.
 import type { Viewport } from "../platform/types";
-import type { FocusPort, FocusTarget } from "../ui/focus";
+import { TEXT_BOX, type FocusPort, type FocusTarget } from "../ui/focus";
 import { Store } from "../ui/store";
 import type { Screen } from "../workspace/state";
 
@@ -53,8 +53,8 @@ export class FocusController extends Store<FocusView> implements FocusPort {
    * keeps focus where it is. The tap's handlers still run: only the focus change is cancelled.
    */
   private readonly keepFocus = (event: MouseEvent): void => {
-    if (this.viewport().directInput === "xterm" || !document.activeElement?.matches("input, textarea")) return;
-    if (event.target instanceof Element && event.target.closest("input, textarea, select, label, [contenteditable]")) return;
+    if (this.viewport().directInput === "xterm" || !document.activeElement?.matches(TEXT_BOX)) return;
+    if (event.target instanceof Element && event.target.closest(`${TEXT_BOX}, select, label`)) return;
     event.preventDefault();
   };
 
