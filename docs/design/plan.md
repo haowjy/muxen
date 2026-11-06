@@ -208,9 +208,17 @@ screen is watched.
   the heartbeat as the backstop.
 - **Connect timeout:** iOS 26 can leave a new WebSocket stuck in CONNECTING after
   resume ([WebKit 308073](https://bugs.webkit.org/show_bug.cgi?id=308073),
-  [ios-web.md §2](research/ios-web.md)). If a socket isn't open within a few seconds,
-  the client tries one new socket and then recreates the web view. All state that
-  matters is on the server.
+  [ios-web.md §2](research/ios-web.md)). A socket not open within 5 s is given up, and the
+  first time one new socket goes out at once. Later timeouts take one backoff step like any
+  failure. From the third in a row, the first on the long limit below, each also sends one
+  `GET /auth/info`, given up after 5 s. If that is answered, HTTP works where sockets don't, and
+  the client recreates the web view: at most once per 10 minutes, and not if a socket was welcomed
+  since or another server's socket is open, which shows sockets work. An off server answers
+  nothing, so it never causes a reload. All state that matters is on the server.
+- **Slow links:** the 5 s limit holds for the first two attempts of an outage, so an off server
+  reads offline at about 10 s. Once the server is unreachable each attempt gets 15 s, which costs a
+  silent server nothing and lets a slow handshake finish. A socket that has opened waits up to 15 s
+  for `welcome`; it is not a connect timeout and doesn't count towards the rule above.
 - **Tabs never close on network loss.** A dropped tab shows "reconnecting…" on its
   pill indefinitely. Retries back off with jitter: 0.5 s, 1, 2, 4… capped at 30 s. The
   backoff resets and a retry fires at once on becoming visible, coming online, or a
@@ -230,6 +238,100 @@ screen is watched.
   closes the host's tabs as
   `serverExited` would. The listing covers the `main` tmux server only, so it never prunes scratch
   tabs (after the core MVP). A refused or failed listing prunes nothing.
+
+### Reachability
+
+Each server has one reachability: whether its daemon is answering now. The phone decides it from
+the end of each attempt its socket already makes; nothing is sent to learn it, and nothing asks
+Tailscale. It is separate from admission, which is whether the daemon lets this client in: a server
+can be admitted and unreachable (switched off), or reachable and not admitted (not enrolled, token
+refused). The host's socket owns it for the whole life of the host.
+
+**What views read is the shown state:** the stored state, or *no network* whenever the phone
+reports none. The web's host registry exposes it beside admission. Every consumer rule, here and in
+[browser-behaviors.md](client/browser-behaviors.md), is written against it, and no view decides for
+itself.
+
+| Shown state | Means |
+|---|---|
+| reachable | The daemon answered, and no attempt since has failed 1.5 s or more into an outage |
+| checking | No answer yet and not yet unreachable, a failed attempt ended 1.5–10 s into an outage, or a tapped Retry is in flight |
+| unreachable | An attempt failed 10 s or more into an outage, or an open socket went silent |
+| no network | The phone reports no network. Not stored: it overlays any of the three |
+
+Home's status word follows from these and admission, in the order in
+[browser-behaviors.md](client/browser-behaviors.md#home).
+
+**Decided when an attempt ends.** The host's socket keeps two times: *trouble since*, when the first
+unanswered attempt of the current outage began, and *last reached*, when the daemon last answered
+(now while the socket is open; once it closes or stops, the time of the last message it received).
+Every path that opens a socket (a tab joining, a request, a nudge, Retry, the foreground, a backoff
+step) goes through one connect, which notes when the attempt began. Reachability changes only on the
+rows below, so no timer runs for it.
+
+| When | The socket next | Reachability |
+|---|---|---|
+| `welcome` | Open | Reachable, last reached now; trouble cleared |
+| Server closes with 4401 or 4001 | Halted (re-enrol, update) | Reachable, last reached now; trouble cleared. Admission shows the refusal |
+| Server closes with any other 4xxx (4005 over the cap, 4503 can't decide now) | One backoff step; in a browser, a 4503 stops the socket and the admission check takes over | Reachable, last reached now; trouble cleared |
+| An open socket's idle close (25–35 s after its last message) | One backoff step | Unreachable, last reached = its last message, trouble since = the close. With no network: as the next row |
+| Any other close: a connect timeout, an error (1006), a clean close (1000, 1001), the link's own 4003, a socket that opened and got no `welcome`, native opening no socket (1006, or 4401 when it holds no token, which also halts and refuses) | One backoff step, or the [connect-timeout rule](#reconnect) | Unanswered. Trouble since = this attempt's start (the close, for a socket that was open), if unset. Then unreachable if 10 s have passed since then; from reachable, checking if 1.5 s have; else unchanged. A socket that was open also sets last reached to its last message |
+| A connect starts (any path above) | Connecting | Unchanged |
+| Stop: nothing needs the socket, background, host removed, or browser admission check paused | Stopped | Unchanged, but last reached = the last message of a socket that was open; trouble cleared |
+
+- An attempt is answered by a `welcome` or by a 4xxx close the server sent. The socket marks every
+  close the client made itself, native's no-token 4401 among them; those are unanswered.
+- At launch every server is checking until an answer or until it turns unreachable. Last reached
+  comes back from the saved workspace. It is saved per server when the workspace is saved, so it
+  survives a kill or a reload and adds no write of its own.
+- A quick failure changes nothing on its own: a Wi-Fi to cellular handoff fails a socket or two and
+  reconnects within seconds, so it never reads offline, and one that recovers within 1.5 s keeps its
+  last word. With fast failures, offline appears at the 10 s threshold plus one backoff step. An off
+  server's first connect times out at 5 s (checking) and its second, sent at once, at about 10 s
+  (offline).
+- From unreachable, automatic attempts leave the state alone until an answer arrives.
+- Stopping clears trouble, including when a browser admission check is paused, so a page hidden or
+  an app locked mid-outage decides nothing: the first attempt after it starts a new outage.
+
+A browser host that isn't admitted yet has no socket running; its admission check is its attempt,
+reported to the same socket, by the same rows. The check is `GET /auth/info`, then
+`/auth/node/session`, each given up after 5 s. It is answered by a 200 whose body has a string
+`hostId`, or by the daemon's 503 `identity_unavailable`; anything else (`tailscale serve`'s 502, no
+response, the 5 s limit) is unanswered. It isn't sent while the browser page is hidden; showing the
+page sends it.
+
+**No network.** While the phone reports no network, every server shows no network and only the
+network returning clears it. An attempt that ends unanswered with no network changes nothing; a
+`welcome` or a 4xxx close sent by the server still counts as an answer. The network returning clears
+trouble, so the outage never decides "no answer" for the servers behind it.
+
+**No polling.** Nothing is sent to learn reachability. The views that need a server already make
+the attempts: Home and the sessions overlay keep each admitted server's socket joined, and so does
+any open tab; a browser host that isn't admitted yet is retried by its admission check. The socket
+retries with the [Reconnect](#reconnect) backoff (capped at 30 s) and at once on becoming visible,
+coming online, or Retry. A hidden page sends nothing. A server with no tabs, while a tab of another
+server is on screen, isn't updated until something needs it; entering Home is such a thing.
+
+**Requests.** Every HTTP request to a server is made while something has joined its socket: a Files
+tab is a tab, and Settings and the sessions overlay open over Home, whose listing joins every
+admitted server. The browser's admission check is the one exception. `GET /auth/info` is not
+subject to what follows, for the admission check and the connect-timeout rule alike. So:
+
+- When a server's shown state becomes unreachable or no network, every GET and HEAD not yet
+  finished fails at once as `network`, whether it waits for an answer or for the rest of the body.
+- A GET or HEAD made while it shows either is not sent: it fails at once as `network`. The socket is
+  already retrying.
+- When the shown state becomes reachable, or the server answers a new socket while reachable, every
+  view whose last load failed as `network` loads again by itself: Files
+  ([browser-behaviors.md](client/browser-behaviors.md#files)) and Settings.
+- Otherwise a request is never cut short, however slow. Other methods (a settings save, an
+  enrolment, an upload) are always sent and never aborted.
+
+**Retry.** Every Retry for a server is the same one, `app.retryHost`: reset the backoff, connect its
+socket if it isn't already connecting, check admission again if it is undecided, and list sessions
+again. It shows checking over unreachable when it started an attempt or an attempt is in flight,
+which then ends as any other; while the socket is open, stopped or has nothing joined it changes
+nothing.
 
 ### Stack
 

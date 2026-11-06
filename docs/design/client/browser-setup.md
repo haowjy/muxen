@@ -80,7 +80,7 @@ input and explains reload, not retries. Prefer lifecycle-triggered update checks
 polling. Cache only this app's namespaces and remove obsolete versions safely.
 [Service-worker lifecycle](https://web.dev/articles/service-worker-lifecycle).
 
-Offline launch shows Disconnected and the locally saved drafts, not a pretend live
+Offline launch shows Home's offline card and the locally saved drafts, not a pretend live
 terminal. Never send a line to a different tab than the one it was written in; it goes to the window that tab shows when it is sent. Preserve immutable
 target identity and explicit delivery uncertainty. Do not cache terminal/file content
 for offline reading in the minimal pass.

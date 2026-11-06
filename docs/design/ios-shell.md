@@ -121,8 +121,10 @@ origin:
     the app's version. Native asks it: the first proxied request to a host holds while
     the handler fetches `/auth/info` once (later requests join the same check), then
     goes through, or gets `409 {"error": "incompatible"}` if the range excludes the
-    app. A check that gets no answer fails the held requests as a network error and is
-    not remembered. Only a compatible answer is kept. The protocol version covers the HTTP routes
+    app. The check gives up after 10 s (its own session's request timeout; the proxy
+    session keeps the default). A check that gets no answer fails the held requests as a
+    network error and is not remembered. The web's own `GET /auth/info` is never held by
+    the gate. Only a compatible answer is kept. The protocol version covers the HTTP routes
     ([daemon-core.md §5.2](daemon-core.md#52-handshake-and-versions)). The app's
     version is `DaemonProtocol.version` (`MuxenKit/AuthTypes.swift`), which moves with
     `PROTOCOL_VERSION` (2 since tabs follow a session); enrolment checks it too.
@@ -205,7 +207,11 @@ host}`. Native replies `{url, token}`, `{locked:true}` or `{notEnrolled:true}`; 
 enrolled host, `url` is `wss://<stored host>/ws`. The URL and token are returned only to
 that Link and are never put in `PlatformHost`, workspace, storage or general page state.
 No Keychain read occurs in the WebKit callback; the app lock has already loaded the
-token map into memory.
+token map into memory. Native replies at once, on the main actor, on every path; a message
+the bridge refuses (from a replaced web view, or a malformed one) is rejected, and the web
+treats that as no socket (a 1006 close it made itself), so the web's wait for the reply has no
+timer of its own. A close for no socket says nothing from the server: a 1006, or the 4401 for
+no token, is an unanswered attempt ([plan.md](plan.md#reachability)).
 
 Rejected: `baseURL` on `PlatformHost` (exposes host routing in page state);
 `WebSocket` over `muxen-app://` (a scheme handler cannot carry it); native
@@ -420,7 +426,7 @@ token to native solely for comparison and revocation, never into storage or logs
 | `ready` | `Boot { bridgeVersion: 11, hosts, workspace, viewport, preferences, lifecycle }` | Start and restore the saved workspace (opaque JSON) |
 | `socket { host }` | `{ url, token }`, `{ locked: true }` or `{ notEnrolled: true }` | Resolve the WebSocket endpoint and credential inside `HostLink`; keep both there except echoing the exact refused token to native for `hostRejected` |
 | `hostRejected { host, token }` | `null` | Clear that exact rejected token only, then re-publish `hosts` |
-| `recreateWebView` | `null` | Discard/reload the page after unrecoverable WebSocket connection failure |
+| `recreateWebView` | `null` | Discard/reload the page: sockets time out while HTTP answers ([plan.md](plan.md#reconnect)) |
 | `saveWorkspace { workspace }` | `null` | Persist the entire workspace JSON as given |
 | `draftGet { key: TabKey }` | `DraftRecord` or `null` | Read the line-field draft |
 | `draftPut { record, baseRevision }` | `"ok"`, `"conflict"` or `"failed"` | Revision-checked draft write |
@@ -515,10 +521,10 @@ which the page owns, and the keyboard stays down until the user taps.
 | Background (`scenePhase == background`) | Native starts a short background task and publishes `lifecycle { visible:false, online, locked, covered }`, then ends the task after the web callback or expiration. The web closes sockets. Native keeps tokens in memory until a lock. |
 | A native screen covers the terminal (server list, Add host, or lock screen) | Native blurs any WebKit text field and covers the terminal. A server sheet sets `Lifecycle.covered`; the lock screen uses `Lifecycle.locked`. The web's single watch predicate unwatches the hidden active tab. On sheet dismissal native republishes the whole lifecycle snapshot. |
 | Foreground (`scenePhase == active`) | If the selected 5 min or 1 hour interval was exceeded, native drops its token map and attempts one Keychain read to unlock; At launch never relocks merely on foreground. Otherwise restore focus without a prompt. The web recomputes admission and reconnects as needed. |
-| Reachability change (`NWPathMonitor`) | Native updates `Lifecycle.online`; the web resets backoff/reconnects closed or stale sockets when `online` changes. |
+| Network change (`NWPathMonitor`) | Native updates `Lifecycle.online`; the web resets backoff/reconnects closed or stale sockets when `online` changes. Unsatisfied shows every host as "This iPhone is offline." at once, and the web fails their waiting GETs ([plan.md](plan.md#reachability), "No network"). |
 | Web content process killed (`webViewWebContentProcessDidTerminate`) | Native reloads the page; `boot` restores tabs from the native copy, which survives this; focus is restored |
-| Web asks for a fresh web view (`recreateWebView`, after two consecutive connect timeouts: iOS 26 can leave a new WebSocket stuck in CONNECTING after resume) | Native discards the `WKWebView` and loads a new one, then it follows the same path as a killed content process: `boot` restores tabs from the native copy, the web reconnects, focus is restored |
-| Host unreachable for a while | Tabs stay "reconnecting" ([plan.md](plan.md#reconnect)). Past 10 s, the pill's detail says "Can't reach devbox. Is Tailscale on?": the app cannot read the VPN state, and Tailscale off is the usual cause |
+| Web asks for a fresh web view (`recreateWebView`: the [connect-timeout rule](plan.md#reconnect), when `GET /auth/info` answers while sockets time out, at most once per 10 minutes, a limit the web keeps) | Native discards the `WKWebView` and loads a new one, then it follows the same path as a killed content process: `boot` restores tabs from the native copy, the web reconnects, focus is restored |
+| Host unreachable | The host turns unreachable at the 10 s threshold plus one backoff step ([plan.md](plan.md#reachability); about 10 s for connect timeouts). Home's card reads offline; tabs stay "reconnecting" ([plan.md](plan.md#reconnect)), their strip saying "Can't reach devbox". The app cannot read the VPN state, and Tailscale off is the usual cause, so the hint names both. The web fails the host's waiting GETs, and WebKit's `webView(_:stop:)` cancels their proxied tasks |
 
 iOS suspends the app in the background and its sockets die, native or not; resume
 speed is what the design optimizes.

@@ -16,6 +16,18 @@ naming the old option under Rejected; git history keeps the removed text.
 
 Decided by Jimmy, 2026-10-21 unless an entry gives another date.
 
+### A server's reachability is one state, shown on Home and read everywhere (2026-11-05)
+
+- **What:** each server has one reachability (reachable, checking, unreachable), decided on the
+  phone from its own traffic to that server ([plan.md](plan.md#reachability)). The Home card shows
+  it; the folder view, terminal tabs, the server banner and every other view of the server read the
+  same state. Nothing polls, and nothing outside the tailnet is asked (no Tailscale API). Servers
+  reporting each other's state is not part of it; it may be added later.
+- **Why:** with homebox powered off, the app's folder view loaded indefinitely and Home read
+  "pop-os · connected · 1 tab". Each view decided for itself, and the app never decided at all.
+  Jimmy: "It should show up on this status screen basically, and then propagate down."
+- **Rejected:** per-view detection; polling; the Tailscale API.
+
 ### Touch scrolls and selects on one native list of rows; desktop follows (2026-10-31)
 
 - **What:** on touch the terminal is one native scroller of rows: tmux's history, the lines that left the
@@ -1223,9 +1235,9 @@ Decided 2026-10-22 by the tech lead.
 
 - **Decided:** 2026-10-22, tech lead. Evidence: [ios-shell.md](ios-shell.md#the-bridge).
 - **What:** `recreateWebView` is a web → native message with no data and no reply. The
-  web sends it after two consecutive connect timeouts on a host's socket (the first
-  timeout opens a new socket at once; any `welcome` resets the count). Native discards
-  the `WKWebView` and loads a new one, and the tabs come back through `boot`.
+  web sends it under the [connect-timeout rule](plan.md#reconnect), limited on the web's side
+  (see "A stuck socket recreates the web view only if the server answers"). Native discards the
+  `WKWebView` and loads a new one, and the tabs come back through `boot`.
 - **Why:** [plan.md](plan.md#reconnect) already says the client recreates the web view
   when a socket stays stuck in CONNECTING (WebKit 308073). Only the web sees the stuck
   socket, so only the web can ask; native's content-process hook never fires for it.
@@ -3743,7 +3755,7 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   `#/`, `#/tabs`, `#/term/<session>`, `#/files/<path>` (a folder ends in `/`; `~/…` under home). It
   names no server: a browser page talks to one host, its own origin. A session with no tab shows the
   overview; a Files place with no tab showing it opens a new Files tab there. Back from it is Home. A
-  server that is down is explained on the tab itself ("Can't reach the server" with Retry).
+  server that is down is explained on the tab itself ("Can't reach pop-os" with Retry).
 - **Why:** landing on Home after every reload threw the place away, and the tab already explains an
   unreachable server, which was the reason for the earlier rule.
 - **Rejected:** an opaque tab id in the hash (a reload works but a link can't name a folder); a server
@@ -3995,7 +4007,8 @@ Decided 2026-10-24 by design within Jimmy's Mac-host decisions. Probe results:
   search and no Settings row; the gear in its header opens Settings. Settings and the server's
   full-height sessions sheet are router overlays rendered as `Dialog variant="page"`, not routes.
   The browser shows its one origin and no Add server. "Last reached" is the cache's in-memory
-  `reachedAt`: a page that has never reached the host says so, and nothing is persisted for it.
+  `reachedAt`: a page that has never reached the host says so. (Replaced: see "Last reached is saved
+  with the workspace".)
   The desktop workspace no longer focuses Home search on closing the last tab; the search is gone.
   Appearance and terminal text size are left out of Settings until slice 5 can store them.
 - **Why:** overlays give Back, Escape and focus return for free; a route needs a `Route`, a hash and
@@ -5219,3 +5232,306 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
   - showing only the hidden ancestors (listings are one per folder under one setting; a mixed outline
     needs a second listing model);
   - leaving the outline closed and saying why (the user asked to see that file).
+
+## Server reachability (2026-11-05)
+
+The design under Jimmy's decision "A server's reachability is one state, shown on Home and read
+everywhere". The rules are in [plan.md](plan.md#reachability). Entries marked **Jimmy to confirm**
+carry the design lead's recommended answer to a question put to Jimmy and not yet answered.
+
+### Reachability is decided by the socket's own lifecycle, at the end of each attempt
+
+- **Decided:** 2026-11-05, tech lead, on the fourth design review.
+- **What:** the host's socket (`Host`) derives reachability where the evidence arrives. It keeps
+  *trouble since* (when the first unanswered attempt of the outage began) and *last reached*, and
+  decides at the end of each attempt: a `welcome` or a 4xxx close the server sent makes the server
+  reachable; any other close makes it unreachable once an attempt fails at or after the 10 s
+  threshold, plus one backoff step when failures come back quickly, and
+  checking from reachable once 1.5 s have. Every path that opens a socket goes through one connect.
+  Stopping the socket clears trouble. No timer runs for reachability. The socket's object owns the
+  state for the host's whole life: a browser host that isn't admitted yet reports its admission
+  check to it, by the same rows.
+- **Why:** the socket already knows everything reachability needs: when an attempt began, how each
+  ended, and its backoff. Copying those facts across a callback into a second state machine meant
+  keeping two machines in step, and every gap three reviews found sat between them: connects that
+  bypassed the one step, an abandoned attempt's clock still firing, a Retry the socket ignored
+  leaving the card on "checking" for good. With one lifecycle, one connect and one owner, there is
+  nothing to keep in step. An off server reaches the 10 s threshold plus one backoff step; timeouts land at
+  about 10 s, while fast failures such as `tailscale serve`'s 502 can take longer.
+- **Rejected:**
+  - a separate reachability reducer with its own transitions table, 10 s timer and event protocol
+    (attempt, open, closed, stopped), fed by the socket and by HTTP: two machines tracking one fact;
+  a pure step shared by the socket and the admission check, with the state kept by whichever ran
+  (two copies, with a gap at the hand-over);
+  - deriving reachability from the sessions listing (only Home and the overlay list, and a listing
+    says nothing while a request hangs).
+
+### Reachability sits beside admission, not inside it
+
+- **Decided:** 2026-11-05, design lead.
+- **What:** each host has a reachability separate from its admission. Admission is whether the
+  daemon lets this client in; reachability is whether it is answering now. Admission loses its
+  `unreachable` kind: a browser host whose `/auth/info` gets no answer stays deciding, still retried,
+  and its reachability says why.
+- **Why:** the host registry runs a socket only while the host is admitted. Marking an off host
+  unadmitted would stop the socket, the only thing able to notice it come back. The two also change
+  for different reasons: admission on the daemon's verdict, reachability on traffic.
+- **Rejected:** an `unreachable` admission in the app (stops the socket, never recovers).
+
+### An answer is a `welcome`, a close the server sent, or `/auth/info`'s own body
+
+- **Decided:** 2026-11-05, tech lead, on the fourth design review.
+- **What:** on the socket, a `welcome` or a 4xxx close received from the server is an answer, a
+  refusal included. Closes the client made itself (timeouts, a protocol error) and closes for a
+  socket native never opened are not; the link marks each of those, native's 4401 for "no token"
+  too, which still halts and refuses because that is a local fact. Over HTTP only the admission check counts: a 200 whose body has
+  a string `hostId`, or the daemon's 503 `identity_unavailable`. No other HTTP response feeds
+  reachability.
+- **Why:** counting only `welcome` made an over-cap host and a refused token read "offline" while the
+  daemon answered every attempt. Every other HTTP request is made while the socket is joined, so the
+  socket's answer always comes too; `/auth/info` is the one request that runs without a socket, and
+  its body is one only the daemon sends: native's own 404 has no `hostId`, and `tailscale serve`'s
+  502 is not 200.
+- **Rejected:** a `Muxen-Daemon` response header set by the daemon and forwarded by native, marking
+  every daemon response as an answer (a daemon and native contract, an exception for the path-secret
+  404, and an allow-list and expose-list entry in native, for one case the body already settles);
+  status codes as the test (native's 404 has the daemon's body shape).
+
+### The 10 s rule, checked when an attempt ends; failures alone don't decide
+
+- **Decided:** 2026-11-05, design lead; checked at an attempt's end on the fourth review.
+- **What:** a server turns unreachable when an attempt fails 10 s or more after the outage's first
+  unanswered attempt began. That is the tab strip's former threshold, now the one copy. A quick
+  failure does not turn it unreachable sooner. An open socket's idle close (25–35 s after the last
+  message) turns it unreachable at once.
+- **Why:** one threshold for every view, so the card, the strip and the folder view agree. A handoff
+  between Wi-Fi and cellular fails a socket or two and recovers within seconds, which must not read
+  offline. A powered-off host gives no failure at all, only timeouts, so a rule built on counting
+  failures would miss it.
+- **Accepted risk, to verify on the iPhone:** if `NWPathMonitor` reports unsatisfied, even briefly,
+  during a Wi-Fi to cellular handoff, every card reads "This iPhone is offline" at that moment and
+  every waiting GET fails (the views reload once the network returns). The device check decides
+  whether the no-network signal needs a grace period of its own.
+- **Jimmy to confirm:** 10 s, not 5 s (one connect timeout reads offline on a slow cellular link
+  where the server is fine).
+- **Rejected:** first failure → unreachable (flicker on handoff); the 5 s connect timeout as the
+  threshold; a count of failures (an off host produces timeouts at a rate set by the backoff); a
+  timer per host (the end of an attempt is where the evidence is, and an off server's attempts end
+  on the 10 s mark anyway).
+
+### The card keeps its last word until an attempt fails; only a tapped Retry shows "checking" over "offline"
+
+- **Decided:** 2026-11-05, design lead; reshaped on the fourth review.
+- **What:** from reachable, the card changes only when an attempt ends: a failure 1.5 s or more into
+  the outage shows checking, and one 10 s or more in shows offline. From unreachable, automatic
+  retries leave the state until an answer comes. A tapped Retry shows checking at once when it started
+  an attempt or one is in flight, which then ends as any other. At launch every card is checking
+  until an answer or until it turns unreachable.
+- **Why:** an offline card that flips to checking on every backoff retry is noise, and so is a
+  resume that flashes "checking" for 200 ms. The 1.5 s is the strip's slow-connect threshold; checked
+  at an attempt's end it costs a comparison, not a re-render timer per card. A resume to an off
+  server reads its last word until the first connect times out (5 s), checking, then offline at
+  about 10 s.
+- **Jimmy to confirm:** the last word until the first attempt fails, then checking, rather than
+  "checking" 1.5 s after an unanswered attempt begins (which needs a timer per card).
+- **Rejected:** showing every attempt; a 1.5 s timer from the attempt's start (a re-render timer on
+  every card); keeping the last word until offline is decided (Home read "connected" for 10 s over
+  an off server, the original complaint, only shorter).
+
+### No network is applied when the state is read, not stored
+
+- **Decided:** 2026-11-05, design lead, on the third review; applied on read on the fourth.
+- **What:** while the phone reports no network, every server shows *no network* ("This iPhone is
+  offline."), and only the network returning clears it. The registry applies `lifecycle.online` when
+  it builds the shown state, so no view does. An unanswered attempt that ends with no network changes
+  nothing; a `welcome` or server-sent 4xxx still counts as an answer. The network returning clears
+  trouble.
+- **Why:** stored as a state, the cause depended on event order: an answer during the outage (a LAN,
+  a wrong path report) made the server reachable, and the next failed attempt read "Can't reach
+  pop-os", with the wrong fix. Ignoring unanswered attempts with no network keeps that outage from
+  deciding "no answer" for every server behind it, while retaining an answer that arrived anyway.
+- **Rejected:** no network as a fourth state (the order problem above).
+
+### The existing socket is the probe; nothing new is sent
+
+- **Decided:** 2026-11-05, design lead.
+- **What:** reachability learns only from attempts views already make: the listing's join while Home
+  or the overlay is on screen or the host has a tab, the tab sockets, and the browser's admission
+  check. A hidden page or a locked app sends nothing, the browser's admission check included.
+- **Invariant this rests on:** every HTTP request to a server is made while something has joined its
+  socket. Today a Files tab is a tab, and Settings and the sessions overlay open over Home, whose
+  listing joins every admitted server. A screen that sent a server requests without joining its
+  socket would break it: its GETs to an unreachable server would fail at once and no socket would
+  be retrying, so the server would never be tried again from that screen.
+- **Why:** "every byte on the network costs the user"; the backoff already exists and already runs
+  while Home is up.
+- **Jimmy to confirm:** a server with no tabs, while a tab of another server is on screen, isn't
+  refreshed until something needs it; entering Home re-checks. The alternative is polling.
+- **Rejected:** a periodic `/auth/info` probe while Home is visible (polling); native probing hosts
+  from Swift and pushing the result (a second owner, and native can't see the web's socket); the
+  Tailscale API (outside the tailnet, and Jimmy ruled it out); letting the browser's admission check
+  run its backoff while the page is hidden.
+
+### One admission check, given up after 5 s
+
+- **Decided:** 2026-11-05, tech lead, on the fourth design review.
+- **What:** the registry sends `GET /auth/info` through one function, `probeInfo(handle)`, which
+  gives up after 5 s. The browser's admission check uses it, and so does the
+  [connect-timeout rule](plan.md#reconnect). `/auth/node/session`, the check's second request, has
+  the same limit, so a server that dies between the two doesn't hang the check.
+- **Why:** the admission check had no timeout, so a browser's check to an off host waited for the
+  browser's own TCP timeout. 5 s matches the socket's connect timeout, so an off host's second check
+  reaches the threshold at 10 s plus one backoff step, as its second connect does.
+- **Rejected:** no limit (the browser's TCP timeout, tens of seconds); a separate server-check
+  function beside the admission check.
+
+### An unreachable server's GETs fail at once; there are no per-request timers
+
+- **Decided:** 2026-11-05, design lead, on review.
+- **What:** when a server's shown state becomes unreachable or no network, every GET and HEAD not
+  yet finished, body included, fails as `network`, and one made while it shows either is not sent. Other methods
+  are always sent and never aborted. `GET /auth/info` is exempt.
+  In the app, only the scheme handler's compatibility check gets a 10 s request timeout; the proxy
+  session keeps its default.
+- **Why:** the abort fires on the same evidence as the state, so a request stops exactly when the
+  server turns unreachable, and a request is cut short for no other reason. It
+  needs no timer per request, and on a spotty link it sends no request that is bound to fail. A write
+  may already have been applied, so aborting it invites a duplicate. A request timeout is per
+  session, so 10 s on the proxy would also cut saves and slow live searches; the compatibility check
+  is what held every request to an off host for 60 s.
+- **Rejected:** a blocked GET nudging the socket (the socket is already retrying, and each nudge
+  resets the backoff, so browsing an off server would hold it near one connect per 5 s; Retry is
+  there); a per-GET timer; `AbortSignal.timeout(10 s)` on every request (cuts a slow answer
+  from a live server); aborting writes; a 10 s timeout on the proxy session; relying on URLSession's
+  60 s (up to about 2 min in the app with the compatibility check in front).
+
+### An open socket feeds reachability on `welcome` and on close, not per message
+
+- **Decided:** 2026-11-05, design lead, on review.
+- **What:** an open socket counts as answering. `welcome` is an answer; the close carries the time of
+  the last message received, which becomes the server's *last reached*. A server that goes off under
+  an open socket reads offline at the socket's idle close, 25–35 s after its last message.
+- **Why:** while the socket is open the server can't be anything but reachable (the link closes
+  itself within 35 s of silence), so a per-message answer would only move a timestamp, on the
+  terminal's hottest path.
+- **Jimmy to confirm:** accepting "within about 35 s" for a server that goes off while muxen is open
+  on it. Faster means a shorter heartbeat (more bytes for every user, all the time) or showing
+  "checking" after one missed pong (one more timer, no bytes), which could follow later.
+- **Rejected:** a receive callback per message.
+
+### A stuck socket recreates the web view only if the server answers
+
+- **Decided:** 2026-11-06, tech lead, on the sixth review. Jimmy was shown this option and sent the
+  work on without objecting; he has not said yes to it in so many words.
+- **What:** from the second connect timeout in a row the socket takes a backoff step as usual. From
+  the third, the first on the 15 s limit, the registry also sends one `probeInfo(handle)`. The web
+  view is recreated only if that check is answered and no socket was welcomed since, at most once
+  per 10 minutes, and not while another server's socket is open. The limit lives in the web, in the view store, which survives a recreated
+  web view. Native keeps no limit.
+- **Why:** a powered-off server times out every connect, exactly like the stuck socket, but it
+  answers no HTTP, and the research says HTTP stays usable and a reload restores a stuck socket
+  (WebKit 308073, [ios-web.md](research/ios-web.md)). An off server therefore never reloads: offline
+  lands at about 10 s, the card keeps last reached, and a Files tab keeps what it has loaded. A reload
+  takes down every server's terminal, so a socket open to another server, which shows sockets work,
+  declines it. The check waits for the third timeout because the first two are on the 5 s limit,
+  which a live server on a slow link misses: a check then answers while the third attempt is
+  about to succeed, and would reload a working app. So a real stuck socket recovers at about 25 s
+  rather than 10 s. The rule is harmless if the bug doesn't occur in WKWebView, and can be deleted then.
+  It assumes HTTP stays usable during a stuck socket in the app, which is unverified; if it doesn't,
+  a stuck app is not recovered until the next foreground.
+- **Cost accepted:** one more `/auth/info` per connect timeout from the third, about 1.3 a minute
+  per off server once backed off, in the foreground, on the failure path.
+- **Rejected:**
+  - recreating at most once per 10 minutes with no check (the interim, in force until this entry and
+    never built): an off server reloaded on most resumes, offline came at about 20 s, a reload
+    dropped last reached and everything `Folders` held, and it tore down live terminals on healthy
+    servers;
+  - limiting native only, with no ask from it until the device check (nothing recovers a stuck socket
+    in the app);
+  - arming the rule only after a resume (resuming to an off box is the common case);
+  - quiet mode, in which a socket that timed out twice sent `GET /auth/info` checks in place of
+    connects until the server answered. Its checks replaced attempts, so it ran a state beside
+    reachability for one fact, and three reviews found its gaps between the two. Here the socket's
+    cadence doesn't change and the check keeps no state: it reads the socket when it returns;
+  - checking from the second timeout (the slow-link reload above);
+  - halting the socket when the limit declines (a server that came back stayed offline until Retry);
+  - a limit in Swift as well as the web (two copies of a five-line rule across a bridge).
+
+### A slow link gets a longer connect limit once the server is unreachable
+
+- **Decided:** 2026-11-06, tech lead, on the sixth review. Jimmy was shown this and sent the work on
+  without objecting.
+- **What:** the first two attempts of an outage keep the 5 s limit. After 10 s of trouble, and for a
+  server stored as unreachable, each attempt gets 15 s. A socket that has opened waits up to 15 s for
+  `welcome`, and that wait ending is an ordinary unanswered close, never a connect timeout.
+- **Why:** a `wss` handshake takes about 4–5 round trips (an estimate, to be measured), so a link
+  with 1 s round trips misses 5 s on every attempt. With the GET guard that link would be locked out
+  of Files for good, and Retry would hit the same limit: a breach of "usable on barely-there
+  connections". Longer limits cost an off server nothing and send fewer attempts.
+- **Rejected:** a longer limit from the first attempt (offline would land later than 10 s); a fixed
+  limit (the lockout); treating `onopen` as an answer (a daemon that accepts and says nothing would
+  read connected).
+
+### Last reached is saved with the workspace
+
+- **Decided:** 2026-11-06, tech lead, on the sixth review. Jimmy was shown this and sent the work on
+  without objecting. Replaces "nothing is persisted for it" in "Home is server cards".
+- **What:** each server's last reached is part of the saved workspace, by host id. Saving the
+  workspace carries the latest values, which covers page hide and before a restart; nothing writes
+  because a value changed. Reachability itself is never saved.
+- **Why:** a kill, or a launch to an off server, would otherwise read "Not reached since muxen
+  opened" about a server reached minutes ago. Writing on each save costs no new write and nothing on
+  the socket's path.
+- **Rejected:** writing on every `welcome` and close (storage on the connection path); keeping it in
+  memory.
+
+### Views read one shown state, and reload when it becomes reachable
+
+- **Decided:** 2026-11-06, tech lead, on the sixth review.
+- **What:** the registry exposes the *shown* state: the stored state, or no network. Every consumer
+  rule is written against it. A view whose last load failed as `network` loads again when the shown
+  state becomes reachable or a new socket is welcomed while it is reachable. While it shows
+  anything but reachable such a view says "Waiting for pop-os", or "Can't reach pop-os" in Settings;
+  a `network` failure under a reachable server offers its own "Try again". Refusals the daemon
+  makes while running, a 4001 included, reach admission.
+- **Why:** reviews kept finding the same gap: rules written against the stored state, while what
+  users see has no network applied. Keyed on the server answering, a folder that failed during a
+  no-network blip over an open socket stayed on "Waiting" for good, because no answer follows on a
+  socket that never dropped: the original complaint by another route. Reloading only on reachable
+  sends no GET that a Retry into an off server would have to abort.
+- **Rejected:** reloading on any state leaving unreachable (a tapped Retry sends every failed view's
+  GET to a server that may still be off).
+
+### A refusal outranks offline on the card
+
+- **Decided:** 2026-11-05, design lead, on review.
+- **What:** the card shows admission that needs the user (every refused kind) above offline, then
+  checking, then the listing and the notices for a daemon turning sockets away.
+- **Why:** a refusal is the daemon's standing verdict and its fix (re-enrol, update) is what the user
+  must do whether or not the server is on right now. A refused token also stops the socket, so the
+  server's reachability is not refreshed after it; "offline" there would be stale.
+- **Rejected:** offline over everything (hid the re-enrol banner behind a wrong Tailscale hint).
+
+### One "Can't reach" for a machine that's off and for muxen that's down
+
+- **Decided:** 2026-11-05, design lead.
+- **What:** an unreachable server reads "Can't reach pop-os" with the hint "Check that it's on and
+  that Tailscale is on.", whatever the cause on the far side.
+- **Why:** the phone can't always tell the two apart: a WebSocket gives the same 1006 either way.
+- **Jimmy to confirm:** one message; telling them apart is later work, if ever.
+- **Rejected:** separate copy for "muxen isn't running" (right only where `tailscale serve`'s 502
+  shows it, and wrong when the guess is wrong).
+
+### One banner per screen, for that screen's server
+
+- **Decided:** 2026-11-05, design lead.
+- **What:** on a screen that belongs to one server the Shell shows only that server's banner, and none
+  over Home, where each card carries its own server's banner as its notice. "Can't reach X" is said
+  once per screen: the card on Home, the strip on a terminal tab, the banner elsewhere. A folder that
+  couldn't load says "Waiting for pop-os" with no second Retry.
+- **Why:** with several servers, another server's outage over this server's terminal changes nothing
+  the user can do here; two Retry buttons for one fault make the user pick one.
+- **Jimmy to confirm:** a tab shows only its own server's banner, where the Shell showed every host's
+  banner on every screen but Home.
+- **Rejected:** every host's banner on every screen; the folder body carrying its own "Can't reach"
+  and Retry beside the banner.

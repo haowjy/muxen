@@ -112,10 +112,36 @@ status colour, and how many tabs are open (Jimmy, 2026-10-30: "home should only 
 workspaces"). Home lists no sessions or files. A row opens that workspace on the tab it last
 showed; a workspace with no tabs opens its tab overview. One and several servers use the same
 rows; a single server does not auto-navigate past Home. Add server leads to enrolment. An
-offline server's row shows when it was last reached and Retry, distinct from an empty one; its
-tabs remain open, reading reconnecting. A restored terminal tab reads “Checking…” until a listing
-proves its session, or “Reconnecting…” while unreachable. Phone Safari Home also offers Add to
-Home Screen instructions.
+offline server's tabs remain open, reading reconnecting. A restored terminal tab reads “Checking…”
+until a listing proves its session, or “Reconnecting…” while unreachable. Phone Safari Home also
+offers Add to Home Screen instructions.
+
+**A row's status word** comes from its server's shown state ([plan.md](../plan.md#reachability))
+and admission, the first that applies:
+
+1. **needs attention** when admission needs the user (not enrolled, token refused, incompatible,
+   wrong origin, origin refused, device refused), even if the server has since stopped answering.
+2. **offline** when the shown state is unreachable. The note says when the server was last reached
+   ("Last reached 4 min ago.", or "Not reached since muxen opened.") and how to fix it ("Check that
+   it's on and that Tailscale is on."), with Retry. When it is no network the note says "This iPhone
+   is offline." ("This device is offline." in a browser), without Retry.
+3. **checking** when the shown state is checking, with the note "Connecting to pop-os…", or when
+   admission is undecided on a server that answers, with the server's banner ("Checking access…"
+   after 10 s) and no note.
+4. Otherwise **connected** (or "tmux isn't running"), with the card's notice while the daemon is
+   turning sockets away: over the connection cap, or unable to decide right now (4503).
+
+The same shown state reaches every other view of the server; none decides it for itself.
+
+**Server banners.** On a screen that belongs to one server (a tab, its overview), the Shell shows
+that server's banner only; other servers' problems show on Home. Admission that needs the user
+comes first, as on the card. Otherwise an unreachable server's banner
+reads "Can't reach pop-os", with the hint and Retry; with no network it reads "This iPhone is
+offline." with no Retry. Either replaces "Checking access…". A terminal tab shows neither: its
+status strip says the same, with the same words and the same Retry. Other banners, such as the
+connection cap's, still show there. The Shell shows no banner over Home: each card carries its own
+server's banner as its notice, and an offline card's note replaces it. Every Retry for a server is
+the same one ([plan.md](../plan.md#reachability), "Retry").
 
 No servers shows enrolment instructions and Add server. If a server's tmux is not running,
 its row says so; muxen never starts Jimmy's tmux server. Server management includes adding,
@@ -150,7 +176,7 @@ loaded, the section says "config.toml has changed since muxen loaded it" with **
 which applies it, or shows the parse error ("config.toml doesn't parse: line 3, column 7…") and leaves
 the running values. Restart-only keys that a reload, or a save that picked up a hand edit, found changed
 are listed until muxen restarts ("Restart muxen to apply: memory_budget_mib").
-A server that can't be reached shows "Can't reach <server name>" in place of its values, with Try again.
+A server whose shown state is unreachable shows "Can't reach <server name>" in place of its values, with Try again, the server's one Retry; with no network it shows "This iPhone is offline." and no Try again. Values load by themselves when it answers again. A failed read while the server shows reachable keeps Try again, which then reads again.
 
 **Where a launch opens.** A launch (a reload, a bookmark, a copied link, or the app after iOS
 killed it) opens the place the page's address names, else the route last shown, saved with the
@@ -160,7 +186,8 @@ any other path drops its leading `/` (`#/files/etc/hosts`). It names no server, 
 talks to its own origin's host only; the app has no address and opens its saved route. A session no
 tab follows shows the overview; a Files place no tab shows opens a new Files tab there. The page is
 opened above Home, so Back goes to Home. A server that is down is explained on the tab
-("Can't reach the server", with Retry). A setup link (`#code=…`) opens Home. Returning from the
+("Can't reach pop-os", with Retry: the strip on a terminal tab, the server banner elsewhere). A
+setup link (`#code=…`) opens Home. Returning from the
 background keeps the screen the user left. The address is rewritten, without a history entry,
 when what it names changes (a session renamed).
 
@@ -172,7 +199,7 @@ when what it names changes (a session renamed).
 - The tab row's ‹ and the system back gesture go to Home, preserving open tabs and the active tab. + opens Open session and Open files.
 - Switching tabs preserves the terminal and running process.
 - Terminal output is not editable mock text masquerading as live input. The prototype says it is sample content and sends no input.
-- On the terminal, show connection status only when not live. Reconnecting/error is visible in text, with Retry, and is distinct from active-tab selection and the bell dot. Home's workspace rows still show live or offline status.
+- On the terminal, show connection status only when not live. Reconnecting/error is visible in text, with Retry, and is distinct from active-tab selection and the bell dot. Home's workspace rows still show connected or offline.
 - Real connection states inherit the existing reconnect contract: disconnect does not silently close tabs; reconnect/error appears with the affected tab; viewing Home/Files must not kill tmux.
 - When the daemon refuses a socket for its connection cap (close code 4005), the host banner says “Too many connections to pop-os” with “Close muxen in another browser or the app, then retry” and a Retry button, until a socket is welcomed. It is a host problem: the tabs keep their own “Reconnecting” state and the socket keeps its normal backoff.
 - Scroll behavior, paste, mouse handling, focus delivery, reconnect, server identity, tmux geometry ownership, and keyboard viewport behavior require implementation-phase verification. No claim of those working is made from static mockups.
@@ -435,6 +462,7 @@ finds the query, the rows and the scroll as they were.
 - **A file muxen can't show** (binary, by its type) gets a card: its icon and name, "muxen can't preview this kind of file.", its type, size, time and path, then a big **Download <size>** and **Open as text**. Its path reads in the one form above.
 - Previews: code (14 grammars, plain text for the rest), Markdown (relative links open the file here, web links go to the browser, an address link hands off to the mail app; an allowlist of prose, lists, tables, code, links and images is sanitized with DOMPurify, and no click inside it navigates the page itself), images (zoom and pan), video and audio (inline in the browser; native keeps its own player), and binary files (the card above). Markdown Mermaid diagrams render with a lazily loaded renderer in strict mode, with rendered output sanitized by DOMPurify. Each diagram's place reads “Loading diagram…” until it renders; if it can't, the code block returns with the reason after it.
 - Loading and failure never look like an empty list: a spinner with words, or the refusal in plain words with “Try again”.
+- **While its server isn't reachable**, a Files tab keeps what it has loaded. A folder or file it hasn't loaded and can't shows "Waiting for pop-os" in place of the listing, with no Retry of its own (the server's banner has it, or says the phone is offline). When the shown state becomes reachable, every folder and preview whose last load failed as `network` loads again by itself ([plan.md](../plan.md#reachability), "Requests"). A folder is never left loading once its server shows either. Only under a reachable server does a load that failed as `network` offer its own "Try again"; in every other shown state, checking included, it says "Waiting for pop-os". Images in a preview that failed to load are not retried by themselves; reopening the preview loads them.
 - Permissions, size limits, and error handling remain governed by [fs.md](../fs.md). Upload/path insertion route is specified below. New file, New folder, Rename and Delete are the only other writes; no move control is added.
 
 ## Persistence and input
@@ -542,7 +570,7 @@ Browser image paste into a focused terminal follows the same upload pipeline. Ca
 
 ## Offline and updates
 
-The service worker serves the shell from its cache. On an offline launch the host card says “Can't reach pop-os” (the name is the last one saved), open tabs read “Reconnecting…”, and the listing shows its offline state. Nothing shows a pretend live terminal and nothing typed is queued. The worker never intercepts `/ws`, `/auth`, `/fs`, `/complete`, `/debug` or a non-GET request.
+The service worker serves the shell from its cache. On a launch with no network the host card reads offline with "This device is offline." (the name is the last one saved) and open tabs read “Reconnecting…”; with a network and no answer, it reads offline with when the server was last reached. Nothing shows a pretend live terminal and nothing typed is queued. The worker never intercepts `/ws`, `/auth`, `/fs`, `/complete`, `/debug` or a non-GET request.
 
 A new build installs in the background and waits. Home and Files show “Update ready” with Update, never over the terminal; only the window that taps Update reloads. Another window shows “Reload to finish updating” with Reload, and keeps running its own build until then. A window whose build the host no longer has (two builds behind, or one behind when it opens its first diagram, since diagram files are not precached) fails to fetch a lazy chunk and shows the designed “Update required” with Reload, in the same place and never over the terminal.
 
