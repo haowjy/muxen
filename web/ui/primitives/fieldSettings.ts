@@ -1,3 +1,7 @@
+import type { RefObject } from "preact";
+import { useCallback } from "preact/hooks";
+import { useFocusRef, type FocusTarget } from "../focus";
+
 /** The keyboard settings every text box uses: a field here holds a command, a path, a name or a code, never prose. */
 export const FIELD_SETTINGS = {
   autocapitalize: "off",
@@ -17,4 +21,18 @@ export const FIELD_SETTINGS = {
 export function applyFieldSettings(el: HTMLElement | null, overrides: Partial<Record<keyof typeof FIELD_SETTINGS, string>> = {}): void {
   if (!el) return;
   for (const [name, value] of Object.entries({ ...FIELD_SETTINGS, ...overrides })) el.setAttribute(name, value);
+}
+
+/**
+ * The stable ref callback of a text box: `FIELD_SETTINGS`, the caller's `ready`, then the focus controller, which may
+ * focus it, and `inputRef`. A new callback each render would withdraw and register the field every time.
+ */
+export function useFieldRef<T extends HTMLElement>(target: FocusTarget | undefined, inputRef?: RefObject<T | null>, ready?: (el: T | null) => void): (el: T | null) => void {
+  const registered = useFocusRef(target);
+  return useCallback((el: T | null) => {
+    applyFieldSettings(el);
+    ready?.(el);
+    registered(el);
+    if (inputRef) inputRef.current = el;
+  }, [registered, inputRef, ready]);
 }

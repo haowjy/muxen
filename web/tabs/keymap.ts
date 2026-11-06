@@ -4,6 +4,7 @@
 // daemon's tests check against its allowlist regex (`is_key_name`). A Ctrl or Alt chord on a
 // character is `chord()` in touch/modifiers.ts, shared with the armed key row.
 import { chord } from "../touch/modifiers";
+import { imeKey } from "../ui/ime";
 
 /** The facts of a `KeyboardEvent` this decision reads. */
 export interface KeyFacts {
@@ -83,7 +84,7 @@ function printable(e: KeyFacts): string | null {
 }
 
 export function decideKey(e: KeyFacts, mode: KeyMode): KeyDecision {
-  if (e.isComposing || e.keyCode === 229) return { kind: "composing" };
+  if (imeKey(e)) return { kind: "composing" };
   // Cmd (and a Super key elsewhere) is never a terminal key: the browser's shortcuts keep their meaning.
   if (e.metaKey || BROWSER_FUNCTION.test(e.key)) return { kind: "browser" };
   if (e.ctrlKey && e.shiftKey && !e.altKey) {

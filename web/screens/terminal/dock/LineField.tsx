@@ -9,6 +9,7 @@ import { readPaste } from "../paste";
 import { terminalsOf } from "../terminals";
 import { stepGrapheme } from "./caret";
 import { lineDraftsOf } from "./lineDrafts";
+import { imeKey } from "../../../ui/ime";
 import styles from "./Dock.module.css";
 
 export type LocalNote = { tone: "error" | "info"; text: string };
@@ -100,11 +101,8 @@ export function LineField({ tab, label, onNote }: LineFieldProps) {
       inputRef={inputRef}
       onInput={edit}
       onKeyDown={(event) => {
-        // Return confirming an IME candidate is the IME's, not a send. Safari reports it after
-        // `compositionend`, as keyCode 229 with isComposing already false.
         if (event.key !== "Enter") return;
-        // eslint-disable-next-line @typescript-eslint/no-deprecated
-        if (event.isComposing || event.keyCode === 229) {
+        if (imeKey(event)) {
           suppressImeReturn.current = true;
           setTimeout(() => { suppressImeReturn.current = false; }, 0);
           return;

@@ -1,9 +1,8 @@
-import type { TargetedClipboardEvent, TargetedInputEvent, TargetedKeyboardEvent, TargetedEvent } from "preact";
-import type { Ref } from "preact";
+import type { RefObject, TargetedClipboardEvent, TargetedInputEvent, TargetedKeyboardEvent, TargetedEvent } from "preact";
 import { useCallback, useLayoutEffect, useRef } from "preact/hooks";
 import { cx } from "../cx";
-import { useFocusRef, type FocusTarget } from "../focus";
-import { applyFieldSettings } from "./fieldSettings";
+import type { FocusTarget } from "../focus";
+import { useFieldRef } from "./fieldSettings";
 import styles from "./LineInput.module.css";
 
 interface LineInputProps {
@@ -14,7 +13,7 @@ interface LineInputProps {
   onInput: (value: string, el: HTMLTextAreaElement) => void;
   /** Registers the input with the focus controller under this name. */
   focusTarget?: FocusTarget;
-  inputRef?: Ref<HTMLTextAreaElement>;
+  inputRef?: RefObject<HTMLTextAreaElement | null>;
   placeholder?: string;
   disabled?: boolean;
   class?: string;
@@ -30,23 +29,12 @@ interface LineInputProps {
  * Return and multiline paste are handled by the dock, not by this textarea.
  */
 export function LineInput({ label, value, onInput, focusTarget, inputRef, class: className, ...rest }: LineInputProps) {
-  const registered = useFocusRef(focusTarget);
   const field = useRef<HTMLTextAreaElement | null>(null);
-  // Stable: a new ref callback each render would withdraw and register the field every time, and each registration is a focus-owner change that renders again.
-  const attach = useCallback(
-    (el: HTMLTextAreaElement | null) => {
-      registered(el);
-      if (typeof inputRef === "function") inputRef(el);
-      else if (inputRef) inputRef.current = el;
-    },
-    [registered, inputRef],
-  );
-  const element = useCallback((el: HTMLTextAreaElement | null) => {
+  const measure = useCallback((el: HTMLTextAreaElement | null) => {
     field.current = el;
-    applyFieldSettings(el);
-    attach(el);
     if (el) resize(el);
-  }, [attach]);
+  }, []);
+  const element = useFieldRef(focusTarget, inputRef, measure);
   useLayoutEffect(() => {
     if (field.current) resize(field.current);
   }, [value]);

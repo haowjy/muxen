@@ -1,8 +1,9 @@
 import type { ComponentChildren, TargetedKeyboardEvent } from "preact";
 import { useCallback, useId } from "preact/hooks";
 import { cx } from "../cx";
-import { useFocusRef, type FocusTarget } from "../focus";
-import { applyFieldSettings } from "./fieldSettings";
+import type { FocusTarget } from "../focus";
+import { imeKey } from "../ime";
+import { useFieldRef } from "./fieldSettings";
 import styles from "./TextField.module.css";
 
 interface FieldProps {
@@ -33,15 +34,11 @@ interface FieldProps {
   class?: string | undefined;
 }
 
-/** A labelled single-line field. With SearchField, the only place an `<input>` lives for screens (lint rule 1). */
+/** A labelled single-line field. The only place an `<input>` lives for screens (lint rule 1). */
 export function TextField({ label, hideLabel = false, value, onInput, onCommit, hint, error, focusTarget, action, selectTo, class: className, ...rest }: FieldProps) {
   const id = useId();
-  const focusRef = useFocusRef(focusTarget);
-  const attach = useCallback((el: HTMLInputElement | null) => {
-    applyFieldSettings(el);
-    if (selectTo) el?.setSelectionRange(0, selectTo);
-    focusRef(el);
-  }, [focusRef, selectTo]);
+  const select = useCallback((el: HTMLInputElement | null) => { if (selectTo) el?.setSelectionRange(0, selectTo); }, [selectTo]);
+  const attach = useFieldRef<HTMLInputElement>(focusTarget, undefined, select);
   const note = error ?? hint;
   return (
     <div class={cx(styles.field, className)}>
@@ -54,7 +51,7 @@ export function TextField({ label, hideLabel = false, value, onInput, onCommit, 
         onInput={(e) => { onInput(e.currentTarget.value); }}
         {...(onCommit && {
           onBlur: onCommit,
-          onKeyDown: (e: TargetedKeyboardEvent<HTMLInputElement>) => { if (e.key === "Enter" && !e.isComposing) onCommit(); },
+          onKeyDown: (e: TargetedKeyboardEvent<HTMLInputElement>) => { if (e.key === "Enter" && !imeKey(e)) onCommit(); },
         })}
         class={styles.input}
         aria-invalid={error ? true : undefined}

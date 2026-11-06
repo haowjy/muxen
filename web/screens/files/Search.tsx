@@ -10,6 +10,7 @@ import { Button } from "../../ui/primitives/Button";
 import { PathInput } from "../../ui/primitives/PathInput";
 import { Spinner } from "../../ui/primitives/Spinner";
 import { useStore } from "../../ui/store";
+import { findKeys } from "./findKeys";
 import { Refused, useFailure } from "./failure";
 import { EntryCells, whyNot } from "./FolderList";
 import { SEARCH, SEARCH_SLASH, SHOW_HIDDEN_IN_SEARCH, useFilesKey, type Chord } from "./keymap";
@@ -129,18 +130,18 @@ export function Search({ session, search, where, onOpen, onReveal, onClose: clos
           end={query ? <span class={cx(styles.mode, glob && styles.glob)}>{glob ? "Glob" : "Fuzzy"}</span> : undefined}
           onInput={(value) => { waiting.current = false; search.type(value); }}
           onKeyDown={(e) => {
-            if (e.key === "Escape") {
-              e.preventDefault();
-              e.stopPropagation();
-              close();
-            } else if (e.key.toLowerCase() === "p" && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) {
-              // Cmd/Ctrl+P in the field it opens: it stays, and never prints.
-              e.preventDefault();
-            } else if (e.key === "Enter") {
-              e.preventDefault();
-              if (search.snapshot.asking) waiting.current = true;
-              else if (!phone || query) act(search.snapshot.selected);
-            } else box.onKeyDown(e);
+            // Cmd/Ctrl+P in the field it opens: it stays, and never prints.
+            if (e.key.toLowerCase() === "p" && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey) e.preventDefault();
+            else {
+              findKeys(e, {
+                onCancel: close,
+                onEnter: () => {
+                  if (search.snapshot.asking) waiting.current = true;
+                  else if (!phone || query) act(search.snapshot.selected);
+                },
+                onMove: box.onKeyDown,
+              });
+            }
           }}
         />
         <Button variant="quiet" onMouseDown={(e) => { e.preventDefault(); }} onClick={close}>Cancel</Button>

@@ -7,6 +7,7 @@ import type { FilesPlace } from "../../platform/types";
 import { Button } from "../../ui/primitives/Button";
 import { PathInput } from "../../ui/primitives/PathInput";
 import { useStore } from "../../ui/store";
+import { findKeys } from "./findKeys";
 import { useFailure } from "./failure";
 import { NarrowedList } from "./NarrowedList";
 import type { FilesSession } from "./session";
@@ -171,14 +172,8 @@ export function PathField({ session, rest, here, actions, onEditing, onOpen }: P
           // Losing focus (the keyboard hidden, a tap elsewhere) only lowers the keyboard: the edit and its text
           // stay, and a tap on the field resumes it. Cancel, Escape and Back end it.
           onKeyDown={(e) => {
-            if (editing && e.key === "Escape") {
-              e.preventDefault();
-              e.stopPropagation();
-              cancel();
-            } else if (editing && e.key === "Enter") {
-              e.preventDefault();
-              void submit();
-            } else if (view) box.onKeyDown(e);
+            if (editing) findKeys(e, { onCancel: cancel, onEnter: () => { void submit(); }, onMove: view ? box.onKeyDown : undefined });
+            else if (view) box.onKeyDown(e);
           }}
         />
         {editing ? (

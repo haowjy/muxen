@@ -3,6 +3,7 @@
 // app/focus.ts may move focus to make one.
 import { useEffect, useRef } from "preact/hooks";
 import { useApp } from "../../app/context";
+import { imeKey } from "../../ui/ime";
 
 /** A shortcut. `mod` is Cmd or Ctrl (either is taken, on every platform). */
 export interface Chord {
@@ -44,7 +45,7 @@ function free(e: Event, chord: Chord): boolean {
 }
 
 function matches(e: KeyboardEvent, chord: Chord): boolean {
-  if (chord === PASTE || e.isComposing) return false;
+  if (chord === PASTE || imeKey(e)) return false;
   // A printed character (`/`) is whatever keys type it: Shift+7 on a German layout, AltGr (Ctrl+Alt to the page) on
   // some Windows layouts. Only Cmd or Ctrl held for themselves make it another key.
   if (printed(chord)) return e.key === chord.key && (e.getModifierState("AltGraph") || !(e.metaKey || e.ctrlKey));

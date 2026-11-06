@@ -1,8 +1,7 @@
-import type { ComponentChildren, Ref, TargetedFocusEvent, TargetedKeyboardEvent } from "preact";
-import { useCallback } from "preact/hooks";
+import type { ComponentChildren, RefObject, TargetedFocusEvent, TargetedKeyboardEvent } from "preact";
 import { cx } from "../cx";
-import { useFocusRef, type FocusTarget } from "../focus";
-import { applyFieldSettings } from "./fieldSettings";
+import type { FocusTarget } from "../focus";
+import { useFieldRef } from "./fieldSettings";
 import { Icon } from "./Icon";
 import styles from "./PathInput.module.css";
 
@@ -13,17 +12,14 @@ interface PathInputProps {
   /** The new text, and the element, so the caller can read the caret. */
   onInput: (value: string, el: HTMLInputElement) => void;
   onFocus?: (e: TargetedFocusEvent<HTMLInputElement>) => void;
-  onBlur?: (e: TargetedFocusEvent<HTMLInputElement>) => void;
   onKeyDown?: (e: TargetedKeyboardEvent<HTMLInputElement>) => void;
-  inputRef?: Ref<HTMLInputElement>;
+  inputRef?: RefObject<HTMLInputElement | null>;
   placeholder?: string;
   /** The list this field narrows (when it has rows), and its selected row, for assistive technology. */
   listId?: string | undefined;
   activeId?: string | undefined;
   /** The name the app moves focus to this field by. */
   focusTarget?: FocusTarget;
-  /** Takes focus when its dialog opens, with a fine pointer (`Dialog`). */
-  "data-initial-focus"?: string;
   /** At rest it reads as a line of text, not a box; focused, it is the field. */
   line?: boolean;
   /** Files' Search: a magnifier before the text, the keyboard's Search key, and the UI font, as a query is not a path. */
@@ -39,17 +35,7 @@ interface PathInputProps {
  * capitals or spellcheck: a path is not prose.
  */
 export function PathInput({ label, value, onInput, inputRef, listId, activeId, focusTarget, line, search, end, class: className, ...rest }: PathInputProps) {
-  const registered = useFocusRef(focusTarget);
-  // Stable: a new ref callback each render would withdraw and register the field every time.
-  const attach = useCallback(
-    (el: HTMLInputElement | null) => {
-      registered(el);
-      applyFieldSettings(el);
-      if (typeof inputRef === "function") inputRef(el);
-      else if (inputRef) inputRef.current = el;
-    },
-    [registered, inputRef],
-  );
+  const attach = useFieldRef(focusTarget, inputRef);
   return (
     <div class={cx(styles.field, line && styles.line, search && styles.search, className)}>
       {search && <Icon name="search" size={16} class={styles.glass} />}
