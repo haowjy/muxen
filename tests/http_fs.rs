@@ -1,6 +1,7 @@
 //! The file routes over a real socket (fs.md "Routes", "Errors"): ranges and their
 //! headers as the native player sees them, uploads one at a time with their part file
-//! cleaned up, and `config.toml` edits applying only at a reload.
+//! cleaned up, a delete that stays inside what it was asked to remove, and `config.toml`
+//! edits applying only at a reload.
 
 use std::time::Duration;
 
@@ -296,6 +297,51 @@ async fn an_upload_can_name_its_folder_and_never_replaces_a_file() {
     );
     assert_eq!(std::fs::read_dir(&locked).expect("the folder").count(), 0);
     std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o700)).expect("unlocked");
+}
+
+#[tokio::test]
+async fn a_delete_stays_inside_the_tree_and_says_how_it_ended() {
+    let daemon = start("fs-delete").await;
+    let delete = async |dir: &std::path::Path, name: &str| {
+        let body = serde_json::json!({ "dir": dir, "name": name }).to_string();
+        post(&daemon, "/fs/delete", body.as_bytes(), true).await
+    };
+    let home = daemon.home("");
+
+    // A link inside the tree goes; what it points to stays.
+    let kept = daemon.home("kept/note.txt");
+    std::fs::create_dir_all(daemon.home("kept")).expect("a dir");
+    std::fs::write(&kept, "still here").expect("written");
+    std::fs::create_dir_all(daemon.home("tree/inner")).expect("a dir");
+    std::os::unix::fs::symlink(daemon.home("kept"), daemon.home("tree/inner/out")).expect("a link");
+    assert_eq!(delete(&home, "tree").await.status, 204);
+    assert!(!daemon.home("tree").exists());
+    assert_eq!(std::fs::read_to_string(&kept).expect("kept"), "still here");
+
+    // Files something else removes mid-delete are not "not found": that answer would say the
+    // folder was gone with most of it left.
+    std::fs::create_dir_all(daemon.home("busy")).expect("a dir");
+    for n in 0..4000 {
+        std::fs::write(daemon.home(&format!("busy/{n}")), "").expect("written");
+    }
+    let busy = daemon.home("busy");
+    let rival = std::thread::spawn(move || {
+        for n in (0..4000).rev() {
+            let _ = std::fs::remove_file(busy.join(n.to_string()));
+        }
+    });
+    assert_eq!(delete(&home, "busy").await.status, 204);
+    rival.join().expect("the rival finished");
+    assert!(!daemon.home("busy").exists());
+
+    // Only the name the client gave answers `not_found`.
+    assert_eq!(delete(&home, "busy").await.status, 404);
+
+    // A folder past the depth limit is refused before anything in the chain goes.
+    let chain = (0..=64).fold(daemon.home("deep"), |path, _| path.join("d"));
+    std::fs::create_dir_all(&chain).expect("a chain");
+    assert_eq!(delete(&home, "deep").await.status, 403);
+    assert!(chain.exists());
 }
 
 #[tokio::test]
