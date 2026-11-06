@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
+import { useApp } from "../../app/context";
 import { loadImage } from "../../files/images";
+import type { FilesSession } from "./session";
 import styles from "./Viewers.module.css";
 
 const MIN_SCALE = 1;
@@ -7,7 +9,8 @@ const MAX_SCALE = 8;
 const DOUBLE_TAP_MS = 300;
 
 /** One image, fitted to the frame; pinch or wheel to zoom, drag to pan, double-tap to toggle zoom. */
-export function ImageViewer({ url, name }: { url: string; name: string }) {
+export function ImageViewer({ session, url, name }: { session: FilesSession; url: string; name: string }) {
+  const app = useApp();
   const box = useRef<HTMLDivElement>(null);
   const img = useRef<HTMLImageElement>(null);
   const [state, setState] = useState<"loading" | "shown" | "failed">("loading");
@@ -15,6 +18,7 @@ export function ImageViewer({ url, name }: { url: string; name: string }) {
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const gesture = useRef<{ dist: number; scale: number } | null>(null);
   const lastTap = useRef(0);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     const el = img.current;
@@ -30,7 +34,9 @@ export function ImageViewer({ url, name }: { url: string; name: string }) {
       el.removeEventListener("load", shown);
       el.removeEventListener("error", failed);
     };
-  }, [url]);
+  }, [url, attempt]);
+  // An image that failed while the server was unreachable loads again when it answers.
+  useEffect(() => (state === "failed" ? app.hosts.recovered(session.handle, () => { setAttempt((n) => n + 1); }) : undefined), [app, session.handle, state]);
 
   const apply = (): void => {
     const el = img.current;

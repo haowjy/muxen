@@ -30,11 +30,12 @@ export function Shell() {
   // Touch input ends in the dock (phone and iPad); a mouse keeps the tab row on top, even in a narrow window. Home and the overview have none.
   const topRow = useAppView((v) => v.viewport.layout === "desktop" || v.viewport.directInput === "xterm");
   const hosts = useAppView((v) => v.hosts);
-  // On a terminal tab the status strip says the server is unreachable, unless the tab's own state fills it: then the banner does.
+  // On a terminal tab the status strip says the server is unreachable, and the banner shows only when the tab's own state fills the strip.
   const statuses = useStore(terminalsOf(app), (s) => s.tabs);
   const hostLook = useHostLook();
   const current = useAppView((v) => activeTerminal(v.workspace));
-  const stripSaysServer = tabShown && screen === "terminal" && current !== null && lookOf(current, statuses[current.id], hostLook(current.host), true, 0).status.server;
+  const terminalTab = tabShown && screen === "terminal" && current !== null;
+  const stripOwn = terminalTab && lookOf(current, statuses[current.id], hostLook(current.host), true, 0).status.own;
   // A screen of one server shows that server's banner only; the rest show on Home.
   const ownId = useAppView((v) => routeWorkspace(v.workspace)?.host ?? null);
   const own = ownId === null ? undefined : hostById(hosts, ownId);
@@ -51,7 +52,7 @@ export function Shell() {
         <div class={styles.banners}>
           <AppBanners />
           {/* Home's cards carry their own host's notice. */}
-          {!blocking && screen !== "home" && own && <HostBanner host={own} reach={!stripSaysServer} />}
+          {!blocking && screen !== "home" && own && <HostBanner host={own} reach={!terminalTab || stripOwn} />}
         </div>
         <main class={styles.screen}>
           {blocking ? (

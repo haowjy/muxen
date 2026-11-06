@@ -25,11 +25,11 @@ export interface Status {
   hint: string | null;
   /** What a tap does, when it does something. */
   action: string | null;
-  /** The headline is the server's unreachable or offline words, which its banner would repeat. */
-  server: boolean;
+  /** The tab's own state fills the strip (closed, limited, detached, a failed watch), so the server's banner may show beside it. */
+  own: boolean;
 }
 
-const quiet = (tone: Tone): Status => ({ tone, detail: null, hint: null, action: null, server: false });
+const quiet = (tone: Tone): Status => ({ tone, detail: null, hint: null, action: null, own: false });
 
 /**
  * `downSince`: when the tab stopped being live, or opened. `onScreen`: the active tab. The tab's own states
@@ -45,6 +45,7 @@ export function describe(state: ConnectionState, downSince: number, retryAt: num
       return {
         ...quiet("gone"),
         detail: state.reason === "serverExited" ? "tmux server exited" : state.reason === "sessionClosed" ? "Session closed" : null,
+        own: true,
       };
     case "limited":
       return limitedStatus(state.message, host.name);
@@ -53,7 +54,12 @@ export function describe(state: ConnectionState, downSince: number, retryAt: num
       break;
   }
   if (state.kind === "reconnecting" && state.halt === "detached") {
-    return { ...quiet("waiting"), detail: "Detached by another tmux client", action: "Reattach" };
+    return { ...quiet("waiting"), detail: "Detached by another tmux client", action: "Reattach", own: true };
+  }
+  // A browser's 4401 can leave the server admitted after its recheck, so the refusal is the tab's own to say; Retry reconnects.
+  if (state.kind === "reconnecting" && (state.halt === "unauthorized" || state.halt === "incompatible") && host.server.kind !== "attention") {
+    const { title, hint } = hostProblem(state.halt, host.name, host.byToken);
+    return { ...quiet("halted"), detail: title, hint, action: "Retry" };
   }
   const { server } = host;
   switch (server.kind) {
@@ -62,12 +68,12 @@ export function describe(state: ConnectionState, downSince: number, retryAt: num
       return quiet("halted");
     // A failed watch on a live socket says the daemon's reason, not a network blame.
     case "noNetwork":
-      if (message === undefined) return { ...quiet("waiting"), detail: offlineWords(host.byToken), server: true };
+      if (message === undefined) return { ...quiet("waiting"), detail: offlineWords(host.byToken) };
       break;
     case "unreachable":
       if (message === undefined) {
         const { title, hint } = hostProblem("unreachable", host.name);
-        return { ...quiet("waiting"), detail: title, hint, action: "Retry now", server: true };
+        return { ...quiet("waiting"), detail: title, hint, action: "Retry now" };
       }
       break;
     case "checking":
@@ -86,6 +92,7 @@ export function describe(state: ConnectionState, downSince: number, retryAt: num
     detail: message ?? `Reconnecting to ${host.name}`,
     hint: seconds === 0 ? "Retrying now" : `Retrying in ${String(seconds)}s`,
     action: "Retry now",
+    own: message !== undefined,
   };
 }
 
@@ -97,7 +104,7 @@ export function describe(state: ConnectionState, downSince: number, retryAt: num
 export function limitedStatus(message: string | undefined, host: string): Status {
   return {
     tone: "limited",
-    server: false,
+    own: true,
     detail: message ?? `muxen on ${host} is at its session limit`,
     hint: "Close tabs from other sessions, in this or another muxen window or the app, to open this one.",
     action: "Retry",

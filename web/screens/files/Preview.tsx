@@ -95,7 +95,7 @@ export function Preview({ session, file, text, kind, plain, wrap, onAsText, onLi
     <div class={styles.viewer}>
       {kind === "code" && <CodeViewer key={file.path} session={session} text={text} file={file} wrap={wrap} plain={plain} />}
       {kind === "markdown" && <MarkdownViewer key={file.path} session={session} text={text} file={file} onLink={onLink} />}
-      {kind === "image" && <Waits key={file.path} session={session}><ImageViewer url={api.rawUrl(file.path)} name={file.name} /></Waits>}
+      {kind === "image" && <Waits key={file.path} session={session}><ImageViewer session={session} url={api.rawUrl(file.path)} name={file.name} /></Waits>}
       {kind === "media" && <Waits key={file.path} session={session}><MediaViewer session={session} file={file} /></Waits>}
       {kind === "binary" && <Unsupported session={session} file={file} onAsText={onAsText} />}
     </div>
