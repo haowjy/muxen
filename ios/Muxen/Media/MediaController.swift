@@ -20,8 +20,6 @@ final class MediaController: NSObject, PHPickerViewControllerDelegate, UIImagePi
     private weak var screen: UIViewController?
     private var screenEnded: () -> Void = {}
     private var pendingPick: PendingPick?
-    /// Feeds the player that is up; it lives as long as the player screen does.
-    private var mediaLoader: MediaLoader?
 
     init(model: MuxenAppModel, presenter: UIViewController, send: @escaping (NativeEvent) -> Void) {
         self.model = model
@@ -96,7 +94,6 @@ final class MediaController: NSObject, PHPickerViewControllerDelegate, UIImagePi
     /// nothing stays up over the lock screen. A screen already going on its own runs its own handler instead.
     func lock() {
         downloader.cancel()
-        stopPlayback()
         guard let screen else { return }
         let ended = screenEnded
         afterTransition {
@@ -198,25 +195,12 @@ final class MediaController: NSObject, PHPickerViewControllerDelegate, UIImagePi
         }
         let route = "/fs/raw/" + segments.joined(separator: "/")
         guard case .ready = model.request(on: host, path: route) else { return }
-        let loader = MediaLoader(model: model, host: host, path: route)
-        let controller = MediaPlayerViewController()
-        controller.gone = { [weak self, weak controller] in
-            controller?.player?.pause()
-            if self?.mediaLoader === loader { self?.stopPlayback() }
-        }
-        // The player is made once the screen is up: a refused one fetches nothing.
-        show(controller, ended: { [weak controller] in controller?.player?.pause() }, then: { [weak self] in
+        let controller = MediaPlayerViewController(loader: MediaLoader(model: model, host: host, path: route))
+        // The player is made once the screen is up: a refused one fetches nothing. The screen ends its own fetches.
+        show(controller, then: { [weak self, weak controller] in
             guard let self, !self.model.isLocked else { return }
-            self.mediaLoader = loader
-            controller.player = AVPlayer(playerItem: AVPlayerItem(asset: loader.asset()))
-            controller.player?.play()
+            controller?.play()
         })
-    }
-
-    /// Ends the player's fetches: the player went, or the app locked.
-    private func stopPlayback() {
-        mediaLoader?.stop()
-        mediaLoader = nil
     }
 
     /// Files' Download: `url` is the page's own `muxen-app://h-{host}/fs/raw/…`, resolved as the scheme handler

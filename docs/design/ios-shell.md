@@ -192,22 +192,25 @@ daemon's answer. Three limits hold the file to being only itself:
 - The asset is made with `AVURLAssetReferenceRestrictionsKey` = `forbidAll` (the raw
   value as an `NSNumber`; the Swift option set crashes AVFoundation).
 - The delegate serves one URL, the file asked to play. Any other URL AVFoundation asks
-  for (a reference movie's target, a relative reference, a playlist's segment) is refused.
+  for (a reference movie's target, a relative reference) is refused.
 - A redirect from the daemon is followed only by `HostRequest.redirect`, within the file's own path.
 
 This replaces `AVURLAssetHTTPHeaderFieldsKey`, which is not public API and is not the
 header's only exposure: AVFoundation applied it to the URLs a hostile file names, so a
 reference movie in a file under any repo sent the device token to an arbitrary HTTPS
 host, and AVFoundation follows a redirect with the header too (checked on iOS 26.5 and
-27.0). A fetch asks only for the range AVFoundation wants; when it wants "to the end"
-the delegate asks for 1 MiB and AVFoundation asks again, so the bytes on the network stay
-about the same as with the header option. Stopping the player, a lock, or AVFoundation's
-cancel ends the fetches, and a locked app refuses new ones.
+27.0). Every fetch is a range, and only a `206` with a `Content-Range` is accepted. AVFoundation's
+main read is "to the end" and it cancels once it has enough, so a fetch asks for the
+smaller of 1 MiB and the length asked, and AVFoundation asks again; the bytes on the
+network stay about the same as with the header option (checked on iOS 26.5). The player
+screen owns the loader and ends its fetches when it goes, whether by Done, a swipe down or
+a lock; AVFoundation's cancel ends one fetch; a locked app refuses new ones.
 
 `.m3u8` must stay out of the daemon's MIME table ([fs.md](fs.md)): unlisted, it goes out
-as `application/octet-stream` and AVFoundation doesn't read it as a playlist. With the HLS type it
-would, and a playlist makes AVFoundation fetch its segments by URL; the loader refuses them, but
-the type isn't worth adding for a feature this player can't use.
+as `application/octet-stream`, Files offers it as a binary, and the player never opens it. A
+playlist is the one hole in the limits above: on a URL ending `.m3u8` AVFoundation fetches a
+playlist's segments through its own stack, past the loader. It sends no token, but the host it
+names learns the phone's address and that the file was played (checked on iOS 26.5).
 
 **Development:** the Debug app uses bundled assets and enables Web Inspector. The
 Debug dev-server asset-source switch and HMR route are not implemented in P4a. Desktop
