@@ -16,6 +16,8 @@ const REPLY_TIMEOUT_MS = 30_000;
 /** An outage this old is told (plan.md "Reachability"); from reachable, a failed attempt this far in shows checking. */
 const UNREACHABLE_AFTER_MS = 10_000;
 const CHECKING_AFTER_MS = 1_500;
+/** An open socket that has heard nothing this long after an ask reads checking. */
+const QUIET_AFTER_MS = 3_000;
 /** A tapped Retry replaces a connect this old instead of joining it. */
 const REPLACE_CONNECT_AFTER_MS = 5_000;
 
@@ -127,6 +129,11 @@ export class Host {
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
   private lastWatch = 0;
   private lastReq = 0;
+  /** When the latest ask went out on the open socket; the timer fires 3 s after the first one it was armed for. */
+  private askedAt = 0;
+  private quietTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The open socket has heard nothing since an ask and reach was set to checking for it; any arrival undoes it. */
+  private quiet = false;
 
   constructor(opts: HostOptions) {
     this.opts = opts;
@@ -197,6 +204,7 @@ export class Host {
     if (msg.type === "watch") this.watchRoutes.set(msg.data.watch, tab);
     else if (msg.type === "unwatch") this.watchRoutes.delete(msg.data.watch);
     else if (msg.type === "paste") this.pastes.set(msg.data.req, tab);
+    if (msg.type === "watch") this.asked();
     this.link?.send(msg);
   }
 
@@ -224,6 +232,7 @@ export class Host {
         transmit: (link) => {
           clearTimeout(timer);
           timer = expireIn(REPLY_TIMEOUT_MS);
+          this.asked();
           link.send(pending.msg);
         },
         answer: (reply) => {
@@ -276,8 +285,8 @@ export class Host {
   }
 
   /**
-   * An attempt to reach the daemon ended (the socket's own, or the browser's admission check). The
-   * one place reachability changes, so no timer runs for it.
+   * An attempt to reach the daemon ended (the socket's own, or the browser's admission check). With
+   * the open socket's quiet timer, the only place reachability changes.
    */
   attemptEnded(answered: boolean, startedAt: number): void {
     const now = this.now();
@@ -302,6 +311,40 @@ export class Host {
     this._reach = reach;
     this._reachedAt = reachedAt;
     this.opts.onReach();
+  }
+
+  /** An ask (a watch, a request) went out on the open socket: 3 s without anything back reads checking. */
+  private asked(): void {
+    if (this.status !== "open" || this.quiet) return;
+    this.askedAt = this.now();
+    this.quietTimer ??= setTimeout(() => { this.checkQuiet(); }, QUIET_AFTER_MS);
+  }
+
+  private checkQuiet(): void {
+    this.quietTimer = undefined;
+    const wait = this.askedAt + QUIET_AFTER_MS - this.now();
+    if (wait > 0) { // a later ask went out since: its 3 s are not up
+      this.quietTimer = setTimeout(() => { this.checkQuiet(); }, wait);
+      return;
+    }
+    const heard = this.link?.lastRecv ?? null;
+    if (this._reach === "reachable" && (heard === null || heard <= this.askedAt)) {
+      this.quiet = true;
+      this.setReach("checking");
+    }
+  }
+
+  /** Something arrived on the open socket after it read checking for silence. */
+  private heard(): void {
+    this.quiet = false;
+    this.change("reachable", this.now());
+  }
+
+  /** The socket the timer watched is gone or stopped. Reach is the caller's to set. */
+  private endQuiet(): void {
+    clearTimeout(this.quietTimer);
+    this.quietTimer = undefined;
+    this.quiet = false;
   }
 
   /** A socket that was open went quiet or closed: the daemon last answered at its last message. */
@@ -331,6 +374,7 @@ export class Host {
   /** Opens a socket. One still held is closed first; its late handlers do nothing, so nothing is reported for it. */
   private connect(): void {
     clearTimeout(this.retryTimer);
+    this.endQuiet();
     const old = this.link;
     this.link = null;
     old?.close();
@@ -350,6 +394,9 @@ export class Host {
   /** Closes the socket without telling anyone it was lost. The link's close never reaches `onClose`: `link` is null by then. */
   private stop(status: "idle" | "background"): void {
     clearTimeout(this.retryTimer);
+    // Nobody is trying any more and nothing was proven about the server: quiet is undone.
+    if (this.quiet) this.setReach("reachable");
+    this.endQuiet();
     const link = this.link;
     this.link = null;
     if (this.status === "open") this.noteLastMessage(link);
@@ -396,6 +443,7 @@ export class Host {
     // Only a server's own close is an answer; the link marks every close it made itself.
     const answered = close.code >= 4000 && close.cause === undefined;
     if (wasOpen) this.noteLastMessage(this.link);
+    this.endQuiet(); // reach stays: the rows below decide it
     this.link = null;
     this.watchRoutes.clear();
     if (close.cause === "idle" && this.opts.online()) {
@@ -449,10 +497,12 @@ export class Host {
   }
 
   private onFrame(frame: Frame): void {
+    if (this.quiet) this.heard();
     this.watchRoutes.get(frame.watch)?.frame(frame);
   }
 
   private onMessage(msg: ServerMsg): void {
+    if (this.quiet) this.heard();
     if (msg.type === "pasted") {
       const tab = this.pastes.get(msg.data.req);
       if (!tab) return;

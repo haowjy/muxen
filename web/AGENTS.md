@@ -13,8 +13,8 @@ adding a file. [README.md](README.md) has the commands.
   `app/focus.ts`, the only caller of `.focus()` and `.blur()`. The listing: `app/listing.ts`,
   the only sender of `listSessions`. Persistence: `app/persist.ts`; per-device view settings (Show hidden, the Files Preview panel and its width, the files opened per host for Search's recents): `app/viewMemory.ts`. Screens reach them through
   `useApp()` and call their own cores directly.
-- **Every view of a server reads one state.** Only `Host` decides reachability, when an attempt ends: add no timer for it,
-  and feed it no HTTP response but the browser's admission check. A view showing a server's status switches on `serverState`
+- **Every view of a server reads one state.** Only `Host` decides reachability, when an attempt ends or an ask on its open socket goes
+  unanswered for 3 s: add no other timer for it, and feed it no HTTP response but the browser's admission check. A view showing a server's status switches on `serverState`
   (`net/hosts.ts`) and keeps its own words; it doesn't work out the order from `admission` and `shown` itself. A server's GETs
   go through `client.fs` or `client.settings`, from a screen whose server has a joined socket (a tab, or the listing under
   Home and its overlays). Without one, each GET is refused while the server is unreachable and no socket is retrying to bring

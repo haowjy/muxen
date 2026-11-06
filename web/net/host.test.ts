@@ -372,6 +372,88 @@ describe("reachability", () => {
     expect(t.host.reachedAt).toBe(last);
   });
 
+  describe("an ask with no answer", () => {
+    const watch = (t: ReturnType<typeof makeHost>): void => {
+      t.host.send(port, { type: "watch", data: { watch: t.host.nextWatch(), session: sesA, size: { cols: 80, rows: 24 } } });
+    };
+
+    it("reads checking after 3 s of silence and reachable again on any message or frame", () => {
+      const arrivals = [
+        (t: ReturnType<typeof makeHost>): void => { t.link().say({ type: "pong", data: { t: 0 } }); },
+        (t: ReturnType<typeof makeHost>): void => { t.link().output(1, "x"); },
+      ];
+      for (const arrival of arrivals) {
+        const t = reachable();
+        watch(t);
+        at(2.9);
+        expect(t.host.reach).toBe("reachable");
+        at(0.2);
+        expect(t.host.reach).toBe("checking");
+        arrival(t);
+        expect(t.host.reach).toBe("reachable");
+      }
+    });
+
+    it("stays reachable when something arrives inside the 3 s, however slow the reply", () => {
+      const t = reachable();
+      watch(t);
+      at(2);
+      t.link().say({ type: "pong", data: { t: 0 } });
+      at(5);
+      expect(t.host.reach).toBe("reachable");
+    });
+
+    it("times a request sent, including one queued before the socket opened; keystrokes are no ask", () => {
+      const queued = makeHost();
+      void list(queued).catch(() => undefined);
+      queued.link().welcome();
+      at(3);
+      expect(queued.host.reach).toBe("checking");
+      const t = reachable();
+      t.host.send(port, { type: "input", data: { watch: 1, bytes: "x" } } as unknown as ClientMsg);
+      at(10);
+      expect(t.host.reach).toBe("reachable");
+    });
+
+    it("goes on to unreachable at the idle close, and a close from the server is an answer", () => {
+      const t = reachable();
+      watch(t);
+      at(4);
+      t.link().drop(1006, "idle");
+      expect(t.host.reach).toBe("unreachable");
+      const u = reachable();
+      watch(u);
+      at(4);
+      u.link().drop(4005);
+      expect(u.host.reach).toBe("reachable");
+    });
+
+    it("is undone when the last tab leaves, so Home does not read connecting for good", () => {
+      const t = reachable();
+      watch(t);
+      at(4);
+      expect(t.host.reach).toBe("checking");
+      t.host.leave(port);
+      expect(t.host.reach).toBe("reachable");
+      at(10);
+      expect(t.host.reach).toBe("reachable");
+    });
+
+    it("is undone by the background, and no timer fires across sockets", () => {
+      const t = reachable();
+      watch(t);
+      at(4);
+      t.host.background();
+      expect(t.host.reach).toBe("reachable");
+      const u = reachable();
+      watch(u);
+      at(2);
+      u.host.leave(port);
+      at(5);
+      expect(u.host.reach).toBe("reachable");
+    });
+  });
+
   it("a 1006 on a socket open for minutes is still reachable: the outage starts at the close", () => {
     const t = reachable();
     at(600);
