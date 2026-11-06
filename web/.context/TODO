@@ -25,8 +25,3 @@ Must-do (client-architecture.md §11):
   bottom in view). Same family: a rotation while the app's keyboard is up measures chrome
   from a shortened surface. Fix by measuring chrome from the in-flow chrome elements
   (dock resting slot, tab bar) rather than stable box less surface.
-
-- A browser that isn't enrolled retries `/ws` every 1–20 s and is refused each time ("browser
-  origin is not admitted", dev box log 2026-10-31 14:39–14:41, before the phone enrolled). Until
-  admission says enrolled, the host should not open the socket: every refused attempt is bytes and a
-  round trip on a spotty link. Start in `net/host.ts` / `net/hosts.ts` admission.

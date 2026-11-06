@@ -5236,9 +5236,18 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
 
 ## Server reachability (2026-11-05)
 
-The design under Jimmy's decision "A server's reachability is one state, shown on Home and read
-everywhere". The rules are in [plan.md](plan.md#reachability). Entries marked **Jimmy to confirm**
-carry the design lead's recommended answer to a question put to Jimmy and not yet answered.
+The design under the decision "A server's reachability is one state, shown on Home and read
+everywhere". Jimmy's part of that entry is its quote; the rest are agents' proposals, in force as
+built. The rules are in [plan.md](plan.md#reachability). Entries marked **Jimmy to confirm** carry
+the design lead's recommended answer to a question put to Jimmy and not yet answered. They are in
+force as built, and his answer may change them.
+
+The same holds for three entries below: "A stuck socket recreates the web view only if the server
+answers", "A slow link gets a longer connect limit" and "Last reached is saved with the workspace".
+They went to him together; asked whether his "ok" was a yes, he answered "just handoff to
+tech-lead", so he has said yes to none of them. The built versions also differ from what he saw:
+the check starts at the third timeout rather than the second, the limit is 15 s rather than 15 to
+20 s, and last reached rides on the workspace save rather than a write at page hide.
 
 ### Reachability is decided by the socket's own lifecycle, at the end of each attempt
 
@@ -5370,8 +5379,8 @@ carry the design lead's recommended answer to a question put to Jimmy and not ye
   refreshed until something needs it; entering Home re-checks. The alternative is polling.
 - **Rejected:** a periodic `/auth/info` probe while Home is visible (polling); native probing hosts
   from Swift and pushing the result (a second owner, and native can't see the web's socket); the
-  Tailscale API (outside the tailnet, and Jimmy ruled it out); letting the browser's admission check
-  run its backoff while the page is hidden.
+  Tailscale API (needs a key and leaves the tailnet, against the tailnet-only rule); letting the
+  browser's admission check run its backoff while the page is hidden.
 
 ### One admission check, given up after 5 s
 
