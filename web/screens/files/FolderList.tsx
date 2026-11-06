@@ -1,4 +1,4 @@
-import { Component, type ComponentChildren, type TargetedMouseEvent } from "preact";
+import { Component, Fragment, type ComponentChildren, type TargetedMouseEvent } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { Entry, Listing } from "../../files/api";
 import { folderKey, type Held } from "../../files/folders";
@@ -25,12 +25,20 @@ export function whyNot(entry: Entry): string | null {
   return null;
 }
 
+/** A new file's or folder's name field, drawn among the rows and no row of theirs: the keys never reach it. */
+export interface Naming {
+  /** The folder row it goes under; null for the first thing in the list. */
+  after: string | null;
+  field: ComponentChildren;
+}
+
 interface RowListProps {
   rows: readonly OutlineRow[];
   selected: string | null;
   optionId: (key: string) => string;
   /** The entry just added by an upload or a paste: marked. */
   fresh?: string | null | undefined;
+  naming?: Naming | null | undefined;
   /** The desktop's outline: rows are tree items, indented, folders with a disclosure. */
   tree?: boolean;
   /** What each `rest` row says, by its key. */
@@ -172,15 +180,19 @@ class FileRow extends Component<FileRowProps> {
 }
 
 /** The rows of a listbox (or the outline's tree), as options: the caller's container holds the focus and names the selected one by `optionId(selected)`. */
-export function RowList({ rows, selected, optionId, fresh, tree = false, notes, onPress, onDouble }: RowListProps) {
+export function RowList({ rows, selected, optionId, fresh, tree = false, notes, naming, onPress, onDouble }: RowListProps) {
   const act: Act = useRef({ onPress, onDouble });
   act.current = { onPress, onDouble };
   const now = useMemo(() => Date.now(), [rows]);
   const upName = baseName(rows[0]?.kind === "up" ? (rows[0].place?.path ?? "") : "") || "/";
   return (
     <>
+      {naming?.after === null && <div class={styles.naming} style={{ "--depth": 0 }}>{naming.field}</div>}
       {rows.map((row) => (
-        <FileRow key={row.key} row={row} id={optionId(row.key)} selected={row.key === selected} fresh={row.entry !== null && row.entry.name === fresh} tree={tree} note={notes?.get(row.key) ?? null} upName={upName} now={now} act={act} />
+        <Fragment key={row.key}>
+          <FileRow row={row} id={optionId(row.key)} selected={row.key === selected} fresh={row.entry !== null && row.entry.name === fresh} tree={tree} note={notes?.get(row.key) ?? null} upName={upName} now={now} act={act} />
+          {naming?.after === row.key && <div class={styles.naming} style={{ "--depth": row.kind === "up" ? 0 : row.depth + 1 }}>{naming.field}</div>}
+        </Fragment>
       ))}
     </>
   );
@@ -197,6 +209,7 @@ interface FolderListboxProps {
   rows: readonly OutlineRow[];
   selected: string | null;
   fresh?: string | null | undefined;
+  naming?: Naming | null | undefined;
   /** The desktop's outline: a click selects, and opens or closes a folder in place; a double-click or Enter goes in. */
   tree?: TreeProps | undefined;
   onSelect: (selection: string | null) => void;
@@ -218,7 +231,7 @@ interface TreeProps {
 }
 
 /** A folder's rows as the page's one focusable listbox (a tree on a desktop), which stays when the folder has no rows, so the keys work there too. */
-function FolderListbox({ rows, selected, fresh, tree, onSelect, onOpen, onKeyNavigate, onUp, onRowMenu }: FolderListboxProps) {
+function FolderListbox({ rows, selected, fresh, naming, tree, onSelect, onOpen, onKeyNavigate, onUp, onRowMenu }: FolderListboxProps) {
   const ref = useFocusRef("list");
   /** The row a menu is for: one that opens something, never `..`. */
   const menuRow = (el: Element | null): OutlineRow | null => {
@@ -305,7 +318,7 @@ function FolderListbox({ rows, selected, fresh, tree, onSelect, onOpen, onKeyNav
         onClickCapture: (e: MouseEvent) => { if (press.swallowClick()) { e.stopPropagation(); e.preventDefault(); } },
       })}
     >
-      <RowList rows={rows} selected={selected} optionId={box.optionId} fresh={fresh} tree={!!tree} {...(tree && { notes: tree.notes })} onPress={onPress} onDouble={onDouble} />
+      <RowList rows={rows} selected={selected} optionId={box.optionId} fresh={fresh} naming={naming} tree={!!tree} {...(tree && { notes: tree.notes })} onPress={onPress} onDouble={onDouble} />
     </div>
   );
 }
@@ -332,6 +345,8 @@ export interface DirListProps {
   loading: boolean;
   /** The entry just added by an upload or a paste: marked, and scrolled into view. */
   fresh?: string | null;
+  /** A new entry being named, on a desktop. It stands in for the "empty" message. */
+  naming?: Naming | null;
   onOpen: (place: FilesPlace) => void;
   /** The desktop's outline: the folders open in place and every record held, to draw them. Absent: one flat list. */
   outline?: OutlineProps | undefined;
@@ -370,7 +385,7 @@ function restNote(record: Held | undefined, describe: OutlineProps["describe"]):
 }
 
 /** The folder's rows: on a desktop the outline, its folders open in place; on the phone one flat list. */
-export function DirList({ pages, hidden, loading, fresh, onOpen, outline: tree, selection, onSelect, onKeyNavigate, onMore, onToggleHidden, onUp, onRowMenu }: DirListProps) {
+export function DirList({ pages, hidden, loading, fresh, naming, onOpen, outline: tree, selection, onSelect, onKeyNavigate, onMore, onToggleHidden, onUp, onRowMenu }: DirListProps) {
   const { entries, total, truncated } = pages;
   const parent = onUp ? (pages.parent ?? null) : null;
   const expanded = tree?.expanded;
@@ -418,6 +433,7 @@ export function DirList({ pages, hidden, loading, fresh, onOpen, outline: tree, 
         rows={rows}
         selected={selected}
         fresh={fresh}
+        naming={naming}
         tree={tree && { notes, onToggle: tree.onToggle, onRest: tree.onRest }}
         onSelect={onSelect}
         onOpen={onOpen}
@@ -425,7 +441,7 @@ export function DirList({ pages, hidden, loading, fresh, onOpen, outline: tree, 
         onUp={onUp}
         onRowMenu={onRowMenu}
       />
-      {entries.length === 0 && <EmptyState icon="folder" title="This folder is empty">{hidden ? undefined : "Hidden files are not shown."}</EmptyState>}
+      {entries.length === 0 && !naming && <EmptyState icon="folder" title="This folder is empty">{hidden ? undefined : "Hidden files are not shown."}</EmptyState>}
       {more && (
         <div ref={sentinel} class={styles.more}>
           {loading ? <Spinner label="Loading more" /> : <Button variant="quiet" onClick={onMore}>Show more ({String(total - entries.length)} left)</Button>}

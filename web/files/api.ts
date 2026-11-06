@@ -2,7 +2,7 @@
 // for TypeScript like the WebSocket messages; keep them in step with fs.md "Routes".
 
 import { BUSY_RETRIES, HttpRefusal, send } from "../net/http";
-import type { Search } from "../proto/generated/messages";
+import type { Created, CreateKind, CreateRequest, Search } from "../proto/generated/messages";
 
 export interface Entry {
   name: string;
@@ -48,6 +48,8 @@ export interface FsApi {
   search(path: string, q: string, hidden: boolean, signal: AbortSignal): Promise<Search>;
   /** The URL an `<img>` loads a file from. */
   rawUrl(path: string): string;
+  /** An empty file or a new folder; `exists` if the name is taken (fs.md "POST /fs/create"). */
+  create(dir: string, name: string, kind: CreateKind): Promise<Created>;
 }
 
 /** `/a/b c` → `/a/b%20c`: each segment percent-encoded, joined with `/` (fs.md "Routes"). */
@@ -121,5 +123,10 @@ export function httpFsApi(origin: string, fetchFn?: typeof fetch): FsApi {
     search: (path, q, hidden, signal) => json<Search>(url("search", path, `?q=${encodeURIComponent(q)}&hidden=${hidden ? "1" : "0"}`), { signal }),
 
     rawUrl: (path) => url("raw", path),
+
+    create: (dir, name, kind) => {
+      const request: CreateRequest = { dir, name, kind };
+      return json<Created>(`${origin}/fs/create`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) });
+    },
   };
 }

@@ -23,3 +23,4 @@
 .search { position: relative; display: flex; align-items: center; min-width: 0; }
 .glyph { position: absolute; left: var(--space-3); color: var(--color-text-muted); pointer-events: none; }
 .searchInput { padding-left: calc(var(--space-3) + 16px + var(--space-2)); }
+.hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

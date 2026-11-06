@@ -2,7 +2,7 @@
 // browser model's tests: any listed directory opens, dirs sort first, pages of `page` entries. Paths are already canonical.
 import { HttpRefusal } from "../../net/http";
 import type { Entry, FsApi, Listing } from "../../files/api";
-import type { Match, Search } from "../../proto/generated/messages";
+import type { Created, CreateKind, CreateRequest, Match, Search } from "../../proto/generated/messages";
 import type { FakeDaemon } from ".";
 import { defaultSettings, searchSkipOf } from "./settings";
 
@@ -40,6 +40,17 @@ export class FakeFs implements FsApi {
   list(path: string, offset: number, hidden: boolean): Promise<Listing> {
     // `~` names the home folder, as the real list route is assumed to answer it.
     return this.answer(`list ${path} ${String(offset)}`, () => this.listing(path === "~" ? this.tree.home : path, offset, hidden));
+  }
+
+  create(dir: string, name: string, kind: CreateKind): Promise<Created> {
+    return this.answer(`create ${dir} ${name}`, () => {
+      const path = `${dir === "/" ? "" : dir}/${name}`;
+      if (name.includes("/")) throw new HttpRefusal(400, "bad_request");
+      if (this.tree.dirs.includes(path) || this.tree.files[path] !== undefined) throw new HttpRefusal(409, "exists");
+      if (kind === "dir") this.tree.dirs.push(path);
+      else this.tree.files[path] = "text/plain; charset=utf-8";
+      return { path };
+    });
   }
 
   probe(path: string): Promise<{ kind: "dir" } | { kind: "file"; mime: string | null; size: number | null }> {
@@ -220,12 +231,16 @@ const decodePath = (encoded: string): string => encoded.split("/").map(decodeURI
 export function serveFs(fs: FakeFs, daemon: FakeDaemon): NonNullable<FakeDaemon["fs"]> {
   fs.searchSkip = () => searchSkipOf(daemon.settings.running);
   const page = (query: URLSearchParams): [number, boolean] => [Number(query.get("offset") ?? 0), query.get("hidden") === "1"];
-  const route = async ({ method, path, query, signal }: Parameters<NonNullable<FakeDaemon["fs"]>>[0]): Promise<Response> => {
+  const route = async ({ method, path, query, body, signal }: Parameters<NonNullable<FakeDaemon["fs"]>>[0]): Promise<Response> => {
     // `~` and `~/…` ride bare after the route's `/` (the client's `url`).
     const at = (prefix: string): string => {
       const rest = decodePath(path.slice(prefix.length));
       return rest.startsWith("/~") ? rest.slice(1) : rest;
     };
+    if (method === "POST" && path === "/fs/create") {
+      const { dir, name, kind } = JSON.parse(String(body)) as CreateRequest;
+      return json(201, await fs.create(dir, name, kind));
+    }
     if (method === "GET" && path.startsWith("/fs/list/")) return json(200, await fs.list(at("/fs/list"), ...page(query)));
     if (method === "GET" && path.startsWith("/fs/search/")) return json(200, await fs.search(at("/fs/search"), query.get("q") ?? "", query.get("hidden") === "1", signal ?? undefined));
     if (method === "GET" && path.startsWith("/fs/raw/")) {

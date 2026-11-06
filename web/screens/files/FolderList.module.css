@@ -100,3 +100,5 @@
 /* A text-style button under the message it acts on: its label lines up with the message's text, not its padding. */
 .action { align-self: flex-start; margin-inline-start: calc(-1 * var(--space-4)); }
 .footer { display: flex; justify-content: center; padding-bottom: var(--space-3); }
+/* A name being typed, under the folder it goes in; the disclosure column stays empty. */
+.naming { padding-left: calc(var(--depth) * 16px + 22px); }

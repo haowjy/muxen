@@ -1,6 +1,6 @@
 import {
   Check, ChevronDown, ChevronLeft, ChevronRight, CircleX, ClipboardCopy, Copy, Download, Ellipsis, Equal, ExternalLink, Eye, File,
-  FileBraces, FileCode, FileCog, FileDigit, FileImage, FileLock, FileMusic, FileTerminal, FileText, FileVideoCamera, Film, Folder,
+  FileBraces, FileCode, FileCog, FileDigit, FileImage, FileLock, FileMusic, FilePlus, FileTerminal, FileText, FileVideoCamera, Film, Folder, FolderPlus,
   House, Image, Info, Keyboard, ClipboardPaste, KeyboardOff, List, Maximize2, PanelRight, Plus, RotateCw, Search, Server, Settings, SquarePlus, Terminal,
   TriangleAlert, Upload, WrapText, X, type LucideIcon,
 } from "lucide-preact";
@@ -10,6 +10,8 @@ const ICONS = {
   home: House,
   back: ChevronLeft,
   sessions: Server,
+  newFile: FilePlus,
+  newFolder: FolderPlus,
   folder: Folder,
   /** The Files Preview panel's toggle. */
   panel: PanelRight,

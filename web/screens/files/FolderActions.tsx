@@ -1,5 +1,6 @@
 import { useState } from "preact/hooks";
 import { useApp, useAppView } from "../../app/context";
+import type { CreateKind } from "../../proto/generated/messages";
 import { useStore } from "../../ui/store";
 import { Menu, type MenuItem } from "../../ui/primitives/Menu";
 import { IconButton } from "../../ui/primitives/IconButton";
@@ -15,6 +16,8 @@ interface Props {
   /** The folder's listing is on screen: Paste puts into it. */
   pasteable: boolean;
   loading: boolean;
+  /** New file or New folder here; absent while the folder isn't listed. */
+  onCreate?: ((kind: CreateKind) => void) | undefined;
   /** The magnifier: Search below the folder; absent while it isn't listed (loading, refused, gone). */
   onSearch?: (() => void) | undefined;
 }
@@ -24,7 +27,7 @@ interface Props {
  * phone's line has room for the path and ⋯ only, so they move into ⋯. Copy path and Show hidden files are in ⋯
  * on both; Cmd/Ctrl+Shift+. toggles hidden files on a keyboard.
  */
-export function FolderActions({ session, path, pasteable, loading, onSearch }: Props) {
+export function FolderActions({ session, path, pasteable, loading, onCreate, onSearch }: Props) {
   const app = useApp();
   const phone = useAppView((v) => v.viewport.layout === "phone");
   const touch = useAppView((v) => v.viewport.density === "touch");
@@ -44,6 +47,10 @@ export function FolderActions({ session, path, pasteable, loading, onSearch }: P
     { label: "Refresh", icon: "refresh", disabled: loading, onSelect: () => { void browser.reload(); } },
   ];
   const sections = [
+    ...(onCreate ? [{ items: [
+      { label: "New file", icon: "newFile" as const, onSelect: () => { onCreate("file"); } },
+      { label: "New folder", icon: "newFolder" as const, onSelect: () => { onCreate("dir"); } },
+    ] }] : []),
     { items: [{ label: "Copy path", icon: "copy" as const, onSelect: () => { void copyPath(app, path, browser.snapshot.home); } }] },
     { items: [{ label: "Show hidden files", checked: hidden, ...(!phone && { hint: hiddenKeys }), onSelect: () => { void browser.toggleHidden(); } }] },
     ...(phone ? [{ items: tools }] : []),

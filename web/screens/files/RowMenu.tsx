@@ -1,6 +1,7 @@
 import { useApp, useAppView } from "../../app/context";
 import { formatSize } from "../../files/format";
 import { Menu, type MenuSection } from "../../ui/primitives/Menu";
+import type { CreateKind } from "../../proto/generated/messages";
 import { routeWorkspace } from "../../workspace/state";
 import { insertSection, useInsert } from "./insert";
 import { copyPath } from "./copy";
@@ -10,6 +11,8 @@ import type { FilesSession } from "./session";
 
 interface Props extends RowMenuAsk {
   session: FilesSession;
+  /** New file or New folder in a folder row. */
+  onCreate: (dir: string, kind: CreateKind) => void;
   onClose: () => void;
 }
 
@@ -17,7 +20,7 @@ interface Props extends RowMenuAsk {
  * A row's menu (right click, a held touch, Shift+F10): Open, Open in new tab, Copy path, Download (files) and the
  * terminal tabs to insert the path into. A menu's copy has no button left to confirm it, so a notice does.
  */
-export function RowMenu({ session, row, at, list, onClose }: Props) {
+export function RowMenu({ session, row, at, list, onCreate, onClose }: Props) {
   const app = useApp();
   const touch = useAppView((v) => v.viewport.density === "touch");
   const phone = useAppView((v) => v.viewport.layout === "phone");
@@ -33,6 +36,10 @@ export function RowMenu({ session, row, at, list, onClose }: Props) {
         ...(workspace ? [{ label: "Open in new tab", icon: "newTab" as const, onSelect: () => { app.openFiles(workspace.id, place); } }] : []),
       ],
     },
+    ...(dir ? [{ items: [
+      { label: "New file here", icon: "newFile" as const, onSelect: () => { onCreate(place.path, "file"); } },
+      { label: "New folder here", icon: "newFolder" as const, onSelect: () => { onCreate(place.path, "dir"); } },
+    ] }] : []),
     {
       items: [
         { label: "Copy path", icon: "copy", onSelect: () => { void copyPath(app, place.path, session.browser.snapshot.home); } },

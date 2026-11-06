@@ -8,6 +8,8 @@ import styles from "./TextField.module.css";
 
 interface FieldProps {
   label: string;
+  /** The label is for screen readers: what surrounds the field already says what it is. */
+  hideLabel?: boolean;
   value: string;
   /** Called with the new text on every edit. */
   onInput: (value: string) => void;
@@ -29,7 +31,7 @@ interface FieldProps {
 }
 
 /** A labelled single-line field. With SearchField, the only place an `<input>` lives for screens (lint rule 1). */
-export function TextField({ label, value, onInput, onCommit, hint, error, focusTarget, action, class: className, ...rest }: FieldProps) {
+export function TextField({ label, hideLabel = false, value, onInput, onCommit, hint, error, focusTarget, action, class: className, ...rest }: FieldProps) {
   const id = useId();
   const focusRef = useFocusRef(focusTarget);
   const attach = useCallback((el: HTMLInputElement | null) => {
@@ -39,7 +41,7 @@ export function TextField({ label, value, onInput, onCommit, hint, error, focusT
   const note = error ?? hint;
   return (
     <div class={cx(styles.field, className)}>
-      <label for={id} class={styles.label}>{label}</label>
+      <label for={id} class={cx(styles.label, hideLabel && styles.hidden)}>{label}</label>
       {wrapIn(action, <input
         type="text"
         {...rest}

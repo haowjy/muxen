@@ -12,6 +12,9 @@ import { EmptyState } from "../../ui/primitives/EmptyState";
 import { Spinner } from "../../ui/primitives/Spinner";
 import { readPaste } from "../terminal/paste";
 import { DirList, MissingFolder, type RowMenuAsk } from "./FolderList";
+import { NewEntry, type Creating } from "./NewEntry";
+import { UP } from "../../files/outline";
+import type { CreateKind } from "../../proto/generated/messages";
 import { FolderActions } from "./FolderActions";
 import { PASTE, SEARCH, SEARCH_SLASH, useFilesKey } from "./keymap";
 import { PathField } from "./PathField";
@@ -57,6 +60,7 @@ export function ListPane({ session, tab, view, pages, tree, up, search, onOpen }
   const scroller = useRef<HTMLDivElement>(null);
   const [rowMenu, setRowMenu] = useState<RowMenuAsk | null>(null);
   const [finding, setFinding] = useState(false);
+  const [creating, setCreating] = useState<Creating | null>(null);
   const { place, home, loading, error, hidden } = view;
   const outline = useOutlineListings(session, tree, hidden, !phone);
   const mode: Mode = search ? "search" : finding ? "finding" : place.kind === "dir" && error?.code === "not_found" ? "missing" : "list";
@@ -92,7 +96,24 @@ export function ListPane({ session, tab, view, pages, tree, up, search, onOpen }
     if (folder !== null && scroller.current) scroller.current.scrollTop = session.scroll.get(scrollKey(tab, folder)) ?? 0;
   }, [folder, session.scroll, tab, showing]);
   // A row's menu belongs to the folder it was asked in.
-  useEffect(() => { setRowMenu(null); }, [folder]);
+  useEffect(() => { setRowMenu(null); setCreating(null); }, [folder]);
+
+  // A new entry is named under its folder, which opens to show the field; the field goes with the folder or the list.
+  const create = (dir: string, kind: CreateKind): void => {
+    if (!phone && dir !== folder) tree.toggle(dir, true);
+    setCreating({ dir, kind });
+  };
+  const naming = creating && (creating.dir === folder || tree.expanded.has(creating.dir)) ? creating : null;
+  useEffect(() => { if (creating && (!showing || (!phone && !naming))) setCreating(null); }, [creating, showing, naming, phone]);
+  const form = creating && (
+    <NewEntry
+      {...creating}
+      key={`${creating.dir}\0${creating.kind}`}
+      session={session}
+      onCreated={(path) => { if (!phone && creating.kind === "dir") tree.toggle(path, true); }}
+      onClose={() => { setCreating(null); app.focus.focusTarget("list"); }}
+    />
+  );
 
   // What stands in for the rows: a folder gone (it still has a way up), refused, or not here yet.
   const body = mode === "missing" ? (
@@ -128,7 +149,7 @@ export function ListPane({ session, tab, view, pages, tree, up, search, onOpen }
           here={place.path}
           onEditing={setFinding}
           onOpen={onOpen}
-          actions={<FolderActions session={session} path={pages?.path ?? place.path} pasteable={folderShown !== null} loading={loading} onSearch={folderShown !== null ? openSearch : undefined} />}
+          actions={<FolderActions session={session} path={pages?.path ?? place.path} pasteable={folderShown !== null} loading={loading} {...(folderShown !== null && { onCreate: (kind: CreateKind) => { create(folderShown, kind); } })} onSearch={folderShown !== null ? openSearch : undefined} />}
         />
       )}
       {mode !== "finding" && mode !== "search" && <UploadPanel session={session} onPreview={(path) => { onOpen({ kind: "file", path }); }} />}
@@ -144,6 +165,7 @@ export function ListPane({ session, tab, view, pages, tree, up, search, onOpen }
             pages={pages}
             hidden={hidden}
             loading={loading}
+            naming={!phone && naming && form ? { after: naming.dir === folder ? (up ? UP : null) : naming.dir, field: form } : null}
             fresh={phone && view.fresh !== null && parentOf(view.fresh) === pages.path ? baseName(view.fresh) : null}
             onOpen={onOpen}
             outline={outline}
@@ -159,7 +181,8 @@ export function ListPane({ session, tab, view, pages, tree, up, search, onOpen }
       )}
       {phone && showing && <PullToRefresh key={`pull:${pages.path}`} scroller={scroller} onRefresh={() => browser.reload()} />}
       {body && <div class={styles.scroll}>{body}</div>}
-      {rowMenu && showing && <RowMenu session={session} {...rowMenu} onClose={() => { setRowMenu(null); }} />}
+      {rowMenu && showing && <RowMenu session={session} {...rowMenu} onCreate={create} onClose={() => { setRowMenu(null); }} />}
+      {phone && form}
     </div>
   );
 }
