@@ -23,7 +23,7 @@ final class MediaLoader: NSObject, @preconcurrency AVAssetResourceLoaderDelegate
     private let hostID: String
     private let path: String
     private var jobs: [Int: Job] = [:]
-    /// Nil once `stop()` has invalidated it: a session can't make tasks after that.
+    /// Set by `asset()`. Nil again once `stop()` has invalidated it: a session can't make tasks after that.
     private var session: URLSession?
 
     /// `path` is the percent-encoded `/fs/raw/…` path of the file to play.
@@ -31,15 +31,15 @@ final class MediaLoader: NSObject, @preconcurrency AVAssetResourceLoaderDelegate
         self.model = model
         self.hostID = hostID
         self.path = path
-        super.init()
+    }
+
+    /// The asset for the file. The loader isn't retained by it: the player screen keeps the loader, and `stop()`s it.
+    /// The session starts here, not in `init`: it holds its delegate until invalidated, and a refused screen never stops.
+    func asset() -> AVURLAsset {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.httpCookieStorage = nil
         configuration.urlCache = nil
         session = URLSession(configuration: configuration, delegate: self, delegateQueue: .main)
-    }
-
-    /// The asset for the file. The loader isn't retained by it: the player screen keeps the loader, and `stop()`s it.
-    func asset() -> AVURLAsset {
         var components = URLComponents()
         components.scheme = Self.scheme
         components.host = "file"

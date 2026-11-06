@@ -38,9 +38,13 @@ function cleanStyle(css: string): string {
   return parseRules(css).filter((text) => !EXTERNAL_REF.test(text)).join("");
 }
 
-/** A `style=` value is the body of a rule: parse it as one and test what came out. */
+/** Parsed as a declaration list, as the attribute is: wrapped in `*{…}`, a `}` in the value would end the rule early. */
 function hasExternalRef(declarations: string): boolean {
-  return parseRules(`*{${declarations}}`).some((text) => EXTERNAL_REF.test(text));
+  const sheet = new CSSStyleSheet();
+  sheet.replaceSync("*{}");
+  const rule = sheet.cssRules[0] as CSSStyleRule;
+  rule.style.cssText = declarations;
+  return EXTERNAL_REF.test(rule.cssText);
 }
 
 const purify = DOMPurify();
