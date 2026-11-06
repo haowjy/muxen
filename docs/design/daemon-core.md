@@ -200,8 +200,21 @@ without UTF-8 decoding, keeping a partial line across calls:
   discarded through its line end and reported as `Line::TooLong`, never as an error.
   The cap on a group's replies is `Session`'s (§3.3), since only it knows the groups.
 
-Accepted: a captured line that is byte for byte the matching `%end T N F` ends the
-block early. tmux's protocol has this ambiguity, and a pane can't predict `N`.
+Accepted: a body line (captured pane text, or a raw window name in a `display-message`
+reply) that is byte for byte the matching `%end T N F` ends the block early. The guard
+compares `N` and `F`, not `T`. `N` is tmux's server-wide command counter, so a pane
+can't know it but can guess it: text holding a run of `%end` lines for plausible `N`
+needs no access beyond writing to the pane. What follows an early end is not harmless:
+the rest of the real body parses as top-level lines, so captured text could forge
+`%output` for a wanted pane or `%exit`, and the real `%end` is then ignored. The reply
+completes short or wrong, and a pending group in the same state is left to the next
+reply. This is open, not closed by §3.2's parser. Content that reaches the stream
+outside a block (a subscription value) is a different hole and is closed in §3.7.
+
+A `%begin` with flag 1 and no group pending is fatal (`UnexpectedReply`) and stays so.
+The parser opens a block on any `%begin` line, so dropping the line in `Session` would
+leave the parser swallowing every later line until a matching `%end`, and no reply
+deadline would notice: a restart of the control client is the only clean recovery.
 
 ### 3.3 Session: the sans-IO control client (`session.rs`)
 
@@ -742,9 +755,10 @@ typing, idling and a cwd change sent none
 ([probe](research/probe-session-follow.md), §8, §15).
 
 ```text
-refresh-client -B 'w<W>:@W:<acts>|#{pane_current_path}'
+refresh-client -B 'w<W>:@W:<acts>|<cwd>'
 → %subscription-changed w<W> $S @W <index> - : <acts>|<path>
 
+<cwd>  = #{?#{m:*[[:cntrl:]]*,#{pane_current_path}},,#{pane_current_path}}
 <acts> = #{L:#{?client_height,#{?client_control_mode,,#{?#{m:*#,#{client_name}#,*,#,#{window_active_clients_list}#,},#{client_name}.#{client_activity}.#{client_width}x#{client_height}.#{client_flags};,}},}}
 ```
 
@@ -758,6 +772,16 @@ unidentified client into `L:` before assigning its name, and expanding
 `#{client_name}` in that state dereferences NULL. An initialized tty has a height;
 clients without one cannot be a terminal client acting on this window. See
 [the subscription format crash probe](research/tmux-subscription-format-crash.md).
+
+`<cwd>` is the pane's path, or empty when the path holds a control character. tmux
+writes the value into one `%subscription-changed` line without escaping, so a line feed
+in a directory name (`x⏎%exit`) would end the line and the rest would parse as top-level
+protocol. The empty value reaches the hub as no cwd (`Session::cwd` returns `None`), never
+a mangled path. `#{s/[[:cntrl:]]/…/:pane_current_path}` can't do this: it prints empty
+for every path on 3.4 and 3.8. The other formats are safe: tmux escapes session names, and
+names in notifications; `STARTUP_FORMAT`, `STATE_FORMAT` and `CREATED_FORMAT` print ids and
+numbers; the listing escapes the window name (§4.8); `LOCATE_FORMAT`'s window name is the
+last field of a reply block, so a line feed in it only truncates the label.
 Verified on 3.4 and 3.7b ([probe](research/probe-latest-activity.md)).
 
 On 3.4 ([probe](research/probe-locate-subscriptions.md)) the first value arrives within

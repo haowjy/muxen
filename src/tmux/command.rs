@@ -206,7 +206,10 @@ pub fn subscription_name(window: WindowId) -> String {
 /// outer window available inside the loop; window_active_clients_list supplies the
 /// exact membership test. Gate client_name on client_height: older tmux can evaluate
 /// this for a socket client before IDENTIFY, when the name is still null.
-const WINDOW_SUBSCRIPTION_FORMAT: &str = "#{L:#{?client_height,#{?client_control_mode,,#{?#{m:*#,#{client_name}#,*,#,#{window_active_clients_list}#,},#{client_name}.#{client_activity}.#{client_width}x#{client_height}.#{client_flags};,}},}}|#{pane_current_path}";
+/// tmux prints the value into one `%subscription-changed` line unescaped, so a path
+/// with a control character (a line feed forges protocol lines) is withheld: the value
+/// ends `|` with no path. `#{s/[[:cntrl:]]/…/}` prints empty on 3.4 and 3.8; `m:` works.
+const WINDOW_SUBSCRIPTION_FORMAT: &str = "#{L:#{?client_height,#{?client_control_mode,,#{?#{m:*#,#{client_name}#,*,#,#{window_active_clients_list}#,},#{client_name}.#{client_activity}.#{client_width}x#{client_height}.#{client_flags};,}},}}|#{?#{m:*[[:cntrl:]]*,#{pane_current_path}},,#{pane_current_path}}";
 
 fn locate(session: SessionId) -> Group {
     Group::one(format!(

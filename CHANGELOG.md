@@ -5,6 +5,7 @@ version section on release.
 
 ## [Unreleased]
 
+- A directory name containing a line feed no longer stops muxen showing its session. The pane's folder is left blank for such a path.
 - Files can edit text files: Edit is in a file's ⋯ menu. A save never replaces a change made elsewhere without asking, and unsaved text comes back after the app is closed.
 - A file that can't be shown offers Try again whatever the reason, like a folder that can't be.
 - A running upload in Files has a × that cancels it. The server deletes what it received.

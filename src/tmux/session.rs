@@ -167,9 +167,15 @@ impl Session {
         self.wanted.iter().copied()
     }
 
-    /// The latest subscribed path for this window, absent until its first value.
+    /// The latest subscribed path for this window, absent until its first value and
+    /// while the path is empty (tmux has none, or the format withheld one with a
+    /// control character in it).
     pub fn cwd(&self, window: WindowId) -> Option<&str> {
-        self.subscriptions.get(&window)?.path.as_deref()
+        self.subscriptions
+            .get(&window)?
+            .path
+            .as_deref()
+            .filter(|path| !path.is_empty())
     }
 
     /// Bytes from the control client's stdout, in order.

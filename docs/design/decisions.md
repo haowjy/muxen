@@ -5648,3 +5648,20 @@ the check starts at the third timeout rather than the second, the limit is 15 s 
   a dead Retry, a tab joined after a refusal reading "Connecting", Open session spinning on a refused host.
 - **Rejected:** a function returning words (the card, banner and strip word the same state differently,
   and rightly).
+
+## Security audit, 2026-11-06
+
+
+### A path with a control character is withheld from the window subscription
+
+- **Decided:** 2026-11-06, security audit.
+- **What:** the subscription prints `pane_current_path` only if it holds no control
+  character, and the hub reads an empty value as no cwd. A `%begin` with no command
+  pending stays fatal to that control client.
+- **Why:** tmux prints subscription values unescaped into one line, so a directory named
+  with a line feed forged `%exit` or `%begin` and ended or looped the control client
+  (run on 3.4 and 3.8). No cwd is safer than a sanitized one, which could be acted on as a
+  real path. `%begin` stays fatal because the parser would stay inside a block with no
+  reply deadline to end it, and a desync would go unnoticed.
+- **Rejected:** `#{s/[[:cntrl:]]/…/}`, which prints empty for every path on both versions;
+  dropping a forged `%begin` with a log.
