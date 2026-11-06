@@ -163,7 +163,7 @@ export class HostRegistry {
     }
   }
 
-  /** `recheck` for enrolment and removal, which change what the check would answer. */
+  /** Check admission again: after enrolment or removal, which change what the check would answer, and from `retry`. */
   recheck(handle: string): void {
     const slot = this.slots.get(handle);
     if (!slot) return;
@@ -272,7 +272,25 @@ export class HostRegistry {
     if (!slot || (method !== undefined && method !== "GET" && method !== "HEAD")) return this.fetchFn(input, init);
     if (slot.client.shown === "unreachable" || slot.client.shown === "noNetwork") return Promise.reject(new TypeError("network"));
     const own = slot.abort.signal;
-    return this.fetchFn(input, { ...init, signal: init?.signal ? AbortSignal.any([init.signal, own]) : own });
+    const theirs = init?.signal;
+    if (!theirs) return this.fetchFn(input, { ...init, signal: own });
+    // `AbortSignal.any` needs iOS 17.4. Either signal aborts the request, body read included, so the link stays until one fires
+    // or the fetch fails; a signal that never fires is the caller's own, per request, and goes with it.
+    const both = new AbortController();
+    const stop = (): void => { both.abort(); };
+    const unlink = (): void => {
+      own.removeEventListener("abort", stop);
+      theirs.removeEventListener("abort", stop);
+    };
+    if (own.aborted || theirs.aborted) both.abort();
+    else {
+      own.addEventListener("abort", stop, { once: true });
+      theirs.addEventListener("abort", stop, { once: true });
+    }
+    return this.fetchFn(input, { ...init, signal: both.signal }).catch((error: unknown) => {
+      unlink();
+      throw error;
+    });
   }
 
   /** Copies the socket's reachability, with the phone's network, onto the client, and acts on the edges. */
@@ -346,9 +364,12 @@ export class HostRegistry {
     if (slot && slot.client.hostId !== hostId) this.patch(slot, { hostId });
   }
 
+  /** Not `patch`: a host being stopped reports `null`, and `applyRunning` would start it again. */
   private refusing(handle: string, refusing: Refusing | null): void {
     const slot = this.slots.get(handle);
-    if (slot) this.patch(slot, { refusing });
+    if (!slot) return;
+    slot.client = { ...slot.client, refusing };
+    this.emit();
   }
 
   private onRefused(handle: string, code: typeof CloseCode.BadToken | typeof CloseCode.AuthUnavailable | typeof CloseCode.Incompatible): void {

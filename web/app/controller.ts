@@ -68,6 +68,8 @@ export class AppController extends Store<AppView> {
   readonly router: Router;
   readonly focus: FocusController;
   readonly persist: Persist;
+  /** The last-reached times the saved workspace held at launch, kept so a server this page never reached keeps its entry; Clear local data drops them. */
+  private savedReached: Record<string, number> | undefined;
   /** What this device remembers of how screens look (Show hidden). */
   readonly view: ViewMemory;
   readonly listing: ListingFetcher;
@@ -133,7 +135,7 @@ export class AppController extends Store<AppView> {
       ...(options.fetchFn && { fetchFn: options.fetchFn }),
     });
     this.view = new ViewMemory(platform.storage.view);
-    this.persist = new Persist(platform.storage, () => savedWorkspaces(this.snapshot.workspace), () => this.bells.toSave(this.hosts.all().map((h) => h.hostId)), () => savedRoute(this.snapshot.workspace), () => ({ ...saved?.reached, ...this.reachedNow() }));
+    this.persist = new Persist(platform.storage, () => savedWorkspaces(this.snapshot.workspace), () => this.bells.toSave(this.hosts.all().map((h) => h.hostId)), () => savedRoute(this.snapshot.workspace), () => ({ ...this.savedReached, ...this.reachedNow() }));
     this.persist.provideHostName(() => this.hosts.all()[0]?.name ?? null);
     this.listing = new ListingFetcher({
       restoring: () => allTabs(this.snapshot.workspace).some((t) => t.kind === "terminal" && t.restoring),
@@ -142,7 +144,11 @@ export class AppController extends Store<AppView> {
     this.sessions = new SessionsCache();
     // The tab on screen on a visible page counts as seen: a hidden page, a backgrounded app and Home show nothing.
     this.bells = new BellMarks(saved?.bellSeen ?? {}, () => (this.snapshot.lifecycle.visible ? shownTab(this.snapshot.workspace) : null));
-    this.persist.onClear(() => { this.bells.forget(); });
+    this.savedReached = saved?.reached;
+    this.persist.onClear(() => {
+      this.bells.forget();
+      this.savedReached = undefined;
+    });
 
     this.applyViewport(boot.viewport);
     this.applyPreferences(boot.preferences);

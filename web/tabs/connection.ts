@@ -73,7 +73,8 @@ export function reduce(state: ConnectionState, event: ConnectionEvent): Connecti
       if (event.halt) return lost(state.attempt, null, event.halt);
       return state.halt === null ? lost(state.attempt + 1, event.retryInMs, null) : state;
     case "linkUp":
-      return state.kind === "reconnecting" && state.halt === null ? { kind: "connecting", attempt: state.attempt } : state;
+      // A welcome disproves a refusal; only a detach, which no socket can undo, waits for a tap.
+      return state.kind === "reconnecting" && state.halt !== "detached" ? { kind: "connecting", attempt: state.attempt } : state;
     case "watchEnded":
       // Another client detached us: retrying on a timer would fight it, so wait for a tap.
       if (state.kind === "reconnecting" || state.kind === "limited") return state;

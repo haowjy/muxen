@@ -16,6 +16,8 @@ const REPLY_TIMEOUT_MS = 30_000;
 /** An outage this old is told (plan.md "Reachability"); from reachable, a failed attempt this far in shows checking. */
 const UNREACHABLE_AFTER_MS = 10_000;
 const CHECKING_AFTER_MS = 1_500;
+/** A tapped Retry replaces a connect this old instead of joining it. */
+const REPLACE_CONNECT_AFTER_MS = 5_000;
 
 /** Whether the daemon is answering (plan.md "Reachability"). Not stored: the phone's own lack of network, which overlays it. */
 export type Reach = "reachable" | "checking" | "unreachable";
@@ -249,13 +251,14 @@ export class Host {
   /**
    * Visible, back online, or a pill tapped: reconnect now unless the socket is up. Returns whether
    * an attempt is under way or just began; false when nothing needs one or the socket is open.
-   * An attempt already connecting keeps its link (`connect` closes nothing) and takes the backoff reset.
+   * An attempt under 5 s old keeps its link and takes the backoff reset; an older one is replaced.
    */
   nudge(): boolean {
     if (this.tabs.size === 0 || this.status === "background" || this.status === "open") return false;
     this.attempt = 0;
     this.stuckCount = 0;
-    if (this.status !== "connecting") this.connect();
+    // A tap should not wait out a long connect limit on a server that has just come back.
+    if (this.status !== "connecting" || this.now() - this.attemptStart >= REPLACE_CONNECT_AFTER_MS) this.connect();
     return true;
   }
 
@@ -322,8 +325,12 @@ export class Host {
     if (this.tabs.size > 0) this.connect();
   }
 
+  /** Opens a socket. One still held is closed first; its late handlers do nothing, so nothing is reported for it. */
   private connect(): void {
     clearTimeout(this.retryTimer);
+    const old = this.link;
+    this.link = null;
+    old?.close();
     this.status = "connecting";
     this.attemptStart = this.now();
     // A tapped Retry shows checking over an old outage and keeps the long limit.
@@ -395,17 +402,18 @@ export class Host {
       this.attemptEnded(answered, wasOpen ? now : this.attemptStart);
     }
     this.setRefusing(close.code === CloseCode.OverCap ? "overCap" : close.code === CloseCode.AuthUnavailable ? "authUnavailable" : null);
-    if (close.code === CloseCode.BadToken || close.code === CloseCode.AuthUnavailable || close.code === CloseCode.Incompatible) this.opts.onRefused(close.code);
     const halt =
       close.code === CloseCode.BadToken ? "unauthorized" : close.code === CloseCode.Incompatible ? "incompatible" : undefined;
+    // Before `onRefused`: it can background this host, which would give these "background" and the wrong words.
+    this.failPastes();
+    this.failAll(new RequestError(halt ? `host halted: ${halt}` : "connection lost", halt ?? "lost"));
+    if (close.code === CloseCode.BadToken || close.code === CloseCode.AuthUnavailable || close.code === CloseCode.Incompatible) this.opts.onRefused(close.code);
     // The admission verdict can stop this socket at once (a browser's 4503, or any refusal admission decides).
     // A halt is still the tabs' to hear.
     if (this.status === "background") {
       if (halt) this.notifyLost(null, halt);
       return;
     }
-    this.failPastes();
-    this.failAll(new RequestError(halt ? `host halted: ${halt}` : "connection lost", halt ?? "lost"));
     if (this.tabs.size === 0) {
       this.stop("idle");
       return;

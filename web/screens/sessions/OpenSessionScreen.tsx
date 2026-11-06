@@ -11,7 +11,7 @@ import { bellLook } from "../../sessions/bells";
 import { ago, matching, windowCount } from "../../sessions/groups";
 import type { SessionListing, TmuxListing } from "../../proto/generated/messages";
 import { BellDot } from "../../ui/primitives/BellDot";
-import { offlineWords } from "../../ui/hostProblem";
+import { hostProblem, offlineWords } from "../../ui/hostProblem";
 import { Button } from "../../ui/primitives/Button";
 import { Dialog } from "../../ui/primitives/Dialog";
 import { ScreenBar } from "../../ui/primitives/ScreenBar";
@@ -38,7 +38,7 @@ export function OpenSessionScreen() {
 /** Why nothing can be created on `host`, if so. */
 function blockedBy(host: HostClient): string | undefined {
   if (host.shown === "noNetwork") return offlineWords(host.entry.pageOrigin === null);
-  if (host.shown === "unreachable") return `${host.name ?? "The server"} can't be reached`;
+  if (host.shown === "unreachable") return hostProblem("unreachable", host.name ?? "the server").title;
   return host.hostId === null ? "Checking access" : undefined;
 }
 
@@ -95,11 +95,14 @@ function Body({ host, workspace }: { host: HostClient; workspace: Workspace }) {
     else if (listing !== null) void commit();
   };
 
+  const unreachable = hostProblem("unreachable", name);
+  const title = failure !== null ? `${name} refused the request` : host.shown === "noNetwork" ? offlineWords(host.entry.pageOrigin === null) : unreachable.title;
+  const detail = failure === null && host.shown !== "noNetwork" ? unreachable.hint : "Your open tabs and drafts are kept.";
   let list;
   if (listing === undefined) {
     list = blocked === undefined && failure === null
       ? <div class={styles.loading}><Spinner label="Loading sessions" /><span>Loading sessions</span></div>
-      : <EmptyState icon="alert" title={failure !== null ? `${name} refused the request` : host.shown === "noNetwork" ? offlineWords(host.entry.pageOrigin === null) : `${name} can't be reached`} action={host.shown === "noNetwork" ? undefined : retry}>Your open tabs and drafts are kept.</EmptyState>;
+      : <EmptyState icon="alert" title={title} action={host.shown === "noNetwork" ? undefined : retry}>{detail}</EmptyState>;
   } else if (listing === null) {
     list = <EmptyState icon="terminal" title={`No tmux server is running on ${name}`} action={retry}>muxen never starts one. Start tmux on the server, then retry.</EmptyState>;
   } else {

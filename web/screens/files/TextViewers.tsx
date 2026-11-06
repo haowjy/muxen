@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
-import type { FsApi, TextPreview } from "../../files/api";
+import type { TextPreview } from "../../files/api";
 import type { FilesSession } from "./session";
 import type { FileRef } from "../../files/browser";
 import { HIGHLIGHT_MAX, highlightedLines, plainLines } from "../../files/render/code";
@@ -10,10 +10,12 @@ import { useAppView } from "../../app/context";
 import { formatSize } from "../../files/format";
 import { languageFor, type Language } from "../../files/kinds";
 import { HttpRefusal } from "../../net/http";
+import { Button } from "../../ui/primitives/Button";
 import { EmptyState } from "../../ui/primitives/EmptyState";
 import { Spinner } from "../../ui/primitives/Spinner";
 import { cx } from "../../ui/cx";
 import { useStore } from "../../ui/store";
+import { useFailure } from "./failure";
 import styles from "./Viewers.module.css";
 
 /** The code and Markdown viewers read at most this much, with Range (fs.md "Text previews"). */
@@ -54,8 +56,12 @@ function Loading({ what }: { what: string }) {
   return <div class={styles.loading}><Spinner label={what} /><p>{what}</p></div>;
 }
 
-function Failed({ error, describe }: { error: HttpRefusal; describe: (e: HttpRefusal) => string }) {
-  return <EmptyState icon="alert" title="Can't show this file">{describe(error)}</EmptyState>;
+/** A file that did not load: waiting for the server says so as its title; a connection that failed while the server answers offers Try again. */
+function Failed({ error, session }: { error: HttpRefusal; session: FilesSession }) {
+  const { describe, waiting } = useFailure(session);
+  if (waiting(error)) return <EmptyState icon="alert" title={describe(error)} />;
+  const retry = error.code === "network" ? <Button onClick={() => { session.browser.reread(); }}>Try again</Button> : undefined;
+  return <EmptyState icon="alert" title="Can't show this file" action={retry}>{describe(error)}</EmptyState>;
 }
 
 function Truncated({ preview }: { preview: TextPreview }) {
@@ -85,7 +91,7 @@ export function TextFacts({ name, preview, plain }: { name: string; preview: Tex
 }
 
 /** Source and text, numbered, edge to edge; coloured by Shiki when the extension is on the allowlist and the file is small. */
-export function CodeViewer({ text, file, wrap, plain, describe }: { text: Loaded<TextPreview>; file: FileRef; wrap: boolean; plain: boolean; describe: (e: HttpRefusal) => string }) {
+export function CodeViewer({ session, text, file, wrap, plain }: { session: FilesSession; text: Loaded<TextPreview>; file: FileRef; wrap: boolean; plain: boolean }) {
   const ref = useRef<HTMLElement>(null);
   const gutter = useRef<HTMLSpanElement>(null);
   useEffect(() => {
@@ -102,7 +108,7 @@ export function CodeViewer({ text, file, wrap, plain, describe }: { text: Loaded
     return () => { live = false; };
   }, [text, file.name, plain]);
   if (text.kind === "loading") return <Loading what="Loading the file" />;
-  if (text.kind === "error") return <Failed error={text.error} describe={describe} />;
+  if (text.kind === "error") return <Failed error={text.error} session={session} />;
   return (
     <div class={cx(styles.text, styles.sunken)}>
       <Truncated preview={text.value} />
@@ -113,11 +119,11 @@ export function CodeViewer({ text, file, wrap, plain, describe }: { text: Loaded
 }
 
 /** Rendered Markdown. Links to files open here; links to the web leave the app. */
-export function MarkdownViewer({ api, text, file, onLink, describe }: { api: FsApi; text: Loaded<TextPreview>; file: FileRef; onLink: (target: LinkTarget) => void; describe: (e: HttpRefusal) => string }) {
+export function MarkdownViewer({ session, text, file, onLink }: { session: FilesSession; text: Loaded<TextPreview>; file: FileRef; onLink: (target: LinkTarget) => void }) {
   const [html, setHtml] = useState<string | null>(null);
   const article = useRef<HTMLElement>(null);
   const scheme = useAppView((v) => v.viewport.scheme);
-  const docUrl = new URL(api.rawUrl(file.path), location.href).href;
+  const docUrl = new URL(session.browser.api.rawUrl(file.path), location.href).href;
   useEffect(() => {
     if (text.kind !== "done") return undefined;
     let live = true;
@@ -130,7 +136,7 @@ export function MarkdownViewer({ api, text, file, onLink, describe }: { api: FsA
     if (html === null || !root) return undefined;
     return mountDiagrams(root, scheme);
   }, [html, scheme]);
-  if (text.kind === "error") return <Failed error={text.error} describe={describe} />;
+  if (text.kind === "error") return <Failed error={text.error} session={session} />;
   if (text.kind === "loading" || html === null) return <Loading what="Loading the document" />;
   return (
     <div

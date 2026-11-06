@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { useApp, useAppView, useOverlay } from "../../app/context";
-import { describeError, parentPlace } from "../../files/browser";
+import { parentPlace } from "../../files/browser";
 import { folderKey } from "../../files/folders";
 import type { Found, SearchView } from "../../files/search";
 import { baseName, parentOf } from "../../files/paths";
 import type { FilesTab } from "../../workspace/state";
 import type { LinkTarget } from "../../files/render/markdown";
+import type { HttpRefusal } from "../../net/http";
 import type { FilesPlace } from "../../platform/types";
 import { Store, useStore } from "../../ui/store";
 import { cx } from "../../ui/cx";
 import { IconButton } from "../../ui/primitives/IconButton";
 import { Divider } from "./Divider";
+import { useFailure } from "./failure";
 import { FileView } from "./FileView";
 import { useFilesKey, type Chord } from "./keymap";
 import { ListPane, Loading, Refused } from "./ListPane";
@@ -57,6 +59,7 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
     return () => { wantsNow.current = null; };
   }, [app, browser, wanted]);
 
+  const failure = useFailure(session);
   const open = (to: FilesPlace): void => { app.openPlace(to); };
   const up = parentPlace(place, pages);
   const listed = pages !== null && (place.kind === "dir" ? pages.path === place.path : pages.path === parentOf(place.file.path));
@@ -115,7 +118,7 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
     else if (target.kind === "path") {
       const token = wantsNow.current;
       const here = (): boolean => wantsNow.current === token;
-      browser.resolve(target.path).then((to) => { if (here()) open(to); }, (e: unknown) => { if (here()) app.notify(e instanceof Error && "code" in e ? describeError(e as never, session.hostName) : "That link can't be opened."); });
+      browser.resolve(target.path).then((to) => { if (here()) open(to); }, (e: unknown) => { if (here()) app.notify(e instanceof Error && "code" in e ? failure.describe(e as HttpRefusal) : "That link can't be opened."); });
     }
   };
 

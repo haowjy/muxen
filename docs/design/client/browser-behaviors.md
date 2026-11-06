@@ -128,7 +128,7 @@ and admission, the first that applies:
 3. **checking** when the shown state is checking, with the note "Connecting to pop-os…", or when
    admission is undecided on a server that answers, with the server's banner ("Checking access…"
    after 10 s) and no note.
-4. Otherwise **connected** (or "tmux isn't running"), with the card's notice while the daemon is
+4. Otherwise **connected**, with a note if tmux isn't running, and the card's notice while the daemon is
    turning sockets away: over the connection cap, or unable to decide right now (4503).
 
 The same shown state reaches every other view of the server; none decides it for itself.
@@ -138,7 +138,7 @@ that server's banner only; other servers' problems show on Home. Admission that 
 comes first, as on the card. Otherwise an unreachable server's banner
 reads "Can't reach pop-os", with the hint and Retry; with no network it reads "This iPhone is
 offline." with no Retry. Either replaces "Checking access…". A terminal tab shows neither: its
-status strip says the same, with the same words and the same Retry. Other banners, such as the
+status strip says the same, with the same Retry. Other banners, such as the
 connection cap's, still show there. The Shell shows no banner over Home: each card carries its own
 server's banner as its notice, and an offline card's note replaces it. Every Retry for a server is
 the same one ([plan.md](../plan.md#reachability), "Retry").
@@ -443,7 +443,7 @@ finds the query, the rows and the scroll as they were.
   in the Preview panel; never a row the app selected (an answer's first row, the row a tab kept). The
   phone selects none of them (a tap is the way in); a desktop selects the first, for Enter. With none: "Files you open show here."
 - **Errors** read as a listing's do, in plain words with Try again, in place of the rows; offline, the
-  field stays and the list says the host can't be reached. The Preview panel stays on what it shows meanwhile.
+  field stays and the list says "Waiting for pop-os". The Preview panel stays on what it shows meanwhile.
 
 **Browsing by tap** is unchanged at rest:
 

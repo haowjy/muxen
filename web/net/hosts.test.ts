@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestPlatform, type TestPlatform } from "../platform/test";
 import { FakeLink } from "../platform/test/host";
 import type { HostEntry } from "../platform/types";
+import { TabDriver } from "../tabs/driver";
 import type { TabPort } from "./host";
 import { HostRegistry } from "./hosts";
 
@@ -423,5 +424,158 @@ describe("a stuck socket", () => {
     t.timeouts("h1", 3);
     await vi.advanceTimersByTimeAsync(0);
     expect(t.stuck).toEqual([]);
+  });
+});
+
+describe("Retry", () => {
+  const tokenHost: HostEntry = { handle: "h1", hostId: "h-pop", name: "pop-os", pageOrigin: null };
+
+  it("connects a waiting socket now and shows checking over an unreachable server", async () => {
+    const t = await boot();
+    t.host()?.socket.join(port);
+    await vi.advanceTimersByTimeAsync(0);
+    t.platform.links.at(-1)?.drop(1006, "idle");
+    expect(t.host()?.shown).toBe("unreachable");
+    const before = t.platform.links.length;
+    t.registry.retry("h1");
+    expect(t.platform.links.length).toBeGreaterThan(before);
+    expect(t.host()?.shown).toBe("checking");
+  });
+
+  it("changes nothing while the socket is open, and nothing for a handle that isn't listed", async () => {
+    const t = await boot();
+    t.host()?.socket.join(port);
+    await vi.advanceTimersByTimeAsync(0);
+    const links = t.platform.links.length;
+    t.registry.retry("h1");
+    t.registry.retry("nope");
+    expect(t.platform.links).toHaveLength(links);
+    expect(t.host()?.shown).toBe("reachable");
+  });
+
+  it("checks admission again for a host that is still undecided", async () => {
+    const t = await boot((p) => { p.daemon.node = "busy"; });
+    expect(t.host()?.admission).toEqual({ kind: "deciding" });
+    t.platform.daemon.node = "enrolled";
+    t.registry.retry("h1");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(t.host()?.admission).toEqual({ kind: "admitted", deviceName: "laptop" });
+  });
+
+  it("admits a native host called incompatible again, and opens its socket", async () => {
+    const t = await boot(undefined, { hosts: [tokenHost] });
+    t.host()?.socket.join(port);
+    t.platform.links[0]?.drop(4001);
+    expect(t.host()?.admission).toEqual({ kind: "incompatible" });
+    const links = t.platform.links.length;
+    t.registry.retry("h1");
+    expect(t.host()?.admission).toEqual({ kind: "admitted" });
+    expect(t.platform.links.length).toBeGreaterThan(links);
+  });
+
+  it("a refused tab moves on after Retry only because the server went first", async () => {
+    const t = await boot(undefined, { hosts: [tokenHost] });
+    const states: string[] = [];
+    const host = t.host();
+    if (!host) throw new Error("no host");
+    const tab = new TabDriver({
+      session: { server: "main:1-2", session: 1 },
+      model: { output: () => undefined, snapshot: () => Promise.resolve() },
+      host: host.socket,
+      size: () => ({ cols: 80, rows: 24 }),
+      onState: (s) => states.push(s.kind),
+      onNotice: () => undefined,
+      random: () => 0.5,
+    });
+    t.platform.links[0]?.drop(4001);
+    expect(states.at(-1)).toBe("reconnecting");
+    // The tab's own nudge, with the host stopped (refused): it has nothing to connect to, so the tab stays as it is.
+    tab.nudge();
+    expect(states.at(-1)).toBe("reconnecting");
+    // The server's Retry first: it admits the host again and its socket opens; then the tab's nudge goes on.
+    t.registry.retry("h1");
+    tab.nudge();
+    expect(states.at(-1)).toBe("connecting");
+    t.platform.links.at(-1)?.welcome();
+    expect(t.platform.links.at(-1)?.types()).toContain("watch");
+  });
+});
+
+describe("a refusal", () => {
+  const tokenHost: HostEntry = { handle: "h1", hostId: "h-pop", name: "pop-os", pageOrigin: null };
+
+  it("fails a request with the halt reason, not the background's", async () => {
+    const t = await boot(undefined, { hosts: [tokenHost] });
+    const host = t.host();
+    host?.socket.join(port);
+    const answer = host?.socket.request((req) => ({ type: "listSessions", data: { req } }) as never, () => undefined);
+    const outcome = answer?.catch((e: unknown) => (e as { reason: string }).reason);
+    t.platform.links[0]?.drop(4401);
+    expect(await outcome).toBe("unauthorized");
+  });
+
+  it("a welcome on a refused tab clears its refusal, and a detach is kept", async () => {
+    const { reduce } = await import("../tabs/connection");
+    const refused = { kind: "reconnecting", attempt: 1, retryInMs: null, halt: "unauthorized" } as const;
+    expect(reduce(refused, { type: "linkUp" }).kind).toBe("connecting");
+    expect(reduce({ ...refused, halt: "incompatible" }, { type: "linkUp" }).kind).toBe("connecting");
+    expect(reduce({ ...refused, halt: "detached" }, { type: "linkUp" }).kind).toBe("reconnecting");
+  });
+});
+
+describe("a host removed from the list", () => {
+  it("closes its socket and keeps its last message as last reached; a host being stopped is not started again", async () => {
+    const t = await boot();
+    const host = t.host();
+    host?.socket.join(port);
+    await vi.advanceTimersByTimeAsync(0);
+    const link = t.platform.links[0] as FakeLink;
+    await vi.advanceTimersByTimeAsync(20_000);
+    link.say({ type: "pong", data: { t: 0 } });
+    const last = Date.now();
+    await vi.advanceTimersByTimeAsync(5_000);
+    const links = t.platform.links.length;
+    t.registry.set([]);
+    expect(link.closed).toBe(true);
+    expect(host?.socket.reachedAt).toBe(last);
+    expect(t.registry.all()).toHaveLength(0);
+    expect(t.platform.links).toHaveLength(links);
+  });
+
+  it("a stopping socket's refusing update does not foreground the host", async () => {
+    const t = await boot();
+    const host = t.host();
+    host?.socket.join(port);
+    await vi.advanceTimersByTimeAsync(0);
+    t.platform.links[0]?.drop(4005);
+    expect(t.host()?.refusing).toBe("overCap");
+    // Removing the host stops its socket, which reports "not refusing"; that must not start it again.
+    const links = t.platform.links.length;
+    t.registry.set([]);
+    expect(t.platform.links).toHaveLength(links);
+  });
+});
+
+describe("a request with its own signal", () => {
+  it("ends when either signal fires, with no AbortSignal.any", async () => {
+    const original = Object.getOwnPropertyDescriptor(AbortSignal, "any");
+    // @ts-expect-error iOS 17.0 has no AbortSignal.any
+    delete AbortSignal.any;
+    try {
+      const hold = { on: true, sent: [] as string[] };
+      const t = await boot(undefined, {}, (inner) => holding(inner, hold));
+      t.host()?.socket.join(port);
+      await vi.advanceTimersByTimeAsync(0);
+      const own = new AbortController();
+      const fs = t.host()?.fs;
+      const caught = fs?.search("/", "x", false, own.signal).catch((e: unknown) => e);
+      own.abort();
+      expect(await caught).toMatchObject({ name: "AbortError" });
+      const other = fs?.search("/", "y", false, new AbortController().signal).catch((e: unknown) => e);
+      t.platform.links.at(-1)?.drop(1006, "idle"); // the host turns unreachable: its own signal fires
+      expect(await other).toMatchObject({ code: "network" });
+    } finally {
+      if (original) Object.defineProperty(AbortSignal, "any", original);
+    }
   });
 });

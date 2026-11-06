@@ -5,6 +5,7 @@ import type { ComponentChildren } from "preact";
 import { BellDot } from "../../ui/primitives/BellDot";
 import { Button } from "../../ui/primitives/Button";
 import { Row } from "../../ui/primitives/Row";
+import { useNow } from "../terminal/useNow";
 import { ago } from "../../sessions/groups";
 import { hostProblem, offlineWords } from "../../ui/hostProblem";
 import { STATUS, type CardBody, type CardStatus } from "./card";
@@ -35,6 +36,12 @@ function Note({ children }: { children: ComponentChildren }) {
   return <p class={styles.note}>{children}</p>;
 }
 
+/** Its age moves on while an offline card is on screen: re-drawn once a minute, by this component alone. */
+function LastReached({ at }: { at: number | null }) {
+  useNow(true, 60_000);
+  return <>{at ? `Last reached ${ago(at)}.` : "Not reached since muxen opened."}</>;
+}
+
 function Body({ name, body, byToken, onRetry }: Pick<WorkspaceCardProps, "name" | "body" | "byToken" | "onRetry">) {
   const retry = <Button variant="secondary" icon="refresh" onClick={onRetry}>Retry</Button>;
   switch (body.kind) {
@@ -42,7 +49,7 @@ function Body({ name, body, byToken, onRetry }: Pick<WorkspaceCardProps, "name" 
       if (body.noNetwork) return <Note>{offlineWords(byToken)}</Note>;
       return (
         <>
-          <Note>{body.reachedAt ? `Last reached ${ago(body.reachedAt)}.` : "Not reached since muxen opened."} {hostProblem("unreachable", name).hint}</Note>
+          <Note><LastReached at={body.reachedAt} /> {hostProblem("unreachable", name).hint}</Note>
           {retry}
         </>
       );

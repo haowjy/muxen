@@ -13,6 +13,7 @@ import { Icon } from "../../ui/primitives/Icon";
 import { useFocusRef } from "../../ui/focus";
 import { useLongPress } from "../../ui/longPress";
 import { Spinner } from "../../ui/primitives/Spinner";
+import type { Failure } from "./failure";
 import { fileIcon } from "./fileIcon";
 import { useListbox } from "./useListbox";
 import styles from "./FolderList.module.css";
@@ -371,8 +372,8 @@ export interface DirListProps {
 export interface OutlineProps {
   expanded: ReadonlySet<string>;
   held: ReadonlyMap<string, Held>;
-  /** Why a folder's listing failed, in the file manager's words. */
-  describe: (error: NonNullable<Held["error"]>) => string;
+  /** Why a folder's listing failed, in the file manager's words, and whether it loads again by itself. */
+  failure: Failure;
   onToggle: (folder: string, open: boolean) => void;
   onRest: (folder: string, act: "more" | "retry") => void;
   /** The folders open on screen now (every folder above them open too): each needs its listing, pinned while shown. */
@@ -380,9 +381,9 @@ export interface OutlineProps {
 }
 
 /** What an expanded folder's rest row says: it is loading, failed, empty, too big, or has more to show. */
-function restNote(record: Held | undefined, describe: OutlineProps["describe"]): RestNote {
+function restNote(record: Held | undefined, { describe, waiting }: Failure): RestNote {
   const listing = record?.listing ?? null;
-  if (record?.error && !listing) return { words: describe(record.error), action: { label: "Try again", act: "retry" } };
+  if (record?.error && !listing) return { words: describe(record.error), ...(!waiting(record.error) && { action: { label: "Try again", act: "retry" as const } }) };
   if (!listing) return { words: "Loading", busy: true };
   if (listing.entries.length === 0 && listing.total === 0) return { words: "Empty" };
   if (listing.truncated) return { words: "Too big to list in full" };
@@ -396,7 +397,7 @@ export function DirList({ pages, hidden, loading, fresh, naming, onOpen, outline
   const parent = onUp ? (pages.parent ?? null) : null;
   const expanded = tree?.expanded;
   const held = tree?.held;
-  const describe = tree?.describe;
+  const failure = tree?.failure;
   // The rows are rebuilt when the pages or the open folders change, never for a selection move, so the rows keep their identity.
   const { rows, notes } = useMemo(() => {
     const record = (path: string): Held | undefined => held?.get(folderKey(path, hidden));
@@ -409,9 +410,9 @@ export function DirList({ pages, hidden, loading, fresh, naming, onOpen, outline
       selection: null,
     });
     const said = new Map<string, RestNote>();
-    if (describe) for (const row of out.rows) if (row.kind === "rest") said.set(row.key, restNote(record(restFolder(row.key)), describe));
+    if (failure) for (const row of out.rows) if (row.kind === "rest") said.set(row.key, restNote(record(restFolder(row.key)), failure));
     return { rows: out.rows, notes: said };
-  }, [pages, parent, expanded, held, hidden, describe]);
+  }, [pages, parent, expanded, held, hidden, failure]);
   const selected = rows.some((r) => r.key === selection) ? selection : null;
   const shown = rows.filter((r) => r.expanded).map((r) => r.key).join("\0");
   const onShown = useRef(tree?.onShown);

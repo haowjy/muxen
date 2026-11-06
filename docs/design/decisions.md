@@ -5464,8 +5464,9 @@ carry the design lead's recommended answer to a question put to Jimmy and not ye
 - **What:** the first two attempts of an outage keep the 5 s limit. After 10 s of trouble, and for a
   server stored as unreachable, each attempt gets 15 s. A socket that has opened waits up to 15 s for
   `welcome`, and that wait ending is an ordinary unanswered close, never a connect timeout.
-- **Why:** a `wss` handshake takes about 4–5 round trips (an estimate, to be measured), so a link
-  with 1 s round trips misses 5 s on every attempt. With the GET guard that link would be locked out
+- **Why:** a socket reached `welcome` in 4.0 s over a proxy adding 2 s of round trip, without TLS
+  (Chromium and WebKit, 2026-11-06), so a link of about 2 s round trip, less with TLS, misses 5 s on
+  every attempt. With the GET guard that link would be locked out
   of Files for good, and Retry would hit the same limit: a breach of "usable on barely-there
   connections". Longer limits cost an off server nothing and send fewer attempts.
 - **Rejected:** a longer limit from the first attempt (offline would land later than 10 s); a fixed

@@ -324,14 +324,17 @@ subject to what follows, for the admission check and the connect-timeout rule al
 - When the shown state becomes reachable, or the server answers a new socket while reachable, every
   view whose last load failed as `network` loads again by itself: Files
   ([browser-behaviors.md](client/browser-behaviors.md#files)) and Settings.
+- An image, video or audio file loads by its URL, outside these rules. A preview of one opened
+  while the server isn't reachable waits as a folder does; one already loading isn't cut short.
 - Otherwise a request is never cut short, however slow. Other methods (a settings save, an
   enrolment, an upload) are always sent and never aborted.
 
 **Retry.** Every Retry for a server is the same one, `app.retryHost`: reset the backoff, connect its
 socket if it isn't already connecting, check admission again if it is undecided, and list sessions
-again. It shows checking over unreachable when it started an attempt or an attempt is in flight,
-which then ends as any other; while the socket is open, stopped or has nothing joined it changes
-nothing.
+again. A connect under 5 s old is kept; an older one is replaced, since a tap should not wait out a
+15 s limit on a server that has just come back. Retry shows checking over unreachable when an attempt
+is under way, which then ends as any other; while the socket is open, stopped or has nothing joined
+it changes nothing.
 
 ### Stack
 

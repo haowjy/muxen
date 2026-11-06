@@ -97,13 +97,13 @@ export function useTabOutline(session: FilesSession, tab: string, root: string |
 export function useOutlineListings(session: FilesSession, tree: TabOutline, hidden: boolean, on: boolean): OutlineProps | undefined {
   const { folders } = session.browser;
   const held = useStore(folders, (s) => s.held);
-  const { describe } = useFailure(session);
+  const failure = useFailure(session);
   useEffect(() => () => { folders.pin("outline", []); }, [folders]);
   if (!on) return undefined;
   return {
     expanded: tree.expanded,
     held,
-    describe,
+    failure,
     onToggle: tree.toggle,
     onRest: (path, act) => { void (act === "more" ? folders.more(path, hidden) : folders.load(path, hidden)); },
     onShown: (paths) => {

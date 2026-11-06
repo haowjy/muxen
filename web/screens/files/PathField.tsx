@@ -1,7 +1,6 @@
 import type { ComponentChildren } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { useApp, useOverlay } from "../../app/context";
-import { describeError } from "../../files/browser";
 import { HttpRefusal } from "../../net/http";
 import { enter, fieldView, type FieldContext } from "../../files/pathfield";
 import type { FilesPlace } from "../../platform/types";
@@ -118,7 +117,7 @@ export function PathField({ session, rest, here, actions, onEditing, onOpen }: P
         if (latest.current !== text) return;
         // A partial name on a page not loaded can't be probed: the list offers the rest.
         if (error instanceof HttpRefusal && error.code === "not_found") setSaid(`Nothing named ${v.typed?.segment ?? ""} in the entries loaded. Load the rest to match more.`);
-        else setSaid(error instanceof HttpRefusal ? describeError(error, session.hostName) : "That path can't be opened.");
+        else setSaid(error instanceof HttpRefusal ? failure.describe(error) : "That path can't be opened.");
       }
     } else if ("say" in go) setSaid(go.say);
   };
@@ -127,7 +126,7 @@ export function PathField({ session, rest, here, actions, onEditing, onOpen }: P
     if (!view?.ask) return;
     setLoadingRest(true);
     browser.folders.rest(view.ask.path, view.ask.hidden).catch((error: unknown) => {
-      setSaid(error instanceof HttpRefusal ? describeError(error, session.hostName) : "Couldn't load the rest.");
+      setSaid(error instanceof HttpRefusal ? failure.describe(error) : "Couldn't load the rest.");
     }).finally(() => { setLoadingRest(false); });
   };
 

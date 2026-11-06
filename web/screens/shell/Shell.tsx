@@ -43,7 +43,7 @@ export function Shell() {
         <div class={styles.banners}>
           <AppBanners />
           {/* Home's cards carry their own host's notice. */}
-          {!blocking && screen !== "home" && own && <HostBanner host={own} reach={screen !== "terminal"} />}
+          {!blocking && screen !== "home" && own && <HostBanner host={own} reach={!(tabShown && screen === "terminal")} />}
         </div>
         <main class={styles.screen}>
           {blocking ? (

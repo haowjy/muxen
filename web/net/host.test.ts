@@ -442,6 +442,96 @@ describe("reachability", () => {
     expect(t.stuck.calls).toBe(0);
   });
 
+  it("an idle close starts the trouble at the close, so a Retry's attempt failing 10 s after it is unreachable", () => {
+    const t = reachable();
+    at(20);
+    t.link().say({ type: "pong", data: { t: 0 } });
+    at(30);
+    t.link().drop(1006, "idle");
+    t.host.retrying();
+    expect(t.host.reach).toBe("checking");
+    at(0.5); // the backoff step: a new attempt starts here, half a second after the close
+    at(9.7);
+    t.link().drop(1006, "connectTimeout");
+    expect(t.host.reach).toBe("unreachable");
+  });
+
+  it.each([
+    ["a clean close, 1000", 1000, undefined],
+    ["a clean close, 1001", 1001, undefined],
+    ["the link's own 4003", 4003, "protocol"],
+    ["native opening no socket, 1006", 1006, undefined],
+  ] as const)("%s is no answer: last reached stays its last message", (_name, code, cause) => {
+    const t = reachable();
+    const last = Date.now();
+    at(20);
+    t.link().drop(code, cause);
+    expect(t.host.reachedAt).toBe(last);
+    expect(t.host.reach).toBe("reachable"); // under 1.5 s into an unanswered attempt nothing reads checking
+  });
+
+  it("native's 4401 with no token is no answer, yet halts the tabs and refuses", () => {
+    const t = makeHost();
+    const lost: unknown[] = [];
+    t.host.join({ ...port, linkLost: (info) => lost.push(info) });
+    at(10);
+    t.link().drop(4401, "notEnrolled");
+    expect(t.host.reachedAt).toBeNull();
+    expect(t.host.reach).toBe("unreachable");
+    expect(t.events).toContain("refused 4401");
+    expect(lost).toEqual([{ retryInMs: null, halt: "unauthorized" }]);
+  });
+
+  it("a socket that opened and got no welcome reads unreachable at 10 s, never reachable", () => {
+    const t = makeHost();
+    t.host.join(port);
+    t.link().drop(1006, "welcomeTimeout");
+    at(11);
+    t.link().drop(1006, "welcomeTimeout");
+    expect(t.host.reach).toBe("unreachable");
+    expect(t.host.reachedAt).toBeNull();
+  });
+
+  it.each([["drops", (t: ReturnType<typeof makeHost>) => { t.link().drop(1006); }], ["stops with nothing needing it", (t: ReturnType<typeof makeHost>) => { t.host.leave(port); }]])("a socket that was open sets last reached to its last message when it %s", (_name, end) => {
+    const t = reachable();
+    at(20);
+    t.link().say({ type: "pong", data: { t: 0 } });
+    const last = Date.now();
+    at(5);
+    end(t);
+    expect(t.host.reachedAt).toBe(last);
+  });
+
+  describe("Retry", () => {
+    it("keeps a connect under 5 s old and gives it the backoff reset", () => {
+      const t = makeHost();
+      t.host.join(port);
+      at(4.9);
+      expect(t.host.nudge()).toBe(true);
+      expect(t.links).toHaveLength(1);
+      expect(t.link().closed).toBe(false);
+    });
+
+    it("replaces a connect 5 s old or more, and the old link's late handlers do nothing", () => {
+      const t = makeHost();
+      t.host.join(port);
+      const old = t.link();
+      at(6);
+      expect(t.host.nudge()).toBe(true);
+      expect(t.links).toHaveLength(2);
+      expect(old.closed).toBe(true);
+      const reaches = t.reaches.length;
+      old.welcome();
+      old.drop(1006, "connectTimeout");
+      expect(t.host.ready).toBe(false);
+      expect(t.links).toHaveLength(2);
+      expect(t.reaches).toHaveLength(reaches);
+      expect(t.host.reach).toBe("checking");
+      t.link().welcome();
+      expect(t.host.reach).toBe("reachable");
+    });
+  });
+
   describe("the connect limit", () => {
     it("is 5 s for the first two attempts of an outage and 15 s once unreachable; the backoff advances from the second timeout", () => {
       const t = makeHost();

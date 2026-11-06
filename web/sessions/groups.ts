@@ -25,5 +25,6 @@ export function ago(then: number): string {
   if (minutes < 1) return "just now";
   if (minutes < 60) return `${String(minutes)} min ago`;
   const hours = Math.floor(minutes / 60);
-  return hours < 24 ? `${String(hours)} ${hours === 1 ? "hour" : "hours"} ago` : `${String(Math.floor(hours / 24))} days ago`;
+  const unit = (n: number, word: string): string => `${String(n)} ${word}${n === 1 ? "" : "s"} ago`;
+  return hours < 24 ? unit(hours, "hour") : unit(Math.floor(hours / 24), "day");
 }

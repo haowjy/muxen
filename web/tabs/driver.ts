@@ -124,10 +124,12 @@ export class TabDriver {
     this.watchIfReady();
   }
 
-  /** Visible, online, or the pill was tapped. */
+  /**
+   * Visible, online, or the pill was tapped. A host that tries no more (refused, in the background)
+   * leaves the tab as it is: connecting would wait on a socket nothing will open.
+   */
   nudge(): void {
-    this.dispatch({ type: "nudge" });
-    this.opts.host.nudge();
+    if (this.opts.host.nudge() || this.opts.host.ready) this.dispatch({ type: "nudge" });
   }
 
   /** Rotation or font change only. A resize that finds the watch in flight is sent when it binds. */

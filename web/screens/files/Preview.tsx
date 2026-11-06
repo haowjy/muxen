@@ -1,3 +1,4 @@
+import type { ComponentChildren } from "preact";
 import { useEffect, useState } from "preact/hooks";
 import { useApp } from "../../app/context";
 import { formatSize, formatTime, shorten } from "../../files/format";
@@ -5,10 +6,11 @@ import type { FileRef } from "../../files/browser";
 import type { ViewerKind } from "../../files/kinds";
 import type { LinkTarget } from "../../files/render/markdown";
 import { Button } from "../../ui/primitives/Button";
+import { EmptyState } from "../../ui/primitives/EmptyState";
 import { Icon } from "../../ui/primitives/Icon";
 import { useStore } from "../../ui/store";
 import { DownloadButton } from "./FileActions";
-import { useFailure } from "./failure";
+import { useReachableOnce } from "./failure";
 import { fileIcon } from "./fileIcon";
 import { ImageViewer } from "./ImageViewer";
 import type { FilesSession } from "./session";
@@ -26,6 +28,12 @@ function Meta({ session, file }: { session: FilesSession; file: FileRef }) {
       {file.mime && <><dt>Type</dt><dd class={styles.mono}>{file.mime}</dd></>}
     </dl>
   );
+}
+
+/** A viewer that loads by URL starts when the server answers, and stays once it has. */
+function Waits({ session, children }: { session: FilesSession; children: ComponentChildren }) {
+  const started = useReachableOnce(session);
+  return started ? <>{children}</> : <EmptyState icon="alert" title={`Waiting for ${session.hostName}`} />;
 }
 
 /** Video and audio: native's player opens on arrival; the browser plays them inline over Range requests. */
@@ -80,14 +88,13 @@ function Unsupported({ session, file, onAsText }: { session: FilesSession; file:
 
 /** The viewer for `kind`, under the file's header (`FileView`), which owns the viewer's controls. */
 export function Preview({ session, file, text, kind, plain, wrap, onAsText, onLink }: { session: FilesSession; file: FileRef; text: Loaded<TextPreview>; kind: ViewerKind; plain: boolean; wrap: boolean; onAsText: () => void; onLink: (target: LinkTarget) => void }) {
-  const { describe } = useFailure(session);
   const api = session.browser.api;
   return (
     <div class={styles.viewer}>
-      {kind === "code" && <CodeViewer key={file.path} text={text} file={file} wrap={wrap} plain={plain} describe={describe} />}
-      {kind === "markdown" && <MarkdownViewer key={file.path} api={api} text={text} file={file} onLink={onLink} describe={describe} />}
-      {kind === "image" && <ImageViewer key={file.path} url={api.rawUrl(file.path)} name={file.name} />}
-      {kind === "media" && <MediaViewer key={file.path} session={session} file={file} />}
+      {kind === "code" && <CodeViewer key={file.path} session={session} text={text} file={file} wrap={wrap} plain={plain} />}
+      {kind === "markdown" && <MarkdownViewer key={file.path} session={session} text={text} file={file} onLink={onLink} />}
+      {kind === "image" && <Waits key={file.path} session={session}><ImageViewer url={api.rawUrl(file.path)} name={file.name} /></Waits>}
+      {kind === "media" && <Waits key={file.path} session={session}><MediaViewer session={session} file={file} /></Waits>}
       {kind === "binary" && <Unsupported session={session} file={file} onAsText={onAsText} />}
     </div>
   );

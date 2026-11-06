@@ -40,9 +40,10 @@ export function TerminalScreen({ active }: { active: boolean }) {
   const status = look?.status;
   // The strip's Retry is the tab's own and the server's one (plan.md "Reachability", "Retry").
   const retry = (id: string, hostId: string): void => {
-    terminals.retry(id);
+    // The server's first: native's incompatible host reconnects there, and the tab's nudge needs the socket.
     const host = hostById(app.hosts.all(), hostId);
     if (host) app.retryHost(host.entry.handle);
+    terminals.retry(id);
   };
 
   return (

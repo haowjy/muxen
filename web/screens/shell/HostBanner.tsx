@@ -32,6 +32,10 @@ export function HostBanner({ host, reach = true }: { host: HostClient; reach?: b
     const manage = app.platform.manageHosts;
     return copy && <Banner tone="error" title={copy.title} {...(manage && { action: { label: "Servers", onAction: manage } })}>{copy.hint}</Banner>;
   }
+  if (admission.kind === "incompatible") {
+    const copy = admissionCopy(admission, name, byToken);
+    return copy && <Banner tone="error" title={copy.title} action={retry}>{copy.hint}</Banner>;
+  }
   if (reach && host.shown === "noNetwork") return <Banner tone="warning" title={offlineWords(byToken)} />;
   if (reach && host.shown === "unreachable") {
     const copy = hostProblem("unreachable", name);
@@ -41,7 +45,7 @@ export function HostBanner({ host, reach = true }: { host: HostClient; reach?: b
     const copy = hostProblem(host.refusing, name);
     return <Banner tone="warning" title={copy.title} action={retry}>{copy.hint}</Banner>;
   }
-  if (admission.kind === "deciding" && host.checkingSince !== null && now - host.checkingSince >= CHECKING_AFTER_MS) {
+  if (admission.kind === "deciding" && host.shown === "reachable" && host.checkingSince !== null && now - host.checkingSince >= CHECKING_AFTER_MS) {
     return <Banner tone="info" title="Checking access…" />;
   }
   return null;

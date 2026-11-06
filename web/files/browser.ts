@@ -175,6 +175,11 @@ export class FileBrowser extends Store<FilesView> {
     ]);
   }
 
+  /** A view that keeps a `network` failure of its own was asked to try again (its Try again): it hears this as it hears a recovery. */
+  reread(): void {
+    this.update({ recoveries: this.snapshot.recoveries + 1 });
+  }
+
   /** The next page, when the list scrolls near its end. */
   async more(): Promise<void> {
     const { dir, loading } = this.snapshot;

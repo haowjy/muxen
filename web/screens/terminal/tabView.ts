@@ -29,11 +29,12 @@ export function lookOf(tab: TerminalTab, status: TabStatus | undefined, host: Ho
   const known = status ?? { state: initialState, downSince: now, retryAt: null };
   const described = describe(known.state, known.downSince, known.retryAt, now, host, onScreen);
   // A restored tab is unproven until the daemon finds its session: reconnecting colour, "Checking…", no input.
+  // With the server off or the phone offline nothing is being checked: it reads as reconnecting.
   if (tab.restoring && known.state.kind !== "closed") {
     const checking = described.tone === "connecting" || described.tone === "idle" || described.tone === "live";
     return {
       tone: "reconnecting",
-      state: "checking",
+      state: host.shown === "unreachable" || host.shown === "noNetwork" ? "reconnecting" : "checking",
       status: checking ? { ...described, tone: "connecting", detail: onScreen && now - known.downSince >= 1_500 ? "Checking…" : null } : described,
     };
   }

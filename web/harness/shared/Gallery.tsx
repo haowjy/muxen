@@ -109,7 +109,7 @@ export function Gallery() {
         <TabStrip pills={PILLS} active={active} onSelect={setActive} onClose={() => undefined} onMenu={() => undefined} />
       </Section>
       <Section title="Status">
-        <Banner title="Can't reach pop-os" tone="warning" action={{ label: "Retry", onAction: () => undefined }}>Check that Tailscale is on, then retry.</Banner>
+        <Banner title="Can't reach pop-os" tone="warning" action={{ label: "Retry", onAction: () => undefined }}>Check that it's on and that Tailscale is on.</Banner>
         <Banner title="Update ready" action={{ label: "Update", onAction: () => undefined }} />
         <Banner title="This device isn't enrolled on pop-os" tone="error">Run muxen enroll on the server for a code.</Banner>
         <div class={styles.band}>
