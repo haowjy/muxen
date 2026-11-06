@@ -63,18 +63,14 @@ impl Stamp {
 /// The state directory's `flock`, held until dropped: every writer of `auth.toml` holds it
 /// for its read-modify-write, the CLI's included.
 pub fn lock(state_dir: &Path) -> io::Result<File> {
-    let file = lock_file(state_dir)?;
-    rustix::fs::flock(&file, rustix::fs::FlockOperation::LockExclusive)?;
-    Ok(file)
-}
-
-fn lock_file(state_dir: &Path) -> io::Result<File> {
-    OpenOptions::new()
+    let file = OpenOptions::new()
         .create(true)
         .truncate(false)
         .write(true)
         .mode(0o600)
-        .open(state_dir.join(LOCK))
+        .open(state_dir.join(LOCK))?;
+    rustix::fs::flock(&file, rustix::fs::FlockOperation::LockExclusive)?;
+    Ok(file)
 }
 
 /// The 1-based line and column (in characters) of a toml parse error, `(0, 0)` if it has no
@@ -88,6 +84,18 @@ pub fn toml_position(text: &str, error: &toml::de::Error) -> (usize, usize) {
             head[line_start..].chars().count() + 1,
         )
     })
+}
+
+const BASE32: &[u8; 32] = b"abcdefghijklmnopqrstuvwxyz234567";
+
+/// `n` random base32 characters, for a temporary file's name.
+pub fn random_name(n: usize) -> io::Result<String> {
+    let mut bytes = vec![0; n];
+    getrandom::fill(&mut bytes).map_err(io::Error::other)?;
+    Ok(bytes
+        .iter()
+        .map(|byte| char::from(BASE32[usize::from(byte & 31)]))
+        .collect())
 }
 
 /// An open directory; cheap to clone.
@@ -147,7 +155,7 @@ impl From<File> for Dir {
 /// A file being written in a directory, under a temporary name until it lands. Not
 /// deleted on drop: a drop can happen on the runtime thread, and a delete can block on
 /// the disk. Each landing deletes it on its own failure; otherwise call `discard`, on a
-/// lane. One left by a crash is removed by the next `create` of its name (the paste files)
+/// lane. One left by a crash is removed by the next `create` of its name (auth's and Settings' fixed temporary names)
 /// or, for an upload's random-named part file, through the upload record (`upload::reap`).
 #[derive(Debug)]
 pub struct Temp {

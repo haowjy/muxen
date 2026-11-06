@@ -22,7 +22,7 @@ use tracing::{debug, info};
 
 use super::{FsError, Opened, Want, expand, open};
 use crate::blocking::Lane;
-use crate::files::{Dir, Temp};
+use crate::files::{Dir, Temp, random_name};
 use crate::proto::fs::Uploaded;
 
 /// Larger uploads get `413 too_large`.
@@ -40,7 +40,6 @@ const PART_PREFIX: &str = ".muxen-upload-";
 const PART_SUFFIX: &str = ".part";
 /// Name clashes tried before giving up: four random characters clash rarely.
 const RENAME_TRIES: usize = 16;
-const BASE32: &[u8; 32] = b"abcdefghijklmnopqrstuvwxyz234567";
 
 /// The folder an upload lands in: `dest` (`~`, `~/…` or absolute; it must exist), else
 /// `uploads_dir` (the running config's), created 0700 if missing and then opened after creating it, so a folder
@@ -284,7 +283,7 @@ impl Part {
         reap(&lane, &record);
         let name = format!(
             "{PART_PREFIX}{}{PART_SUFFIX}",
-            random(16).map_err(FsError::io)?
+            random_name(16).map_err(FsError::io)?
         );
         let path = Path::new(dir_path).join(&name);
         std::fs::write(&record, path.as_os_str().as_encoded_bytes()).map_err(FsError::Internal)?;
@@ -346,7 +345,11 @@ pub fn extension(client_name: &str) -> String {
 
 /// `YYYYMMDD-HHMMSSZ-xxxx.<ext>`, in UTC.
 fn final_name(now: SystemTime, extension: &str) -> io::Result<String> {
-    Ok(format!("{}-{}.{extension}", utc_stamp(now), random(4)?))
+    Ok(format!(
+        "{}-{}.{extension}",
+        utc_stamp(now),
+        random_name(4)?
+    ))
 }
 
 /// `YYYYMMDD-HHMMSSZ`, from RFC 3339 with the punctuation taken out.
@@ -357,16 +360,6 @@ fn utc_stamp(now: SystemTime) -> String {
         .filter(char::is_ascii_digit)
         .collect();
     format!("{}-{}Z", &digits[..8], &digits[8..14])
-}
-
-/// `n` random base32 characters.
-fn random(n: usize) -> io::Result<String> {
-    let mut bytes = vec![0; n];
-    getrandom::fill(&mut bytes).map_err(io::Error::other)?;
-    Ok(bytes
-        .iter()
-        .map(|byte| char::from(BASE32[usize::from(byte & 31)]))
-        .collect())
 }
 
 fn is_part(name: &OsStr) -> bool {
@@ -492,7 +485,10 @@ mod tests {
         let (suffix, extension) = rest.split_once('.').expect("an extension");
         assert_eq!(extension, "jpg");
         assert!(
-            suffix.len() == 4 && suffix.bytes().all(|b| BASE32.contains(&b)),
+            suffix.len() == 4
+                && suffix
+                    .bytes()
+                    .all(|b| matches!(b, b'a'..=b'z' | b'2'..=b'7')),
             "{name}"
         );
     }
