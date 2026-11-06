@@ -42,9 +42,9 @@ auth is [auth.md](auth.md). Decisions and the alternatives rejected are in
 
 ## The uploads folder
 
-An upload that names no folder goes to `uploads_dir` in `config.toml` (default `~/.muxen-uploads`), absolute or
-starting with `~/`. A missing absolute path is created by the next upload; one that is
-neither absolute nor `~/` makes every upload answer `409 not_a_directory`. There are no
+An upload that names no folder goes to `uploads_dir` in `config.toml` (default `~/.muxen-uploads`), absolute, `~` (uploads land in
+the home folder) or starting with `~/`. A missing path is created by the next upload; one that is
+none of those makes every upload answer `409 not_a_directory`. There are no
 favorites. `uploads_dir` is edited by hand or from Settings, through the one route that writes
 `config.toml` ([Server settings](#server-settings)).
 
@@ -407,7 +407,7 @@ the cap against `Content-Length` up front, when sent, and against the running co
 1. Take the upload slot (none free: `503 busy` at once).
 2. Without `dir`: create `uploads_dir` (0700) if missing, then resolve it and `fs::open(…, Dir)`
    it, so a directory that didn't exist when the config was read still counts. An `uploads_dir` that can't be resolved to a directory (neither absolute
-   nor `~/`, or not a directory) answers `409 not_a_directory`.
+   nor `~` or `~/…`, or not a directory) answers `409 not_a_directory`.
    On Linux, `fstatfs` on the opened directory descriptor rejects tmpfs and ramfs with
    `409 memory_backed` before a `.part` file is created (a `dir` too). A folder the user
    can't write is `403 denied`, and nothing is created. On macOS there is no cgroup
@@ -486,7 +486,7 @@ SettingsChange = { searchSkip?: [string] | null, uploadsDir?: string | null }
   sets it. An unknown or mistyped field is `bad_request` with axum's 422, as every JSON body axum rejects. It answers the resulting `ServerSettings`, which the
   client draws. **Validation:** at most 64 patterns, each 1–255 bytes of UTF-8 with no `/` or NUL, not
   made only of `*` (which would skip every folder); duplicates are dropped, order kept. `uploadsDir`
-  absolute or starting with `~/`, at most 4,096 bytes. Anything else is `400 bad_request` and nothing is
+  absolute, `~` or starting with `~/`, at most 4,096 bytes (`check_shape`'s limits, as on load). Anything else is `400 bad_request` and nothing is
   written. A pattern starting with `.` only matters while Show hidden files is on; it is allowed.
 - **Writing** follows the earlier writer's rules
   ([decisions.md](decisions.md#config-writes-toml_edit-auths-lock-temp-file-and-rename-re-stat-before-rename)),
@@ -527,7 +527,7 @@ The auth middleware also uses this body for `forbidden`, `auth_required`,
 | 403 | `node_refused` | The current Tailscale node fails a node-lane rule; includes the refusal reason |
 | 404 | `not_found` | `ENOENT`, `ENOTDIR` while resolving, `ELOOP` at open |
 | 409 | `exists` | a create or a rename found the name taken |
-| 409 | `not_a_directory`, `not_a_file` | the wrong kind for the route; a FIFO, socket or device is `not_a_file`; an upload when `uploads_dir` isn't an absolute or `~/` path, or the upload's `dir` or `uploads_dir` isn't a directory |
+| 409 | `not_a_directory`, `not_a_file` | the wrong kind for the route; a FIFO, socket or device is `not_a_file`; an upload when `uploads_dir` isn't an absolute, `~` or `~/…` path, or the upload's `dir` or `uploads_dir` isn't a directory |
 | 409 | `memory_backed` | on Linux, an upload destination directory on tmpfs or ramfs; its pages would remain charged to muxen's unit while the file exists |
 | 409 | `config_read_only` | `config.toml`, or a directory on its way, is a dangling link or can't be written |
 | 413 | `too_large` | an upload over the cap |

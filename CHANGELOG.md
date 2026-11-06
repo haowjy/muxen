@@ -5,6 +5,7 @@ version section on release.
 
 ## [Unreleased]
 
+- Settings accepts `~` as the Uploads folder, as `config.toml` already did: uploads land in your home folder.
 - The file routes answer a malformed request the way the rest of the API does: a create, rename or delete with a body over 16 KiB, not JSON or the wrong shape gets 413, 415 or 422 instead of 400, and an upload with `text=2` is refused with 400 instead of saved.
 - A file opened just as the app unlocks no longer stops at "Something went wrong (locked)": it loads by itself once the server is back.
 - Home and every view of a server say when it can't be reached, about 10 s after a connect fails, and a folder no longer loads forever while its server is off: it reads "Waiting for pop-os" and loads by itself when the server answers again. Home says when the server was last reached, and "This iPhone is offline." when the phone has no network. A server that is off no longer makes the app reload its page. A server that refused this device says so once, in its banner, and Open session on it no longer spins. While a server is being tried, Home and restored tabs say "connecting". When a server stops answering under an open connection, Home says "connecting" about 3 s after a tab does, instead of staying "connected" until it turns offline.

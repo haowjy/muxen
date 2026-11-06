@@ -22,7 +22,6 @@ pub(super) const TRIES: usize = 3;
 /// Validation (fs.md "Server settings").
 const MAX_PATTERNS: usize = 64;
 const MAX_PATTERN: usize = 255;
-const MAX_UPLOADS_DIR: usize = 4096;
 
 #[derive(Debug, Error)]
 pub enum SaveError {
@@ -72,8 +71,13 @@ pub fn validated(change: SettingsChange) -> Result<SettingsChange, SaveError> {
         other => other,
     };
     if let Patch::Set(dir) = &change.uploads_dir {
-        let shaped = dir.starts_with("~/") || Path::new(dir).is_absolute();
-        if !shaped || dir.len() > MAX_UPLOADS_DIR || dir.contains('\0') {
+        // Absolute, `~` or `~/…`, within `check_shape`'s limits; the home is only known
+        // when an upload resolves it.
+        let shaped = crate::fs::expand(dir, Path::new("/")).and_then(|path| {
+            path.to_str()
+                .map(|path| crate::fs::check_shape(path).is_ok())
+        });
+        if shaped != Some(true) {
             return Err(SaveError::BadRequest);
         }
     }
