@@ -81,10 +81,10 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
 
   // What just landed under the list is selected once on a desktop, so the Preview panel shows it; the phone marks its row.
   const { fresh } = view;
-  const here = !phone && root !== null && wanted.kind === "dir" && fresh !== null && fresh.startsWith(`${root === "/" ? "" : root}/`);
+  const here = !phone && root !== null && wanted.kind === "dir" && fresh !== null && fresh.path.startsWith(`${root === "/" ? "" : root}/`);
   useEffect(() => {
     if (!here) return;
-    tree.reveal(fresh);
+    tree.reveal(fresh.path, undefined, fresh.opens);
     browser.freshSeen();
   }, [here, fresh]);
 

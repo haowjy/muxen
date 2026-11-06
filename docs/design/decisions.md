@@ -5038,6 +5038,8 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
   they are, and the field's keys stop at its form.
 - **Why a landing is one path:** upload, paste and create all end in `FileBrowser.added`, which lists the folder again
   wherever it shows and sets `fresh`. A create of its own would keep the stale-record bug the shared path fixed.
+- **Why the session owns the request:** the POST and the relist outlive the form, and on a slow connection a form that
+  awaited them closed a second form and collapsed folders with its stale closures. The form awaits the answer only.
 - **Lead's calls within Jimmy's sketch:** leaving the field empty cancels and leaving it with a name keeps it; a "Created
   <name>" notice, as Paste has; a new folder on the phone is marked, not entered, since "opens in place" means nothing in
   a flat list.

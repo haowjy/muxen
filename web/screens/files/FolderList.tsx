@@ -36,7 +36,7 @@ interface RowListProps {
   rows: readonly OutlineRow[];
   selected: string | null;
   optionId: (key: string) => string;
-  /** The entry just added by an upload or a paste: marked. */
+  /** The entry just added (an upload, a paste, a create): marked. */
   fresh?: string | null | undefined;
   naming?: Naming | null | undefined;
   /** The desktop's outline: rows are tree items, indented, folders with a disclosure. */
@@ -343,7 +343,7 @@ export interface DirListProps {
   pages: Listing;
   hidden: boolean;
   loading: boolean;
-  /** The entry just added by an upload or a paste: marked, and scrolled into view. */
+  /** The entry just added (an upload, a paste, a create): marked, and scrolled into view. */
   fresh?: string | null;
   /** A new entry being named, on a desktop. It stands in for the "empty" message. */
   naming?: Naming | null;

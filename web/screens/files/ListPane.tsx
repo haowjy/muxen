@@ -13,7 +13,7 @@ import { Spinner } from "../../ui/primitives/Spinner";
 import { readPaste } from "../terminal/paste";
 import { DirList, MissingFolder, type RowMenuAsk } from "./FolderList";
 import { NewEntry, type Creating } from "./NewEntry";
-import { UP } from "../../files/outline";
+import { foldersBetween, UP } from "../../files/outline";
 import type { CreateKind } from "../../proto/generated/messages";
 import { FolderActions } from "./FolderActions";
 import { PASTE, SEARCH, SEARCH_SLASH, useFilesKey } from "./keymap";
@@ -96,22 +96,29 @@ export function ListPane({ session, tab, view, pages, tree, up, search, onOpen }
     if (folder !== null && scroller.current) scroller.current.scrollTop = session.scroll.get(scrollKey(tab, folder)) ?? 0;
   }, [folder, session.scroll, tab, showing]);
   // A row's menu belongs to the folder it was asked in.
-  useEffect(() => { setRowMenu(null); setCreating(null); }, [folder]);
+  useEffect(() => { setRowMenu(null); }, [folder]);
 
   // A new entry is named under its folder, which opens to show the field; the field goes with the folder or the list.
   const create = (dir: string, kind: CreateKind): void => {
+    if (folder === null) return;
     if (!phone && dir !== folder) tree.toggle(dir, true);
-    setCreating({ dir, kind });
+    if (creating?.dir === dir && creating.kind === kind) app.focus.focusTarget("name", true);
+    else app.focus.keepKeyboardOn("name"); // inside this tap: iOS raises the keyboard only then
+    setCreating({ dir, kind, root: folder });
   };
-  const naming = creating && (creating.dir === folder || tree.expanded.has(creating.dir)) ? creating : null;
-  useEffect(() => { if (creating && (!showing || (!phone && !naming))) setCreating(null); }, [creating, showing, naming, phone]);
-  const form = creating && (
+  const named = creating?.root === folder && showing ? creating : null;
+  const naming = named && (phone || named.dir === folder || [...foldersBetween(folder ?? "", named.dir), named.dir].every((f) => tree.expanded.has(f))) ? named : null;
+  useEffect(() => { if (creating && !naming) setCreating(null); }, [creating, naming]);
+  const form = naming && (
     <NewEntry
-      {...creating}
-      key={`${creating.dir}\0${creating.kind}`}
+      key={`${naming.dir}\0${naming.kind}`}
       session={session}
-      onCreated={(path) => { if (!phone && creating.kind === "dir") tree.toggle(path, true); }}
-      onClose={() => { setCreating(null); app.focus.focusTarget("list"); }}
+      dir={naming.dir}
+      kind={naming.kind}
+      onClose={(hadFocus) => {
+        setCreating(null);
+        if (hadFocus) app.focus.focusTarget("list");
+      }}
     />
   );
 
@@ -165,8 +172,8 @@ export function ListPane({ session, tab, view, pages, tree, up, search, onOpen }
             pages={pages}
             hidden={hidden}
             loading={loading}
-            naming={!phone && naming && form ? { after: naming.dir === folder ? (up ? UP : null) : naming.dir, field: form } : null}
-            fresh={phone && view.fresh !== null && parentOf(view.fresh) === pages.path ? baseName(view.fresh) : null}
+            naming={!phone && naming ? { after: naming.dir === folder ? (up ? UP : null) : naming.dir, field: form } : null}
+            fresh={phone && view.fresh !== null && parentOf(view.fresh.path) === pages.path ? baseName(view.fresh.path) : null}
             onOpen={onOpen}
             outline={outline}
             selection={tree.selection}

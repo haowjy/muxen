@@ -6,12 +6,14 @@ import type { AppController } from "../../app/controller";
 import type { OpenedFile } from "../../app/viewMemory";
 import type { FsApi, TextPreview } from "../../files/api";
 import { FileBrowser, type FileRef } from "../../files/browser";
-import { baseName } from "../../files/paths";
+import { baseName, join } from "../../files/paths";
 import { Recent } from "../../files/recent";
 import { FileSearch, type Found } from "../../files/search";
 import { UploadTracker } from "../../files/uploads";
 import type { HostClient } from "../../net/hosts";
+import { HttpRefusal } from "../../net/http";
 import type { Pasted, UploadEvent } from "../../platform/types";
+import type { CreateKind } from "../../proto/generated/messages";
 import { insertTargetOf } from "../../workspace/state";
 
 export interface FilesSession {
@@ -43,6 +45,11 @@ export interface FilesSession {
    * in the Preview panel. Search's recents list it first.
    */
   opened: (file: { path: string; mime: string | null }) => void;
+  /**
+   * Makes an empty file or folder in `dir`. A refusal rejects; the landing (the folder listed again, the entry shown)
+   * goes on after it resolves, whatever is on screen by then.
+   */
+  create: (dir: string, name: string, kind: CreateKind) => Promise<void>;
   /** The tab's Search below `root`: the one it left there, so Back to its results finds them as they were, unless `fresh`. */
   search: (tab: string, root: string, fresh?: boolean) => FileSearch;
 }
@@ -106,6 +113,17 @@ export function filesSession(app: AppController, host: KnownHost): FilesSession 
       const before = (all[hostId] ?? []).filter((f) => f.path !== file.path);
       const now = { path: file.path, mime: file.mime, at: Math.floor(Date.now() / 1000) };
       app.view.set("opened", { ...all, [hostId]: [now, ...before].slice(0, OPENED_KEPT) });
+    },
+    create: async (dir, name, kind) => {
+      try {
+        await browser.api.create(dir, name, kind);
+      } catch (refused) {
+        // Taken, perhaps by this name's own lost answer: its row shows once the folder is listed again.
+        if (refused instanceof HttpRefusal && refused.code === "exists") void browser.folders.drop(dir);
+        throw refused;
+      }
+      app.notify(`Created ${name}`);
+      void browser.added(join(dir, name), kind === "dir");
     },
     search: (tab, root, fresh = false) => {
       const kept = searches.get(scrollKey(tab, root));

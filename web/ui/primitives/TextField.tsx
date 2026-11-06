@@ -18,6 +18,8 @@ interface FieldProps {
   placeholder?: string;
   name?: string;
   disabled?: boolean;
+  /** Stays focused while a request runs, as a disabled field wouldn't. */
+  readOnly?: boolean;
   hint?: string | undefined;
   /** Shown under the field and announced; also marks the field invalid. */
   error?: string | null | undefined;

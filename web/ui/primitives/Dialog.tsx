@@ -35,7 +35,7 @@ export function Dialog({ open, onClose, title, variant = "dialog", header, child
   // A dialog unmounted while open must not leave the page inert.
   useEffect(() => () => {
     const dialog = ref.current;
-    if (dialog?.open) dialog.close();
+    if (dialog?.open) focus.closeDialog(dialog);
   }, []);
 
   return (

@@ -176,8 +176,9 @@ export class FocusController extends Store<FocusView> implements FocusPort {
 
   /**
    * Shows a modal dialog and sets its initial focus: the field marked `data-initial-focus=""`
-   * on a fine pointer, else the close button; in `touch` density never a field (the close
-   * button), so opening Open session on a phone doesn't raise the keyboard.
+   * on a fine pointer, else the close button; in `touch` density not that field (the close
+   * button), so opening Open session on a phone doesn't raise the keyboard. A dialog that
+   * exists to be typed in marks its field `typing`, which takes focus on both.
    */
   openDialog(dialog: HTMLDialogElement): void {
     const { owner } = this.snapshot;
@@ -187,7 +188,7 @@ export class FocusController extends Store<FocusView> implements FocusPort {
     this.opener = null;
     if (!dialog.open) dialog.showModal();
     const mark = (value: string): HTMLElement | null => dialog.querySelector<HTMLElement>(`[data-initial-focus='${value}']`);
-    const first = this.viewport().density === "touch" ? mark("touch") : (mark("") ?? mark("touch"));
+    const first = mark("typing") ?? (this.viewport().density === "touch" ? mark("touch") : (mark("") ?? mark("touch")));
     (first ?? dialog).focus();
   }
 
