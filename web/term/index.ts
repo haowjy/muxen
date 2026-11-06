@@ -35,8 +35,6 @@ export interface PromptLine {
   before: string;
   /** From the cursor to the end of the input's last row, trailing spaces dropped. */
   after: string;
-  /** The path of the OSC 7 that followed this prompt's start; null if none did. */
-  cwd: string | null;
 }
 
 export interface ViewOptions {

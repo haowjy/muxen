@@ -826,16 +826,23 @@ or malformed file returns a retryable unavailable response (HTTP 503, socket clo
 row. One unprotected route is remote code execution.
 
 **Rendered content is untrusted:** DOMPurify on all rendered HTML, Mermaid with
-`securityLevel: "strict"`, and the CSP above. A diagram cannot set Mermaid's theme, theme
-CSS, theme variables, fonts or look (`secure` in `web/files/render/mermaid.ts`), and a
-stylesheet Mermaid returns loses any rule with a CSS escape, `@font-face`, `@keyframes` or
-`@import`, and any external `url()`.
+`securityLevel: "strict"`, and the CSP above. `secure` in `web/files/render/mermaid.ts`
+closes the config route: a diagram cannot set Mermaid's theme, theme CSS, theme variables,
+fonts or look. A `classDef` still reaches the draw, which happens in `<body>` before the
+sanitizer runs, so at draw time only the CSP stops a fetch. The sanitizer cleans what stays
+in the page: a browser-parsed stylesheet (`CSSStyleSheet.replaceSync`, which decodes CSS
+escapes and fetches nothing) keeps a top-level rule only if its serialized text has no
+external reference (a `url()` that is not a `#` fragment, `image-set`, `@import`,
+`@font-face`), and a `style=` attribute with one is removed.
 
 **Terminal queries are tmux's to answer:** xterm never replies to a query in the pane's
 output (DA, DSR, DECRQM, DECRQSS, OSC 4/10/11/12 colour queries, DECID); `parsingTerminal`
-claims them, because the desktop path forwards xterm's `onData` to the pane as typing. tmux
-answers the same queries from the pane's own state, on 3.4 and newer, so every attached
-tab would otherwise add a second reply to the program's stdin.
+claims them, because the desktop path forwards xterm's `onData` to the pane as typing. What
+tmux answers varies by version (probed on 3.4, 3.7b and 3.8): DA1, DA2, DSR 5, CPR and
+OSC 10/11 on all three (the colours are tmux's own, black); DECRQM, DECRQSS and `?996n`
+only on 3.7b and 3.8; OSC 4, OSC 12, `?6n`, DA3 and DECID on none. A query with no reply
+reads as an unsupported terminal, which programs handle. Where tmux does answer, each
+attached tab's reply would be a second answer in the program's stdin.
 
 **Logging:** never log terminal contents, control-client input or output, pastes, or
 file contents. File writes are logged by path and action.

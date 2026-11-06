@@ -1,7 +1,7 @@
 # muxen shell integration for bash 4.4+ (docs/design/complete.md#the-shell-snippet).
 #
-# Marks the prompt and the command line with OSC 133 and reports the directory with
-# OSC 7, so muxen's suggestion strip can read what you are typing. Source it at the
+# Marks the prompt and the command line with OSC 133, so muxen's suggestion strip can
+# read what you are typing. Source it at the
 # END of ~/.bashrc, after anything that sets PS1 or PROMPT_COMMAND:
 #
 #   [ -r ~/gitrepos/muxen/contrib/shell/muxen.bash ] && . ~/gitrepos/muxen/contrib/shell/muxen.bash
@@ -14,26 +14,12 @@
 [[ -z ${__muxen_loaded-} ]] || return 0
 __muxen_loaded=1
 
-# OSC 7: file://host/path, the path percent-encoded byte by byte.
-__muxen_osc7() {
-  local LC_ALL=C p=$PWD out= c i
-  for ((i = 0; i < ${#p}; i++)); do
-    c=${p:i:1}
-    case $c in
-      [-/._~A-Za-z0-9]) out+=$c ;;
-      *) printf -v c '%%%02X' "'$c"; out+=$c ;;
-    esac
-  done
-  printf '\e]7;file://%s%s\a' "${HOSTNAME-}" "$out"
-}
-
 # First in PROMPT_COMMAND: D closes the last command with its status, A opens the
 # prompt. Returns the status it found, so later hooks still see it.
 __muxen_pre() {
   local s=$?
   [[ -n ${MUXEN_NO_HISTORY_APPEND-} ]] || history -a
   printf '\e]133;D;%s\a\e]133;A\a' "$s"
-  __muxen_osc7
   return "$s"
 }
 

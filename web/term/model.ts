@@ -36,11 +36,12 @@ export function parsingTerminal(options: { cols?: number; rows?: number; scrollb
 
 /**
  * Claim every terminal query xterm would answer, so the answer never reaches `onData`, where the
- * desktop input path forwards it to the pane as typing. tmux is the terminal the pane's program
- * talks to and answers for itself (DA, DSR, DECRQM, DECRQSS, colour queries, from the pane's
- * state); a second answer from each attached browser tab would be stray input. Queries have no
- * drawing effect. An OSC 4/10/11/12 with a colour value still applies, and only the `?` slot is
- * claimed.
+ * desktop input path forwards it to the pane as typing. Queries have no drawing effect. tmux, the
+ * terminal the pane's program talks to, answers some of them itself, by version (DA1, DA2, DSR 5,
+ * CPR and OSC 10/11 on 3.4 and newer; DECRQM, DECRQSS and `?996n` from 3.7b); a second answer from
+ * each attached browser tab would be stray input, and where tmux is silent the program reads that
+ * as an unsupported terminal. An OSC 4/10/11/12 with a colour value still applies; one holding a `?`
+ * slot is claimed whole, so a colour set in the same sequence is dropped with the query.
  */
 function claimQueries(term: Terminal): void {
   const { parser } = term;

@@ -434,7 +434,6 @@ marks, raw: tmux passes them through control mode with `allow-passthrough` off
 |---|---|---|---|
 | `OSC 133;D;<status>` | the last command ended | first `PROMPT_COMMAND` hook | first `precmd` hook |
 | `OSC 133;A` | prompt starts | same hook, after D | same hook, after D |
-| `OSC 7;file://<host><path>` | the shell's directory, percent-encoded | same hook | same hook |
 | `OSC 133;B` | prompt ends; typed input starts | appended to `PS1` by the last `PROMPT_COMMAND` hook | appended to `PS1` by the last `precmd` hook |
 | `OSC 133;C` | the line was accepted; output starts | `PS0` | `preexec` hook |
 

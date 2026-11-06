@@ -5,44 +5,42 @@
 //    leaves the document's settings in Mermaid's shared config for the next one to inherit.
 //    `secure` holds every key that reaches CSS (`theme`, `themeCSS`, `themeVariables`,
 //    `fontFamily`, `fontSize`, `look`), so a document cannot write a stylesheet or pick a theme;
-//    the app's light or dark scheme decides. This is what stops a request for an external URL
-//    from CSS, because Mermaid draws into <body> before anything here sanitizes.
-//  - The SVG it returns is sanitized again with DOMPurify's SVG profile, and its <style> goes
-//    through `cleanStyle`: a rule with a backslash (a CSS escape such as `\75rl(` spells `url(`
-//    past a literal filter), `@font-face`, `@keyframes` (global at-rules, which Mermaid's id prefix
-//    does not scope) or `@import` is dropped, and an external `url()` is stripped from the rest.
+//    the app's light or dark scheme decides. `secure` closes the config route; a `classDef`
+//    (a state diagram accepts `url()` in one) still reaches the draw, where only the CSP stops a
+//    fetch, because Mermaid draws into <body> before anything here sanitizes.
+//  - The SVG it returns is sanitized again with DOMPurify's SVG profile. The sanitizer cleans what
+//    stays in the page: the browser parses each <style> and `style=` (so CSS escapes such as
+//    `\75rl(` arrive decoded), and a rule or attribute whose serialized text refers outside the
+//    document is dropped (`externalRef`).
 //  - The page's CSP. Mermaid draws into a temporary element of <body> *before* this module
-//    sanitizes, so a node's `img: "https://…"` is requested by the browser; the daemon's
-//    `img-src` and the app's refuse it. Loosening the CSP opens that fetch.
+//    sanitizes, so a node's `img: "https://…"` or a `classDef` `url()` is requested by the
+//    browser; the daemon's `img-src` and the app's refuse it. Loosening the CSP opens that fetch.
 import DOMPurify from "dompurify";
 import mermaid from "mermaid";
 import type { Viewport } from "../../platform/types";
 
-/** The only `url()` a diagram's styles may use is an in-document reference such as a marker. */
-const EXTERNAL_URL = /url\(\s*(?!["']?#)[^)]*\)|@import[^;]*;?/giu;
+/**
+ * The browser's own parse of `css` refers outside the document: a `url()` that is not a `#`
+ * fragment, `image-set`, `@import` or `@font-face`. `replaceSync` decodes escapes and
+ * normalizes strings and comments and starts no request, so the serialized text is what to test.
+ */
+const EXTERNAL_REF = /url\(\s*(?!["']?#)|image-set|@import|@font-face/iu;
 
-/** Mermaid writes no backslash itself, so one in its stylesheet came from the document. */
-const DROPPED_RULE = /\\|^\s*@(?:font-face|keyframes|-[a-z]+-keyframes|import)\b/iu;
+/** The top-level rules of `css` as the browser serializes them. */
+function parseRules(css: string): string[] {
+  const sheet = new CSSStyleSheet();
+  sheet.replaceSync(css);
+  return Array.from(sheet.cssRules, (rule) => rule.cssText);
+}
 
-/** `css` as top-level rules (nested braces stay inside their rule) without the dropped ones. */
+/** `css` without the top-level rules that refer outside the document. */
 function cleanStyle(css: string): string {
-  const kept: string[] = [];
-  let depth = 0;
-  let start = 0;
-  for (let i = 0; i < css.length; i += 1) {
-    const ch = css[i];
-    if (ch === "{") depth += 1;
-    else if (ch === "}") {
-      depth = Math.max(0, depth - 1);
-      if (depth === 0) {
-        const rule = css.slice(start, i + 1);
-        if (!DROPPED_RULE.test(rule)) kept.push(rule.replace(EXTERNAL_URL, ""));
-        start = i + 1;
-      }
-    }
-  }
-  // Text after the last closed rule is an unfinished rule: nothing the browser applies.
-  return kept.join("");
+  return parseRules(css).filter((text) => !EXTERNAL_REF.test(text)).join("");
+}
+
+/** A `style=` value is the body of a rule: parse it as one and test what came out. */
+function hasExternalRef(declarations: string): boolean {
+  return parseRules(`*{${declarations}}`).some((text) => EXTERNAL_REF.test(text));
 }
 
 const purify = DOMPurify();
@@ -50,6 +48,8 @@ purify.addHook("uponSanitizeElement", (node) => {
   if (node.nodeName.toLowerCase() === "style") node.textContent = cleanStyle(node.textContent ?? "");
 });
 purify.addHook("afterSanitizeAttributes", (node) => {
+  const style = node.getAttribute("style");
+  if (style !== null && hasExternalRef(style)) node.removeAttribute("style");
   // Only in-document fragments: no `use` or marker leads anywhere else.
   for (const name of ["href", "xlink:href"]) {
     const value = node.getAttribute(name);

@@ -8,24 +8,19 @@ interface InputStart {
 }
 
 /**
- * Follows the shell's OSC 133 and OSC 7 marks (complete.md "The shell snippet") and reads
+ * Follows the shell's OSC 133 marks (complete.md "The shell snippet") and reads
  * the command line from the buffer between the input start (B) and the cursor. A prompt
  * (A), an accepted line (C), the end of a command (D) and a reset all forget the input
  * start, so with no fresh B there is no line rather than a guess.
  */
 export class PromptTracker {
   private start: InputStart | null = null;
-  private cwd: string | null = null;
   private last: PromptLine | null = null;
   private readonly listeners: ((line: PromptLine | null) => void)[] = [];
 
   constructor(private readonly term: Terminal) {
     term.parser.registerOscHandler(133, (data) => {
       this.mark(data.split(";", 1)[0] ?? "");
-      return true;
-    });
-    term.parser.registerOscHandler(7, (data) => {
-      this.cwd = osc7Path(data) ?? this.cwd;
       return true;
     });
     term.onWriteParsed(() => { this.check(); });
@@ -40,14 +35,12 @@ export class PromptTracker {
   /** The screen is about to be repainted from a snapshot, which carries no marks. */
   reset(): void {
     this.forget();
-    this.cwd = null;
     this.check();
   }
 
   private mark(kind: string): void {
     if (kind === "A") {
       this.forget();
-      this.cwd = null; // only an OSC 7 after this prompt's start counts
     } else if (kind === "B") {
       this.forget();
       const buffer = this.term.buffer.active;
@@ -64,7 +57,7 @@ export class PromptTracker {
 
   private check(): void {
     const line = this.read();
-    if (line === this.last || (line && this.last && line.before === this.last.before && line.after === this.last.after && line.cwd === this.last.cwd)) return;
+    if (line === this.last || (line && this.last && line.before === this.last.before && line.after === this.last.after)) return;
     this.last = line;
     for (const listener of this.listeners) listener(line);
   }
@@ -81,7 +74,7 @@ export class PromptTracker {
     while (buffer.getLine(lastRow + 1)?.isWrapped) lastRow++;
     const after = rowsText(buffer, cursorRow, buffer.cursorX, lastRow, this.term.cols, this.term.cols);
     if (after === null) return null;
-    return { before, after: after.trimEnd(), cwd: this.cwd };
+    return { before, after: after.trimEnd() };
   }
 }
 
@@ -99,14 +92,4 @@ function rowsText(buffer: IBuffer, fromRow: number, fromCol: number, toRow: numb
     text += line.translateToString(false, row === fromRow ? fromCol : 0, row === toRow ? toCol : cols);
   }
   return text;
-}
-
-/** `file://host/a%20b` → `/a b`; the host is ignored. Null for anything else. */
-function osc7Path(data: string): string | null {
-  try {
-    const url = new URL(data);
-    return url.protocol === "file:" && url.pathname.startsWith("/") ? decodeURIComponent(url.pathname) : null;
-  } catch {
-    return null;
-  }
 }

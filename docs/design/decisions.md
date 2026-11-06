@@ -1716,8 +1716,7 @@ behind it are Jimmy's ([Shell integration](#shell-integration)); see the
   before and after the cursor as two strings,
   and `cwd` or null. Each chip carries `insert`, the literal text typed at the cursor,
   with no control characters; every source matches by prefix, so no chip deletes.
-  The current prompt's OSC 7 path is preferred; a tmux window subscription supplies cwd
-  without the shell snippet and in TUIs.
+  A tmux window subscription supplies cwd, with or without the shell snippet.
 - **Why:** a cursor index needs a character unit both JavaScript (UTF-16) and Rust
   (UTF-8 bytes) agree on; two strings need none. Prefix-only chips make the diff
   against what's typed a plain suffix, which the client sends like typed text, and
@@ -1725,8 +1724,9 @@ behind it are Jimmy's ([Shell integration](#shell-integration)); see the
 - **Rejected:** `{line, cursor}` (the unit problem); a `shell` field (the client
   can't know the shell; the daemon picks the history file); replace ranges with a
   delete count and fuzzy matches (backspaces through readline and vi modes behave
-  differently, and the counts need the same unit agreement); using only OSC 7 (no cwd
-  without the snippet or inside TUIs); querying completion through the hub (the hub
+  differently, and the counts need the same unit agreement); OSC 7 as a source of cwd
+  (terminal output can forge it, and it would be missing without the snippet and in
+  TUIs); querying completion through the hub (the hub
   would have to run the completion work).
 
 ### History: one file, parsed into a cached index, ranked by entry age
@@ -1867,20 +1867,18 @@ behind it are Jimmy's ([Shell integration](#shell-integration)); see the
   dropping when the last WebSocket closes (`complete` doesn't see the hub's
   connections, by design).
 
-### The snippet: OSC 133 from prompt hooks and `PS1`, plus OSC 7
+### The snippet: OSC 133 from prompt hooks and `PS1`
 
-- **What:** D, A and OSC 7 from the first prompt hook; B appended to `PS1` by the last
+- **What:** D and A from the first prompt hook; B appended to `PS1` by the last
   hook, re-added each prompt; C from `PS0` (bash) or `preexec` (zsh); raw OSC with
-  BEL. The client prefers the OSC 7 path of the current prompt over `watching`'s cwd.
+  BEL.
 - **Why:** prompt hooks see `$?` before anything else changes it; prompt themes
   rebuild `PS1` in their own hooks, so B must be re-added after them; `PS0` gives bash
-  a pre-exec point with no `DEBUG` trap. OSC 7 at the prompt is current at once, where
-  tmux's subscription lags a `cd` by up to a second; tmux's cwd stays the fallback,
-  so completion still works without the snippet.
+  a pre-exec point with no `DEBUG` trap.
 - **Rejected:** a `DEBUG`-trap preexec (bash-preexec: heavier, and it competes with
   other traps); wrapping the marks in tmux's DCS passthrough (not needed: control mode
-  sees them raw); OSC 7 as the only cwd source (already rejected above: no cwd without
-  the snippet or inside TUIs).
+  sees them raw); OSC 7 at the prompt (current at once, where tmux's subscription lags
+  a `cd` by up to a second, but terminal output can forge it).
 - **The bash wrapper** makes an existing `PROMPT_COMMAND` an array on bash 5.1+ and
   joins it with newlines before that: joined with `;`, one ending in `&` broke every
   prompt and one ending in a comment swallowed the B hook.
@@ -5246,13 +5244,9 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
   host's `baseURL` and token themselves, and only the proxy refused a cross-origin redirect; Download
   followed any. `MuxenAppModel.request(on:path:query:)` now builds every one (the `baseURL`, the
   percent-encoded path unchanged, the Bearer token), and `HostRequest.redirect` is the one redirect rule:
-  the same origin, within the route the request was for. The video player can't take the rule, since
-  AVFoundation follows redirects itself with no hook; it drops `Authorization` on a cross-origin redirect
-  (checked on macOS), and a player plays what it gets, never as the app.
+  the same origin, within the route the request was for.
 - **Rejected:**
   - Each session keeping its own copy of the check: four copies had already drifted to one.
-  - Loading video through an `AVAssetResourceLoaderDelegate` on a custom scheme so native's own session
-    fetches it: a Range-serving proxy in the app to police a redirect the daemon never sends.
 
 ## The app's native screens go up one way, and a lock takes any of them down (2026-11-05)
 
@@ -5678,23 +5672,28 @@ the check starts at the third timeout rather than the second, the limit is 15 s 
   to URLs named inside a file and to redirects: a reference movie sent the device token to an
   arbitrary HTTPS host (run on iOS 26.5 and 27.0 Simulators). The snapshot iOS keeps on disk
   showed the page.
-- **Rejected:** a media ticket in auth (more daemon surface, and a URL AVFoundation still
-  holds); `forbidAll` while keeping the header (another port on the same host still got the
+- **Rejected:** leaving the player outside the redirect rule (AVFoundation follows redirects itself with no
+  hook, and a player plays what it gets, never as the app; on macOS it dropped `Authorization` on a
+  cross-origin redirect, but the header still reached URLs named inside a file); a media ticket in auth
+  (more daemon surface, and a URL AVFoundation still holds); `forbidAll` while keeping the header (another port on the same host still got the
   token); download then play (16 MB against about 4 MB for 5 s of a test file, against "every
   byte costs the user"); a SwiftUI cover (it sits under native screens).
 
-### Terminal queries stay with tmux; a document can't style its diagrams
+### Terminal queries stay with tmux; a diagram's styles can't name another host
 
 - **Decided:** 2026-11-06, security audit.
 - **What:** parser hooks claim every query xterm would answer (DA, DSR, DECRQM, DECRQSS, DECID
-  and the `?` forms of OSC 4, 10, 11, 12). Mermaid's `secure` list holds every key that reaches
-  CSS, and its style hook drops a rule with a CSS escape, `@font-face`, `@keyframes` or `@import`.
-- **Why:** tmux answers the pane's queries itself, so xterm's reply was a second copy per tab,
-  arriving on stdin as typing. The literal `url(` filter was bypassed by `\75rl(`, leaving only
-  the CSP to stop a fetch.
-- **Rejected:** telling replies from keys in `onData` (private xterm internals); stripping `\`
-  from a whole stylesheet (deletes Mermaid's own styling); letting a document pick `theme` (it
-  overrides the app's dark mode and can't be separated from `themeVariables`).
+  and the `?` forms of OSC 4, 10, 11, 12). Mermaid's `secure` list holds its theme keys. The
+  browser's CSS parser reads each stylesheet and `style=` value, and a rule or attribute with an
+  external `url()`, `image-set`, `@import` or `@font-face` is dropped. A `classDef` still reaches
+  Mermaid's draw, before this runs, so at draw time the CSP is the only layer.
+- **Why:** where tmux answers, xterm's reply was a second copy per tab, arriving on stdin as typing.
+  Where tmux doesn't, no reply means an unsupported terminal, which programs handle. The literal
+  `url(` filter was bypassed by `\75rl(`; the CSS parser decodes escapes, so the test sees the URL.
+- **Rejected:** telling replies from keys in `onData` (private xterm internals); a scanner of our
+  own over the stylesheet (strings, comments and nesting got past it); filtering a diagram's source
+  (one diagram type at a time); letting a document pick `theme` (it overrides the app's dark mode
+  and can't be separated from `themeVariables`).
 
 ### Service hardening, SHA-pinned actions, completion ignores forged marks
 

@@ -1,7 +1,7 @@
 # muxen shell integration for zsh 5.1+ (docs/design/complete.md#the-shell-snippet).
 #
-# Marks the prompt and the command line with OSC 133 and reports the directory with
-# OSC 7, so muxen's suggestion strip can read what you are typing. Source it at the
+# Marks the prompt and the command line with OSC 133, so muxen's suggestion strip can
+# read what you are typing. Source it at the
 # END of ~/.zshrc, after your prompt theme and plugins:
 #
 #   [[ -r ~/gitrepos/muxen/contrib/shell/muxen.zsh ]] && source ~/gitrepos/muxen/contrib/shell/muxen.zsh
@@ -16,19 +16,10 @@ typeset -g __muxen_loaded=1
 
 [[ -n ${MUXEN_NO_HISTORY_APPEND-} ]] || setopt INC_APPEND_HISTORY
 
-# OSC 7: file://host/path, the path percent-encoded byte by byte.
-__muxen_osc7() {
-  emulate -L zsh -o extended_glob
-  local LC_ALL=C
-  printf '\e]7;file://%s%s\a' "${HOST-}" \
-    "${PWD//(#m)[^-\/._~A-Za-z0-9]/%${(l:2::0:)$(([##16]#MATCH))}}"
-}
-
 # First precmd hook: D closes the last command with its status, A opens the prompt.
 __muxen_precmd() {
   local s=$?
   printf '\e]133;D;%s\a\e]133;A\a' "$s"
-  __muxen_osc7
   return $s
 }
 
