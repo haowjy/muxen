@@ -3,7 +3,6 @@
 //! target; only `search_skip` and `uploads_dir` change, with `toml_edit` keeping comments,
 //! order and unknown keys; the text goes through `files::Temp` with the file's mode.
 
-use std::ffi::OsString;
 use std::fs;
 use std::io;
 use std::os::unix::fs::{DirBuilderExt as _, PermissionsExt as _};
@@ -13,7 +12,7 @@ use thiserror::Error;
 use toml_edit::{Array, DocumentMut, Item, Value};
 
 use super::{Config, ConfigError};
-use crate::files::{Dir, Stamp, Temp};
+use crate::files::{self, Dir, Stamp};
 use crate::fs::FsError;
 use crate::proto::settings::{Patch, SettingsChange};
 
@@ -92,9 +91,7 @@ pub fn validated(change: SettingsChange) -> Result<SettingsChange, SaveError> {
 /// The file a save writes: the canonical target, opened through its directory.
 pub(super) struct Target {
     pub(super) path: PathBuf,
-    dir: Dir,
-    name: OsString,
-    temp_name: OsString,
+    file: files::Target,
 }
 
 impl Target {
@@ -107,17 +104,12 @@ impl Target {
             )));
         };
         let dir = Dir::open(parent).map_err(write_error)?;
-        // The rename would replace a file Jimmy made read-only; the spec refuses it.
-        dir.check_writable(name).map_err(write_error)?;
-        let name = name.to_owned();
-        let mut temp_name = name.clone();
+        let mut temp_name = name.to_owned();
         temp_name.push(".tmp");
-        Ok(Self {
-            path,
-            dir,
-            name,
-            temp_name,
-        })
+        let file = files::Target::new(dir, name, &temp_name);
+        // The rename would replace a file Jimmy made read-only; the spec refuses it.
+        file.check_writable().map_err(write_error)?;
+        Ok(Self { path, file })
     }
 
     /// The file as it is now; a missing file is an empty one, mode 0600.
@@ -126,7 +118,7 @@ impl Target {
             path: self.path.clone(),
             source,
         };
-        let Some(opened) = self.dir.read(&self.name).map_err(unreadable)? else {
+        let Some(opened) = self.file.read().map_err(unreadable)? else {
             return Ok(Before {
                 text: String::new(),
                 stamp: None,
@@ -149,8 +141,8 @@ impl Target {
         before: &Before,
         text: &str,
     ) -> Result<Option<Stamp>, SaveError> {
-        let temp = Temp::create(&self.dir, &self.temp_name, before.mode).map_err(write_error)?;
-        temp.replace_if(&self.name, text.as_bytes(), before.stamp)
+        self.file
+            .replace_if(before.mode, text.as_bytes(), before.stamp)
             .map_err(write_error)
     }
 }

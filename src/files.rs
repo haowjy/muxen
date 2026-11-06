@@ -4,7 +4,7 @@
 //! after the directory was opened can't redirect a write. Everything here blocks: call
 //! it on a lane (`crate::blocking`).
 
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::fs::{File, Metadata, OpenOptions};
 use std::io::{self, Write as _};
 use std::os::unix::fs::{MetadataExt as _, OpenOptionsExt as _, PermissionsExt as _};
@@ -113,7 +113,7 @@ impl Dir {
     }
 
     /// `name` in the directory, opened for reading, links followed; `None` if missing.
-    pub fn read(&self, name: &OsStr) -> io::Result<Option<File>> {
+    fn read(&self, name: &OsStr) -> io::Result<Option<File>> {
         let flags = OFlags::RDONLY | OFlags::NONBLOCK | OFlags::CLOEXEC | OFlags::NOCTTY;
         match rustix::fs::openat(&*self.0, name, flags, Mode::empty()) {
             Ok(fd) => Ok(Some(File::from(fd))),
@@ -124,7 +124,7 @@ impl Dir {
 
     /// An error if this user may not write `name` (`faccessat(W_OK)`, links followed); a
     /// missing `name` passes.
-    pub fn check_writable(&self, name: &OsStr) -> io::Result<()> {
+    fn check_writable(&self, name: &OsStr) -> io::Result<()> {
         let write = rustix::fs::Access::WRITE_OK;
         match rustix::fs::accessat(&*self.0, name, write, AtFlags::empty()) {
             Ok(()) | Err(Errno::NOENT) => Ok(()),
@@ -266,6 +266,50 @@ impl Temp {
     fn failed(self, error: io::Error) -> io::Error {
         self.discard();
         error
+    }
+}
+
+/// One file to replace in an open directory: `name`, written through a temporary file
+/// `temp_name` that is the same for every save here, so a leftover from a writer that died is
+/// removed by the next one (`Temp::create` unlinks it). `temp_name` must be a name nothing
+/// else owns: config's `{name}.tmp` and the file API's `.muxen-save` both are.
+#[derive(Debug)]
+pub struct Target {
+    dir: Dir,
+    name: OsString,
+    temp_name: OsString,
+}
+
+impl Target {
+    pub fn new(dir: Dir, name: &OsStr, temp_name: &OsStr) -> Self {
+        Self {
+            dir,
+            name: name.to_owned(),
+            temp_name: temp_name.to_owned(),
+        }
+    }
+
+    /// An error if this user may not write the file: a rename would replace one made
+    /// read-only. A missing file passes.
+    pub fn check_writable(&self) -> io::Result<()> {
+        self.dir.check_writable(&self.name)
+    }
+
+    /// The file as it is now, links followed; `None` if missing.
+    pub fn read(&self) -> io::Result<Option<File>> {
+        self.dir.read(&self.name)
+    }
+
+    /// `text` in place of the file with exactly `mode`, if the file still has the stamp
+    /// `expected` (`None`: still missing); answers the new file's stamp, or `None` if it
+    /// changed.
+    pub fn replace_if(
+        &self,
+        mode: u32,
+        text: &[u8],
+        expected: Option<Stamp>,
+    ) -> io::Result<Option<Stamp>> {
+        Temp::create(&self.dir, &self.temp_name, mode)?.replace_if(&self.name, text, expected)
     }
 }
 

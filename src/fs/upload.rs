@@ -153,6 +153,28 @@ where
     }
 }
 
+/// The next piece of a request body, `None` at its end. Only time spent waiting counts toward
+/// the idle timeout; a body that stalls or breaks (the client went away) is `bad_request`.
+/// Shared with the save (`save::read_body`).
+pub(super) async fn next_chunk<S, E>(body: &mut S) -> Result<Option<Bytes>, FsError>
+where
+    S: Stream<Item = Result<Bytes, E>> + Unpin,
+    E: std::fmt::Display,
+{
+    match tokio::time::timeout(IDLE, body.next()).await {
+        Err(_) => {
+            debug!("a request body went idle: aborted");
+            Err(FsError::BadRequest)
+        }
+        Ok(None) => Ok(None),
+        Ok(Some(Err(cause))) => {
+            debug!(%cause, "a request body failed: aborted");
+            Err(FsError::BadRequest)
+        }
+        Ok(Some(Ok(bytes))) => Ok(Some(bytes)),
+    }
+}
+
 /// The body into `file`, 64 KiB at a time. Returns its size.
 async fn copy<S, E>(lane: &Lane, file: Arc<File>, limit: u64, mut body: S) -> Result<u64, FsError>
 where
@@ -163,19 +185,8 @@ where
     let mut written = 0;
     let mut flushed = 0;
     loop {
-        // Only time spent waiting for the body counts toward the idle timeout.
-        let next = tokio::time::timeout(IDLE, body.next()).await;
-        let mut bytes = match next {
-            Err(_) => {
-                debug!("an upload went idle: aborted");
-                return Err(FsError::BadRequest);
-            }
-            Ok(None) => break,
-            Ok(Some(Err(cause))) => {
-                debug!(%cause, "an upload's body failed: aborted");
-                return Err(FsError::BadRequest);
-            }
-            Ok(Some(Ok(bytes))) => bytes,
+        let Some(mut bytes) = next_chunk(&mut body).await? else {
+            break;
         };
         let total = written + (chunk.len() + bytes.len()) as u64;
         if total > limit {
