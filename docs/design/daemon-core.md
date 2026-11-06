@@ -772,6 +772,7 @@ unidentified client into `L:` before assigning its name, and expanding
 `#{client_name}` in that state dereferences NULL. An initialized tty has a height;
 clients without one cannot be a terminal client acting on this window. See
 [the subscription format crash probe](research/tmux-subscription-format-crash.md).
+Verified on 3.4 and 3.7b ([probe](research/probe-latest-activity.md)).
 
 `<cwd>` is the pane's path, or empty when the path holds a control character. tmux
 writes the value into one `%subscription-changed` line without escaping, so a line feed
@@ -782,7 +783,6 @@ for every path on 3.4 and 3.8. The other formats are safe: tmux escapes session 
 names in notifications; `STARTUP_FORMAT`, `STATE_FORMAT` and `CREATED_FORMAT` print ids and
 numbers; the listing escapes the window name (§4.8); `LOCATE_FORMAT`'s window name is the
 last field of a reply block, so a line feed in it only truncates the label.
-Verified on 3.4 and 3.7b ([probe](research/probe-latest-activity.md)).
 
 On 3.4 ([probe](research/probe-locate-subscriptions.md)) the first value arrives within
 about a second, then one per change; tmux checks once a second, so faster changes

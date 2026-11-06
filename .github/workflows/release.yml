@@ -15,6 +15,9 @@ env:
   CARGO_TERM_COLOR: always
   RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
+permissions:
+  contents: read
+
 jobs:
   verify-provenance:
     name: Verify release provenance

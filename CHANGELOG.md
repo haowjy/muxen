@@ -5,6 +5,7 @@ version section on release.
 
 ## [Unreleased]
 
+- A save no longer tries to carry a file's setuid, setgid or sticky bit onto the new file.
 - The systemd unit sets `NoNewPrivileges`, `LockPersonality`, `RestrictRealtime` and `RestrictSUIDSGID`; rerun `muxen setup --background` to pick it up. CI and release workflows pin third-party actions to commit SHAs.
 - Security: terminal query replies no longer reach the pane as typing, so a `cat` of a hostile file can't put stray characters at your prompt. A Markdown diagram can no longer set Mermaid's theme, fonts or CSS. Animated diagram edges no longer move.
 - Security: the video player no longer gives your device token to the system media stack. A media file that names another URL can't make the app send the token to that host. The app switcher now shows a plain cover instead of the terminal or file.

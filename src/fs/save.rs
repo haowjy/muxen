@@ -72,7 +72,8 @@ where
 /// - The stamp from the open must be the one `if_match` names, and is checked again at the
 ///   rename. If it isn't, `changed`, unless the file already holds exactly `body`: the
 ///   answer to an earlier save was lost, and this one is its retry.
-/// - The new file has the old one's mode.
+/// - The new file has the old one's permissions, never its setuid, setgid or sticky bit: the
+///   content changed, and the service's `RestrictSUIDSGID` refuses setting them.
 pub fn save(path: &str, home: &Path, if_match: &IfMatch, body: &[u8]) -> Result<Stamp, FsError> {
     let tries = if *if_match == IfMatch::Any { TRIES } else { 1 };
     for _ in 0..tries {
@@ -112,7 +113,7 @@ fn attempt(path: &str, home: &Path, if_match: &IfMatch, body: &[u8]) -> Result<S
     let target = Target::new(dir, name, TEMP_NAME.as_ref());
     target.check_writable().map_err(FsError::io)?;
     target
-        .replace_if(meta.mode() & 0o7777, body, Some(stamp))
+        .replace_if(meta.mode() & 0o777, body, Some(stamp))
         .map_err(FsError::io)?
         .ok_or(FsError::Changed)
 }

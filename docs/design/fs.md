@@ -489,7 +489,7 @@ checks `Content-Length` up front when sent and the running count as the body arr
    one, so the file with two hard links would keep its other name's old text; a file owned by
    another user would change owner; a file or folder this user can't write (`faccessat(W_OK)` on
    the file, then the temp file's creation in the folder, `EROFS` included) would be replaced
-   anyway. Those files are edited in the terminal. The new file keeps the old one's mode (owner is the
+   anyway. Those files are edited in the terminal. The new file keeps the old one's permissions, without setuid, setgid or sticky (owner is the
    user's; the group follows the folder; ACLs and extended attributes are not carried over).
 5. The `ETag` from step 3's `fstat` must equal `If-Match` (`*` always passes). If it doesn't, and
    the file isn't already byte-identical to the body, answer `412 changed`. If it is identical,
