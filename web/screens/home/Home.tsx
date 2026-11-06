@@ -35,6 +35,7 @@ function Row({ host }: { host: HostClient }) {
       tabs={workspace?.tabs.length ?? 0}
       bell={workspace?.tabs.some((t) => bellLook(bells, t.id).ring) ?? false}
       body={body}
+      byToken={host.entry.pageOrigin === null}
       bellsUnavailable={bellsUnavailable(bells, host.hostId)}
       notice={body.kind !== "offline" && <HostBanner host={host} />}
       onRetry={() => { app.retryHost(handle); }}

@@ -1,6 +1,8 @@
 import { createContext, type ComponentChildren } from "preact";
 import { useContext, useEffect } from "preact/hooks";
+import { hostById } from "../net/hosts";
 import type { BellsState } from "../sessions/bells";
+import type { HostLook } from "../tabs/status";
 import { FocusContext } from "../ui/focus";
 import { useStore } from "../ui/store";
 import type { AppController, AppView } from "./controller";
@@ -51,6 +53,15 @@ export function useBells(): BellsState {
 export function useHostName(): (hostId: string) => string {
   const hosts = useAppView((v) => v.hosts);
   return (hostId) => hosts.find((h) => h.hostId === hostId)?.name ?? hostId;
+}
+
+/** What a tab says of its server: the name and the shown reachability, by host id. */
+export function useHostLook(): (hostId: string) => HostLook {
+  const hosts = useAppView((v) => v.hosts);
+  return (hostId) => {
+    const host = hostById(hosts, hostId);
+    return { name: host?.name ?? hostId, shown: host?.shown ?? "checking", byToken: host?.entry.pageOrigin === null };
+  };
 }
 
 /** Touch input ends in the dock (phone and iPad), so its screens put back and their controls in a bottom bar, where the dock's tab row is. */

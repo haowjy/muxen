@@ -3,16 +3,14 @@
 import type { TmuxListing } from "../proto/generated/messages";
 import { Store } from "../ui/store";
 
-/** Why cached rows are stale: the host couldn't be reached, or it answered with a refusal. */
-export type Failure = "offline" | "refused";
+/** Why cached rows are stale: the daemon answered with a refusal. Not reaching it is the host's reachability, not a failure here. */
+export type Failure = "refused";
 
 export interface HostSessions {
   /** `undefined`: never listed. `null`: the daemon says no tmux server is running. */
   listing: TmuxListing | null | undefined;
   /** The last attempt failed: the rows above are stale. */
   failure: Failure | null;
-  /** When the last authoritative listing came, in this page's life: when the host was last reached. */
-  reachedAt: number | null;
   /** A listing was requested and no answer has come since. */
   updating: boolean;
 }
@@ -22,21 +20,20 @@ export interface SessionsState {
   hosts: Readonly<Record<string, HostSessions>>;
 }
 
-const EMPTY: HostSessions = { listing: undefined, reachedAt: null, failure: null, updating: false };
+const EMPTY: HostSessions = { listing: undefined, failure: null, updating: false };
 
 /**
- * `null` when the failure says nothing about the host (the page was hidden; the daemon was
- * busy and a `sessionsChanged` hint will follow). Everything the daemon refused is
- * `refused`; everything that never got an answer is `offline`.
+ * `null` when the failure says nothing about the daemon's answer: the page was hidden, the daemon
+ * was busy (a `sessionsChanged` hint will follow), or nothing answered (the host's reachability says so).
+ * Everything the daemon refused is `refused`.
  */
 function classifyFailure(reason: string): Failure | null {
   switch (reason) {
     case "busy":
     case "background":
-      return null;
     case "lost":
     case "timeout":
-      return "offline";
+      return null;
     default:
       return "refused";
   }
@@ -55,7 +52,7 @@ export class SessionsCache extends Store<SessionsState> {
 
   /** An authoritative listing. */
   listed(handle: string, listing: TmuxListing | null): void {
-    this.setHost(handle, { listing, reachedAt: Date.now(), failure: null, updating: false });
+    this.setHost(handle, { listing, failure: null, updating: false });
   }
 
   /** Nothing decided: cached rows go stale. */

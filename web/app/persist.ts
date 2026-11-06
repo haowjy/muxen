@@ -16,6 +16,8 @@ export class Persist {
     private readonly workspaces: () => SavedWorkspace[],
     private readonly bellSeen: () => Record<string, number>,
     private readonly shown: () => SavedRoute | null,
+    /** When each server was last reached, by host id: written with the workspace, so it costs no write of its own. */
+    private readonly reached: () => Record<string, number>,
   ) {}
 
   /** The controller says the page's host name, once `/auth/info` has told it. */
@@ -39,6 +41,7 @@ export class Persist {
   save(): void {
     const hostName = this.hostName();
     const shown = this.shown();
+    const reached = this.reached();
     const workspaces = this.workspaces();
     const open = new Set(workspaces.flatMap((w) => w.tabs.map(savedTabId)));
     // A closed tab leaves the set, so opening its session again saves it.
@@ -48,6 +51,7 @@ export class Persist {
       version: 5,
       workspaces: workspaces.map((w) => ({ ...w, tabs: w.tabs.filter((t) => !this.cleared.has(savedTabId(t))), last: kept(w.last), lastTerminal: kept(w.lastTerminal) })),
       ...(hostName !== null && { hostName }),
+      ...(Object.keys(reached).length > 0 && { reached }),
       bellSeen: this.bellSeen(),
       ...(shown !== null && { shown }),
     });

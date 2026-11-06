@@ -1,5 +1,6 @@
 import { useApp, useAppView } from "../../app/context";
-import { screenOf } from "../../workspace/state";
+import { hostById } from "../../net/hosts";
+import { routeWorkspace, screenOf } from "../../workspace/state";
 import { Spinner } from "../../ui/primitives/Spinner";
 import { Enrol } from "../enrol/Enrol";
 import { NoServers } from "../enrol/NoServers";
@@ -26,6 +27,9 @@ export function Shell() {
   // Touch input ends in the dock (phone and iPad); a mouse keeps the tab row on top, even in a narrow window. Home and the overview have none.
   const topRow = useAppView((v) => v.viewport.layout === "desktop" || v.viewport.directInput === "xterm");
   const hosts = useAppView((v) => v.hosts);
+  // A screen of one server shows that server's banner only; the rest show on Home.
+  const ownId = useAppView((v) => routeWorkspace(v.workspace)?.host ?? null);
+  const own = ownId === null ? undefined : hostById(hosts, ownId);
   // An app with no server yet has nothing to wait for: it offers to add one.
   const noServers = hosts.length === 0 && app.platform.manageHosts !== undefined;
   // The browser has one host; native may have several, each with its own banner.
@@ -39,7 +43,7 @@ export function Shell() {
         <div class={styles.banners}>
           <AppBanners />
           {/* Home's cards carry their own host's notice. */}
-          {!blocking && screen !== "home" && hosts.map((h) => <HostBanner key={h.entry.handle} host={h} />)}
+          {!blocking && screen !== "home" && own && <HostBanner host={own} reach={screen !== "terminal"} />}
         </div>
         <main class={styles.screen}>
           {blocking ? (

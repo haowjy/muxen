@@ -5,7 +5,7 @@
 // component should: one `TabDriver` per open tab, tmux's size from the stable box, desktop
 // direct input, and (in `Pastes`) paste.
 import type { AppController } from "../../app/controller";
-import type { HostClient } from "../../net/hosts";
+import { hostById, type HostClient } from "../../net/hosts";
 import type { InputEvent, TextSize, Viewport } from "../../platform/types";
 import { acceptsInsert, type ConnectionState } from "../../tabs/connection";
 import { TabDriver } from "../../tabs/driver";
@@ -219,7 +219,7 @@ export class Terminals extends Store<TerminalsView> {
   /** The long-press menu's New window: `new-window` on the tab's session, whichever window it shows. The tab follows the session to it. */
   async newWindow(id: string): Promise<void> {
     const tab = terminalTabOf(this.app.snapshot.workspace, id);
-    const client = tab && this.app.hosts.byHostId(tab.host);
+    const client = tab && hostById(this.app.hosts.all(), tab.host);
     if (!tab || !client) return;
     try {
       await client.socket.request(
@@ -296,7 +296,7 @@ export class Terminals extends Store<TerminalsView> {
     const tabs = allTabs(workspace);
     for (const tab of tabs) {
       if (tab.kind !== "terminal" || this.drivers.has(tab.id)) continue;
-      const client = this.app.hosts.byHostId(tab.host);
+      const client = hostById(this.app.hosts.all(), tab.host);
       if (client) this.open(tab.id, tab.key.session, client);
     }
     for (const [id, driver] of this.drivers) {

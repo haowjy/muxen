@@ -7,7 +7,7 @@
 import { HostRegistry, type HostClient } from "../net/hosts";
 import { BellMarks } from "../sessions/bells";
 import { SessionsCache } from "../sessions/cache";
-import { samePlace, type BootResult, type FilesPlace, type Lifecycle, type Platform, type Preferences, type UpdateState, type Viewport } from "../platform/types";
+import { samePlace, type BootResult, type FilesPlace, type HostEntry, type Lifecycle, type Platform, type Preferences, type UpdateState, type Viewport } from "../platform/types";
 import { Store } from "../ui/store";
 import { parseSavedWorkspaces } from "../workspace/saved";
 import { activeTab, allTabs, initialWorkspace, reduce, savedRoute, savedWorkspaces, screenOf, shownTab, type Route, type Screen, type WorkspaceEffect, type WorkspaceEvent, type WorkspaceState } from "../workspace/state";
@@ -19,6 +19,8 @@ import { hashOf, launchOf, underHome, type Launch } from "./address";
 import { browserHistory, enrolCodeFromHash, Router, type Entry, type Overlay } from "./router";
 
 const NOTICE_MS = 5_000;
+/** A stuck socket reloads the page at most this often, so a slow link can't loop reloads. */
+const STUCK_RELOAD_EVERY_MS = 10 * 60_000;
 /** The update check on becoming visible runs at most this often. */
 const UPDATE_CHECK_EVERY_MS = 60 * 60_000;
 export interface AppView {
@@ -52,6 +54,13 @@ export interface StartOptions {
 interface ListingSurface {
   kind: "home" | "sessions";
   name: string;
+}
+
+/** The saved time a server was last reached. A browser's lone host whose id isn't known yet (an offline launch) takes the only saved one. */
+function savedReachedAt(reached: Record<string, number> | undefined, entry: HostEntry, hostCount: number): number | null {
+  if (entry.hostId !== null) return reached?.[entry.hostId] ?? null;
+  const only = Object.values(reached ?? {});
+  return hostCount === 1 && only.length === 1 ? (only[0] ?? null) : null;
 }
 
 export class AppController extends Store<AppView> {
@@ -119,14 +128,12 @@ export class AppController extends Store<AppView> {
     this.focus = new FocusController(() => this.snapshot.viewport);
     this.hosts = new HostRegistry({
       transport: platform.transport,
-      onStuck: () => {
-        this.persist.persistNow();
-        platform.restart("stuck");
-      },
+      onStuck: () => { this.reloadIfStuck(); },
+      reachedAt: (entry) => savedReachedAt(saved?.reached, entry, boot.hosts.length),
       ...(options.fetchFn && { fetchFn: options.fetchFn }),
     });
     this.view = new ViewMemory(platform.storage.view);
-    this.persist = new Persist(platform.storage, () => savedWorkspaces(this.snapshot.workspace), () => this.bells.toSave(this.hosts.all().map((h) => h.hostId)), () => savedRoute(this.snapshot.workspace));
+    this.persist = new Persist(platform.storage, () => savedWorkspaces(this.snapshot.workspace), () => this.bells.toSave(this.hosts.all().map((h) => h.hostId)), () => savedRoute(this.snapshot.workspace), () => ({ ...saved?.reached, ...this.reachedNow() }));
     this.persist.provideHostName(() => this.hosts.all()[0]?.name ?? null);
     this.listing = new ListingFetcher({
       restoring: () => allTabs(this.snapshot.workspace).some((t) => t.kind === "terminal" && t.restoring),
@@ -219,10 +226,26 @@ export class AppController extends Store<AppView> {
     this.router.openOverlay(overlay);
   }
 
-  /** Looks at a host again: admission when it is unreachable, a fresh listing otherwise. The one Retry. */
+  /** The one Retry for a server (plan.md "Reachability"): its socket and admission, then a fresh listing. */
   retryHost(handle: string): void {
-    if (this.hosts.get(handle)?.admission.kind === "unreachable") this.hosts.recheck(handle);
-    else this.listing.refresh(handle);
+    this.hosts.retry(handle);
+    this.listing.refresh(handle);
+  }
+
+  /** Sockets time out while HTTP answers: a fresh web view may help, once per 10 minutes. */
+  private reloadIfStuck(): void {
+    if (Date.now() - this.view.get("stuckReload") < STUCK_RELOAD_EVERY_MS) return;
+    this.persist.persistNow();
+    this.view.set("stuckReload", Date.now());
+    this.platform.restart();
+  }
+
+  /** When each server whose id is known was last reached. */
+  private reachedNow(): Record<string, number> {
+    return Object.fromEntries(this.hosts.all().flatMap((h) => {
+      const at = h.socket.lastReached();
+      return h.hostId !== null && at !== null ? [[h.hostId, at]] : [];
+    }));
   }
 
   /** A new Files tab in workspace `workspace`, at `place` (every time: the tab is the place). */

@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { useApp, useAppView } from "../../app/context";
 import type { Listing } from "../../files/api";
 import type { FileSearch } from "../../files/search";
-import { describeError, type FilesView } from "../../files/browser";
+import type { FilesView } from "../../files/browser";
 import { shorten } from "../../files/format";
 import { baseName, parentOf } from "../../files/paths";
 import type { FilesPlace } from "../../platform/types";
@@ -13,6 +13,7 @@ import { Spinner } from "../../ui/primitives/Spinner";
 import { readPaste } from "../terminal/paste";
 import { DirList, MissingFolder, type RowMenuAsk } from "./FolderList";
 import { useEntryTasks } from "./entryTasks";
+import { useFailure } from "./failure";
 import type { CreateKind } from "../../proto/generated/messages";
 import { FolderActions } from "./FolderActions";
 import { PASTE, SEARCH, SEARCH_SLASH, useFilesKey } from "./keymap";
@@ -172,7 +173,8 @@ export function ListPane({ session, tab, view, pages, tree, up, search, onOpen }
 
 /** A listing or a file the host refused, in the file manager's words, with Try again. */
 export function Refused({ session, error }: { session: FilesSession; error: NonNullable<FilesView["error"]> }) {
-  return <EmptyState icon="alert" title={describeError(error, session.hostName)} action={<Button onClick={() => { void session.browser.reload(); }}>Try again</Button>} />;
+  const { describe, waiting } = useFailure(session);
+  return <EmptyState icon="alert" title={describe(error)} action={waiting(error) ? undefined : <Button onClick={() => { void session.browser.reload(); }}>Try again</Button>} />;
 }
 
 export function Loading({ what }: { what: string }) {

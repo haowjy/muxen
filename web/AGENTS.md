@@ -6,8 +6,8 @@ adding a file. [README.md](README.md) has the commands.
 
 - **One owner per piece of state.** Workspaces (one per host: its tabs of both kinds in order, its
   last tab and last terminal tab), and a Files tab's place (written only from `navigated`):
-  `workspace/` (pure reducer); its saved form has one parser, `workspace/saved.ts`. Sockets and admission:
-  `net/hosts.ts`. Navigation: `app/router.ts`, the only writer of browser history (routes
+  `workspace/` (pure reducer); its saved form has one parser, `workspace/saved.ts`. Sockets, admission and reachability:
+  `net/hosts.ts`, decided in `net/host.ts`. Navigation: `app/router.ts`, the only writer of browser history (routes
   `home | overview | tab`, a tab opened from Home sitting above its overview in history; the screen
   is derived by `screenOf`). Focus:
   `app/focus.ts`, the only caller of `.focus()` and `.blur()`. The listing: `app/listing.ts`,

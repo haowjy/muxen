@@ -42,7 +42,8 @@ export function parseSavedWorkspaces(raw: unknown): SavedWorkspaces | null {
   if (parsed.some((w) => w === null)) return null;
   const { hostName } = raw;
   const bellSeen = isRecord(raw["bellSeen"]) ? Object.fromEntries(Object.entries(raw["bellSeen"]).filter((e): e is [string, number] => Number.isInteger(e[1]))) : {};
+  const reached = isRecord(raw["reached"]) ? Object.fromEntries(Object.entries(raw["reached"]).filter((e): e is [string, number] => typeof e[1] === "number" && Number.isFinite(e[1]))) : undefined;
   const shown = raw["shown"];
   const route: SavedRoute | null = isRecord(shown) && (shown["route"] === "overview" || shown["route"] === "tab") && isString(shown["workspace"]) ? { route: shown["route"], workspace: shown["workspace"] } : null;
-  return { version: 5, workspaces: parsed as SavedWorkspace[], ...(isString(hostName) && { hostName }), bellSeen, ...(route && { shown: route }) };
+  return { version: 5, workspaces: parsed as SavedWorkspace[], ...(isString(hostName) && { hostName }), ...(reached && { reached }), bellSeen, ...(route && { shown: route }) };
 }

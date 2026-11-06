@@ -4,7 +4,8 @@
 // mounted once and hidden rather than unmounted (§6.5); the renderer, the drivers and tmux's
 // size belong to `terminals.ts`, so this file only places things and draws state.
 import { useEffect, useRef } from "preact/hooks";
-import { useApp, useAppView, useHostName } from "../../app/context";
+import { useApp, useAppView, useHostLook } from "../../app/context";
+import { hostById } from "../../net/hosts";
 import { EmptyState } from "../../ui/primitives/EmptyState";
 import { StatusBand } from "../../ui/primitives/StatusBand";
 import { useStore } from "../../ui/store";
@@ -31,12 +32,18 @@ export function TerminalScreen({ active }: { active: boolean }) {
     if (slot.current) terminals.mount(slot.current);
   }, [terminals]);
 
-  const hostName = useHostName();
+  const hostLook = useHostLook();
   const current = activeTerminal(workspace);
   const running = active && current !== null && statuses[current.id]?.state.kind !== "live";
   const now = useNow(running);
-  const look = current && lookOf(current, statuses[current.id], hostName(current.host), active, now);
+  const look = current && lookOf(current, statuses[current.id], hostLook(current.host), active, now);
   const status = look?.status;
+  // The strip's Retry is the tab's own and the server's one (plan.md "Reachability", "Retry").
+  const retry = (id: string, hostId: string): void => {
+    terminals.retry(id);
+    const host = hostById(app.hosts.all(), hostId);
+    if (host) app.retryHost(host.entry.handle);
+  };
 
   return (
     <div class={styles.terminal} hidden={!active} data-layout={phone ? "phone" : "desktop"} data-dock={active && dock && phone ? "" : undefined}>
@@ -60,7 +67,7 @@ export function TerminalScreen({ active }: { active: boolean }) {
             tone={bandTone(status.tone)}
             text={status.detail}
             hint={status.hint}
-            action={status.action ? { label: status.action, onAction: () => { terminals.retry(current.id); } } : null}
+            action={status.action ? { label: status.action, onAction: () => { retry(current.id, current.host); } } : null}
           />
         )}
       </div>

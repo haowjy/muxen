@@ -101,7 +101,10 @@ export function filesSession(app: AppController, host: KnownHost): FilesSession 
   });
   const searches = new Recent<FileSearch>(SEARCHES_KEPT);
   // Clear local data forgets the recents: a kept Search would still show the ones it began with.
-  const forget = app.persist.onClear(() => { searches.clear(); });
+  const unclear = app.persist.onClear(() => { searches.clear(); });
+  // What failed for want of the server loads again once it answers (plan.md "Requests"); stopped with the session.
+  const unrecover = app.hosts.recovered(host.entry.handle, () => { void browser.recovered(); });
+  const forget = (): void => { unclear(); unrecover(); };
   /** `ask`, a change in `dir`. A refusal rejects, and what is really there shows once the folder is listed again: the name was taken, or gone, or (`partly`, a delete that stopped) part of it was. */
   const changing = async (dir: string, partly: string | null, ask: () => Promise<void>): Promise<void> => {
     try {

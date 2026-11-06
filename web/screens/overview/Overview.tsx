@@ -5,7 +5,7 @@
 // stream every tab's screen.
 import type { TargetedPointerEvent } from "preact";
 import { useRef, useState } from "preact/hooks";
-import { useApp, useAppView, useBells, useHostName } from "../../app/context";
+import { useApp, useAppView, useBells, useHostLook } from "../../app/context";
 import { shorten } from "../../files/format";
 import { bellsUnavailable } from "../../sessions/bells";
 import { ago, findSession } from "../../sessions/groups";
@@ -36,11 +36,11 @@ function WorkspacePage({ workspace, over }: { workspace: Workspace; over: boolea
   const host = useAppView((v) => v.hosts.find((h) => h.hostId === workspace.host));
   const sessions = useStore(app.sessions, (s) => (host ? s.hosts[host.entry.handle] : undefined));
   const statuses = useStore(terminals, (s) => s.tabs);
-  const hostName = useHostName();
+  const hostLook = useHostLook();
   const bells = useBells();
   const add = useAddActions(workspace);
-  const env = { home: workspace.home, statuses, hostName, onScreen: null, now: Date.now(), bells };
-  const name = hostName(workspace.host);
+  const env = { home: workspace.home, statuses, host: hostLook, onScreen: null, now: Date.now(), bells };
+  const name = hostLook(workspace.host).name;
   const listing = sessions?.listing ?? null;
 
   // The row being dragged by its handle, and how far it has moved from where it started.

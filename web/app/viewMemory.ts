@@ -21,9 +21,11 @@ export interface ViewState {
   listWidth: number | null;
   /** The files opened in Files, by host id, the most recent first. */
   opened: Readonly<Record<string, readonly OpenedFile[]>>;
+  /** When a stuck socket last reloaded the page (ms since the epoch; 0: never), so a slow link can't loop reloads. */
+  stuckReload: number;
 }
 
-const DEFAULTS: ViewState = { showHidden: false, preview: true, listWidth: null, opened: {} };
+const DEFAULTS: ViewState = { showHidden: false, preview: true, listWidth: null, opened: {}, stuckReload: 0 };
 
 const isOpened = (v: unknown): v is OpenedFile => {
   const o = v as Partial<Record<keyof OpenedFile, unknown>> | null;
@@ -35,6 +37,7 @@ const READ: { [K in keyof ViewState]: (stored: unknown) => ViewState[K] | undefi
   showHidden: (stored) => (typeof stored === "boolean" ? stored : undefined),
   preview: (stored) => (typeof stored === "boolean" ? stored : undefined),
   listWidth: (stored) => (typeof stored === "number" && Number.isFinite(stored) && stored > 0 ? stored : undefined),
+  stuckReload: (stored) => (typeof stored === "number" && Number.isFinite(stored) && stored > 0 ? stored : undefined),
   // A host's list that doesn't parse is dropped, not the others'.
   opened: (stored) => (typeof stored === "object" && stored !== null && !Array.isArray(stored)
     ? Object.fromEntries(Object.entries(stored).filter((e): e is [string, OpenedFile[]] => Array.isArray(e[1]) && e[1].every(isOpened)))

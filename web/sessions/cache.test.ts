@@ -9,11 +9,12 @@ const listing = (...ids: number[]): TmuxListing => ({
 });
 
 describe("SessionsCache", () => {
-  it("a failure marks the cached rows stale and a listing clears it; a refusal differs from a network failure; busy and background are ignored", () => {
+  it("a refusal marks the cached rows stale and a listing clears it; no answer, busy and background say nothing", () => {
     const cache = new SessionsCache();
     cache.listed("h1", listing(1));
     cache.failed("h1", "timeout");
-    expect(cache.snapshot.hosts["h1"]).toMatchObject({ listing: listing(1), failure: "offline" });
+    cache.failed("h1", "lost");
+    expect(cache.snapshot.hosts["h1"]).toMatchObject({ listing: listing(1), failure: null });
     cache.failed("h1", "tmux");
     expect(cache.snapshot.hosts["h1"]?.failure).toBe("refused");
     cache.listed("h1", listing(1));
@@ -23,7 +24,7 @@ describe("SessionsCache", () => {
     fresh.requested("h2");
     fresh.failed("h2", "busy");
     fresh.failed("h2", "background");
-    expect(fresh.snapshot.hosts["h2"]).toEqual({ listing: undefined, reachedAt: null, failure: null, updating: true });
+    expect(fresh.snapshot.hosts["h2"]).toEqual({ listing: undefined, failure: null, updating: true });
   });
 
   it("keeps a null listing (no tmux server) distinct from never listed", () => {

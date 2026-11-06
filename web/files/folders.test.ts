@@ -118,4 +118,57 @@ describe("Folders", () => {
     await folders.settled("/a", false);
     expect(folders.peek("/a", false)).not.toBeNull();
   });
+
+  it("lists again, once the server answers, the pinned folders whose listing failed as network; others wait to be asked", async () => {
+    const { fs, folders } = setup();
+    folders.pin("place", [{ path: "/home/j/repos", hidden: false }]);
+    fs.offline = true;
+    await folders.load("/home/j/repos", false);
+    await folders.load("/home/j/up", false);
+    expect(record(folders, "/home/j/repos")).toMatchObject({ error: { code: "network" } });
+    expect(record(folders, "/home/j/up")).toMatchObject({ error: { code: "network" } });
+    fs.offline = false;
+    fs.calls.length = 0;
+    await folders.recovered();
+    expect(fs.calls).toEqual(["list /home/j/repos 0"]);
+    expect(record(folders, "/home/j/repos")).toMatchObject({ error: null, loading: false });
+    expect(record(folders, "/home/j/up")).toMatchObject({ error: { code: "network" } });
+  });
+
+  it("recovery skips a folder under way or named by the caller, so none is asked twice", async () => {
+    const { fs, folders } = setup();
+    folders.pin("place", [{ path: "/home/j/repos", hidden: false }, { path: "/home/j/up", hidden: false }]);
+    fs.offline = true;
+    await folders.load("/home/j/repos", false);
+    await folders.load("/home/j/up", false);
+    fs.offline = false;
+    fs.calls.length = 0;
+    fs.hold = true;
+    const again = folders.load("/home/j/repos", false);
+    const recovered = folders.recovered("0/home/j/up");
+    fs.hold = false;
+    fs.release();
+    await Promise.all([again, recovered]);
+    expect(fs.calls).toEqual(["list /home/j/repos 0"]);
+  });
+
+  it("a burst of failures hands every turn on: the next requests are served, two at a time", async () => {
+    const paths = many(6);
+    const { fs, folders } = setup(paths);
+    fs.offline = true;
+    await Promise.all(paths.map((path) => folders.load(path, false)));
+    expect(paths.every((path) => record(folders, path)?.error?.code === "network" && !record(folders, path)?.loading)).toBe(true);
+    fs.offline = false;
+    fs.hold = true;
+    fs.calls.length = 0;
+    const loads = paths.slice(0, 4).map((path) => folders.load(path, false));
+    expect(fs.calls).toHaveLength(2); // the queue still holds two
+    fs.hold = false;
+    fs.release();
+    await vi.advanceTimersByTimeAsync(0);
+    fs.release();
+    await Promise.all(loads);
+    expect(fs.calls).toHaveLength(4);
+    expect(paths.slice(0, 4).every((path) => record(folders, path)?.error === null)).toBe(true);
+  });
 });

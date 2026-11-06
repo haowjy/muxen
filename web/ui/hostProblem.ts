@@ -1,7 +1,7 @@
 import type { Admission } from "../net/admission";
 
 /** Why a host can't be used, in every place that says so. */
-export type HostProblem = "unreachable" | "unauthorized" | "incompatible" | "overCap";
+export type HostProblem = "unreachable" | "unauthorized" | "incompatible" | "overCap" | "authUnavailable";
 
 export interface ProblemCopy {
   title: string;
@@ -16,7 +16,7 @@ export interface ProblemCopy {
 export function hostProblem(kind: HostProblem, host: string, byToken = false): ProblemCopy {
   switch (kind) {
     case "unreachable":
-      return { title: `Can't reach ${host}`, hint: "Check that Tailscale is on, then retry." };
+      return { title: `Can't reach ${host}`, hint: "Check that it's on and that Tailscale is on." };
     case "unauthorized":
       return byToken
         ? { title: `This app isn't paired with ${host}`, hint: "Pair it again from Settings > Servers, with a code from muxen enroll on the server." }
@@ -25,7 +25,14 @@ export function hostProblem(kind: HostProblem, host: string, byToken = false): P
       return { title: `muxen on ${host} speaks a different version`, hint: "Update the page or the daemon so they use the same protocol." };
     case "overCap":
       return { title: `Too many connections to ${host}`, hint: "Close muxen in another browser or the app, then retry." };
+    case "authUnavailable":
+      return { title: `${host} can't check this device right now`, hint: "muxen keeps trying." };
   }
+}
+
+/** What the phone's lack of network says, in place of anything about a server. */
+export function offlineWords(byToken: boolean): string {
+  return byToken ? "This iPhone is offline." : "This device is offline.";
 }
 
 const NODE_REFUSALS: Record<string, string> = {
@@ -68,7 +75,5 @@ export function admissionCopy(admission: Admission, host: string, byToken: boole
       return hostProblem("incompatible", host);
     case "deciding":
       return { title: "Checking access…", hint: null };
-    case "unreachable":
-      return hostProblem("unreachable", host);
   }
 }

@@ -42,3 +42,21 @@ export async function send(target: string, init: RequestInit = {}, retries = BUS
     await new Promise((resolve) => setTimeout(resolve, wait * 1000));
   }
 }
+
+/**
+ * Reads a response's body. A body that dies mid-read (the server went, or the request was
+ * aborted for it) is `network` like a failed request; the caller's own abort stays an abort.
+ */
+export async function readBody<T>(res: Response, signal: AbortSignal | null | undefined, read: (res: Response) => Promise<T>): Promise<T> {
+  try {
+    return await read(res);
+  } catch (error) {
+    if (signal?.aborted || error instanceof SyntaxError) throw error;
+    throw new HttpRefusal(0, "network");
+  }
+}
+
+/** {@link send} and the JSON body of its answer. */
+export async function sendJson<T>(target: string, init?: RequestInit, fetchFn?: typeof fetch): Promise<T> {
+  return (await readBody(await send(target, init, BUSY_RETRIES, fetchFn), init?.signal, (res) => res.json())) as T;
+}

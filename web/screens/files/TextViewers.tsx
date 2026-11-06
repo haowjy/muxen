@@ -13,6 +13,7 @@ import { HttpRefusal } from "../../net/http";
 import { EmptyState } from "../../ui/primitives/EmptyState";
 import { Spinner } from "../../ui/primitives/Spinner";
 import { cx } from "../../ui/cx";
+import { useStore } from "../../ui/store";
 import styles from "./Viewers.module.css";
 
 /** The code and Markdown viewers read at most this much, with Range (fs.md "Text previews"). */
@@ -27,22 +28,24 @@ export type Loaded<T> = { kind: "loading" } | { kind: "done"; value: T } | { kin
  * reading it again; nothing else is kept, so a file shown again later is read fresh.
  */
 export function useText(session: FilesSession, path: string, wanted: boolean): Loaded<TextPreview> {
-  const [state, setState] = useState<{ path: string; loaded: Loaded<TextPreview> } | null>(() => {
+  // `recoveries` when a failure came: one for want of a connection is read again once the server has answered since.
+  const recoveries = useStore(session.browser, (s) => s.recoveries);
+  const [state, setState] = useState<{ path: string; loaded: Loaded<TextPreview>; recoveries: number } | null>(() => {
     const handed = session.handed?.path === path ? session.handed.text : null;
     if (!handed) return null;
     session.handed = null;
-    return { path, loaded: { kind: "done", value: handed } };
+    return { path, loaded: { kind: "done", value: handed }, recoveries };
   });
-  const have = state?.path === path;
+  const have = state?.path === path && !(state.loaded.kind === "error" && state.loaded.error.code === "network" && state.recoveries !== recoveries);
   useEffect(() => {
     if (!wanted || have) return undefined;
     const abort = new AbortController();
     session.browser.api.text(path, TEXT_LIMIT, abort.signal).then(
-      (value) => { setState({ path, loaded: { kind: "done", value } }); },
-      (error: unknown) => { if (!abort.signal.aborted) setState({ path, loaded: { kind: "error", error: error instanceof HttpRefusal ? error : new HttpRefusal(0, "internal") } }); },
+      (value) => { setState({ path, loaded: { kind: "done", value }, recoveries }); },
+      (error: unknown) => { if (!abort.signal.aborted) setState({ path, loaded: { kind: "error", error: error instanceof HttpRefusal ? error : new HttpRefusal(0, "internal") }, recoveries }); },
     );
     return () => { abort.abort(); };
-  }, [session, path, wanted]);
+  }, [session, path, wanted, recoveries]);
   // Another file's text, from before a switch, is never this one's.
   return have ? state.loaded : { kind: "loading" };
 }

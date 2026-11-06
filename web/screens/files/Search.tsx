@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from "preact/hooks";
 import { useApp, useAppView } from "../../app/context";
-import { describeError } from "../../files/browser";
 import type { OutlineRow } from "../../files/outline";
 import { baseName } from "../../files/paths";
 import { isGlob, marked, tooLong, type FileSearch, type Found } from "../../files/search";
@@ -12,6 +11,7 @@ import { EmptyState } from "../../ui/primitives/EmptyState";
 import { PathInput } from "../../ui/primitives/PathInput";
 import { Spinner } from "../../ui/primitives/Spinner";
 import { useStore } from "../../ui/store";
+import { useFailure } from "./failure";
 import { EntryCells, whyNot } from "./FolderList";
 import { SEARCH, SEARCH_SLASH, SHOW_HIDDEN_IN_SEARCH, useFilesKey, type Chord } from "./keymap";
 import type { FilesSession } from "./session";
@@ -60,6 +60,8 @@ export function Search({ session, search, where, onOpen, onReveal, onClose: clos
   const phone = useAppView((v) => v.viewport.layout === "phone");
   const view = useStore(search, (s) => s);
   const hidden = useStore(session.browser, (s) => s.hidden);
+  const recoveries = useStore(session.browser, (s) => s.recoveries);
+  const failure = useFailure(session);
   const { text, shown, asking, error } = view;
   const query = text.trim() !== "";
   const scroller = useRef<HTMLDivElement>(null);
@@ -100,6 +102,8 @@ export function Search({ session, search, where, onOpen, onReveal, onClose: clos
     return () => { search.stop(); };
   }, [search]);
   useEffect(() => { search.setHidden(hidden); }, [search, hidden]);
+  // The server answers again after a search failed for want of it.
+  useEffect(() => { if (search.snapshot.error?.code === "network") search.resume(); }, [search, recoveries]);
   useEffect(() => {
     if (asking || !waiting.current) return;
     waiting.current = false;
@@ -150,7 +154,7 @@ export function Search({ session, search, where, onOpen, onReveal, onClose: clos
       </div>
       <div ref={scroller} class={pane.scroll} onScroll={(e) => { search.scroll = e.currentTarget.scrollTop; }}>
         {error ? (
-          <EmptyState icon="alert" title={describeError(error, session.hostName)} action={<Button onClick={() => { search.resume(); }}>Try again</Button>} />
+          <EmptyState icon="alert" title={failure.describe(error)} action={failure.waiting(error) ? undefined : <Button onClick={() => { search.resume(); }}>Try again</Button>} />
         ) : (
           <div class={list.wrap} aria-busy={asking}>
             {asking && <p class={styles.label}><Spinner label="Searching" /><span>Searching</span></p>}

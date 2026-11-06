@@ -1,14 +1,14 @@
 import { useEffect, useState } from "preact/hooks";
 import { useApp } from "../../app/context";
 import { formatSize, formatTime, shorten } from "../../files/format";
-import { describeError, type FileRef } from "../../files/browser";
+import type { FileRef } from "../../files/browser";
 import type { ViewerKind } from "../../files/kinds";
 import type { LinkTarget } from "../../files/render/markdown";
-import type { HttpRefusal } from "../../net/http";
 import { Button } from "../../ui/primitives/Button";
 import { Icon } from "../../ui/primitives/Icon";
 import { useStore } from "../../ui/store";
 import { DownloadButton } from "./FileActions";
+import { useFailure } from "./failure";
 import { fileIcon } from "./fileIcon";
 import { ImageViewer } from "./ImageViewer";
 import type { FilesSession } from "./session";
@@ -80,7 +80,7 @@ function Unsupported({ session, file, onAsText }: { session: FilesSession; file:
 
 /** The viewer for `kind`, under the file's header (`FileView`), which owns the viewer's controls. */
 export function Preview({ session, file, text, kind, plain, wrap, onAsText, onLink }: { session: FilesSession; file: FileRef; text: Loaded<TextPreview>; kind: ViewerKind; plain: boolean; wrap: boolean; onAsText: () => void; onLink: (target: LinkTarget) => void }) {
-  const describe = (error: HttpRefusal): string => describeError(error, session.hostName);
+  const { describe } = useFailure(session);
   const api = session.browser.api;
   return (
     <div class={styles.viewer}>

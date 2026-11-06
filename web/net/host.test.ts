@@ -3,7 +3,7 @@ import type { ClientMsg, ServerMsg, SessionRef, TmuxListing } from "../proto/gen
 import type { ConnectionState } from "../tabs/connection";
 import { TabDriver, type TabOptions } from "../tabs/driver";
 import { makeHost } from "../platform/test/host";
-import { RequestError } from "./host";
+import { RequestError, type TabPort } from "./host";
 
 const server = "main:1-2";
 const sesA: SessionRef = { server, session: 3 };
@@ -244,14 +244,17 @@ describe("lifecycle", () => {
 });
 
 describe("connect timeout", () => {
-  it("tries one new socket at once, then asks native to recreate the web view", () => {
+  it("tries one new socket at once, backs off the second, and asks from the third", () => {
     const t = setup();
     const a = t.tab("a", sesA);
     t.link().drop(1006, "connectTimeout");
     expect(t.links).toHaveLength(2);
-    expect(t.events).toEqual([]);
     t.link().drop(1006, "connectTimeout");
     expect(t.links).toHaveLength(2);
+    expect(t.events).toEqual([]);
+    vi.advanceTimersByTime(60_000);
+    expect(t.links).toHaveLength(3);
+    t.link().drop(1006, "connectTimeout");
     expect(t.events).toEqual(["stuck"]);
     expect(a.state().kind).toBe("reconnecting");
   });
@@ -265,5 +268,311 @@ describe("connect timeout", () => {
     vi.advanceTimersByTime(500);
     t.link().drop(1006, "connectTimeout");
     expect(t.events).toEqual([]);
+  });
+});
+
+// Reachability (plan.md "Reachability"): the table's rows, and the sequences around them.
+describe("reachability", () => {
+  const port: TabPort = { linkUp: () => undefined, linkLost: () => undefined, paused: () => undefined, message: () => undefined, frame: () => undefined };
+  const at = (seconds: number): void => { vi.advanceTimersByTime(seconds * 1000); };
+  /** The socket in CONNECTING gives up after its limit, `seconds` after it began. */
+  const timesOut = (t: ReturnType<typeof makeHost>, seconds = 5): void => { at(seconds); t.link().drop(1006, "connectTimeout"); };
+
+  /** A host with a tab joined and a welcomed socket: reachable. */
+  function reachable() {
+    const t = makeHost();
+    t.host.join(port);
+    t.link().welcome();
+    return t;
+  }
+
+  it("a welcome is reachable, last reached now", () => {
+    const t = makeHost();
+    t.host.join(port);
+    expect(t.host.reach).toBe("checking");
+    at(1);
+    t.link().welcome();
+    expect(t.host.reach).toBe("reachable");
+    expect(t.host.reachedAt).toBe(Date.now());
+  });
+
+  it.each([[4401, "halted"], [4001, "halted"], [4005, "waiting"], [4503, "waiting"]])("a server's %i close is an answer: reachable, trouble cleared", (code) => {
+    const t = makeHost();
+    t.host.join(port);
+    t.link().drop(1006, "connectTimeout"); // trouble began
+    at(5);
+    t.link().drop(code);
+    expect(t.host.reach).toBe("reachable");
+    expect(t.host.reachedAt).toBe(Date.now());
+    t.link().drop(1006); // a fresh outage begins at its own attempt
+    expect(t.host.reach).toBe("reachable");
+  });
+
+  it("4401 and 4001 halt the socket for the tabs, and 4005 backs off", () => {
+    const notices: unknown[] = [];
+    const t = makeHost();
+    t.host.join({ ...port, linkLost: (info) => notices.push(info) });
+    t.link().drop(4401);
+    // The halted host opens nothing by itself.
+    at(60);
+    expect(t.links).toHaveLength(1);
+    expect(notices).toEqual([{ retryInMs: null, halt: "unauthorized" }]);
+    t.host.nudge();
+    t.link().drop(4005);
+    expect(notices.at(-1)).toEqual({ retryInMs: 500 });
+  });
+
+  it("an off server reads checking at 5 s and unreachable at about 10 s", () => {
+    const t = reachable();
+    t.link().drop(1006); // the open socket closes: the outage begins here
+    expect(t.host.reach).toBe("reachable");
+    at(0.5);
+    expect(t.links).toHaveLength(2);
+    timesOut(t);
+    expect(t.host.reach).toBe("checking");
+    expect(t.links).toHaveLength(3); // the first timeout reconnects at once
+    timesOut(t);
+    expect(t.host.reach).toBe("unreachable");
+    expect(t.reaches.filter((r) => r !== "reachable")).toEqual(["checking", "unreachable"]);
+  });
+
+  it("a quick failure and a welcome inside 1.5 s never read checking", () => {
+    const t = reachable();
+    at(10);
+    t.link().drop(1006);
+    at(0.5);
+    t.link().drop(1006); // the backoff's socket fails too, 0.5 s in
+    at(1);
+    t.link().welcome();
+    expect(t.reaches).not.toContain("checking");
+    expect(t.host.reach).toBe("reachable");
+  });
+
+  it("a failure that ends under 10 s into an outage from unreachable leaves it unreachable", () => {
+    const t = reachable();
+    t.link().drop(1006);
+    at(0.5);
+    timesOut(t);
+    timesOut(t);
+    expect(t.host.reach).toBe("unreachable");
+    at(0.5);
+    at(2);
+    t.link().drop(1006); // a quick failure, 2 s into an attempt
+    expect(t.host.reach).toBe("unreachable");
+  });
+
+  it("an open socket's idle close is unreachable at once, last reached its last message", () => {
+    const t = reachable();
+    at(20);
+    const last = Date.now();
+    t.link().say({ type: "pong", data: { t: 0 } });
+    at(30);
+    t.link().drop(1006, "idle");
+    expect(t.host.reach).toBe("unreachable");
+    expect(t.host.reachedAt).toBe(last);
+  });
+
+  it("a 1006 on a socket open for minutes is still reachable: the outage starts at the close", () => {
+    const t = reachable();
+    at(600);
+    t.link().drop(1006);
+    expect(t.host.reach).toBe("reachable");
+    at(0.5);
+    timesOut(t);
+    expect(t.host.reach).toBe("checking");
+  });
+
+  it("stop mid-outage clears the trouble: a new connect failing at 5 s is not unreachable", () => {
+    const t = reachable();
+    t.link().drop(1006);
+    at(0.5);
+    timesOut(t);
+    expect(t.host.reach).toBe("checking");
+    t.host.background();
+    t.host.foreground();
+    timesOut(t);
+    expect(t.host.reach).toBe("checking");
+  });
+
+  it("stop on an open socket sets last reached to its last message", () => {
+    const t = reachable();
+    at(20);
+    t.link().say({ type: "pong", data: { t: 0 } });
+    const last = Date.now();
+    at(5);
+    t.host.background();
+    expect(t.host.reachedAt).toBe(last);
+  });
+
+  it("an unanswered attempt ending without a network changes nothing, but an answer still counts", () => {
+    const t = reachable();
+    t.network.online = false;
+    t.link().drop(1006);
+    at(0.5);
+    timesOut(t);
+    timesOut(t);
+    expect(t.host.reach).toBe("reachable");
+    at(60);
+    t.host.nudge();
+    t.link().drop(4005);
+    expect(t.host.reach).toBe("reachable");
+    expect(t.host.reachedAt).toBe(Date.now());
+  });
+
+  it("an idle close without a network changes nothing but last reached", () => {
+    const t = reachable();
+    at(20);
+    t.link().say({ type: "pong", data: { t: 0 } });
+    const last = Date.now();
+    at(30);
+    t.network.online = false;
+    t.link().drop(1006, "idle");
+    expect(t.host.reach).toBe("reachable");
+    expect(t.host.reachedAt).toBe(last);
+  });
+
+  it("a socket that opened and got no welcome is unanswered and not stuck", () => {
+    const t = makeHost();
+    t.host.join(port);
+    t.link().drop(1006, "welcomeTimeout");
+    at(1);
+    t.link().drop(1006, "welcomeTimeout");
+    at(2);
+    t.link().drop(1006, "welcomeTimeout");
+    expect(t.stuck.calls).toBe(0);
+  });
+
+  describe("the connect limit", () => {
+    it("is 5 s for the first two attempts of an outage and 15 s once unreachable; the backoff advances from the second timeout", () => {
+      const t = makeHost();
+      t.host.join(port);
+      const started: number[] = [];
+      const t0 = Date.now();
+      const note = (): void => { started.push(Math.round((Date.now() - t0) / 100) / 10); };
+      note();
+      for (let i = 0; i < 4; i++) {
+        const before = t.links.length;
+        timesOut(t, (t.limits.at(-1) ?? 0) / 1000);
+        while (t.links.length === before) at(0.1);
+        note();
+      }
+      expect(t.limits).toEqual([5_000, 5_000, 15_000, 15_000, 15_000]);
+      // 0, then at once at 5, then the backoff's 0.5, 1 and 2 s after each 15 s attempt.
+      expect(started).toEqual([0, 5, 10.5, 26.5, 43.5]);
+    });
+
+    it("a tapped Retry over an old outage keeps the long limit", () => {
+      const t = makeHost();
+      t.host.join(port);
+      timesOut(t);
+      timesOut(t);
+      expect(t.host.reach).toBe("unreachable");
+      t.host.retrying();
+      expect(t.host.reach).toBe("checking");
+      at(60);
+      t.host.nudge();
+      expect(t.limits.at(-1)).toBe(15_000);
+    });
+  });
+
+  describe("the connect-timeout rule", () => {
+    it("the third and later timeouts ask; a welcome, stop, nudge or other close restart the count", () => {
+      const t = makeHost();
+      t.host.join(port);
+      t.link().drop(1006, "connectTimeout");
+      at(30);
+      t.link().drop(1006, "connectTimeout");
+      expect(t.stuck.calls).toBe(0);
+      expect(t.host.stuck).toBe(false);
+      at(30);
+      t.link().drop(1006, "connectTimeout");
+      expect(t.stuck.calls).toBe(1);
+      expect(t.host.stuck).toBe(true);
+      at(30);
+      t.link().drop(1006, "connectTimeout");
+      expect(t.stuck.calls).toBe(2);
+      at(60);
+      t.host.nudge();
+      expect(t.host.stuck).toBe(false);
+      t.link().drop(1006, "connectTimeout");
+      at(30);
+      t.link().welcome();
+      t.link().drop(1006);
+      at(1);
+      t.link().drop(1006, "connectTimeout");
+      at(30);
+      t.link().drop(1006, "connectTimeout");
+      expect(t.host.stuck).toBe(false);
+      at(30);
+      t.link().drop(1006, "connectTimeout");
+      t.host.background();
+      expect(t.host.stuck).toBe(false);
+    });
+
+    it("takes the ordinary backoff and never halts", () => {
+      const t = makeHost();
+      const lost: unknown[] = [];
+      t.host.join({ ...port, linkLost: (info) => lost.push(info) });
+      t.link().drop(1006, "connectTimeout");
+      t.link().drop(1006, "connectTimeout");
+      expect(lost.at(-1)).toEqual({ retryInMs: 500 });
+      at(0.5);
+      expect(t.links).toHaveLength(3);
+    });
+  });
+
+  describe("nudge", () => {
+    it("returns false while backgrounded, open, or with no tab joined, and the state stays", () => {
+      const t = makeHost();
+      expect(t.host.nudge()).toBe(false); // no tab
+      t.host.join(port);
+      timesOut(t);
+      timesOut(t);
+      expect(t.host.reach).toBe("unreachable");
+      t.host.background();
+      expect(t.host.nudge()).toBe(false);
+      t.host.foreground();
+      t.link().welcome();
+      expect(t.host.nudge()).toBe(false);
+    });
+
+    it("while connecting keeps the attempt, resets the backoff and opens no second link", () => {
+      const t = makeHost();
+      t.host.join(port);
+      t.link().drop(1006, "connectTimeout");
+      t.link().drop(1006, "connectTimeout"); // backoff 0.5 s, attempt 1
+      at(0.5);
+      t.link().drop(1006); // attempt 2: 1 s next
+      at(1);
+      expect(t.links).toHaveLength(4);
+      expect(t.host.nudge()).toBe(true);
+      expect(t.links).toHaveLength(4);
+      t.link().drop(1006);
+      at(0.5); // back at the first step
+      expect(t.links).toHaveLength(5);
+    });
+  });
+
+  describe("every path that opens a socket notes when the attempt began", () => {
+    // After a long quiet stretch with nothing in trouble, a failure 1 s into a new attempt is 1 s of trouble, not minutes.
+    it.each(["join", "request", "nudge", "foreground", "backoff"])("%s", (path) => {
+      const t = makeHost();
+      t.host.join(port);
+      t.link().welcome();
+      at(300);
+      if (path === "join" || path === "request") t.host.leave(port);
+      if (path === "foreground") t.host.background();
+      if (path === "nudge") t.link().drop(4401);
+      if (path === "backoff") t.link().drop(4005);
+      if (path === "join") t.host.join(port);
+      if (path === "request") void t.host.request((req) => ({ type: "listSessions", data: { req } }), () => undefined).catch(() => undefined);
+      if (path === "nudge") t.host.nudge();
+      if (path === "foreground") t.host.foreground();
+      if (path === "backoff") at(0.5);
+      expect(t.links).toHaveLength(2);
+      at(1);
+      t.link().drop(1006);
+      expect(t.host.reach).toBe("reachable");
+    });
   });
 });

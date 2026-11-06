@@ -86,4 +86,52 @@ describe("FileBrowser", () => {
     await browser.follow({ kind: "dir", path: "/" });
     expect(parentPlace(browser.snapshot.place, pagesOf(browser))).toBeNull();
   });
+
+  describe("when the server answers again", () => {
+    it("loads the place that failed as network, and asks for home again", async () => {
+      const { browser, fs } = setup();
+      fs.offline = true;
+      await browser.follow({ kind: "dir", path: "/home/j/repo" });
+      expect(browser.snapshot.error?.code).toBe("network");
+      expect(browser.snapshot.home).toBeNull();
+      fs.offline = false;
+      await browser.recovered();
+      await Promise.resolve();
+      expect(browser.snapshot).toMatchObject({ error: null, loading: false, home: "/home/j", recoveries: 1 });
+      expect(pagesOf(browser)?.path).toBe("/home/j/repo");
+    });
+
+    it("leaves a place that loaded alone, and does not double a load under way", async () => {
+      const { browser, fs } = setup();
+      await browser.follow({ kind: "dir", path: "/home/j/repo" });
+      const calls = fs.calls.length;
+      await browser.recovered();
+      expect(fs.calls.length).toBe(calls);
+      fs.hold = true;
+      const loading = browser.follow({ kind: "dir", path: "/home/j/up" });
+      await browser.recovered();
+      fs.hold = false;
+      fs.release();
+      await loading;
+      expect(fs.calls.filter((c) => c === "list /home/j/up 0")).toHaveLength(1);
+    });
+
+    it("does not move a user who has gone elsewhere: a failed load for the place left is dropped", async () => {
+      const { browser, fs } = setup();
+      await browser.follow({ kind: "dir", path: "/home/j/repo" });
+      fs.offline = true;
+      fs.hold = true;
+      const failing = browser.follow({ kind: "dir", path: "/home/j/other" });
+      fs.hold = false;
+      fs.offline = false;
+      await browser.follow({ kind: "dir", path: "/home/j/up" });
+      fs.offline = true;
+      fs.release();
+      await failing;
+      fs.offline = false;
+      await browser.recovered();
+      expect(browser.snapshot.place).toEqual({ kind: "dir", path: "/home/j/up" });
+      expect(browser.snapshot.error).toBeNull();
+    });
+  });
 });

@@ -4,6 +4,7 @@
 // `Pastes` is what a paste, a copy and an inserted path do after that.
 import type { AppController } from "../../app/controller";
 import type { PasteResult } from "../../net/host";
+import { hostById } from "../../net/hosts";
 import type { Pasted, UploadEvent } from "../../platform/types";
 import type { InsertResult, TabDriver } from "../../tabs/driver";
 import { cannotInsert, shellQuote } from "../../tabs/input";
@@ -185,7 +186,7 @@ export class Pastes {
       return;
     }
     const tab = terminalTabOf(app.snapshot.workspace, target.id);
-    const client = tab && app.hosts.byHostId(tab.host);
+    const client = tab && hostById(app.hosts.all(), tab.host);
     if (!client) {
       app.notify("Paste images from Files → Upload");
       return;

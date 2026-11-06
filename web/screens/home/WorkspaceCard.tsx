@@ -6,6 +6,7 @@ import { BellDot } from "../../ui/primitives/BellDot";
 import { Button } from "../../ui/primitives/Button";
 import { Row } from "../../ui/primitives/Row";
 import { ago } from "../../sessions/groups";
+import { hostProblem, offlineWords } from "../../ui/hostProblem";
 import { STATUS, type CardBody, type CardStatus } from "./card";
 import styles from "./WorkspaceCard.module.css";
 
@@ -18,6 +19,8 @@ export interface WorkspaceCardProps {
   /** A bell rang in one of them since this device last showed it. */
   bell: boolean;
   body: CardBody;
+  /** The server admits this client by a native token: the offline words say "iPhone". */
+  byToken: boolean;
   /** What is wrong with the server, when something is: its host banner. */
   notice: ComponentChildren;
   /** The daemon can't read tmux's bell state on this server: said in words, never a silent dot-free tab. */
@@ -32,13 +35,14 @@ function Note({ children }: { children: ComponentChildren }) {
   return <p class={styles.note}>{children}</p>;
 }
 
-function Body({ name, body, onRetry }: Pick<WorkspaceCardProps, "name" | "body" | "onRetry">) {
+function Body({ name, body, byToken, onRetry }: Pick<WorkspaceCardProps, "name" | "body" | "byToken" | "onRetry">) {
   const retry = <Button variant="secondary" icon="refresh" onClick={onRetry}>Retry</Button>;
   switch (body.kind) {
     case "offline":
+      if (body.noNetwork) return <Note>{offlineWords(byToken)}</Note>;
       return (
         <>
-          <Note>{body.reachedAt ? `Last reached ${ago(body.reachedAt)}.` : "Not reached since this page opened."} Check that it is on and on your tailnet.</Note>
+          <Note>{body.reachedAt ? `Last reached ${ago(body.reachedAt)}.` : "Not reached since muxen opened."} {hostProblem("unreachable", name).hint}</Note>
           {retry}
         </>
       );
@@ -59,12 +63,13 @@ function Body({ name, body, onRetry }: Pick<WorkspaceCardProps, "name" | "body" 
         </>
       );
     case "checking":
+      return body.connecting ? <Note>Connecting to {name}…</Note> : null;
     case "ok":
       return null;
   }
 }
 
-export function WorkspaceCard({ name, tabs, bell, body, notice, bellsUnavailable, onRetry, onOpen }: WorkspaceCardProps) {
+export function WorkspaceCard({ name, tabs, bell, body, byToken, notice, bellsUnavailable, onRetry, onOpen }: WorkspaceCardProps) {
   const status = STATUS[body.kind];
   return (
     <section class={styles.card} aria-label={name}>
@@ -86,7 +91,7 @@ export function WorkspaceCard({ name, tabs, bell, body, notice, bellsUnavailable
       />
       {notice}
       {bellsUnavailable && <Note>Bell tracking unavailable on this host</Note>}
-      <Body name={name} body={body} onRetry={onRetry} />
+      <Body name={name} body={body} byToken={byToken} onRetry={onRetry} />
     </section>
   );
 }

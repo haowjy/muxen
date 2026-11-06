@@ -1,7 +1,7 @@
 // The file API client (fs.md). Hand-written wire types until src/proto/fs.rs is generated
 // for TypeScript like the WebSocket messages; keep them in step with fs.md "Routes".
 
-import { BUSY_RETRIES, HttpRefusal, send } from "../net/http";
+import { BUSY_RETRIES, HttpRefusal, readBody, send, sendJson } from "../net/http";
 import type { CreateKind, CreateRequest, DeleteRequest, RenameRequest, Search } from "../proto/generated/messages";
 
 export interface Entry {
@@ -87,7 +87,7 @@ export function httpFsApi(origin: string, fetchFn?: typeof fetch): FsApi {
   // An absolute path's own `/` is the route's; `~` and `~/…` ride bare after one (fs.md "Routes").
   const url = (route: string, path: string, query = ""): string => `${origin}/fs/${route}${path.startsWith("~") ? "/" : ""}${encodePath(path)}${query}`;
   const post = (request: unknown): RequestInit => ({ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) });
-  const json = async <T>(target: string, init?: RequestInit): Promise<T> => (await (await send(target, init, BUSY_RETRIES, fetchFn)).json()) as T;
+  const json = <T>(target: string, init?: RequestInit): Promise<T> => sendJson<T>(target, init, fetchFn);
   const page = (offset: number, hidden: boolean): string => `?offset=${String(offset)}&hidden=${hidden ? "1" : "0"}`;
 
   return {
@@ -115,7 +115,7 @@ export function httpFsApi(origin: string, fetchFn?: typeof fetch): FsApi {
         if (error instanceof HttpRefusal && error.code === "bad_range") return { text: "", size: 0, truncated: false };
         throw error;
       }
-      const bytes = new Uint8Array(await res.arrayBuffer());
+      const bytes = new Uint8Array(await readBody(res, signal, (r) => r.arrayBuffer()));
       const size = res.status === 206 ? totalOf(res.headers.get("Content-Range")) : bytes.length;
       return {
         text: new TextDecoder().decode(bytes),

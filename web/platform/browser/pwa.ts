@@ -2,7 +2,6 @@
 // is registered after the page's `load`, so it never competes with first paint. A new build
 // installs and waits; `apply()` is the tap that lets it take over. Screens see only the
 // capability and the `update` events.
-import { restart } from "./restart";
 import type { Platform, PlatformEvent, UpdateState } from "../types";
 
 /** How long `apply()` waits for a build that is still installing or activating before it reloads anyway. */
@@ -55,7 +54,7 @@ export function createPwa(emit: (event: PlatformEvent) => void): Pick<Platform, 
   // its build and offers a reload; the page that tapped reloads at once.
   let hadController = container.controller !== null;
   container.addEventListener("controllerchange", () => {
-    if (applying) restart("update");
+    if (applying) location.reload();
     else if (hadController) set("reload");
     hadController = true;
   });
@@ -85,7 +84,7 @@ export function createPwa(emit: (event: PlatformEvent) => void): Pick<Platform, 
             reg = await registration;
           }
           if (!reg?.waiting) {
-            restart("update");
+            location.reload();
             return;
           }
           applying = true;
@@ -94,7 +93,7 @@ export function createPwa(emit: (event: PlatformEvent) => void): Pick<Platform, 
           // A hard-reloaded page has no controller, so `controllerchange` never fires for it.
           if (container.controller === null) {
             await reached(worker, "activated");
-            restart("update");
+            location.reload();
           }
         })();
       },

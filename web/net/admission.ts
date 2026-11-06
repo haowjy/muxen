@@ -13,7 +13,7 @@ export interface AuthInfo {
   browserRefused: string | null;
 }
 
-/** A node route's answer, parsed. Status 0 is no answer at all. */
+/** A node route's answer, parsed. Status 0 is no answer at all (it reads as `deciding`: reachability is the socket's). */
 export interface SessionReply {
   status: number;
   error?: string;
@@ -35,8 +35,7 @@ export type Admission =
   /** The page speaks a protocol the daemon does not: never retried. */
   | { kind: "incompatible" }
   /** The daemon cannot decide now: keep the screen, retry with backoff. */
-  | { kind: "deciding" }
-  | { kind: "unreachable" };
+  | { kind: "deciding" };
 
 /** Where a check goes next. */
 export type Step = { admission: Admission } | { askSession: true };
@@ -54,8 +53,6 @@ export function fromInfo(info: AuthInfo, pageOrigin: string): Step {
 
 export function fromSession(reply: SessionReply): Admission {
   switch (reply.status) {
-    case 0:
-      return { kind: "unreachable" };
     case 200:
       return { kind: "admitted", ...(reply.deviceName !== undefined && { deviceName: reply.deviceName }) };
     case 401:
@@ -76,11 +73,6 @@ export function fromClose(code: number): "recheck" | Admission | null {
   if (code === CloseCode.AuthUnavailable) return { kind: "deciding" };
   if (code === CloseCode.Incompatible) return { kind: "incompatible" };
   return null;
-}
-
-/** Whether a later check could change the answer. The rest wait for a fix on the server or a new build. */
-export function isRetryable(admission: Admission): boolean {
-  return admission.kind === "deciding" || admission.kind === "unreachable";
 }
 
 export type EnrolResult =

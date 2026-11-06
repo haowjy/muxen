@@ -1,8 +1,15 @@
-import { hostProblem } from "../ui/hostProblem";
+import type { Reach } from "../net/host";
+import { hostProblem, offlineWords } from "../ui/hostProblem";
 import type { ConnectionState } from "./connection";
 
-/** Past this, a lost host is probably Tailscale being off (ios-shell.md "Lifecycle and reconnect"). */
-const UNREACHABLE_AFTER_MS = 10_000;
+/** What a tab's words say of its server: the host registry's shown state, never decided here. */
+export interface HostLook {
+  name: string;
+  shown: Reach | "noNetwork";
+  /** The server admits this client by a native token (the iPhone app), not as a tailnet node. */
+  byToken: boolean;
+}
+
 /** A first connect quicker than this shows no strip, so a normal switch doesn't flash one. */
 const SLOW_CONNECT_MS = 1_500;
 
@@ -21,7 +28,7 @@ export interface Status {
 }
 
 /** `downSince`: when the tab stopped being live, or opened. `onScreen`: the active tab. */
-export function describe(state: ConnectionState, downSince: number, retryAt: number | null, now: number, host: string, onScreen: boolean): Status {
+export function describe(state: ConnectionState, downSince: number, retryAt: number | null, now: number, host: HostLook, onScreen: boolean): Status {
   // Off screen, a tab has no watch: it rests in whichever of these it was in when it left,
   // and a lost host moves it on to `reconnecting`.
   if (!onScreen && (state.kind === "live" || state.kind === "connecting")) {
@@ -31,8 +38,10 @@ export function describe(state: ConnectionState, downSince: number, retryAt: num
     case "live":
       return { tone: "live", detail: null, hint: null, action: null };
     case "connecting": {
+      // No socket is trying for a host that isn't admitted (a browser's, offline): the server's state still says why.
+      if (host.shown === "unreachable" || host.shown === "noNetwork") break;
       const slow = now - downSince >= SLOW_CONNECT_MS;
-      return { tone: "connecting", detail: slow ? `Connecting to ${host}…` : null, hint: null, action: null };
+      return { tone: "connecting", detail: slow ? `Connecting to ${host.name}…` : null, hint: null, action: null };
     }
     case "closed":
       return {
@@ -43,14 +52,16 @@ export function describe(state: ConnectionState, downSince: number, retryAt: num
         action: null,
       };
     case "limited":
-      return limitedStatus(state.message, host);
+      return limitedStatus(state.message, host.name);
     case "reconnecting":
       break;
   }
-  switch (state.halt) {
+  const halt = state.kind === "reconnecting" ? state.halt : null;
+  const message = state.kind === "reconnecting" ? state.message : undefined;
+  switch (halt) {
     case "unauthorized":
     case "incompatible": {
-      const { title, hint } = hostProblem(state.halt, host);
+      const { title, hint } = hostProblem(halt, host.name);
       return { tone: "halted", detail: title, hint, action: "Retry" };
     }
     case "detached":
@@ -58,13 +69,21 @@ export function describe(state: ConnectionState, downSince: number, retryAt: num
     case null:
       break;
   }
-  const unreachable = now - downSince >= UNREACHABLE_AFTER_MS;
   // A failed watch on a live socket: the daemon's reason, not a network blame.
-  const detail = state.message ?? (unreachable ? hostProblem("unreachable", host).title : `Reconnecting to ${host}`);
-  if (retryAt === null) return { tone: "waiting", detail, hint: null, action: "Retry" };
-  const seconds = Math.max(0, Math.ceil((retryAt - now) / 1000));
-  const when = seconds === 0 ? "now" : `${String(seconds)}s`;
-  return { tone: "waiting", detail, hint: seconds === 0 ? "Retrying now" : `Retrying in ${when}`, action: "Retry now" };
+  if (message === undefined) {
+    if (host.shown === "noNetwork") return { tone: "waiting", detail: offlineWords(host.byToken), hint: null, action: null };
+    if (host.shown === "unreachable") {
+      const { title, hint } = hostProblem("unreachable", host.name);
+      return { tone: "waiting", detail: title, hint, action: "Retry now" };
+    }
+  }
+  const seconds = Math.max(0, Math.ceil(((retryAt ?? now) - now) / 1000));
+  return {
+    tone: "waiting",
+    detail: message ?? `Reconnecting to ${host.name}`,
+    hint: seconds === 0 ? "Retrying now" : `Retrying in ${String(seconds)}s`,
+    action: "Retry now",
+  };
 }
 
 /**

@@ -283,6 +283,7 @@ export function createTestPlatform(options: TestPlatformOptions = {}): TestPlatf
           const saved = hosts.find((h) => h.handle === handle);
           const id = saved?.hostId ?? daemon.info.hostId;
           link.ready = true;
+          link.lastRecv = Date.now();
           handlers.welcome({ protocol: 2, daemon: { version: "0", completion: false }, host: { id, name: saved?.name ?? daemon.info.name } });
         });
         const send = link.send.bind(link);
@@ -339,7 +340,7 @@ export function createTestPlatform(options: TestPlatformOptions = {}): TestPlatf
     playVideo: () => "inline",
     haptic: (kind) => { platform.haptics.push(kind); },
     setBackSwipe: (enabled) => { platform.backSwipes.push(enabled); },
-    restart: (reason) => { platform.restarts.push(reason); },
+    restart: () => { platform.restarts.push("restart"); },
   };
 
   if (options.pwa) {

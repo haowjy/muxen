@@ -116,6 +116,8 @@ export interface SavedWorkspaces {
   workspaces: SavedWorkspace[];
   /** The host's last known name: an offline launch cannot ask `/auth/info`, yet still says "Can't reach pop-os". */
   hostName?: string;
+  /** When each server was last reached, by host id, for an offline launch's "Last reached 4 min ago." Written with the workspace. */
+  reached?: Record<string, number>;
   /** Bell attention (sessions/bells.ts): the bell mark this device last showed, by tab id, for the sessions it has seen. */
   bellSeen?: Record<string, number>;
   /** Where the user last was, so a launch opens it again: a workspace's overview or its last tab. Absent: Home. */
@@ -157,8 +159,8 @@ export interface PlatformStorage {
 }
 
 export interface Transport {
-  /** Returns a Link at once. A refusal arrives as a synthetic close, like 4401. */
-  openSocket(handle: string, handlers: LinkHandlers): Link;
+  /** Returns a Link at once. A refusal arrives as a synthetic close, like 4401. `connectTimeoutMs`: how long the socket may stay CONNECTING. */
+  openSocket(handle: string, handlers: LinkHandlers, connectTimeoutMs: number): Link;
   /** Where every /auth, /fs and /complete URL starts. Browser: "" (same origin). */
   httpBase(handle: string): string;
 }
@@ -258,7 +260,8 @@ export interface Platform {
   haptic(kind: HapticKind): void;
   /** Whether the platform's own back swipe may run (native: WebKit's left-edge swipe, which pops the page's history). Browser: no-op, since Safari owns the edge swipe. */
   setBackSwipe(enabled: boolean): void;
-  restart(reason: "stuck" | "update"): void;
+  /** Reloads the page (the app recreates its web view). */
+  restart(): void;
   /** Shows the platform's edit menu (Copy, Paste) over `rect`, in the page's client px, or hides it with null. Choices come back as `menuCopy` and `menuPaste`. The app only: it is what lets the terminal mark text, keyboard up or down. */
   editMenu?: (rect: MenuRect | null) => void;
   /** Opens the platform's own screen for adding, pairing and removing servers. Native only. */

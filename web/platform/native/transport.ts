@@ -18,12 +18,17 @@ class NativeLink implements Link {
     private readonly handle: string,
     private readonly handlers: LinkHandlers,
     private readonly bridge: Bridge,
+    private readonly connectTimeoutMs: number,
   ) {
     void this.open();
   }
 
   get ready(): boolean {
     return this.inner?.ready ?? false;
+  }
+
+  get lastRecv(): number | null {
+    return this.inner?.lastRecv ?? null;
   }
 
   send(msg: ClientMsg): void {
@@ -42,10 +47,10 @@ class NativeLink implements Link {
       // Locked: `lifecycle.locked` stops the sockets and its unlock restarts them; the backoff covers the gap.
       this.fail(1006, true);
     } else if ("notEnrolled" in reply) {
-      this.fail(CloseCode.BadToken, false); // no token to echo: native already has none
+      this.fail(CloseCode.BadToken, false, "notEnrolled"); // no token to echo: native already has none
     } else {
       const { url, token } = reply;
-      this.inner = new HostLink({ url, token, build: import.meta.env.MODE, kind: "ios" }, {
+      this.inner = new HostLink({ url, token, build: import.meta.env.MODE, kind: "ios", connectTimeoutMs: this.connectTimeoutMs }, {
         ...this.handlers,
         close: (close) => {
           if (close.code === CloseCode.BadToken) this.bridge.hostRejected(this.handle, token);
@@ -55,16 +60,17 @@ class NativeLink implements Link {
     }
   }
 
-  private fail(code: number, retry: boolean): void {
+  /** No server sent this close: native opened no socket. */
+  private fail(code: number, retry: boolean, cause?: "notEnrolled"): void {
     this.closed = true;
-    this.handlers.close({ code, retry });
+    this.handlers.close({ code, retry, ...(cause && { cause }) });
   }
 }
 
 /** `muxen-app://h-<handle>` is native's HTTP proxy for a host (auth, files, completion); sockets use the Link above. */
 export function createNativeTransport(bridge: Bridge): Transport {
   return {
-    openSocket: (handle, handlers) => new NativeLink(handle, handlers, bridge),
+    openSocket: (handle, handlers, connectTimeoutMs) => new NativeLink(handle, handlers, bridge, connectTimeoutMs),
     httpBase: (handle) => `muxen-app://h-${handle}`,
   };
 }

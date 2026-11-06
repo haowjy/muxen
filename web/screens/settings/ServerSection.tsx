@@ -9,6 +9,7 @@ import type { HostClient } from "../../net/hosts";
 import { refusalWords } from "../../net/refusalWords";
 import type { SettingsFailure } from "../../net/settings";
 import type { ServerSettings } from "../../proto/generated/messages";
+import { offlineWords } from "../../ui/hostProblem";
 import { Button } from "../../ui/primitives/Button";
 import { IconButton } from "../../ui/primitives/IconButton";
 import { Spinner } from "../../ui/primitives/Spinner";
@@ -59,6 +60,10 @@ export function ServerSection({ host, name }: { host: HostClient; name: string }
   const refocus = useRef<Refocus | null>(null);
 
   useEffect(() => { client.read(); }, [client]);
+  // A server that answers again fills in what could not load.
+  useEffect(() => app.hosts.recovered(host.entry.handle, () => {
+    if (client.snapshot.settings === null || client.snapshot.unreachable) client.read();
+  }), [app, client, host.entry.handle]);
 
   const why = (failed: SettingsFailure | null): string | null => {
     if (!failed) return null;
@@ -86,12 +91,19 @@ export function ServerSection({ host, name }: { host: HostClient; name: string }
     app.focus.refocus(next);
   });
 
-  if (view.unreachable) {
+  if (host.shown === "noNetwork") {
+    return (
+      <Section title={name}>
+        <p class={styles.detail}>{offlineWords(host.entry.pageOrigin === null)}</p>
+      </Section>
+    );
+  }
+  if (host.shown === "unreachable" || view.unreachable) {
     return (
       <Section title={name}>
         <div class={styles.unreachable}>
           <p class={styles.detail}>Can't reach {name}.</p>
-          <Button variant="secondary" onClick={() => { client.read(); }}>Try again</Button>
+          <Button variant="secondary" onClick={() => { if (host.shown === "reachable") client.read(); else app.retryHost(host.entry.handle); }}>Try again</Button>
         </div>
       </Section>
     );

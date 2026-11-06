@@ -1,7 +1,7 @@
 // How a tab's connection reads on its pill, in the status band and on the host label.
 import { bellLook, type BellsState } from "../../sessions/bells";
 import { initialState } from "../../tabs/connection";
-import { describe, type Status, type Tone } from "../../tabs/status";
+import { describe, type HostLook, type Status, type Tone } from "../../tabs/status";
 import type { Pill, PillTone } from "../../ui/primitives/TabStrip";
 import { labelOf } from "../../workspace/labels";
 import type { Tab, TerminalTab } from "../../workspace/state";
@@ -25,7 +25,7 @@ const PILL: Record<Tone, { tone: PillTone; state: string }> = {
 };
 
 /** `onScreen`: the active tab on the Terminal destination, the only one that watches. */
-export function lookOf(tab: TerminalTab, status: TabStatus | undefined, host: string, onScreen: boolean, now: number): TabLook {
+export function lookOf(tab: TerminalTab, status: TabStatus | undefined, host: HostLook, onScreen: boolean, now: number): TabLook {
   const known = status ?? { state: initialState, downSince: now, retryAt: null };
   const described = describe(known.state, known.downSince, known.retryAt, now, host, onScreen);
   // A restored tab is unproven until the daemon finds its session: reconnecting colour, "Checking…", no input.
@@ -45,7 +45,7 @@ export interface PillEnv {
   /** The workspace's server's home folder, if known. */
   home: string | null;
   statuses: Readonly<Record<string, TabStatus>>;
-  hostName: (hostId: string) => string;
+  host: (hostId: string) => HostLook;
   /** The terminal tab that is on screen, if any. */
   onScreen: string | null;
   now: number;
@@ -56,7 +56,7 @@ export interface PillEnv {
 export function pillOf(tab: Tab, env: PillEnv): Pill {
   const label = labelOf(tab, env.home);
   if (tab.kind === "files") return { id: tab.id, host: tab.host, kind: tab.kind, session: label.session, window: "", full: label.full, tone: "idle", state: "open", bell: false };
-  const look = lookOf(tab, env.statuses[tab.id], env.hostName(tab.host), tab.id === env.onScreen, env.now);
+  const look = lookOf(tab, env.statuses[tab.id], env.host(tab.host), tab.id === env.onScreen, env.now);
   return { id: tab.id, host: tab.host, kind: tab.kind, session: label.session, window: label.window, full: label.full, tone: look.tone, state: look.state, bell: bellLook(env.bells, tab.id).ring };
 }
 

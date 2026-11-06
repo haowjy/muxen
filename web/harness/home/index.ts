@@ -3,6 +3,7 @@ import { serveTree } from "../files/fakes";
 import type { ServerSettings, TmuxListing } from "../../proto/generated/messages";
 import { defaultSettings } from "../../platform/test/settings";
 import type { Fixtures } from "../fixture";
+import { Banners } from "./Banners";
 import { Cards } from "./Cards";
 
 const win = (id: number, index: number, name: string) => ({ id, index, name, active: index === 0, activity: 0 });
@@ -36,8 +37,16 @@ export const fixtures: Fixtures = {
   homeMany: { daemon: (d) => { d.listing = MANY; } },
   /** The daemon's tmux has no sessions. */
   emptyServer: { daemon: (d) => { d.listing = { server: "main:1-1", version: "3.4", sessions: [] }; } },
-  /** Offline with a saved workspace: open tabs show as checking, drafts stay reachable. */
+  /** Offline with a saved workspace: open tabs show as checking, drafts stay reachable. Home reads checking at once and offline about 16 s in. */
   offlineTabs: { options: () => ({ workspace: SAVED }), daemon: (d) => { d.info = "down"; } },
+  /** The phone reports no network: every card, banner and strip says so, with no Retry. */
+  noNetwork: {
+    options: () => ({ workspace: SAVED, lifecycle: { visible: true, online: false, locked: false, covered: false } }),
+    openActive: true,
+    daemon: (d) => { d.info = "down"; },
+  },
+  /** Every state of a server's banner at once. */
+  homeBanners: { render: Banners, daemon: (d) => { d.listing = LISTING; } },
   /** Every state of a Home workspace row at once. */
   homeCards: { render: Cards },
   /** Saved terminal tabs and a Files tab on a live server: one row with its tab count. */
@@ -73,6 +82,12 @@ export const fixtures: Fixtures = {
   },
   /** The server's settings can't be fetched. */
   settingsServerOffline: { overlay: SETTINGS, daemon: (d) => { d.listing = LISTING; d.settings.unreachable = true; } },
+  /** The phone has no network: the server's section says so, with no Try again. */
+  settingsServerNoNetwork: {
+    options: () => ({ lifecycle: { visible: true, online: false, locked: false, covered: false } }),
+    overlay: SETTINGS,
+    daemon: (d) => { d.listing = LISTING; },
+  },
   /** config.toml was edited by hand and doesn't parse: tap Reload config.toml to see where. */
   settingsServerBroken: {
     overlay: SETTINGS,

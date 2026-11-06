@@ -103,6 +103,11 @@ export const fixtures: Fixtures = {
   /** A folder, and a file, outside the home folder. */
   filesOutside: at({ kind: "dir", path: ETC }),
   filesOutsideFile: at({ kind: "file", path: `${ETC}/hosts` }),
+  /** The phone reports no network and the folder isn't held: "Waiting for pop-os" in place of the listing, no Try again. */
+  filesWaiting: {
+    ...at({ kind: "dir", path: REPO }),
+    options: () => ({ workspace: savedPlus({ kind: "files", id: "files-1", host: "h-pop", place: { kind: "dir", path: REPO } }, "files-1"), lifecycle: { visible: true, online: false, locked: false, covered: false } }),
+  },
   /** A folder that was deleted or moved since the tab last showed it. */
   filesGone: at({ kind: "dir", path: `${HOME}/gone/deeper` }),
   /** Finding folders by path (the path field), in `~/repos/muxen`. */

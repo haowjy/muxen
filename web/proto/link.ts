@@ -4,7 +4,10 @@ import { CloseCode, PROTOCOL_VERSION, type ClientMsg, type ServerMsg } from "./g
 /** Timings, daemon-core.md §6 and plan.md "Reconnect". */
 const PING_INTERVAL_MS = 10_000;
 const IDLE_TIMEOUT_MS = 25_000; // same threshold the daemon applies to us
-const CONNECT_TIMEOUT_MS = 5_000; // iOS 26 can leave a new socket in CONNECTING
+/** iOS 26 can leave a new socket in CONNECTING; a silent server is told in two of these. */
+export const CONNECT_TIMEOUT_MS = 5_000;
+/** Once a server is unreachable, and for a socket that opened and waits for `welcome`: a slow handshake may finish. */
+export const SLOW_CONNECT_TIMEOUT_MS = 15_000;
 
 export type WelcomeMsg = Extract<ServerMsg, { type: "welcome" }>["data"];
 
@@ -12,8 +15,11 @@ export interface LinkClose {
   code: number;
   /** `false` for 4001 (incompatible) and 4401 (bad token): retrying cannot help. */
   retry: boolean;
-  /** Set when the client gave up itself rather than the daemon closing. */
-  cause?: "connectTimeout" | "idle" | "protocol";
+  /**
+   * Set when the client closed it, whatever `code` says: no server sent it. `welcomeTimeout`: the
+   * socket opened and no `welcome` came. `notEnrolled`: native holds no token (code 4401).
+   */
+  cause?: "connectTimeout" | "welcomeTimeout" | "idle" | "protocol" | "notEnrolled";
 }
 
 export interface LinkHandlers {
@@ -31,6 +37,8 @@ export interface LinkOptions {
   token?: string;
   build: string;
   kind: "ios" | "web";
+  /** How long the socket may stay CONNECTING; the default is {@link CONNECT_TIMEOUT_MS}. */
+  connectTimeoutMs?: number;
   /** Injectable for tests. */
   createSocket?: (url: string, protocols: string[]) => WebSocket;
 }
@@ -44,7 +52,8 @@ export class HostLink {
   private readonly handlers: LinkHandlers;
   private welcomed = false;
   private closed = false;
-  private lastRecv = Date.now();
+  /** When the last message arrived; null before any. */
+  lastRecv: number | null = null;
   private connectTimer: ReturnType<typeof setTimeout> | undefined;
   private pingTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -54,6 +63,7 @@ export class HostLink {
     this.ws = create(opts.url, opts.token ? ["muxen.v1", `muxen.auth.${opts.token}`] : ["muxen.v1"]);
     this.ws.binaryType = "arraybuffer";
     this.ws.onopen = () => {
+      this.armConnectTimer(SLOW_CONNECT_TIMEOUT_MS, "welcomeTimeout");
       this.send({
         type: "hello",
         data: { protocol: PROTOCOL_VERSION, client: { kind: opts.kind, build: opts.build } },
@@ -64,7 +74,12 @@ export class HostLink {
       this.finish({ code: ev.code, retry: ev.code !== CloseCode.Incompatible && ev.code !== CloseCode.BadToken });
     };
     // onerror is always followed by onclose; nothing to add.
-    this.connectTimer = setTimeout(() => { this.giveUp("connectTimeout"); }, CONNECT_TIMEOUT_MS);
+    this.armConnectTimer(opts.connectTimeoutMs ?? CONNECT_TIMEOUT_MS, "connectTimeout");
+  }
+
+  private armConnectTimer(ms: number, cause: "connectTimeout" | "welcomeTimeout"): void {
+    clearTimeout(this.connectTimer);
+    this.connectTimer = setTimeout(() => { this.giveUp(cause); }, ms);
   }
 
   /** Dropped silently before `welcome`: only `hello` is accepted until then. */
@@ -111,7 +126,7 @@ export class HostLink {
   }
 
   private heartbeat(): void {
-    if (Date.now() - this.lastRecv > IDLE_TIMEOUT_MS) {
+    if (this.lastRecv !== null && Date.now() - this.lastRecv > IDLE_TIMEOUT_MS) {
       this.giveUp("idle");
       return;
     }

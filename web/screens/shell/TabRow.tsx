@@ -1,5 +1,5 @@
 import { useCallback, useState } from "preact/hooks";
-import { useApp, useAppView, useBells, useHostName } from "../../app/context";
+import { useApp, useAppView, useBells, useHostLook } from "../../app/context";
 import { cx } from "../../ui/cx";
 import { DockButton } from "../../ui/primitives/DockButton";
 import { Icon } from "../../ui/primitives/Icon";
@@ -26,7 +26,7 @@ export function TabRow({ place }: { place: "top" | "dock" }) {
   const touchInput = useAppView((v) => v.viewport.directInput !== "xterm");
   const owner = useStore(app.focus, (s) => s.owner);
   const statuses = useStore(terminals, (s) => s.tabs);
-  const hostName = useHostName();
+  const host = useHostLook();
   const bells = useBells();
   const [menu, setMenu] = useState<MenuTarget | null>(null);
   const closeMenu = useCallback(() => { setMenu(null); }, []);
@@ -36,7 +36,7 @@ export function TabRow({ place }: { place: "top" | "dock" }) {
   const running = screen === "terminal" && statuses[active ?? ""]?.state.kind !== "live";
   const now = useNow(running);
   if (!space) return null;
-  const env = { home: space.home, statuses, hostName, onScreen: screen === "terminal" ? active : null, now, bells };
+  const env = { home: space.home, statuses, host, onScreen: screen === "terminal" ? active : null, now, bells };
   const pills = space.tabs.map((tab) => pillOf(tab, env));
   const files = screen === "files";
   // A Files tab has no terminal input to raise: its keyboard control is its path field, which lowers with its keyboard.

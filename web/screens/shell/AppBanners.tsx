@@ -12,7 +12,7 @@ export function AppBanners() {
   return (
     <>
       {(storageClosed || update === "reload") && !onTerminal && (
-        <Banner tone="warning" title="Reload to finish updating" action={{ label: "Reload", onAction: () => { app.platform.restart("update"); } }}>
+        <Banner tone="warning" title="Reload to finish updating" action={{ label: "Reload", onAction: () => { app.platform.restart(); } }}>
           {storageClosed ? "Changes since then are kept in memory and won't survive a reload." : undefined}
         </Banner>
       )}

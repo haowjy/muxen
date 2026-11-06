@@ -4,7 +4,7 @@
 // through, so they reach the daemon one at a time and in order whatever screen is open:
 // Settings draws from it, and can close mid-save without losing the save or its outcome.
 
-import { BUSY_RETRIES, HttpRefusal, send, type RefusalCode } from "./http";
+import { HttpRefusal, sendJson, type RefusalCode } from "./http";
 import type { ServerSettings, SettingsChange } from "../proto/generated/messages";
 import { Store } from "../ui/store";
 
@@ -18,7 +18,7 @@ export interface SettingsApi {
 }
 
 export function httpSettingsApi(origin: string, fetchFn?: typeof fetch): SettingsApi {
-  const json = async <T>(path: string, init?: RequestInit): Promise<T> => (await (await send(`${origin}${path}`, init, BUSY_RETRIES, fetchFn)).json()) as T;
+  const json = <T>(path: string, init?: RequestInit): Promise<T> => sendJson<T>(`${origin}${path}`, init, fetchFn);
   const post = (body: string): RequestInit => ({ method: "POST", headers: { "Content-Type": "application/json" }, body });
   return {
     read: () => json<ServerSettings>("/settings"),

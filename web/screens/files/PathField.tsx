@@ -8,6 +8,7 @@ import type { FilesPlace } from "../../platform/types";
 import { Button } from "../../ui/primitives/Button";
 import { PathInput } from "../../ui/primitives/PathInput";
 import { useStore } from "../../ui/store";
+import { useFailure } from "./failure";
 import { NarrowedList } from "./NarrowedList";
 import type { FilesSession } from "./session";
 import { useListbox } from "./useListbox";
@@ -47,6 +48,8 @@ export function PathField({ session, rest, here, actions, onEditing, onOpen }: P
   const home = useStore(browser, (s) => s.home);
   const showHidden = useStore(browser, (s) => s.hidden);
   const held = useStore(browser.folders, (s) => s.held);
+  const recoveries = useStore(browser, (s) => s.recoveries);
+  const failure = useFailure(session);
   const input = useRef<HTMLInputElement>(null);
   /** The typed text; null at rest. */
   const [text, setText] = useState<string | null>(null);
@@ -67,7 +70,8 @@ export function PathField({ session, rest, here, actions, onEditing, onOpen }: P
 
   // The folder the field names is listed once typing settles; leaving cancels a pending one.
   const ask = view?.ask ?? null;
-  useEffect(() => { browser.folders.ask(ask); }, [browser, ask?.path, ask?.hidden]);
+  // Asked again when the server answers after a failure: the narrowed folder may be one that failed.
+  useEffect(() => { browser.folders.ask(ask); }, [browser, ask?.path, ask?.hidden, recoveries]);
   const rows = view?.out.rows ?? [];
   // NarrowedList draws the listbox only for a typed folder that did not fail.
   const listed = rows.length > 0 && !!view?.typed && !view.record?.error;
@@ -190,7 +194,7 @@ export function PathField({ session, rest, here, actions, onEditing, onOpen }: P
           <NarrowedList
             view={view}
             home={home}
-            hostName={session.hostName}
+            failure={failure}
             box={box}
             loadingRest={loadingRest}
             onOpen={open}

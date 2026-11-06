@@ -88,6 +88,15 @@ export class Folders extends Store<FoldersView> {
     this.timer = setTimeout(() => { if (!this.answered(target.path, target.hidden)) void this.load(target.path, target.hidden); }, SETTLE_MS);
   }
 
+  /**
+   * The server answers again: pinned folders whose last listing failed for want of a connection are listed again, except
+   * `except`, which the caller lists itself. An unpinned record is asked for again when something wants it (`answered`).
+   */
+  async recovered(except?: string): Promise<void> {
+    const failed = [...this.snapshot.held].filter(([key, record]) => key !== except && record.error?.code === "network" && !record.loading && this.pinned(key));
+    await Promise.all(failed.map(([key]) => this.relist(folderOf(key), key.startsWith("1"))));
+  }
+
   /** The folder is held, under way, or refused for a reason a second ask would not change. A failure for want of a connection is asked again: it may be back. */
   private answered(path: string, hidden: boolean): boolean {
     const record = this.snapshot.held.get(folderKey(path, hidden));

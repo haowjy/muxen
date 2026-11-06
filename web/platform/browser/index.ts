@@ -9,7 +9,6 @@ import { readLifecycle, watchLifecycle } from "./lifecycle";
 import { clipboard } from "./clipboard";
 import { appleKeyboard, canOpenApp, download, openInApp, openURL } from "./links";
 import { createPwa } from "./pwa";
-import { restart } from "./restart";
 import type { Platform, PlatformEvent } from "../types";
 
 export function createBrowserPlatform(): Platform {
@@ -61,7 +60,7 @@ export function createBrowserPlatform(): Platform {
     playVideo: () => "inline",
     haptic: () => undefined,
     setBackSwipe: () => undefined,
-    restart,
+    restart: () => { location.reload(); },
     ...createPwa(emit),
   };
 }

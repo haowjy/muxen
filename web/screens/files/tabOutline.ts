@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
-import { describeError } from "../../files/browser";
 import { folderKey } from "../../files/folders";
 import type { Entry } from "../../files/api";
 import { foldersBetween, withExpanded } from "../../files/outline";
 import { baseName } from "../../files/paths";
-import type { HttpRefusal } from "../../net/http";
 import { useStore } from "../../ui/store";
+import { useFailure } from "./failure";
 import type { OutlineProps } from "./FolderList";
 import type { PanelPick } from "./PreviewPanel";
 import { scrollKey, type FilesSession } from "./session";
@@ -98,7 +97,7 @@ export function useTabOutline(session: FilesSession, tab: string, root: string |
 export function useOutlineListings(session: FilesSession, tree: TabOutline, hidden: boolean, on: boolean): OutlineProps | undefined {
   const { folders } = session.browser;
   const held = useStore(folders, (s) => s.held);
-  const describe = useMemo(() => (e: HttpRefusal) => describeError(e, session.hostName), [session]);
+  const { describe } = useFailure(session);
   useEffect(() => () => { folders.pin("outline", []); }, [folders]);
   if (!on) return undefined;
   return {

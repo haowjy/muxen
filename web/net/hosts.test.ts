@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestPlatform, type TestPlatform } from "../platform/test";
+import { FakeLink } from "../platform/test/host";
+import type { HostEntry } from "../platform/types";
 import type { TabPort } from "./host";
 import { HostRegistry } from "./hosts";
 
@@ -8,11 +10,16 @@ const port: TabPort = { linkUp: () => undefined, linkLost: () => undefined, paus
 beforeEach(() => { vi.useFakeTimers(); });
 afterEach(() => { vi.useRealTimers(); });
 
-async function boot(edit: (p: TestPlatform) => void = () => undefined, options: Parameters<typeof createTestPlatform>[0] = {}) {
+async function boot(
+  edit: (p: TestPlatform) => void = () => undefined,
+  options: Parameters<typeof createTestPlatform>[0] = {},
+  wrap: (inner: typeof fetch) => typeof fetch = (inner) => inner,
+  extra: Partial<ConstructorParameters<typeof HostRegistry>[0]> = {},
+) {
   const platform = createTestPlatform(options);
   edit(platform);
   const stuck: string[] = [];
-  const registry = new HostRegistry({ transport: platform.transport, fetchFn: platform.fetch, onStuck: () => stuck.push("stuck"), random: () => 0.5 });
+  const registry = new HostRegistry({ transport: platform.transport, fetchFn: wrap(platform.fetch), onStuck: () => stuck.push("stuck"), random: () => 0.5, ...extra });
   const { hosts, lifecycle } = await platform.boot();
   registry.setLifecycle(lifecycle);
   registry.set(hosts);
@@ -58,14 +65,19 @@ describe("admission, read from the daemon at launch", () => {
     expect(t.host()?.checkingSince).toBeNull();
   });
 
-  it("reports an unreachable host and checks again when the network returns", async () => {
+  it("keeps an unanswered host deciding, reads unreachable at the 10 s rule, and admits it when it answers", async () => {
     const t = await boot((p) => { p.daemon.info = "down"; });
-    expect(t.host()?.admission).toEqual({ kind: "unreachable" });
+    expect(t.host()?.admission).toEqual({ kind: "deciding" });
+    expect(t.host()?.shown).toBe("checking");
+    await vi.advanceTimersByTimeAsync(16_000);
+    expect(t.host()?.shown).toBe("unreachable");
+    expect(t.host()?.admission).toEqual({ kind: "deciding" });
     t.platform.daemon.info = defaultInfo();
     t.registry.setLifecycle({ visible: true, online: false, locked: false });
     t.registry.setLifecycle({ visible: true, online: true, locked: false });
     await vi.advanceTimersByTimeAsync(0);
     expect(t.host()?.admission).toEqual({ kind: "admitted", deviceName: "laptop" });
+    expect(t.host()?.shown).toBe("reachable");
   });
 
   it("calls a protocol outside the daemon's range incompatible, and stays", async () => {
@@ -131,5 +143,285 @@ describe("sockets follow the lifecycle", () => {
     expect(t.platform.links[0]?.closed).toBe(true);
     t.registry.setLifecycle({ visible: true, online: true, locked: false });
     expect(t.platform.links).toHaveLength(2);
+  });
+});
+
+/** A fetch that never answers `/auth/info` until released, ending on its caller's abort. */
+function holding(inner: typeof fetch, hold: { on: boolean; sent: string[] }): typeof fetch {
+  return (input, init) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    hold.sent.push(`${init?.method ?? "GET"} ${url}`);
+    if (!hold.on || url.includes("/auth/")) return inner(input, init);
+    return new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => { reject(new DOMException("aborted", "AbortError")); });
+    });
+  };
+}
+
+const reply = (status: number, body: unknown): Response => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+
+describe("the admission check as reachability's attempt", () => {
+  const info = defaultInfo();
+
+  it.each([
+    ["a 200 with a host id", () => Promise.resolve(reply(200, info)), true],
+    ["the daemon's 503 identity_unavailable", () => Promise.resolve(reply(503, { error: "identity_unavailable" })), true],
+    ["a proxy's 502", () => Promise.resolve(reply(502, { error: "bad_gateway" })), false],
+    ["a 404 without a host id", () => Promise.resolve(reply(404, { error: "not_found" })), false],
+    ["a network error", () => Promise.reject(new TypeError("network")), false],
+    ["no reply in 5 s", () => new Promise<Response>(() => undefined), false],
+  ])("%s", async (_name, answer, answered) => {
+    const t = await boot(undefined, {}, () => (input, init) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (!url.includes("/auth/info")) return Promise.resolve(reply(200, { deviceName: "laptop" }));
+      return Promise.race([answer(), new Promise<Response>((_r, reject) => { init?.signal?.addEventListener("abort", () => { reject(new DOMException("aborted", "AbortError")); }); })]);
+    });
+    await vi.advanceTimersByTimeAsync(5_100);
+    expect(t.host()?.shown).toBe(answered ? "reachable" : "checking");
+  });
+
+  it("last reached carries across admission, from the saved value to the answer", async () => {
+    const t = await boot((p) => { p.daemon.info = "down"; }, {}, undefined, { reachedAt: () => 1234 });
+    expect(t.host()).toMatchObject({ shown: "checking", reachedAt: 1234 });
+    t.platform.daemon.info = defaultInfo();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(t.host()?.reachedAt).toBeGreaterThan(1234);
+  });
+
+  it("a 4503 stops the socket and the check takes over: no socket opens while it runs", async () => {
+    const hold = { on: false, sent: [] as string[] };
+    const t = await boot(undefined, {}, (inner) => holding(inner, hold));
+    t.host()?.socket.join(port);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(t.platform.links).toHaveLength(1);
+    t.platform.links[0]?.drop(4503);
+    expect(t.host()?.admission).toEqual({ kind: "deciding" });
+    expect(t.platform.links).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(t.platform.links).toHaveLength(1); // the check is under way
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(t.host()?.admission.kind).toBe("admitted"); // it answered, and the socket came back
+    expect(t.platform.links).toHaveLength(2);
+  });
+
+  it("sends nothing while hidden or locked, and the page shown again sends the check", async () => {
+    const hold = { on: false, sent: [] as string[] };
+    const t = await boot((p) => { p.daemon.node = "busy"; }, {}, (inner) => holding(inner, hold));
+    t.registry.setLifecycle({ visible: false, online: true, locked: false });
+    const seen = hold.sent.length;
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(hold.sent).toHaveLength(seen);
+    t.registry.setLifecycle({ visible: true, online: true, locked: false });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(hold.sent.length).toBeGreaterThan(seen);
+  });
+
+  it("pausing the check decides nothing about the server", async () => {
+    const t = await boot((p) => { p.daemon.info = "down"; });
+    await vi.advanceTimersByTimeAsync(9_000);
+    t.registry.setLifecycle({ visible: false, online: true, locked: false });
+    t.registry.setLifecycle({ visible: true, online: true, locked: false });
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(t.host()?.shown).not.toBe("unreachable"); // the first attempt after the pause begins a new outage
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(t.host()?.shown).toBe("unreachable");
+  });
+});
+
+describe("requests to an unreachable server", () => {
+  /** A server whose file requests hang until aborted; the socket is welcomed by the test platform. */
+  async function connected() {
+    const hold = { on: true, sent: [] as string[] };
+    const t = await boot(undefined, {}, (inner) => holding(inner, hold));
+    t.host()?.socket.join(port);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(t.host()?.shown).toBe("reachable");
+    return { ...t, hold, fs: () => t.host()?.fs, link: () => t.platform.links.at(-1) as FakeLink };
+  }
+  const fileGets = (hold: { sent: string[] }): string[] => hold.sent.filter((s) => s.includes("/fs/"));
+
+  it("a GET in flight fails as network the moment the host turns unreachable, and survives past 10 s while the socket is open", async () => {
+    const t = await connected();
+    const outcome: unknown[] = [];
+    void t.fs()?.list("/", 0, false).then(() => outcome.push("ok"), (e: unknown) => outcome.push(e));
+    await vi.advanceTimersByTimeAsync(40_000);
+    expect(outcome).toEqual([]);
+    t.link().drop(1006, "idle");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(t.host()?.shown).toBe("unreachable");
+    expect(outcome).toMatchObject([{ code: "network" }]);
+  });
+
+  it("a GET past its headers is aborted too: a body that stalls ends as network when the host turns unreachable", async () => {
+    const hold = { on: false, sent: [] as string[] };
+    // Headers arrive at once; the body never finishes and errors when its request is aborted.
+    const stalling = (inner: typeof fetch): typeof fetch => (input, init) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (!url.includes("/fs/")) return inner(input, init);
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) { init?.signal?.addEventListener("abort", () => { controller.error(new DOMException("aborted", "AbortError")); }); },
+      });
+      return Promise.resolve(new Response(body, { status: 200, headers: { "Content-Type": "application/json" } }));
+    };
+    const t = await boot(undefined, {}, (inner) => stalling(holding(inner, hold)));
+    t.host()?.socket.join(port);
+    await vi.advanceTimersByTimeAsync(0);
+    const outcome: unknown[] = [];
+    void t.host()?.fs.list("/", 0, false).then(() => outcome.push("ok"), (e: unknown) => outcome.push(e));
+    await vi.advanceTimersByTimeAsync(40_000);
+    expect(outcome).toEqual([]);
+    (t.platform.links.at(-1) as FakeLink).drop(1006, "idle");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(outcome).toMatchObject([{ code: "network" }]);
+    // The slot's signal was replaced at the edge: the next GET, once reachable, is not born aborted.
+    await vi.advanceTimersByTimeAsync(40_000);
+    expect(t.host()?.shown).toBe("reachable");
+    const next: unknown[] = [];
+    void t.host()?.fs.list("/", 0, false).then(() => next.push("ok"), (e: unknown) => next.push(e));
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(next).toEqual([]); // waiting on its body, not rejected
+  });
+
+  it("a GET made while unreachable is not sent, the admission check still is, and a POST is never aborted", async () => {
+    const t = await connected();
+    t.link().drop(1006, "idle");
+    const before = fileGets(t.hold).length;
+    await expect(t.fs()?.list("/", 0, false)).rejects.toMatchObject({ code: "network" });
+    expect(fileGets(t.hold)).toHaveLength(before);
+    const post = t.host()?.fs.create("/", "a", "file");
+    const settled: string[] = [];
+    void post?.then(() => settled.push("ok"), () => settled.push("failed"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fileGets(t.hold)).toHaveLength(before + 1);
+    expect(t.hold.sent.at(-1)).toMatch(/^POST /);
+    t.link().drop(1006, "idle"); // a second loss changes nothing: the host is unreachable already
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(settled).toEqual([]);
+    t.registry.recheck("h1");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(t.hold.sent.some((s) => s.endsWith("/auth/info"))).toBe(true);
+  });
+
+  it("the caller's own abort still aborts a GET, and reads as an abort", async () => {
+    const t = await connected();
+    const ctrl = new AbortController();
+    const result = t.fs()?.search("/", "q", false, ctrl.signal);
+    ctrl.abort();
+    await expect(result).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  it("phone offline: every host is no network, waiting GETs fail, and none is sent", async () => {
+    const t = await connected();
+    const outcome: unknown[] = [];
+    void t.fs()?.list("/", 0, false).then(() => outcome.push("ok"), (e: unknown) => outcome.push(e));
+    t.registry.setLifecycle({ visible: true, online: false, locked: false });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(t.host()?.shown).toBe("noNetwork");
+    expect(outcome).toMatchObject([{ code: "network" }]);
+    const before = fileGets(t.hold).length;
+    await expect(t.fs()?.list("/", 0, false)).rejects.toMatchObject({ code: "network" });
+    expect(fileGets(t.hold)).toHaveLength(before);
+    t.registry.setLifecycle({ visible: true, online: true, locked: false });
+    expect(t.host()?.shown).toBe("reachable");
+  });
+
+  it("a no-network blip over an open socket tells views that failed as network", async () => {
+    const t = await connected();
+    const calls: string[] = [];
+    t.registry.recovered("h1", () => calls.push("recovered"));
+    t.registry.setLifecycle({ visible: true, online: false, locked: false });
+    expect(t.host()?.shown).toBe("noNetwork");
+    t.registry.setLifecycle({ visible: true, online: true, locked: false });
+    expect(t.host()?.shown).toBe("reachable");
+    expect(calls).toEqual(["recovered"]);
+  });
+
+  it("tells views that failed as network when the server answers again, and not on a socket's ordinary close", async () => {
+    const t = await connected();
+    const calls: string[] = [];
+    t.registry.recovered("h1", () => calls.push("recovered"));
+    t.link().drop(1006); // an ordinary close while reachable: nothing failed
+    expect(calls).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1_000); // the backoff's socket is welcomed while reachable
+    expect(calls).toEqual(["recovered"]);
+    t.platform.links.at(-1)?.drop(1006, "idle");
+    expect(t.host()?.shown).toBe("unreachable");
+    calls.length = 0;
+    await vi.advanceTimersByTimeAsync(40_000);
+    expect(t.host()?.shown).toBe("reachable");
+    expect(calls).toEqual(["recovered"]);
+  });
+});
+
+describe("a stuck socket", () => {
+  /** Sockets that open only when the test says; `answer` is whether HTTP answers. */
+  async function stuckSetup(hosts: HostEntry[] = [{ handle: "h1", hostId: "h-pop", name: "pop-os", pageOrigin: null }], answer = true) {
+    const links: Record<string, FakeLink[]> = {};
+    const gate = { open: (): void => undefined, wait: Promise.resolve() };
+    const t = await boot(
+      (p) => {
+        p.transport.openSocket = (handle, handlers) => {
+          const link = new FakeLink(handlers);
+          (links[handle] ??= []).push(link);
+          return link;
+        };
+      },
+      { hosts },
+      (inner) => async (input, init) => {
+        await gate.wait;
+        return answer ? inner(input, init) : Promise.reject(new TypeError("network"));
+      },
+    );
+    /** Holds every request until `release`. */
+    const hold = (): void => { gate.wait = new Promise<void>((resolve) => { gate.open = resolve; }); };
+    const last = (handle: string): FakeLink => links[handle]?.at(-1) as FakeLink;
+    /** `n` connect timeouts in a row; the backoff's socket opens between them. */
+    const timeouts = (handle: string, n: number) => {
+      for (let i = 0; i < n; i++) {
+        if (i > 0) vi.advanceTimersByTime(5_000);
+        last(handle).drop(1006, "connectTimeout");
+      }
+    };
+    return { ...t, links, last, timeouts, hold, release: () => { gate.open(); } };
+  }
+
+  it("asks for a fresh web view when HTTP answers", async () => {
+    const t = await stuckSetup();
+    t.host()?.socket.join(port);
+    t.timeouts("h1", 3);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(t.stuck).toEqual(["stuck"]);
+  });
+
+  it("does not when the probe gets no answer: an off server never causes a reload", async () => {
+    const t = await stuckSetup(undefined, false);
+    t.host()?.socket.join(port);
+    t.timeouts("h1", 3);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(t.stuck).toEqual([]);
+  });
+
+  it("does not when a welcome came meanwhile", async () => {
+    const t = await stuckSetup();
+    t.host()?.socket.join(port);
+    t.hold();
+    t.timeouts("h1", 3);
+    await vi.advanceTimersByTimeAsync(2_000); // the backoff's socket opens, and is welcomed while the probe waits
+    t.last("h1").welcome();
+    t.release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(t.stuck).toEqual([]);
+  });
+
+  it("does not when another server's socket is open", async () => {
+    const t = await stuckSetup([
+      { handle: "h1", hostId: "h-pop", name: "pop-os", pageOrigin: null },
+      { handle: "h2", hostId: "h-mac", name: "mac", pageOrigin: null },
+    ]);
+    t.registry.all().forEach((c) => { c.socket.join(port); });
+    t.last("h2").welcome();
+    t.timeouts("h1", 3);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(t.stuck).toEqual([]);
   });
 });

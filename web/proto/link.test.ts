@@ -91,6 +91,25 @@ describe("HostLink", () => {
     expect(events.closes).toEqual([{ code: 1006, retry: true, cause: "connectTimeout" }]);
   });
 
+  it("waits 15 s for a welcome once the socket has opened, and calls that welcomeTimeout", () => {
+    const { sock, events } = setup();
+    vi.advanceTimersByTime(4_000);
+    sock.open();
+    vi.advanceTimersByTime(14_900);
+    expect(events.closes).toEqual([]);
+    vi.advanceTimersByTime(200);
+    expect(events.closes).toEqual([{ code: 1006, retry: true, cause: "welcomeTimeout" }]);
+  });
+
+  it("remembers when the last message arrived", () => {
+    const { link, sock } = setup();
+    expect(link.lastRecv).toBeNull();
+    sock.open();
+    vi.advanceTimersByTime(300);
+    sock.serverSends(JSON.stringify(welcome));
+    expect(link.lastRecv).toBe(Date.now());
+  });
+
   it("pings every 10 s and drops a link silent for 25 s", () => {
     const { sock, events } = setup();
     sock.open();
