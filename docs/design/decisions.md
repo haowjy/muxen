@@ -5144,3 +5144,17 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
   - absolute paths everywhere (the tree and the path field are already `~/`);
   - `~/` shown but absolute copied (the same file read two ways, which is what Jimmy objected to);
   - `~/` on Insert too (a quoted `~/my file` does not expand in a shell).
+
+### Revealing a file under a hidden name turns Show hidden files on
+
+- **Decided:** 2026-11-05, design lead, from Jimmy's report that after opening
+  `~/.meridian/git/…/QUEUE.md` by path the outline "didn't properly open, its still in ~/".
+- **What:** the outline's one reveal (Search's Enter, and Back from a full-width file) turns Show hidden
+  files on when a folder between the list's root and the file, or the file, has a name starting with `.`.
+- **Why:** with the setting off the listing of `~/` has no `.meridian` row, so the reveal stopped at the
+  root and left the file selected with nothing visible open. The setting is the device's, as ever, and
+  stays on.
+- **Rejected:**
+  - showing only the hidden ancestors (listings are one per folder under one setting; a mixed outline
+    needs a second listing model);
+  - leaving the outline closed and saying why (the user asked to see that file).

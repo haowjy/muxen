@@ -83,7 +83,7 @@ export function filesTree(): FakeTree {
       [`${REPO}/.env`]: { size: 214, mtime: ago(40 * DAY) },
     },
     home: HOME,
-    dirs: ["/", "/home", ETC, HOME, REPO, `${REPO}/src`, `${REPO}/docs`, `${REPO}/notes`, `${REPO}/.git`, `${REPO}/empty`, `${HOME}/notes`, UPLOADS, `${HOME}/other`, `${HOME}/other/deep`, `${HOME}/.config`],
+    dirs: ["/", "/home", ETC, HOME, REPO, `${REPO}/src`, `${REPO}/docs`, `${REPO}/notes`, `${REPO}/.git`, `${REPO}/empty`, `${HOME}/notes`, UPLOADS, `${HOME}/other`, `${HOME}/other/deep`, `${HOME}/.config`, `${HOME}/.config/muxen`],
     files: {
       [`${REPO}/README.md`]: MD,
       [`${REPO}/Cargo.toml`]: TEXT,
@@ -95,6 +95,7 @@ export function filesTree(): FakeTree {
       [`${REPO}/demo.mp4`]: "video/mp4",
       [`${REPO}/muxen.bin`]: "application/octet-stream",
       [`${REPO}/.env`]: TEXT,
+      [`${HOME}/.config/muxen/config.toml`]: TEXT,
       [`${ETC}/hosts`]: TEXT,
       [`${UPLOADS}/20261022-101010Z-abcd.jpg`]: "image/jpeg",
       ...Object.fromEntries(extra.map((path) => [path, TEXT])),

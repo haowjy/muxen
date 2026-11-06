@@ -16,7 +16,8 @@ export interface TabOutline {
   select: (key: string | null) => void;
   toggle: (folder: string, open: boolean) => void;
   /**
-   * Opens the folders between the list's root and `path`, selects it, and loads each folder's pages until the next
+   * Opens the folders between the list's root and `path` (turning Show hidden files on when a name on the way is
+   * hidden), selects it, and loads each folder's pages until the next
    * name down is held, so its row exists. `entry`, when the caller has it (a Search result), stands in for the row's
    * until then, so the Preview panel shows the file meanwhile.
    */
@@ -57,6 +58,9 @@ export function useTabOutline(session: FilesSession, tab: string, root: string |
     reveal: (path, entry) => {
       if (root === null) return;
       const folders = foldersBetween(root, path);
+      // A hidden name on the way (`~/.config/…`) has no row while Show hidden files is off, so the reveal would stop
+      // at the folder above it: asking for the file is asking to see it, so the setting goes on.
+      if (!session.browser.snapshot.hidden && [...folders, path].some((p) => baseName(p).startsWith("."))) void session.browser.toggleHidden();
       expand(folders.reduce((all: readonly string[], folder) => withExpanded(all, folder, true, root), open));
       select(path);
       setRevealed(entry ? { path, entry } : null);
