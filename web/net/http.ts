@@ -33,6 +33,8 @@ export async function send(target: string, init: RequestInit = {}, retries = BUS
       throw new HttpRefusal(0, "network");
     }
     if (res.ok) return res;
+    // Native's own answer while the app is locked or still unlocking: nothing reached the server, and the socket's return after the unlock is what loads it again.
+    if (res.status === 423) throw new HttpRefusal(0, "network");
     const body = await res.json().then((b: unknown) => b as Partial<ErrorBody> | null, () => null);
     const code = body?.error;
     const detail = typeof body?.detail === "string" ? body.detail : undefined;

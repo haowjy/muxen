@@ -134,7 +134,8 @@ origin:
     answered locally before the compatibility gate; a disallowed route never reaches
     the daemon.
   - Protected requests require a cached native token. While locked the handler returns
-    local `423 {"error":"locked"}`; without a token it returns local
+    local `423 {"error":"locked"}`, which the web reads as `network`: nothing reached the
+    server, and what failed loads again once the socket returns after the unlock. Without a token it returns local
     `401 {"error":"not_enrolled"}`. A daemon `401` revokes the cached token only if
     the request actually carried it. A redirect is followed only by the redirect rule below.
 
