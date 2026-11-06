@@ -62,7 +62,7 @@ fn open_uploads_dir(uploads_dir: &str, home: &Path) -> Result<Opened, FsError> {
         .recursive(true)
         .mode(0o700)
         .create(&dir);
-    // One that can't be resolved is not a directory, whatever the open says.
+    // One that doesn't resolve is not a directory. A folder the user can't reach stays `denied`.
     open(uploads_dir, home, Want::Dir).map_err(|error| match error {
         FsError::BadRequest | FsError::NotFound => FsError::NotADirectory,
         other => other,

@@ -51,7 +51,11 @@ function Confirm({ name, title, confirmLabel, run, children }: {
   const { open, close } = useOverlay("settings", name);
   const { busy, error, run: request } = useRequest();
   const confirm = async (): Promise<void> => {
-    if (await request(run, title)) app.router.closeAllOverlays(); // a finished action leaves nothing open
+    await request(async () => {
+      const failed = await run();
+      if (failed === null) app.router.closeAllOverlays(); // a finished action leaves nothing open
+      return failed;
+    }, title);
   };
   return (
     <ConfirmDialog open={open} title={title} confirm={confirmLabel} confirming="Working…" error={error} busy={busy} onConfirm={() => { void confirm(); }} onClose={close}>

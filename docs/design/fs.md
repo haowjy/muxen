@@ -406,7 +406,8 @@ the cap against `Content-Length` up front, when sent, and against the running co
 1. Take the upload slot (none free: `503 busy` at once).
 2. Without `dir`: create `uploads_dir` (0700) if missing, then resolve it and `fs::open(…, Dir)`
    it, so a directory that didn't exist when the config was read still counts. An `uploads_dir` that can't be resolved to a directory (neither absolute
-   nor `~` or `~/…`, or not a directory) answers `409 not_a_directory`.
+   nor `~` or `~/…`, a name too long, or not a directory) answers `409 not_a_directory`; one under a folder
+   the user can't enter is `403 denied`.
    On Linux, `fstatfs` on the opened directory descriptor rejects tmpfs and ramfs with
    `409 memory_backed` before a `.part` file is created (a `dir` too). A folder the user
    can't write is `403 denied`, and nothing is created. On macOS there is no cgroup

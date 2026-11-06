@@ -25,7 +25,6 @@ fn refused(errno: Errno) -> FsError {
     match errno {
         // Whatever holds the name, a dangling link included.
         Errno::EXIST => FsError::Exists,
-        Errno::NAMETOOLONG => FsError::BadRequest,
         // A mount below, or `TOO_DEEP`.
         Errno::XDEV | TOO_DEEP => FsError::Denied,
         errno => FsError::io(errno.into()),

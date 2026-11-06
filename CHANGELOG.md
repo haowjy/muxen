@@ -5,6 +5,7 @@ version section on release.
 
 ## [Unreleased]
 
+- A file that can't be shown offers Try again whatever the reason, like a folder that can't be.
 - A running upload in Files has a × that cancels it. The server deletes what it received.
 - Return that confirms an input method candidate (Chinese, Japanese) no longer opens the path or closes Search.
 - Remove this device and Clear local data ask in the same dialog as Delete, with the same red button.

@@ -63,6 +63,8 @@ impl FsError {
         match error.raw_os_error().map(Errno::from_raw_os_error) {
             Some(Errno::NOSPC | Errno::DQUOT) => return Self::NoSpace,
             Some(Errno::ACCESS | Errno::PERM | Errno::ROFS) => return Self::Denied,
+            // A name no filesystem here can hold: the request's fault, not the server's.
+            Some(Errno::NAMETOOLONG) => return Self::BadRequest,
             // A folder deleted under its descriptor, a link met at open.
             Some(Errno::NOENT | Errno::NOTDIR | Errno::LOOP) => return Self::NotFound,
             _ => {}
