@@ -14,6 +14,7 @@ pub mod list;
 pub mod mime;
 mod open;
 pub mod raw;
+pub mod save;
 pub mod search;
 mod slots;
 pub mod upload;
@@ -46,6 +47,9 @@ pub enum FsError {
     /// The range starts at or past the end of a file this long.
     #[error("range past the end")]
     BadRange { size: u64 },
+    /// A save's `If-Match` no longer names the file.
+    #[error("changed")]
+    Changed,
     #[error("busy")]
     Busy,
     #[error("no space left")]

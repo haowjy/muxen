@@ -2014,7 +2014,7 @@ native app's reconnect never queues behind a browser's page load.
 | Route | Served at once | Waiting | When full |
 |---|---|---|---|
 | `/ws` | tier table: 3 sockets by default | — | close 4005 |
-| file API | 1 scan, 2 raw, 1 upload | 8 on the fs lane | `503 busy` at once |
+| file API | 1 scan, 2 raw, 1 upload, 1 save | 8 on the fs lane | `503 busy` at once |
 | `/complete` | 4 | — | `503 busy` at once |
 | node-lane identity (whois) | 2 calls | 16 distinct addresses; joins don't take a slot | `503 busy` at once |
 | shell | 4 slots | 16, in arrival order, no deadline | `503 busy` at once |

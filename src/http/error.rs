@@ -35,6 +35,7 @@ impl From<HttpError> for Refusal {
             }
             TooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             BadRange => StatusCode::RANGE_NOT_SATISFIABLE,
+            Changed => StatusCode::PRECONDITION_FAILED,
             Busy | AuthUnavailable | IdentityUnavailable | ConfigUnavailable => {
                 StatusCode::SERVICE_UNAVAILABLE
             }
@@ -146,6 +147,7 @@ impl From<&FsError> for HttpError {
             FsError::MemoryBacked => Self::MemoryBacked,
             FsError::TooLarge => Self::TooLarge,
             FsError::BadRange { .. } => Self::BadRange,
+            FsError::Changed => Self::Changed,
             FsError::Busy => Self::Busy,
             FsError::NoSpace => Self::NoSpace,
             FsError::Internal(_) => Self::Internal,

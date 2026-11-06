@@ -1678,6 +1678,32 @@ are Jimmy's ([Files](#files-view-and-upload-now-three-write-operations-in-v2)).
   2 s"). With `stop` it takes 2.0 s, exits 0 and closes a live `tmux -C` client cleanly.
 - **Rejected:** leaving it (the 4 s, exit 1 above). Nothing else is recorded.
 
+### A save replaces the file with a temp file and a rename, under its own slot
+
+- **Decided:** 2026-11-06, daemon lead, from review p625 (B1, B6, B7) and p630 (17); Jimmy decided the refusals.
+  Spec: [fs.md](fs.md#put-fsfilepath).
+- **What:** `PUT /fs/file/{*path}` resolves the file with `open(…, File)` (a link saves to its target), then
+  writes through `files::Target`: one fixed `.muxen-save` temp file per folder, `fsync`, a stamp check
+  against the folder entry, `renameat`. `If-Match` is required (`*` overwrites). A stale one is
+  `412 changed`, unless the file already holds exactly the body: the answer was lost and this is the
+  retry. A file with another hard link, owned by another user, or not writable is `403 denied` and nothing
+  is written. The save has its own one-permit slot, taken before the body is read; the body read is the
+  upload's idle-timed `next_chunk`. `config`'s writer and the save share `files::Target`, with the temp
+  name a parameter.
+- **Why:** the rename is atomic, so a reader sees the old file or the new one and a crash leaves one. The
+  stamp check at the rename closes the race with a writer that gets in after the open. The refusals are
+  the cases where a swap does what the user didn't ask for: the other hard link keeps the old text, the
+  owner changes, the mode of a read-only file is lost. A fixed temp name means a leftover is removed by
+  the next save in that folder, with no record file; `{name}.tmp` would delete a user's `notes.txt.tmp`.
+  A separate slot means a minutes-long upload never makes a save `busy`; taking it before the body bounds
+  the buffered 1 MiB by the slot, as the memory table counts.
+- **Rejected:** the upload's `Part` (a record file, flush cycle and naming for a 128 MiB stream; its tmpfs
+  refusal would stop a save in `/tmp`; and `land` never replaces). Writing in place (`pwrite`
+  and `ftruncate`): it keeps the inode, hard links and owner, but a crash or a full disk mid-write leaves a
+  torn file, which is worse than the refusals above. Jimmy asked and kept the rename. Opening the parent
+  `Want::Dir` with a plain name, as create does: it would replace a link with a file and leave FIFOs
+  unguarded.
+
 ## Completion
 
 Decided 2026-10-22 by design, writing [complete.md](complete.md). The product calls

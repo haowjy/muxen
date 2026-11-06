@@ -65,4 +65,5 @@ Rules the code relies on, which are easy to break:
 - Route-specific slot and waiter limits use `PermitPool`; shell owns the named 4-slot,
   16-waiter limits. Do not add another semaphore-plus-waiter implementation. Blocking
   work under a slot runs through `Slot::run` (for fs, `Slots`' fields), which
-  moves the permit into the lane work.
+  moves the permit into the lane work. `PUT /fs/file` is the exception: it takes the permit before the body and moves it in itself
+  (`src/fs/AGENTS.md`).

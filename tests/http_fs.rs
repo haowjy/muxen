@@ -314,6 +314,112 @@ async fn a_delete_stays_inside_the_tree_and_says_how_it_ended() {
     assert!(chain.exists());
 }
 
+/// The names in `dir`, sorted.
+fn names(dir: &std::path::Path) -> Vec<String> {
+    let mut names: Vec<String> = std::fs::read_dir(dir)
+        .expect("the folder")
+        .map(|entry| {
+            entry
+                .expect("an entry")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    names.sort();
+    names
+}
+
+#[tokio::test]
+async fn a_save_replaces_a_file_only_if_it_is_still_the_one_read() {
+    let daemon = start("fs-save").await;
+    let note = daemon.home("notes/café.txt");
+    std::fs::create_dir_all(daemon.home("notes")).expect("a dir");
+    std::fs::write(&note, "one").expect("written");
+    let route = url("/fs/file/", &note);
+    let put = async |route: &str, if_match: Option<&str>, body: &[u8]| {
+        let headers: Vec<(&str, &str)> =
+            if_match.map(|tag| ("If-Match", tag)).into_iter().collect();
+        daemon.call("PUT", route, &headers, body).await
+    };
+    let etag_of = async |route: &str| {
+        let raw = get(&daemon, &route.replace("/fs/file/", "/fs/raw/"), &[]).await;
+        raw.header("etag").expect("an ETag").to_owned()
+    };
+    let read = || std::fs::read_to_string(&note).expect("read");
+
+    // The ETag from raw saves, and the answer carries the new one: no re-read.
+    let first = etag_of(&route).await;
+    let saved = put(&route, Some(&first), b"two").await;
+    assert_eq!(saved.status, 204);
+    let second = saved.header("etag").expect("an ETag").to_owned();
+    assert_eq!(
+        (read().as_str(), second == etag_of(&route).await),
+        ("two", true)
+    );
+
+    // A stale ETag is `changed` and the file stays.
+    let stale = put(&route, Some(&first), b"three").await;
+    assert_eq!(
+        (stale.status, stale.text()),
+        (412, r#"{"error":"changed"}"#)
+    );
+    assert_eq!(read(), "two");
+
+    // The save whose answer was lost, sent again with its old ETag, is a success.
+    let retry = put(&route, Some(&first), b"two").await;
+    assert_eq!(
+        (retry.status, retry.header("etag")),
+        (204, Some(second.as_str()))
+    );
+
+    // `*` overwrites whatever is there; no header, or a weak tag, is a bad request.
+    assert_eq!(put(&route, Some("*"), b"four").await.status, 204);
+    assert_eq!(read(), "four");
+    assert_eq!(put(&route, None, b"five").await.status, 400);
+    assert_eq!(put(&route, Some("W/\"1-2-3\""), b"five").await.status, 400);
+    assert_eq!(read(), "four");
+
+    // A missing file is not created; the save leaves no temp file behind.
+    let missing = url("/fs/file/", &daemon.home("notes/new.txt"));
+    assert_eq!(put(&missing, Some("*"), b"x").await.status, 404);
+    assert_eq!(
+        names(&daemon.home("notes")),
+        ["café.txt"],
+        "no new file, no temp file"
+    );
+
+    // A link saves to its target and stays a link.
+    let link = daemon.home("notes/link.txt");
+    std::os::unix::fs::symlink(&note, &link).expect("a link");
+    assert_eq!(
+        put(&url("/fs/file/", &link), Some("*"), b"via link")
+            .await
+            .status,
+        204
+    );
+    assert_eq!(read(), "via link");
+    assert!(
+        std::fs::symlink_metadata(&link)
+            .expect("the link")
+            .is_symlink()
+    );
+    std::fs::remove_file(&link).expect("unlinked");
+
+    // A second hard link would keep the old text: refused, nothing written.
+    let twin = daemon.home("notes/twin.txt");
+    std::fs::hard_link(&note, &twin).expect("a hard link");
+    let refused = put(&route, Some("*"), b"nope").await;
+    assert_eq!(
+        (refused.status, refused.text()),
+        (403, r#"{"error":"denied"}"#)
+    );
+    assert_eq!(
+        (read().as_str(), names(&daemon.home("notes")).len()),
+        ("via link", 2)
+    );
+}
+
 #[tokio::test]
 async fn config_edits_apply_at_a_reload_and_a_broken_one_changes_nothing() {
     let daemon = start("fs-reload").await;

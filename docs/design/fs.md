@@ -1,7 +1,7 @@
-# File API: listing, search, raw reads, uploads
+# File API: listing, search, raw reads, uploads, saves
 
 `src/fs/` serves the phone's file manager: directory listings, file bytes with Range
-for the viewers and the native video player, and uploads. It reads and, for an upload that names a folder, writes any path the daemon's user can: there is no scope.
+for the viewers and the native video player, uploads, and the text editor's save. It reads and, for an upload that names a folder, writes any path the daemon's user can: there is no scope.
 A device token already runs any command in tmux as Jimmy, so a boundary here would
 guard against nothing but Jimmy. Every path the file API touches passes through one
 function, `fs::open`, which canonicalizes the path and returns an open descriptor with
@@ -29,12 +29,14 @@ auth is [auth.md](auth.md). Decisions and the alternatives rejected are in
 | search query | 256 bytes | `400 bad_request` |
 | raw responses at once | 2 | wait |
 | uploads at once | 1 | `503 busy` at once |
+| saves at once | 1, its own slot, taken before the body is read | waits like any slot, then `503 busy` |
+| save size | 1 MiB | `413 too_large` |
 | fs lane | 4 of the runtime's 8 blocking threads; includes scan, search and raw-response slot waits | wait up to 10 s |
 | fs lane waiters | 8 across all fs slots and blocking calls | `503 busy` at once; timed-out requests get `Retry-After: 1` |
 | raw read and upload write chunk | 64 KiB | |
 | raw stall deadline | 30 s for the socket to take the next chunk | the response is aborted, its slot freed |
 | upload size | 128 MiB | `413 too_large`; the partial file is deleted |
-| upload idle timeout | 30 s waiting for a body byte | aborted with `400 bad_request`; the partial file is deleted |
+| upload and save idle timeout | 30 s waiting for a body byte | aborted with `400 bad_request`; an upload's partial file is deleted |
 | upload flush | every 2 MiB: `fdatasync`, then drop the written pages | the dirty pages in between are charged to the unit, and the [ceiling](#limits-and-the-memory-ceiling) counts them |
 | page drop during a raw read | files over 8 MiB: after each chunk, everything from the response's first byte to the current position | |
 | socket buffers, every accepted socket | `SO_SNDBUF` and `SO_RCVBUF` 64 KiB (Linux doubles them); Serve reaches the daemon over a local Unix-socket hop, not another network round trip | the writer waits |
@@ -322,7 +324,8 @@ as muxen or registering as its service worker.
   `Content-Range`. A range list, or a header that doesn't parse, is ignored → `200`
   with the whole file (RFC 9110 allows it). A range starting at or past the end →
   `416 bad_range` with `Content-Range: bytes */<size>`. An end past the end is
-  clamped.
+  clamped. The 416 carries no `ETag`: a client that needs one from an empty file asks again
+  without `Range`.
 - **`If-Range`** not equal to the ETag → the Range is ignored (`200`). There is no
   `304`: nothing on the phone caches these responses.
 - **A file that changes while it is sent:** `Content-Length` comes from the `fstat` at
@@ -463,6 +466,47 @@ deleted. A body that stalls for the idle timeout, or that breaks because the cli
 disconnected, answers `400 bad_request`: the body failed, and the client is usually
 gone to read it. Nothing else in muxen uses the `.muxen-upload-` prefix.
 
+### `PUT /fs/file/{*path}`
+
+The text editor's save (`src/fs/save.rs`): the body, at most 1 MiB, becomes the file's new bytes if the
+file is still the version the client read. The path is in the same URL form as `raw`.
+`If-Match` is required: the strong `ETag` from `GET /fs/raw`, or `*` to overwrite whatever is
+there. A missing header, a list, or a weak tag is `400 bad_request`. Answers `204` with the new
+`ETag`, so the client needs no re-read. axum's default body limit is off on this route; the handler
+checks `Content-Length` up front when sent and the running count as the body arrives.
+
+1. A `Content-Length` over 1 MiB is `413 too_large` at once. Take the save slot (`503 busy` when
+   none frees in time) **before** reading the body, so a slow body holds the one slot, not memory,
+   and a long upload never makes a save `busy`.
+2. Read the body (at most 1 MiB, the upload's 30 s idle timeout: `upload::next_chunk` is shared).
+   Over the cap is `413 too_large`.
+3. On the fs lane, holding the slot (it moves into the lane work): `fs::open(path, File)`. The
+   file must exist (`404 not_found`; a save never creates), a link saves to its target and stays a
+   link, and a folder, FIFO, socket or device is `409 not_a_file`, as for `raw`.
+4. Refuse with `403 denied`, writing nothing, where swapping a new file in would change something the
+   user didn't ask for. This is Jimmy's decision: a save writes a temp file and renames it over the old
+   one, so the file with two hard links would keep its other name's old text; a file owned by
+   another user would change owner; a file or folder this user can't write (`faccessat(W_OK)` on
+   the file, then the temp file's creation in the folder, `EROFS` included) would be replaced
+   anyway. Those files are edited in the terminal. The new file keeps the old one's mode (owner is the
+   user's; the group follows the folder; ACLs and extended attributes are not carried over).
+5. The `ETag` from step 3's `fstat` must equal `If-Match` (`*` always passes). If it doesn't, and
+   the file isn't already byte-identical to the body, answer `412 changed`. If it is identical,
+   answer `204` with the current `ETag`: a save whose answer was lost, sent again with its old
+   `ETag`, must not read as a conflict. The comparison reads at most the body's length plus one
+   byte, and only when the file's size equals the body's.
+6. Write through `files::Target`: a temp file named `.muxen-save` in the file's folder (the same
+   name in every folder, so a leftover from a crash is removed by the next save there; a file
+   with that name is never saved), `fsync`, a second stamp check against the folder entry, `renameat`
+   within the folder's descriptor, a directory `fsync`. The stamp check closes the race between
+   step 3 and the rename: a writer that gets in between makes it `412 changed`, and the temp file
+   is deleted. A `*` save re-reads the file and tries again up to 3 times before it says `changed`.
+   The answer's `ETag` is the new file's stamp.
+
+A save never uses an upload's part file or its record file: those exist for a 128 MiB streaming body,
+and `open_dir`'s tmpfs refusal would stop a save of a file in `/tmp`. A save of 1 MiB is one buffer
+and one temp file, gone or landed in one lane call.
+
 ## Server settings
 
 `GET /settings` and `POST /settings` read and write the keys of `config.toml` that apply without a
@@ -520,9 +564,9 @@ The auth middleware also uses this body for `forbidden`, `auth_required`,
 
 | Status | `error` | Cause |
 |---|---|---|
-| 400 | `bad_request` | a path that is relative, too long, has a NUL, doesn't decode, or canonicalizes to non-UTF-8; a bad query value; an upload body that stalled past the idle timeout or broke (the client went away) |
+| 400 | `bad_request` | a save without a usable `If-Match` (missing, a list, a weak tag); a path that is relative, too long, has a NUL, doesn't decode, or canonicalizes to non-UTF-8; a bad query value; an upload's or save's body that stalled past the idle timeout or broke (the client went away) |
 | 401 | `not_enrolled` | the browser's current Tailscale node has no enrolled device row |
-| 403 | `denied` | `EACCES` or `EPERM`; an upload or a create in a folder that is read-only or not writable (`EROFS` too) |
+| 403 | `denied` | `EACCES` or `EPERM`; an upload or a create in a folder that is read-only or not writable (`EROFS` too); a save of a file with another hard link, owned by another user or not writable, or named `.muxen-save` |
 | 403 | `bad_origin` | Browser Origin, forwarded host or fetch metadata does not match the canonical Serve origin |
 | 403 | `node_refused` | The current Tailscale node fails a node-lane rule; includes the refusal reason |
 | 404 | `not_found` | `ENOENT`, `ENOTDIR` while resolving, `ELOOP` at open |
@@ -530,9 +574,10 @@ The auth middleware also uses this body for `forbidden`, `auth_required`,
 | 409 | `not_a_directory`, `not_a_file` | the wrong kind for the route; a FIFO, socket or device is `not_a_file`; an upload when `uploads_dir` isn't an absolute, `~` or `~/…` path, or the upload's `dir` or `uploads_dir` isn't a directory |
 | 409 | `memory_backed` | on Linux, an upload destination directory on tmpfs or ramfs; its pages would remain charged to muxen's unit while the file exists |
 | 409 | `config_read_only` | `config.toml`, or a directory on its way, is a dangling link or can't be written |
-| 413 | `too_large` | an upload over the cap |
+| 412 | `changed` | a save's `If-Match` no longer names the file (and the file isn't already the body) |
+| 413 | `too_large` | an upload over 128 MiB or a save over 1 MiB |
 | 416 | `bad_range` | a range starting past the end |
-| 503 | `busy` | no slot within the wait, too many waiting, or the upload slot taken; `Retry-After: 1` |
+| 503 | `busy` | no slot within the wait, too many waiting, or the upload slot taken (a save waits for its own slot like the others); `Retry-After: 1` |
 | 503 | `config_unavailable` | `/settings`: `config.toml` exists but can't be read or parsed; `detail` says where (`line 3, column 7`) |
 | 503 | `identity_unavailable` | LocalAPI could not establish the current Tailscale identity |
 | 507 | `no_space` | `ENOSPC` or `EDQUOT` during an upload or a Settings save |
@@ -561,8 +606,9 @@ raw stream then ends in 2.0 s with exit 0.
 | search walk | 1 × (1 MiB queue + one `getdents` buffer + 50 matches × 4 KiB) | 1.3 |
 | raw responses | 2 × (64 KiB chunk + channel + 16 KiB hyper write buffer) | 1.0 |
 | upload | 1 × (16 KiB hyper read buffer + 64 KiB chunk + 2 MiB of dirty pages between flushes) | 2.2 |
+| save | 1 × (16 KiB hyper read buffer + the body, at most 1 MiB, buffered once; written from the same buffer) | 1.0 |
 | listing JSON | one page, 200 entries | 0.1 |
-| **file API, excluding raw responses** | scan, search, upload and listing page | **4.8** |
+| **file API, excluding raw responses** | scan, search, upload, save and listing page | **5.8** |
 
 Raw responses and kernel socket buffers have separate rows in the daemon's ceiling in
 [daemon-core.md §6](daemon-core.md#6-limits-and-the-memory-ceiling). HTTP/1 buffers are
@@ -576,7 +622,7 @@ which is why they have a row and why the flush interval is 2 MiB, not larger.
 ## Logging
 
 - **Writes at `info`, by action and canonical path:** an upload's final path and
-  size (a `dir` upload too); a create's path.
+  size (a `dir` upload too); a create's path; a save's path and size.
 - **Refusals** (`denied`) at `warn` with the path
   asked for.
 - **Reads** (listings, raw ranges) at `debug` only: one video is dozens of requests. A search
@@ -595,16 +641,17 @@ without a disk.
 |---|---|
 | `fs/mod.rs` | `FsError` with its status and code, `expand` for `~/` |
 | `fs/open.rs` | `fs::open`, `fs::check_dir`, the platform descriptor-path lookup |
-| `fs/slots.rs` | scan, search, raw-response and upload permits, with waits counted against the fs lane |
+| `fs/slots.rs` | scan, search, raw-response, upload and save permits, with waits counted against the fs lane |
 | `fs/list.rs` | the scan; pure sort and page |
 | `fs/search/mod.rs` | the walk, the cache-tag probe and the best 50 |
 | `fs/search/matcher.rs` | pure: query parsing, glob and fuzzy scoring, hits, result order, the skip patterns |
 | `fs/raw.rs` | pure `parse_range` and `If-Range`; the chunk producer; ETags come from `files::Stamp` |
 | `fs/mime.rs` | the extension table |
 | `fs/entry.rs` | create, rename and delete: one plain name in a folder, through its descriptor |
-| `fs/upload.rs` | pure name generation; part file, flush, rename, the in-flight record and its cleanup |
+| `fs/upload.rs` | pure name generation; part file, flush, rename, the in-flight record and its cleanup; `next_chunk`, the idle-timed body read a save shares |
+| `fs/save.rs` | `PUT /fs/file`: `If-Match`, the body read, the refusals and the stamp-checked replace through `files::Target` |
 | `config/live.rs` | the running config's live keys, the reload, the save under its lock, "changed since loaded" |
-| `config/write.rs` | the save's pieces: validation, the target, `toml_edit`, the temp file and rename |
+| `config/write.rs` | the save's pieces: validation, the link-following target, `toml_edit`; the replace is `files::Target` (temp name `{name}.tmp`) |
 | `http/settings.rs` | `/settings` and `/settings/reload` |
 
 Wire types go in `src/proto/fs.rs` (`src/proto/settings.rs` for `/settings`) and are generated for TypeScript like the WebSocket
@@ -615,12 +662,10 @@ step 4.
 
 ## v2: what this must not preclude
 
-Edit ([plan.md](plan.md#file-manager)) comes as `PUT
-/fs/file/{*path}` (`If-Match` the ETag above; `412 changed` if it moved). Like `POST /fs/create`, it opens the folder with `Want::Dir`
-and takes a plain name, and it writes relative to that descriptor (a temp file, `fsync` and `renameat`), so a write goes where the
-descriptor is. The ETag, the URL-path form, the error codes
-and the upload's part-file-then-rename shape carry over; resumable uploads extend the
-part file at an offset.
+Edit is built as `PUT /fs/file/{*path}` above. What is left for later must not be precluded by it:
+resumable uploads extend the part file at an offset; rename of an open file in another tab is
+seen by the editor as the save's `not_found`, not by a subscription. The ETag, the URL-path form and
+the error codes are shared by `raw` and the save.
 
 ## Open risks
 

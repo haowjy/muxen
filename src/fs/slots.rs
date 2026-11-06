@@ -1,5 +1,5 @@
 //! The file API's limits (fs.md "Constants", "Limits and the memory ceiling"): 1 scan,
-//! 1 search, 1 delete, 2 raw responses, 1 upload, 1 settings read or write, waited for in the fs lane's queue (`crate::blocking`), so a
+//! 1 search, 1 delete, 2 raw responses, 1 upload, 1 save, 1 settings read or write, waited for in the fs lane's queue (`crate::blocking`), so a
 //! slow disk stalls the file manager without holding memory or starving auth and pastes
 //! of threads. Blocking calls run on `lane`; a slot's work runs through `Slot::run`, which moves
 //! the slot's permit into the lane work.
@@ -16,6 +16,7 @@ const SEARCHES: usize = 1;
 const DELETES: usize = 1;
 const RAW_RESPONSES: usize = 2;
 const UPLOADS: usize = 1;
+const SAVES: usize = 1;
 const SETTINGS: usize = 1;
 
 /// Daemon-wide, shared by every fs request.
@@ -35,6 +36,10 @@ pub struct Slots {
     /// one per chunk, so it uses `acquire`.
     pub raw: Slot,
     upload: Arc<Semaphore>,
+    /// A save (`PUT /fs/file`): its own, so a long upload never makes it `busy`. Taken
+    /// before the body is read, then moved into the lane work, so the slot bounds both the
+    /// buffered body and the one fixed temp name per folder.
+    pub save: Slot,
     /// `/settings` (fs.md "Server settings"): one read, save or reload at a time, so a
     /// save stuck on a hung disk holds one fs thread.
     pub settings: Slot,
@@ -48,6 +53,7 @@ impl Slots {
             delete: lane.slot(DELETES),
             raw: lane.slot(RAW_RESPONSES),
             upload: Arc::new(Semaphore::new(UPLOADS)),
+            save: lane.slot(SAVES),
             settings: lane.slot(SETTINGS),
             lane,
         }

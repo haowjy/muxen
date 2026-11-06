@@ -61,6 +61,8 @@ pub enum HttpError {
     ConfigReadOnly,
     TooLarge,
     BadRange,
+    /// A save's `If-Match` no longer names the file: it changed since the client read it.
+    Changed,
     /// Retry after the `Retry-After` header's seconds.
     Busy,
     /// `auth.toml` can't be read: the token isn't refused, and the app retries with it.

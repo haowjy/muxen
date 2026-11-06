@@ -12,7 +12,7 @@ use axum::extract::rejection::{JsonRejection, PathRejection, QueryRejection};
 use axum::extract::{DefaultBodyLimit, Path, Query, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse as _, Response};
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use serde::{Deserialize, Deserializer, de};
 use tracing::{debug, error, info, warn};
@@ -22,6 +22,7 @@ use crate::files::Stamp;
 use crate::fs::entry;
 use crate::fs::list::{self, Filter};
 use crate::fs::raw::{self, Span};
+use crate::fs::save::{self, IfMatch, MAX_SAVE};
 use crate::fs::search::{self, Pattern, Skip};
 use crate::fs::upload::{self, MAX_UPLOAD, Naming};
 use crate::fs::{FsError, Want, mime};
@@ -39,7 +40,11 @@ pub(super) fn routes() -> Router<Arc<Ctx>> {
         .route("/fs/search/", get(searched))
         .route("/fs/search/{*path}", get(searched))
         .route("/fs/raw/{*path}", get(raw))
-        // The handler checks the cap itself, up front and as the body arrives.
+        // The handlers check the cap themselves, up front and as the body arrives.
+        .route(
+            "/fs/file/{*path}",
+            put(saved).layer(DefaultBodyLimit::disable()),
+        )
         .route(
             "/fs/upload",
             post(upload).layer(DefaultBodyLimit::disable()),
@@ -256,6 +261,44 @@ async fn upload(
     .map_err(refuse)?;
     info!(path = %uploaded.path, size = uploaded.size, "uploaded a file");
     Ok((StatusCode::CREATED, Json(uploaded)).into_response())
+}
+
+/// `204` with the new `ETag`: the body in place of the file, if `If-Match` still names it
+/// (`save::save`). The permit comes before the body, so a slow one holds the one slot, not
+/// memory; it moves into the lane work, as `Slot::run` does.
+async fn saved(
+    State(ctx): State<Arc<Ctx>>,
+    path: WirePath,
+    headers: HeaderMap,
+    body: Body,
+) -> Result<Response, Refusal> {
+    let path = wire_path(path)?;
+    let if_match = headers
+        .get(header::IF_MATCH)
+        .and_then(|value| value.to_str().ok())
+        .and_then(IfMatch::parse)
+        .ok_or(HttpError::BadRequest)?;
+    let declared = headers
+        .get(header::CONTENT_LENGTH)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse::<usize>().ok());
+    let (stamp, size) = async {
+        if declared.is_some_and(|len| len > MAX_SAVE) {
+            return Err(FsError::TooLarge);
+        }
+        let permit = ctx.fs.save.acquire().await?;
+        let bytes = save::read_body(body.into_data_stream(), MAX_SAVE).await?;
+        let (asked, app, size) = (path.clone(), ctx.clone(), bytes.len());
+        let work = move || {
+            let _permit = permit;
+            save::save(&asked, &app.app.home, &if_match, &bytes)
+        };
+        Ok((ctx.fs.lane.try_run(work).await?, size))
+    }
+    .await
+    .map_err(refuse(&path))?;
+    info!(%path, size, "saved a file");
+    Ok((StatusCode::NO_CONTENT, [(header::ETAG, stamp.etag())]).into_response())
 }
 
 /// `204`: an empty file or a new folder. It never replaces anything: a taken name is `exists`.
