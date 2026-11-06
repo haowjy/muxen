@@ -1,6 +1,6 @@
 //! `POST /fs/upload` (fs.md): the body streams into a 0600 part file (`files::Temp`) in
 //! the destination folder (`uploads_dir` unless the request names one), flushed every
-//! 2 MiB, then renamed without replacing to a name the daemon chooses. Only the client
+//! 1 MiB, then renamed without replacing to a name the daemon chooses. Only the client
 //! name's extension is used. A part file is deleted on any failure. The daemon keeps the
 //! path of the one in-flight part file in a record file (`upload-part` in its state
 //! directory); a part file a dead daemon left is deleted from that record, at startup or by
@@ -34,7 +34,7 @@ const CHUNK: usize = 64 * 1024;
 /// ...and every this many are `fdatasync`ed and their pages dropped, so the upload's
 /// dirty pages, charged to the unit and unreclaimable until written, stay small on a
 /// disk the unit reaches at idle I/O priority.
-const FLUSH_EVERY: u64 = 2 << 20;
+const FLUSH_EVERY: u64 = 1 << 20;
 /// Nothing else in muxen names a file like this.
 const PART_PREFIX: &str = ".muxen-upload-";
 const PART_SUFFIX: &str = ".part";

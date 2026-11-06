@@ -1953,7 +1953,7 @@ as MiB, which overstates them by 5%. The default column is the 72-and-up tier.
 | daemon: code, runtime, tasks | budget target | | 5 |
 | one-shot `tmux` | 1 × 4.9 measured | | 4.9 |
 | tmux chunks, pump → hub | 128 × 16 KiB | | 2 |
-| file API, fixed part: a scan, an upload (2 MiB of dirty pages between flushes included), a listing page | [fs.md](fs.md#limits-and-the-memory-ceiling), with 16 KiB hyper buffers | | 3.5 |
+| file API, fixed part: a scan, an upload (1 MiB of dirty pages between flushes included), a save, a listing page | [fs.md](fs.md#limits-and-the-memory-ceiling), with 16 KiB hyper buffers | | 3.5 |
 | HTTP connections not upgraded | (64 permits − sockets) × (16 KiB read + 16 KiB write buffer + ~4 KiB state) | | 2.1 |
 | kernel socket buffers, fixed part: an upload and a couple of JSON replies | 3 × 256 KiB | | 0.75 |
 | reply bodies, in the capture slots | 2 × 1 MiB | | 2 |

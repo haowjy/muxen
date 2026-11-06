@@ -37,7 +37,7 @@ auth is [auth.md](auth.md). Decisions and the alternatives rejected are in
 | raw stall deadline | 30 s for the socket to take the next chunk | the response is aborted, its slot freed |
 | upload size | 128 MiB | `413 too_large`; the partial file is deleted |
 | upload and save idle timeout | 30 s waiting for a body byte | aborted with `400 bad_request`; an upload's partial file is deleted |
-| upload flush | every 2 MiB: `fdatasync`, then drop the written pages | the dirty pages in between are charged to the unit, and the [ceiling](#limits-and-the-memory-ceiling) counts them |
+| upload flush | every 1 MiB: `fdatasync`, then drop the written pages | the dirty pages in between are charged to the unit, and the [ceiling](#limits-and-the-memory-ceiling) counts them |
 | page drop during a raw read | files over 8 MiB: after each chunk, everything from the response's first byte to the current position | |
 | socket buffers, every accepted socket | `SO_SNDBUF` and `SO_RCVBUF` 64 KiB (Linux doubles them); Serve reaches the daemon over a local Unix-socket hop, not another network round trip | the writer waits |
 | path in a request | 4,096 bytes, UTF-8, absolute or `~`-prefixed, no NUL | `400 bad_request` |
@@ -424,7 +424,7 @@ the cap against `Content-Length` up front, when sent, and against the running co
    on the fs lane. Every 2 MiB, `fdatasync` and
    `posix_fadvise(DONTNEED)` what was written, so the upload's dirty pages stay small
    on a disk the unit reaches at idle I/O priority. Dirty pages can't be reclaimed
-   until they are written, so the 2 MiB between flushes is memory the unit holds: the
+   until they are written, so the 1 MiB between flushes is memory the unit holds: the
    [ceiling](#limits-and-the-memory-ceiling) counts it. The flush is the one wait without
    a deadline: on a slow disk it slows the upload to the disk's pace, holding the
    upload slot and one fs slot, which is the backpressure wanted. The idle timeout
@@ -566,7 +566,7 @@ The auth middleware also uses this body for `forbidden`, `auth_required`,
 |---|---|---|
 | 400 | `bad_request` | a save without a usable `If-Match` (missing, a list, a weak tag); a path that is relative, too long, has a NUL, doesn't decode, or canonicalizes to non-UTF-8; a bad query value; an upload's or save's body that stalled past the idle timeout or broke (the client went away) |
 | 401 | `not_enrolled` | the browser's current Tailscale node has no enrolled device row |
-| 403 | `denied` | `EACCES` or `EPERM`; an upload or a create in a folder that is read-only or not writable (`EROFS` too); a save of a file with another hard link, owned by another user or not writable, or named `.muxen-save` |
+| 403 | `denied` | `EACCES` or `EPERM`; an upload or a create in a folder that is read-only or not writable (`EROFS` too); a save of a file with another hard link, owned by another user or not writable, named `.muxen-save`, or in a folder holding a folder of that name |
 | 403 | `bad_origin` | Browser Origin, forwarded host or fetch metadata does not match the canonical Serve origin |
 | 403 | `node_refused` | The current Tailscale node fails a node-lane rule; includes the refusal reason |
 | 404 | `not_found` | `ENOENT`, `ENOTDIR` while resolving, `ELOOP` at open |
@@ -605,10 +605,10 @@ raw stream then ends in 2.0 s with exit 0.
 | directory scan | 1 × (1 MiB of names + 5,000 × 32 B) | 1.2 |
 | search walk | 1 × (1 MiB queue + one `getdents` buffer + 50 matches × 4 KiB) | 1.3 |
 | raw responses | 2 × (64 KiB chunk + channel + 16 KiB hyper write buffer) | 1.0 |
-| upload | 1 × (16 KiB hyper read buffer + 64 KiB chunk + 2 MiB of dirty pages between flushes) | 2.2 |
+| upload | 1 × (16 KiB hyper read buffer + 64 KiB chunk + 1 MiB of dirty pages between flushes) | 1.2 |
 | save | 1 × (16 KiB hyper read buffer + the body, at most 1 MiB, buffered once; written from the same buffer) | 1.0 |
 | listing JSON | one page, 200 entries | 0.1 |
-| **file API, excluding raw responses** | scan, search, upload, save and listing page | **5.8** |
+| **file API, excluding raw responses** | scan, search, upload, save and listing page | **4.8** |
 
 Raw responses and kernel socket buffers have separate rows in the daemon's ceiling in
 [daemon-core.md §6](daemon-core.md#6-limits-and-the-memory-ceiling). HTTP/1 buffers are
@@ -617,7 +617,7 @@ pages are reclaimable, so they don't count toward the unreclaimable ceiling; at
 `MemoryMax` the kernel reclaims them before it kills. The unit sets no `MemoryHigh`,
 since a lower soft limit would stall allocation. The `DONTNEED` calls above keep the
 file API's share small. An upload's dirty pages can't be reclaimed until written,
-which is why they have a row and why the flush interval is 2 MiB, not larger.
+which is why they have a row and why the flush interval is 1 MiB, not larger: the save's buffer took the other MiB, so the ceiling didn't move.
 
 ## Logging
 
