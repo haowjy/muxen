@@ -19,12 +19,12 @@ use crate::proto::fs::EntryKind;
 pub enum Target {
     /// A bare `~`: the chip `/`.
     Tilde,
-    /// Names in `dir`, an absolute path, that start with `prefix`.
+    /// Names in `dir`, absolute or `~/…`, that start with `prefix`.
     Dir { dir: String, prefix: String },
 }
 
 /// `None`: nothing to complete (`~user`, or a relative path with no `cwd`).
-pub fn split(value: &str, cwd: Option<&str>, home: &Path) -> Option<Target> {
+pub fn split(value: &str, cwd: Option<&str>) -> Option<Target> {
     if value == "~" {
         return Some(Target::Tilde);
     }
@@ -32,12 +32,10 @@ pub fn split(value: &str, cwd: Option<&str>, home: &Path) -> Option<Target> {
         Some(at) => value.split_at(at + 1),
         None => ("", value),
     };
-    let dir = if let Some(rest) = dir.strip_prefix("~/") {
-        format!("{}/{rest}", home.to_str()?)
+    let dir = if dir.starts_with("~/") || dir.starts_with('/') {
+        dir.to_owned()
     } else if value.starts_with('~') {
         return None;
-    } else if dir.starts_with('/') {
-        dir.to_owned()
     } else {
         format!("{}/{dir}", cwd?)
     };
@@ -57,10 +55,10 @@ pub struct Listing {
 }
 
 impl Listing {
-    /// `dir`'s names: `cached` while it is the same directory with the same mtime.
-    /// Blocks.
-    pub fn load(dir: &str, cached: Option<Arc<Self>>) -> Result<Arc<Self>, FsError> {
-        let opened = crate::fs::open_absolute(dir, Want::Dir)?;
+    /// `dir`'s names (absolute or `~/…` for `home`): `cached` while it is the same
+    /// directory with the same mtime. Blocks.
+    pub fn load(dir: &str, home: &Path, cached: Option<Arc<Self>>) -> Result<Arc<Self>, FsError> {
+        let opened = crate::fs::open(dir, home, Want::Dir)?;
         let stamp = Stamp::of(&opened.meta);
         if let Some(cached) = cached.filter(|c| c.path == opened.path && c.stamp == stamp) {
             return Ok(cached);
@@ -116,6 +114,9 @@ mod tests {
     use super::*;
     use crate::fs::test_tree::Tree;
 
+    /// Unused by absolute paths.
+    const HOME: &str = "/";
+
     #[test]
     fn listings_reach_any_readable_directory_and_escape_what_they_insert() {
         let tree = Tree::new("complete-paths");
@@ -128,7 +129,7 @@ mod tests {
         tree.write(".env", b"");
         tree.write("line\nbreak", b"");
         let chips = |prefix: &str| -> Vec<(String, String)> {
-            let listing = Listing::load(&tree.str(""), None).expect("listed");
+            let listing = Listing::load(&tree.str(""), Path::new(HOME), None).expect("listed");
             let chips = listing.chips(prefix);
             chips.into_iter().map(|c| (c.insert, c.label)).collect()
         };
@@ -150,18 +151,20 @@ mod tests {
         assert!(chips("li").is_empty());
 
         // Outside `$HOME`: names still come, as the shell's Tab lists.
-        let etc = Listing::load("/etc/", None).expect("listed");
+        let etc = Listing::load("/etc/", Path::new(HOME), None).expect("listed");
         assert!(etc.chips("pass").iter().any(|c| c.label == "passwd"));
         // A file isn't a directory to list.
-        assert!(Listing::load(&tree.str("Makefile"), None).is_err());
+        assert!(Listing::load(&tree.str("Makefile"), Path::new(HOME), None).is_err());
 
         // The cache holds while the mtime does, and a change is seen.
-        let listing = Listing::load(&tree.str(""), None).expect("listed");
-        let again = Listing::load(&tree.str(""), Some(listing.clone())).expect("listed");
+        let listing = Listing::load(&tree.str(""), Path::new(HOME), None).expect("listed");
+        let again =
+            Listing::load(&tree.str(""), Path::new(HOME), Some(listing.clone())).expect("listed");
         assert!(Arc::ptr_eq(&listing, &again));
         std::thread::sleep(std::time::Duration::from_millis(10));
         tree.write("Makefile.am", b"");
-        let changed = Listing::load(&tree.str(""), Some(listing.clone())).expect("listed");
+        let changed =
+            Listing::load(&tree.str(""), Path::new(HOME), Some(listing.clone())).expect("listed");
         assert!(!Arc::ptr_eq(&listing, &changed));
         assert_eq!(changed.chips("Makefile").len(), 2);
     }

@@ -20,7 +20,7 @@ use futures_util::{Stream, StreamExt as _};
 use tokio::sync::OwnedSemaphorePermit;
 use tracing::{debug, info};
 
-use super::{FsError, Opened, Want, expand, open, open_absolute};
+use super::{FsError, Opened, Want, expand, open};
 use crate::blocking::Lane;
 use crate::files::{Dir, Temp};
 use crate::proto::fs::Uploaded;
@@ -63,11 +63,11 @@ fn open_uploads_dir(uploads_dir: &str, home: &Path) -> Result<Opened, FsError> {
         .recursive(true)
         .mode(0o700)
         .create(&dir);
-    let dir = std::fs::canonicalize(&dir)
-        .ok()
-        .and_then(|dir| dir.into_os_string().into_string().ok())
-        .ok_or(FsError::NotADirectory)?;
-    open_absolute(&dir, Want::Dir)
+    // One that can't be resolved is not a directory, whatever the open says.
+    open(uploads_dir, home, Want::Dir).map_err(|error| match error {
+        FsError::BadRequest | FsError::NotFound => FsError::NotADirectory,
+        other => other,
+    })
 }
 
 /// Upload pages would remain charged to muxen while the file lives on tmpfs/ramfs.
@@ -435,7 +435,7 @@ mod tests {
     use crate::fs::test_tree::Tree;
 
     fn dir(tree: &Tree) -> Opened {
-        open_absolute(&tree.str(""), Want::Dir).expect("the folder")
+        open(&tree.str(""), Path::new("/"), Want::Dir).expect("the folder")
     }
 
     /// The record file's path in a fresh state folder, which the test keeps alive.

@@ -36,13 +36,8 @@ pub fn open(path: &str, home: &Path, want: Want) -> Result<Opened, FsError> {
     let path = expand(path, home)
         .and_then(|path| path.into_os_string().into_string().ok())
         .ok_or(FsError::BadRequest)?;
-    open_absolute(&path, want)
-}
-
-/// `open` for a path already known to be absolute (`/complete`'s directories).
-pub fn open_absolute(path: &str, want: Want) -> Result<Opened, FsError> {
-    check_shape(path).map_err(|_| FsError::BadRequest)?;
-    let canonical = std::fs::canonicalize(path).map_err(FsError::io)?;
+    check_shape(&path).map_err(|_| FsError::BadRequest)?;
+    let canonical = std::fs::canonicalize(&path).map_err(FsError::io)?;
     if canonical.to_str().is_none() {
         return Err(FsError::BadRequest);
     }

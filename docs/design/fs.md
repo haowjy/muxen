@@ -74,7 +74,6 @@ written. Listing and raw reads don't use the config.
 
 ```text
 fs::open(path: &str, home: &Path, want: Want) -> Result<Opened, FsError>
-fs::open_absolute(path: &str, want: Want) -> Result<Opened, FsError>   // path already absolute
 Want   = Dir | File
 Opened = { file: File, path: String /* canonical */, meta: Metadata }
 ```
@@ -83,7 +82,7 @@ Opened = { file: File, path: String /* canonical */, meta: Metadata }
 listings), and does, in order:
 
 1. **Shape.** `path` must be absolute, or `~` or start with `~/`, which is the daemon user's
-   `$HOME` (`fs::expand`, as `uploads_dir` uses; `open` is `expand` then `open_absolute`, the one open path); at most 4,096 bytes and free of NUL; otherwise
+   `$HOME` (`fs::expand`, as `uploads_dir` and completion use; `open` is the one open path); at most 4,096 bytes and free of NUL; otherwise
    `bad_request`. The client learns the canonical home from a listing of `~`, whose `path` is
    canonical: Open files lists `~` anyway, so knowing home costs no request of its own. Paths on the wire are UTF-8 strings, so a non-UTF-8 name can't be
    requested ([listing](#get-fslistpath)).

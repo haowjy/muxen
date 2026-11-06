@@ -18,7 +18,7 @@ pub mod search;
 mod slots;
 pub mod upload;
 
-pub use open::{Beneath, Opened, Want, check_dir, check_shape, open, open_absolute};
+pub use open::{Beneath, Opened, Want, check_dir, check_shape, open};
 pub use slots::Slots;
 
 /// A path in a request: absolute, UTF-8, no NUL, at most this long.

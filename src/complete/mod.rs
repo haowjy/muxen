@@ -265,7 +265,7 @@ impl Completer {
 
     /// Path chips for the word `value`.
     async fn paths(&self, value: &str, cwd: Option<&str>) -> Vec<Chip> {
-        let (dir, prefix) = match paths::split(value, cwd, &self.inner.settings.home) {
+        let (dir, prefix) = match paths::split(value, cwd) {
             None => return Vec::new(),
             Some(Target::Tilde) => return paths::tilde(),
             Some(Target::Dir { dir, prefix }) => (dir, prefix),
@@ -273,7 +273,7 @@ impl Completer {
         let inner = self.inner.clone();
         let listing = self.inner.dir.run(move || {
             let cached = lock(&inner.state).listing.clone();
-            let listing = Listing::load(&dir, cached).ok()?;
+            let listing = Listing::load(&dir, &inner.settings.home, cached).ok()?;
             lock(&inner.state).listing = Some(listing.clone());
             Some(listing)
         });
