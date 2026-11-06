@@ -349,6 +349,9 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
             case .pickMedia:
                 media.showMediaPicker(host: try request.field("host"), id: try request.field("id"))
                 reply(NSNull(), nil)
+            case .cancelUpload:
+                media.cancelUpload(id: try request.field("id"))
+                reply(NSNull(), nil)
             case .playVideo:
                 let host: String = try request.field("host")
                 let path: String = try request.field("path")

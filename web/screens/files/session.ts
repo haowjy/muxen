@@ -201,7 +201,7 @@ function recentsBelow(opened: readonly OpenedFile[], root: string): Found[] {
  */
 export function startUpload(app: AppController, session: FilesSession): void {
   const target = insertTargetOf(app.snapshot.workspace);
-  void session.uploads.track(app.platform.uploads.pick(session.handle, new AbortController().signal), target);
+  void session.uploads.track(app.platform.uploads.pick(session.handle), target);
 }
 
 /**
@@ -209,7 +209,7 @@ export function startUpload(app: AppController, session: FilesSession): void {
  * clipboard, which the platform reads itself. The path goes nowhere; Insert path on the file stays the way to use it.
  */
 export function pasteIntoFolder(app: AppController, session: FilesSession, dir: string, pasted?: Pasted): void {
-  void app.platform.uploads.paste(session.handle, dir, new AbortController().signal, pasted).then((result) => {
+  void app.platform.uploads.paste(session.handle, dir, pasted).then((result) => {
     if (result === "empty") app.notify("Nothing to paste");
     else if (result === "denied") app.notify("Couldn't paste: clipboard access was refused");
     else return followPaste(app, session, result);

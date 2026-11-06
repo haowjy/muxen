@@ -8,7 +8,7 @@ import type { Bridge, UploadMsg } from "./bridge";
 
 export interface NativeUploads extends Uploads {
   receive(msg: UploadMsg): void;
-  follow(id: string, signal: AbortSignal): AsyncIterable<UploadEvent>;
+  follow(id: string): AsyncIterable<UploadEvent>;
 }
 
 interface Stream {
@@ -26,7 +26,7 @@ function toEvent(msg: UploadMsg): UploadEvent | null {
 export function createNativeUploads(bridge: Bridge): NativeUploads {
   const streams = new Map<string, Stream>();
 
-  const open = (id: string, signal: AbortSignal): AsyncIterable<UploadEvent> => {
+  const open = (id: string): AsyncIterable<UploadEvent> => {
     const queue: UploadEvent[] = [];
     let wake: (() => void) | null = null;
     let ended = false;
@@ -39,7 +39,6 @@ export function createNativeUploads(bridge: Bridge): NativeUploads {
       },
     };
     streams.set(id, stream);
-    signal.addEventListener("abort", () => { stream.end(); }, { once: true });
     return {
       async *[Symbol.asyncIterator]() {
         for (;;) {
@@ -53,18 +52,22 @@ export function createNativeUploads(bridge: Bridge): NativeUploads {
   };
 
   return {
-    pick(handle, signal) {
+    pick(handle) {
       const id = crypto.randomUUID();
-      const events = open(id, signal);
+      const events = open(id);
       bridge.pickMedia(id, handle); // synchronously, inside the tap
       return events;
     },
-    async paste(handle, dir, signal) {
+    async paste(handle, dir) {
       const id = crypto.randomUUID();
       const reply = await bridge.pasteInto(handle, id, dir).catch(() => "denied" as const);
-      return typeof reply === "string" ? reply : open(reply.uploading, signal);
+      return typeof reply === "string" ? reply : open(reply.uploading);
     },
     follow: open,
+    cancel(id) {
+      bridge.cancelUpload(id);
+      streams.get(id)?.end();
+    },
     receive(msg) {
       const stream = streams.get(msg.id);
       if (!stream) return;

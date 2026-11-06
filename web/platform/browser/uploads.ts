@@ -104,9 +104,6 @@ export function createBrowserUploads(): Uploads {
       }
     };
     xhr.onerror = () => { finish(job, { id: job.id, error: "Couldn't reach the server." }); };
-    xhr.onabort = () => {
-      if (jobs.includes(job)) finish(job, { id: job.id, error: "Upload cancelled" });
-    };
     xhr.send(job.file);
   };
 
@@ -131,32 +128,18 @@ export function createBrowserUploads(): Uploads {
     pump();
   };
 
-  /** The group's files stop when its consumer gives up. */
-  const cancelOn = (signal: AbortSignal, group: Group): void => {
-    signal.addEventListener("abort", () => {
-      for (const job of [...jobs]) {
-        if (job.group !== group) continue;
-        job.abort?.();
-        // A request in flight finishes the job from its abort event; a queued one, or one waiting to retry, does not.
-        if (jobs.includes(job)) finish(job, { id: job.id, error: "Upload cancelled" });
-      }
-      group.channel.end();
-    }, { once: true });
-  };
-
   let input: HTMLInputElement | null = null;
   /** A picker opened and not yet answered: a new pick supersedes it. */
   let awaiting: { group: Group; stop(): void } | null = null;
 
-  const send = (file: File, signal: AbortSignal, to?: Job["to"]): AsyncIterable<UploadEvent> => {
+  const send = (file: File, to?: Job["to"]): AsyncIterable<UploadEvent> => {
     const group: Group = { channel: new Channel(), open: 0 };
-    cancelOn(signal, group);
     enqueue([file], group, to);
     return group.channel;
   };
 
   return {
-    pick(_handle, signal) {
+    pick() {
       const group: Group = { channel: new Channel(), open: 0 };
       // The superseded pick's listeners come off the shared input too, or its files would upload twice.
       awaiting?.stop();
@@ -183,22 +166,29 @@ export function createBrowserUploads(): Uploads {
       awaiting = { group, stop };
       el.addEventListener("change", onChange);
       el.addEventListener("cancel", onCancel);
-      signal.addEventListener("abort", stop, { once: true });
-      cancelOn(signal, group);
       // Inside the tap: the browser opens the picker only for a user gesture.
       el.click();
       return group.channel;
     },
 
-    send: (_handle, file, signal) => send(file, signal),
+    send: (_handle, file) => send(file),
 
-    async paste(_handle, dir, signal, pasted) {
+    async paste(_handle, dir, pasted) {
       // `readClipboard` runs before any await: the browser reads only inside the tap.
       const content = pasted ?? fromClipboard(await readClipboard());
       if (content === "denied") return content;
       if (content.kind === "empty") return "empty";
       const file = content.kind === "image" ? content.file : new File([content.text], "pasted.txt", { type: "text/plain" });
-      return send(file, signal, { dir, ...(content.kind === "text" && { text: true as const }) });
+      return send(file, { dir, ...(content.kind === "text" && { text: true as const }) });
+    },
+
+    cancel(id) {
+      const job = jobs.find((j) => j.id === id);
+      if (!job) return;
+      jobs.splice(jobs.indexOf(job), 1);
+      job.abort?.();
+      if (--job.group.open === 0) job.group.channel.end();
+      pump();
     },
   };
 }

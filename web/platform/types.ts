@@ -181,17 +181,19 @@ export type Pasted = { kind: "image"; file: File } | { kind: "text"; text: strin
 
 export interface Uploads {
   /** Call synchronously in the tap. Ends on completion, failure, or the picker's cancel. */
-  pick(handle: string, signal: AbortSignal): AsyncIterable<UploadEvent>;
+  pick(handle: string): AsyncIterable<UploadEvent>;
   /** One pasted image the page already holds, into `uploads_dir`. Present in the browser only. */
-  send?(handle: string, file: File, signal: AbortSignal): AsyncIterable<UploadEvent>;
+  send?(handle: string, file: File): AsyncIterable<UploadEvent>;
   /**
    * An image or text as a new file in folder `dir`: `pasted` (a paste event's contents) in the browser,
    * else the clipboard, which the platform reads itself. Call synchronously in the tap. `empty` and
    * `denied` start no upload. Native ignores `pasted` and reads the pasteboard.
    */
-  paste(handle: string, dir: string, signal: AbortSignal, pasted?: Pasted): Promise<AsyncIterable<UploadEvent> | "empty" | "denied">;
+  paste(handle: string, dir: string, pasted?: Pasted): Promise<AsyncIterable<UploadEvent> | "empty" | "denied">;
   /** An upload the platform started itself, by the id `clipboard.read` returned as `uploading`. Native only. */
-  follow?(id: string, signal: AbortSignal): AsyncIterable<UploadEvent>;
+  follow?(id: string): AsyncIterable<UploadEvent>;
+  /** Stops the upload `id`, queued or running, and says no more about it. The daemon deletes what it received. */
+  cancel(id: string): void;
 }
 
 /**

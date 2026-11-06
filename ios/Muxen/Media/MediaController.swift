@@ -187,6 +187,8 @@ final class MediaController: NSObject, PHPickerViewControllerDelegate, UIImagePi
         else { sendUpload(id: id, progress: 1, error: "Wait for the current uploads to finish.") }
     }
 
+    func cancelUpload(id: String) { uploader.cancel(id: id) }
+
     func playVideo(host: String, path: String) {
         let segments = path.split(separator: "/").map { segment in
             segment.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-._~"))) ?? String(segment)

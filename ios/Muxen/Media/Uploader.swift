@@ -20,6 +20,8 @@ final class Uploader: NSObject, URLSessionDataDelegate, URLSessionTaskDelegate {
         var responseData = Data()
         var statusCode: Int?
         var retry = 0
+        /// Its request, while one is out.
+        var task: URLSessionTask?
 
         init(id: String, request: URLRequest, data: Data, token: String, rejectedToken: @escaping (String) -> Void, progress: @escaping (Double) -> Void, completion: @escaping (Result<String, Error>) -> Void) {
             self.id = id
@@ -72,6 +74,17 @@ final class Uploader: NSObject, URLSessionDataDelegate, URLSessionTaskDelegate {
         return true
     }
 
+    /// Stops the job `id`, queued or running. The page has already stopped listening.
+    func cancel(id: String) {
+        queuedJobs.removeAll { $0.id == id }
+        guard let job = activeJob, job.id == id else { return }
+        if let task = job.task {
+            jobs[task.taskIdentifier] = nil
+            task.cancel()
+        }
+        finish(job)
+    }
+
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
         jobs[dataTask.taskIdentifier]?.statusCode = (response as? HTTPURLResponse)?.statusCode
         completionHandler(.allow)
@@ -100,7 +113,10 @@ final class Uploader: NSObject, URLSessionDataDelegate, URLSessionTaskDelegate {
         if job.statusCode == 503, job.retry < 3 {
             let retryAfter = (task.response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init) ?? 1
             job.retry += 1
-            DispatchQueue.main.asyncAfter(deadline: .now() + max(0, min(retryAfter, 60))) { [weak self] in self?.attempt(job) }
+            job.task = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + max(0, min(retryAfter, 60))) { [weak self] in
+                if self?.activeJob === job { self?.attempt(job) } // cancelled while it waited, if not
+            }
             return
         }
         if job.statusCode == 401 { job.rejectedToken(job.token) }
@@ -120,6 +136,7 @@ final class Uploader: NSObject, URLSessionDataDelegate, URLSessionTaskDelegate {
         job.statusCode = nil
         let task = session.uploadTask(with: job.request, from: job.data)
         jobs[task.taskIdentifier] = job
+        job.task = task
         task.resume()
     }
 

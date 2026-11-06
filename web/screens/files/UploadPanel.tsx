@@ -1,3 +1,4 @@
+import { useApp } from "../../app/context";
 import { baseName } from "../../files/paths";
 import type { UploadItem } from "../../files/uploads";
 import { useStore } from "../../ui/store";
@@ -10,6 +11,7 @@ import type { FilesSession } from "./session";
 import styles from "./UploadPanel.module.css";
 
 function Item({ session, item, onPreview }: { session: FilesSession; item: UploadItem; onPreview: (path: string) => void }) {
+  const app = useApp();
   // The offer leads with the tab the upload began in, never the one active now.
   const dismiss = (): void => { session.uploads.dismiss(item.id); };
 
@@ -22,6 +24,7 @@ function Item({ session, item, onPreview }: { session: FilesSession; item: Uploa
           <p class={styles.title}>{item.progress === 0 ? "Waiting to upload" : `Uploading ${String(percent)}%`}</p>
           <progress class={styles.progress} max={100} value={percent} aria-label="Upload progress" />
         </div>
+        <IconButton icon="close" label="Cancel upload" onClick={() => { app.platform.uploads.cancel(item.id); dismiss(); }} />
       </li>
     );
   }

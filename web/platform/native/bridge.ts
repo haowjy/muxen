@@ -174,6 +174,11 @@ export class Bridge {
     this.fire({ type: "pickMedia", id, host });
   }
 
+  /** The upload `id` stops, queued or running; native says no more about it. */
+  cancelUpload(id: string): void {
+    this.fire({ type: "cancelUpload", id });
+  }
+
   playVideo(host: string, path: string): void {
     this.fire({ type: "playVideo", host, path });
   }

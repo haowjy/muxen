@@ -149,7 +149,7 @@ export class Pastes {
       else if ("image" in result) this.paste({ kind: "image", file: result.image }, target);
       else if (app.platform.uploads.follow) {
         app.notify("Uploading image…");
-        void this.followUpload(target, app.platform.uploads.follow(result.uploading, new AbortController().signal));
+        void this.followUpload(target, app.platform.uploads.follow(result.uploading));
       }
     });
   }
@@ -192,7 +192,7 @@ export class Pastes {
       return;
     }
     app.notify("Uploading image…");
-    await this.followUpload(target, platform.uploads.send(client.entry.handle, file, new AbortController().signal));
+    await this.followUpload(target, platform.uploads.send(client.entry.handle, file));
   }
 
   /** Types the uploaded path into `target` (window null: the tab had none yet, so the one it shows then), when the upload finishes. */

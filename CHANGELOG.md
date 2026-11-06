@@ -5,6 +5,7 @@ version section on release.
 
 ## [Unreleased]
 
+- A running upload in Files has a × that cancels it. The server deletes what it received.
 - Return that confirms an input method candidate (Chinese, Japanese) no longer opens the path or closes Search.
 - Remove this device and Clear local data ask in the same dialog as Delete, with the same red button.
 - A Settings save onto a full disk says the server is out of disk space instead of "Something went wrong".

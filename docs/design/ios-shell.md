@@ -438,6 +438,7 @@ token to native solely for comparison and revocation, never into storage or logs
 | `readPasteboard { tab: TabKey, id }` | `{ text }`, `{ uploading: id }`, `"empty"` or `"denied"` | Paste text, or upload an image to the tab's host under the web-chosen `id`. The first `upload` event follows this reply |
 | `haptic { kind }` | `null` | `key` or `modifier` (native's own ^C/^D `warning` is not a bridge kind) |
 | `pickMedia { id, host }` | `null` | Present the native media action sheet, then upload the pick to `host` under the web-chosen `id`. Needs no open tab |
+| `cancelUpload { id }` | `null` | Stop the upload `id`, queued or running. No further `upload` event says anything of it |
 | `playVideo { host, path }` | `null` | Play an authenticated `/fs/raw` resource |
 | `download { url, name }` | `null` or `{ error, code? }`, when the share sheet closes | Files' Download: native fetches the file `url` names (the page's own `muxen-app://h-{host}/fs/raw/…`) from that host, shows its progress, then offers it as `name` in the share sheet ("Files and sharing"). `null` is shared, dismissed or cancelled; `code` is the daemon's refusal code, worded by the web as for `upload`, `error` the fallback |
 | `setPreference { name, value }` | Every `Preferences` | Native keeps the choice (`appearance`, `textSize` or `relock`), applies it, and answers with all three; an unknown name or value is a refused request. The web shows the reply. Only the web's Settings changes a preference, so native sends no change event |

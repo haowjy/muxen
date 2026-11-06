@@ -323,7 +323,7 @@ export function createTestPlatform(options: TestPlatformOptions = {}): TestPlatf
         return Promise.resolve();
       },
     },
-    uploads: { pick: () => uploadScript.pick(), paste: (_handle, dir) => Promise.resolve(uploadScript.paste(dir)) },
+    uploads: { pick: () => uploadScript.pick(), paste: (_handle, dir) => Promise.resolve(uploadScript.paste(dir)), cancel: () => undefined },
     clipboard: {
       writeText: (text) => {
         platform.clipboardWrites.push(text);
