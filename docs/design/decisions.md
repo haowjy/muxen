@@ -5053,6 +5053,12 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
 - **What:** Info shows Type and Lines for a file read as text, on both layouts, above Size, Modified and Path. The strip is gone. Lines are counted when Info opens, and a file read only in part shows "+" after the count. **Supersedes** the phone's facts line in "The code frame".
 - **Rejected:** keeping the strip behind a setting (a setting to hide something nobody needs); a desktop-only Info difference (the same four facts on both layouts is one rule).
 
+### Files renames and deletes; delete is permanent, for now
+
+- **Why:** Jimmy: "we are missing right click rename... and then right click delete". Asked trash or permanent: "permanent with confirm could be fine for now". **Supersedes** "Move and delete are done in the terminal" for delete; moving to another folder stays there.
+- **What:** Rename and Delete are the last rows of a row's menu. Rename stands in a name field for the row (a dialog on the phone), with the stem selected, and never replaces anything. Delete asks first, and a folder goes with all it holds. `POST /fs/rename` and `POST /fs/delete` work from the folder's descriptor. A delete never follows a link, stops at a mount unlike `rm -r`, stops 64 levels down, and runs under its own slot. Home and the folders above it offer neither, since muxen's state and the shell config are in there.
+- **Rejected:** moving to the system trash for now (`~/.local/share/Trash`, `~/.Trash`): it needs a copy across disks, a trash that fills, and per-OS layouts. It remains the likely next step. Only empty folders (the common wish is `node_modules`, and the terminal is one tap away, but a file manager that refuses most folders reads as broken). Asking the daemon for a count before the confirm (a walk per dialog, on a slow link, for a number nobody checks). Rewriting other tabs' places on a rename: they show the "gone" state and offer the way up, as for anything renamed in the terminal.
+
 ### The folder cache asks for two first pages at a time, the outline's last
 
 - **Decided:** 2026-11-05, from the phase 2 review (p546): Show hidden re-listed every open folder at

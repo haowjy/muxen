@@ -1,5 +1,5 @@
 //! The file API's limits (fs.md "Constants", "Limits and the memory ceiling"): 1 scan,
-//! 1 search, 2 raw responses, 1 upload, 1 settings read or write, waited for in the fs lane's queue (`crate::blocking`), so a
+//! 1 search, 1 delete, 2 raw responses, 1 upload, 1 settings read or write, waited for in the fs lane's queue (`crate::blocking`), so a
 //! slow disk stalls the file manager without holding memory or starving auth and pastes
 //! of threads. Blocking calls run on `lane`; a slot's work runs through its method, which moves
 //! the slot into the lane work.
@@ -13,6 +13,7 @@ use crate::blocking::{Busy, Lane, PermitPool};
 
 const SCANS: usize = 1;
 const SEARCHES: usize = 1;
+const DELETES: usize = 1;
 const RAW_RESPONSES: usize = 2;
 const UPLOADS: usize = 1;
 const SETTINGS: usize = 1;
@@ -24,6 +25,7 @@ pub struct Slots {
     pub lane: Lane,
     scan: PermitPool,
     search: PermitPool,
+    delete: PermitPool,
     raw: PermitPool,
     upload: Arc<Semaphore>,
     settings: PermitPool,
@@ -34,6 +36,7 @@ impl Slots {
         Self {
             scan: lane.permits(SCANS),
             search: lane.permits(SEARCHES),
+            delete: lane.permits(DELETES),
             raw: lane.permits(RAW_RESPONSES),
             upload: Arc::new(Semaphore::new(UPLOADS)),
             settings: lane.permits(SETTINGS),
@@ -56,6 +59,15 @@ impl Slots {
         work: impl FnOnce() -> T + Send + 'static,
     ) -> Result<T, Busy> {
         self.search.run(&self.lane, work).await
+    }
+
+    /// `work`, a delete, under the delete slot: a big folder holds one fs thread, not all of
+    /// them, and it runs to its end whether or not the request is still there.
+    pub async fn delete<T: Send + 'static>(
+        &self,
+        work: impl FnOnce() -> T + Send + 'static,
+    ) -> Result<T, Busy> {
+        self.delete.run(&self.lane, work).await
     }
 
     /// `work` under the settings slot (`/settings`, fs.md "Server settings"): one read,

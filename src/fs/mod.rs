@@ -9,7 +9,7 @@ use thiserror::Error;
 
 use crate::blocking::Busy;
 
-pub mod create;
+pub mod entry;
 pub mod list;
 pub mod mime;
 mod open;
@@ -36,7 +36,7 @@ pub enum FsError {
     NotADirectory,
     #[error("not a file")]
     NotAFile,
-    /// A create found the name taken: nothing here replaces a file.
+    /// A create or a rename found the name taken: nothing here replaces a file.
     #[error("already exists")]
     Exists,
     #[error("can't upload to a memory-backed filesystem")]

@@ -357,6 +357,36 @@ export type Created = {
 path: string, };
 
 /**
+ * `POST /fs/rename`, within one folder.
+ */
+export type RenameRequest = {
+/**
+ * The folder (`~`, `~/…` or absolute).
+ */
+dir: string,
+/**
+ * A plain name, not a path.
+ */
+name: string,
+/**
+ * The new plain name.
+ */
+to: string, };
+
+/**
+ * `POST /fs/delete`.
+ */
+export type DeleteRequest = {
+/**
+ * The folder (`~`, `~/…` or absolute).
+ */
+dir: string,
+/**
+ * A plain name, not a path.
+ */
+name: string, };
+
+/**
  * `GET /settings`, and the answer to a save and a reload: the running config's values,
  * `null` where the file has no key and the default applies.
  */

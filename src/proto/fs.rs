@@ -89,6 +89,26 @@ pub struct Created {
     pub path: String,
 }
 
+/// `POST /fs/rename`, within one folder.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct RenameRequest {
+    /// The folder (`~`, `~/…` or absolute).
+    pub dir: String,
+    /// A plain name, not a path.
+    pub name: String,
+    /// The new plain name.
+    pub to: String,
+}
+
+/// `POST /fs/delete`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct DeleteRequest {
+    /// The folder (`~`, `~/…` or absolute).
+    pub dir: String,
+    /// A plain name, not a path.
+    pub name: String,
+}
+
 /// `GET /fs/search/{*path}`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct Search {

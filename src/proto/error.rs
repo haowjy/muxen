@@ -52,7 +52,7 @@ pub enum HttpError {
     Denied,
     NotFound,
     NotADirectory,
-    /// A create found the name taken.
+    /// A create or a rename found the name taken.
     Exists,
     NotAFile,
     /// Upload target is backed by tmpfs or ramfs.

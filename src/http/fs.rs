@@ -19,14 +19,14 @@ use tracing::{debug, error, info, warn};
 
 use super::{Ctx, Refusal};
 use crate::files::Stamp;
-use crate::fs::create;
+use crate::fs::entry;
 use crate::fs::list::{self, Filter};
 use crate::fs::raw::{self, Span};
 use crate::fs::search::{self, Pattern};
 use crate::fs::upload::{self, MAX_UPLOAD, Naming};
 use crate::fs::{FsError, Want, mime};
 use crate::proto::HttpError;
-use crate::proto::fs::CreateRequest;
+use crate::proto::fs::{CreateRequest, DeleteRequest, RenameRequest};
 
 /// `{*path}`, or nothing on a route without one; a rejection if it doesn't decode.
 type WirePath = Result<Option<Path<String>>, PathRejection>;
@@ -46,12 +46,20 @@ pub(super) fn routes() -> Router<Arc<Ctx>> {
         )
         .route(
             "/fs/create",
-            post(created).layer(DefaultBodyLimit::max(CREATE_BODY)),
+            post(created).layer(DefaultBodyLimit::max(ENTRY_BODY)),
+        )
+        .route(
+            "/fs/rename",
+            post(renamed).layer(DefaultBodyLimit::max(ENTRY_BODY)),
+        )
+        .route(
+            "/fs/delete",
+            post(deleted).layer(DefaultBodyLimit::max(ENTRY_BODY)),
         )
 }
 
-/// A folder's path and a name, in JSON.
-const CREATE_BODY: usize = 16 * 1024;
+/// A folder's path and a name or two, in JSON.
+const ENTRY_BODY: usize = 16 * 1024;
 
 #[derive(Debug, Deserialize)]
 struct ListQuery {
@@ -273,7 +281,7 @@ async fn created(
     let made = async {
         ctx.fs
             .lane
-            .run(move || create::create(&request, &home))
+            .run(move || entry::create(&request, &home))
             .await?
     }
     .await;
@@ -284,6 +292,61 @@ async fn created(
         }
         Err(refused) => respond(&dir, Err(refused)),
     }
+}
+
+/// `204`: renamed in its folder. It never replaces anything: a taken name is `exists`.
+async fn renamed(
+    State(ctx): State<Arc<Ctx>>,
+    body: Result<Json<RenameRequest>, JsonRejection>,
+) -> Response {
+    let Ok(Json(request)) = body else {
+        return respond("", Err(FsError::BadRequest));
+    };
+    let (dir, name, to) = (
+        request.dir.clone(),
+        request.name.clone(),
+        request.to.clone(),
+    );
+    let home = ctx.app.home.clone();
+    let done = async {
+        ctx.fs
+            .lane
+            .run(move || entry::rename(&request, &home))
+            .await?
+    }
+    .await;
+    respond(
+        &dir,
+        done.map(|()| {
+            info!(dir, name, to, "renamed");
+            StatusCode::NO_CONTENT.into_response()
+        }),
+    )
+}
+
+/// `204`: deleted for good, a folder with all it holds.
+async fn deleted(
+    State(ctx): State<Arc<Ctx>>,
+    body: Result<Json<DeleteRequest>, JsonRejection>,
+) -> Response {
+    let Ok(Json(request)) = body else {
+        return respond("", Err(FsError::BadRequest));
+    };
+    let (dir, name) = (request.dir.clone(), request.name.clone());
+    let home = ctx.app.home.clone();
+    let done = async {
+        ctx.fs
+            .delete(move || entry::delete(&request, &home))
+            .await?
+    }
+    .await;
+    respond(
+        &dir,
+        done.map(|()| {
+            info!(dir, name, "deleted");
+            StatusCode::NO_CONTENT.into_response()
+        }),
+    )
 }
 
 /// `{*path}` decoded, with its `/` (just `/` without one); `None` if it doesn't decode.

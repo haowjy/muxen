@@ -1,7 +1,7 @@
 # fs
 
 The file API's core ([fs.md](../../docs/design/fs.md)): `open`, listings, search, raw
-reads, uploads and creates. Plain functions over files re-read per
+reads, uploads, and creates, renames and deletes (`entry.rs`). Plain functions over files re-read per
 request; no cache, no cursor, no descriptor kept between requests. It knows nothing of
 axum: `http/fs.rs` parses requests, takes slots and builds responses. `mod.rs` holds
 `FsError`; `slots.rs` the limits and the fs lane; the rest one route family

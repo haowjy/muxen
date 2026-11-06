@@ -39,7 +39,7 @@ his tailnet. It needs:
   flags, paths).
 - **A built-in file manager:** upload or paste photos and insert the file path into
   the terminal (MVP); view images and video with range streaming, view code and
-  markdown (MVP) and diffs (v2); create files and folders; edit and rename files (v2).
+  markdown (MVP) and diffs (v2); create, rename and delete files and folders; edit files (v2).
 
 Agent dashboards and notifications are out of scope: Jimmy's agent harness already
 handles notifications. The one exception: a terminal bell puts an attention dot on its
@@ -102,7 +102,7 @@ Jimmy's decisions, as they stand ([log](decisions.md#jimmys-decisions)):
   completion.
 - **Files:** any folder or file the daemon's user can read; no favorites (the path field is the way in); one default uploads folder, and Paste writes into the open folder; HEIC converted on
   the phone; no video thumbnails; no file watcher. Files views, uploads and creates empty files and folders; edit
-  and rename come in v2. Move and delete are done in the terminal.
+  comes in v2. Moving to another folder is done in the terminal.
 - **Auth:** allowlisted Tailscale login plus two device lanes: an iOS device token
   behind Face ID and an enrolled tailnet node for the browser/PWA. Both use the same
   one-time code and can be revoked with `muxen device remove` ([auth.md](auth.md)).
@@ -637,7 +637,7 @@ an edit, rename.
 
 **Editing (v2).** With no file watcher, the conflict check is the ETag taken at open:
 a save whose `If-Match` no longer matches is refused, and the editor offers reload or
-overwrite. A create (already built) and a rename never replace a file. Only UTF-8 text under a size cap
+overwrite. A create and a rename never replace a file. Only UTF-8 text under a size cap
 opens in the editor (CodeMirror 6, loaded on demand). It borrows the keyboard from the
 terminal input while open ([ios-shell.md](ios-shell.md#focus-one-controller-native)).
 
@@ -896,7 +896,7 @@ The spikes come first. The native app's keyboard checks are in
 
 ### v2
 
-- File editing with a conflict check, new file, rename. Resumable multi-upload. Diff
+- File editing with a conflict check. Resumable multi-upload. Diff
   viewer. PDFs. repo-viewer parity.
 - OSC 52 ↔ iOS clipboard and tmux-buffer sync. Snippets.
 - Multi-host.

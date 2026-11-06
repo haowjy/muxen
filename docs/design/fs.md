@@ -23,6 +23,8 @@ auth is [auth.md](auth.md). Decisions and the alternatives rejected are in
 | search walk | 100,000 entries read or 500 ms, whichever first; every entry read counts | `stopped` says which; the matches so far are answered |
 | search queue | 1 MiB of relative paths still to read, offsets counted | stops queueing; `stopped: "queue"` |
 | searches at once | 1, its own slot | wait |
+| deletes at once | 1, its own slot, held to the end of the delete | wait |
+| folder depth under a delete | 64 levels (two descriptors each) | stops with `403 denied`; what was removed stays gone |
 | search matches | 50 | the best 50 by score |
 | search query | 256 bytes | `400 bad_request` |
 | raw responses at once | 2 | wait |
@@ -367,6 +369,26 @@ past 4,096 bytes, which no route could then open. Then, relative to the descript
 file lost in a crash costs nothing. `EEXIST` is `409 exists`, whatever holds the name, a dangling link included. A folder deleted
 under its descriptor is `404 not_found`. `201 { path }`, the canonical path, through any link in `dir`.
 
+### `POST /fs/rename`
+
+`POST /fs/rename`, JSON `{ "dir": "<folder>", "name": "<name>", "to": "<new name>" }`, at most 16 KiB: a new name in the same
+folder; moving to another folder is the terminal's. `dir` opens as for `POST /fs/create`, and `name` and `to` are plain names under
+the same rules, with the same 4,096-byte limit on the result. Then `renameat` with `RENAME_NOREPLACE` (`renamex_np RENAME_EXCL` on
+macOS) relative to the descriptor, so it never replaces anything: `409 exists`, whatever holds the name. There is no fallback on
+a filesystem without it, as for an upload: `500 internal`. A link is renamed, not what it points to. A name that isn't there is
+`404 not_found`. `204`.
+
+### `POST /fs/delete`
+
+`POST /fs/delete`, JSON `{ "dir": "<folder>", "name": "<name>" }`, at most 16 KiB: `name` deleted for good, with no trash. `dir` and
+`name` follow the same rules. A link is removed and never followed; a folder goes with all it holds, removing up from the
+bottom through descriptors (`statat` with `AT_SYMLINK_NOFOLLOW`, `openat` with `O_DIRECTORY | O_NOFOLLOW`, `unlinkat`), so a
+component swapped for a link mid-delete is refused, not followed. Names are read 256 at a time and the folder read again from its
+start after each batch: memory stays bounded, and macOS can skip names in a folder changing under `readdir`. Unlike `rm -r` it stops
+at a mount: a folder on another filesystem is `403 denied`, and so is one past 64 levels. Any failure stops the delete and what was
+removed stays gone; the client lists the folder again and says some of it may be gone. It runs under the delete slot and to its
+end even if the request goes away. A name that isn't there is `404 not_found`, which the client takes as done. `204`.
+
 ### `POST /fs/upload`
 
 `POST /fs/upload?name=<the client's file name>[&dir=<folder>][&text=1]`; the body is the
@@ -499,7 +521,7 @@ The auth middleware also uses this body for `forbidden`, `auth_required`,
 | 403 | `bad_origin` | Browser Origin, forwarded host or fetch metadata does not match the canonical Serve origin |
 | 403 | `node_refused` | The current Tailscale node fails a node-lane rule; includes the refusal reason |
 | 404 | `not_found` | `ENOENT`, `ENOTDIR` while resolving, `ELOOP` at open |
-| 409 | `exists` | a create found the name taken |
+| 409 | `exists` | a create or a rename found the name taken |
 | 409 | `not_a_directory`, `not_a_file` | the wrong kind for the route; a FIFO, socket or device is `not_a_file`; an upload when `uploads_dir` isn't an absolute or `~/` path, or the upload's `dir` or `uploads_dir` isn't a directory |
 | 409 | `memory_backed` | on Linux, an upload destination directory on tmpfs or ramfs; its pages would remain charged to muxen's unit while the file exists |
 | 409 | `config_read_only` | `config.toml`, or a directory on its way, is a dangling link or can't be written |
@@ -574,6 +596,7 @@ without a disk.
 | `fs/search/matcher.rs` | pure: query parsing, glob and fuzzy scoring, hits, result order, the skip patterns |
 | `fs/raw.rs` | pure `parse_range` and `If-Range`; the chunk producer; ETags come from `files::Stamp` |
 | `fs/mime.rs` | the extension table |
+| `fs/entry.rs` | create, rename and delete: one plain name in a folder, through its descriptor |
 | `fs/upload.rs` | pure name generation; part file, flush, rename, the in-flight record and its cleanup |
 | `config/live.rs` | the running config's live keys, the reload, the save under its lock, "changed since loaded" |
 | `config/write.rs` | the save's pieces: validation, the target, `toml_edit`, the temp file and rename |
@@ -587,12 +610,9 @@ step 4.
 
 ## v2: what this must not preclude
 
-Edit and rename ([plan.md](plan.md#file-manager)) come as `PUT
-/fs/file/{*path}` (`If-Match` the ETag above; `412 changed` if it moved) and `POST
-/fs/rename` (`409 exists`). Like `POST /fs/create`, each opens the folder with `Want::Dir`
-and takes a plain name. Every write
-is then relative to that descriptor (a
-temp file, `fsync` and `renameat` for saves; `RENAME_NOREPLACE` for renames), so a write goes where the
+Edit ([plan.md](plan.md#file-manager)) comes as `PUT
+/fs/file/{*path}` (`If-Match` the ETag above; `412 changed` if it moved). Like `POST /fs/create`, it opens the folder with `Want::Dir`
+and takes a plain name, and it writes relative to that descriptor (a temp file, `fsync` and `renameat`), so a write goes where the
 descriptor is. The ETag, the URL-path form, the error codes
 and the upload's part-file-then-rename shape carry over; resumable uploads extend the
 part file at an offset.
