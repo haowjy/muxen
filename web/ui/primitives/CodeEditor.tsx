@@ -83,7 +83,7 @@ export function CodeEditor({ start, wrap, takeKeyboard, onChange, onSave, onRead
       }}
     >
       {up === false && <div class={styles.loading}><Spinner label="Loading the editor" /></div>}
-      {up === "failed" && <p class={styles.loading} role="alert">The editor didn't load. Open the file again to retry.</p>}
+      {up === "failed" && <p class={styles.loading} role="alert">The editor didn't load.</p>}
     </div>
   );
 }

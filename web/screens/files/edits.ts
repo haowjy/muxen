@@ -30,13 +30,18 @@ interface Host {
 }
 
 export class Edits extends Store<{ open: ReadonlyMap<string, Edit>; live: Live | null }> {
+  /** The remembered edit is this page's: pages share the store, and one must not remove what another wrote. */
+  private remembers = false;
+
   constructor(private readonly host: Host) {
     super({ open: new Map(), live: null });
   }
 
   /** Editing `start.path`, unless it already is: an edit left in the Preview panel picks up where it was. */
   begin(start: UnsavedEdit, changed: boolean): void {
-    if (!this.snapshot.open.has(start.path)) this.put({ ...start, state: null, changed, conflict: false });
+    if (this.snapshot.open.has(start.path)) return;
+    this.put({ ...start, state: null, changed, conflict: false });
+    this.remembers ||= changed;
   }
 
   /** Runs per keystroke, and tells no one but the first. */
@@ -104,9 +109,11 @@ export class Edits extends Store<{ open: ReadonlyMap<string, Edit>; live: Live |
   left(path: string, to: string | null): void {
     const { live } = this.snapshot;
     const open = new Map<string, Edit>();
+    const staying = [...this.snapshot.open.values()].filter((edit) => !within(edit.path, path));
+    // First, so a moved edit replaces a stale one at its new path. `changedWithin` has kept a changed one from being there.
+    for (const edit of staying) open.set(edit.path, edit);
     for (const edit of this.snapshot.open.values()) {
-      if (!within(edit.path, path)) open.set(edit.path, edit);
-      else if (to !== null) {
+      if (to !== null && within(edit.path, path)) {
         const at = moved(edit.path, path, to);
         open.set(at, { ...edit, path: at });
       }
@@ -115,16 +122,26 @@ export class Edits extends Store<{ open: ReadonlyMap<string, Edit>; live: Live |
   }
 
   clear(): void {
+    this.remembers = false;
     this.update({ open: new Map() });
+  }
+
+  /** The paths at or below `path` with unsaved text. */
+  changedWithin(path: string): string[] {
+    return [...this.snapshot.open.values()].filter((edit) => edit.changed && within(edit.path, path)).map((edit) => edit.path);
   }
 
   /** As the page goes away, and only then: a MiB of text is no per-keystroke write. The one writer of what is remembered. */
   flush(): void {
-    const latest = [...this.snapshot.open.values()].findLast((edit) => edit.changed);
+    const { open, live } = this.snapshot;
+    const typing = live && open.get(live.path);
+    const latest = typing?.changed ? typing : [...open.values()].findLast((edit) => edit.changed);
     if (!latest) {
-      this.host.remember(null);
+      if (this.remembers) this.host.remember(null);
+      this.remembers = false;
       return;
     }
+    this.remembers = true;
     const { path, etag, ending } = latest;
     this.host.remember({ path, etag, ending, text: this.textOf(latest) });
   }

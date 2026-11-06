@@ -171,6 +171,8 @@ export function filesSession(app: AppController, host: KnownHost): FilesSession 
     },
     rename: async (path, to, opens) => {
       const dir = parentOf(path);
+      // The file there went outside muxen, but its unsaved text is still under that name.
+      if (edits.changedWithin(join(dir, to)).length > 0) throw new HttpRefusal(409, "exists");
       await changing(dir, null, () => browser.api.rename(dir, baseName(path), to));
       app.notify(`Renamed to ${to}`);
       left(path, join(dir, to));

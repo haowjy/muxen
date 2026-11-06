@@ -25,3 +25,11 @@ Must-do (client-architecture.md §11):
   bottom in view). Same family: a rotation while the app's keyboard is up measures chrome
   from a shortened surface. Fix by measuring chrome from the in-flow chrome elements
   (dock resting slot, tab bar) rather than stable box less surface.
+
+File editor, phone checks not yet run on a real iPhone (agent shells can't tap or type):
+- Edit raises the keyboard: focus runs after the lazy chunk, outside the tap.
+- The key row rides the keyboard with only text keys.
+- A save near 1 MiB reaches the daemon whole, through `AppSchemeHandler`.
+- Type, kill the app, reopen: the file reopens in the editor.
+- A change in the terminal, then Save: the conflict line shows.
+- The upload × cancels on native; the "locked" error stays gone after unlocking.
