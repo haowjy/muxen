@@ -144,7 +144,7 @@ export function ListPane({ session, tab, view, pages, tree, up, search, onOpen }
             pages={pages}
             hidden={hidden}
             loading={loading}
-            fresh={view.fresh !== null && parentOf(view.fresh) === pages.path ? baseName(view.fresh) : null}
+            fresh={phone && view.fresh !== null && parentOf(view.fresh) === pages.path ? baseName(view.fresh) : null}
             onOpen={onOpen}
             outline={outline}
             selection={tree.selection}

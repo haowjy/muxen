@@ -145,7 +145,11 @@ export class Folders extends Store<FoldersView> {
     const key = folderKey(path, hidden);
     const ticket = this.begin(key);
     const listing = await this.turn(key, behind, () => this.api.list(path, 0, hidden));
-    if (this.landed(key, ticket)) this.put(listing.path, hidden, { listing, error: null });
+    if (this.landed(key, ticket)) {
+      this.put(listing.path, hidden, { listing, error: null });
+      // A symlink's listing is named for its target; the folder asked for, under its own path, is held too, or it stays "Loading".
+      if (listing.path !== path) this.put(path, hidden, { listing, error: null });
+    }
     return listing;
   }
 

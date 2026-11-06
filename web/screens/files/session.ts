@@ -5,7 +5,7 @@
 import type { AppController } from "../../app/controller";
 import type { OpenedFile } from "../../app/viewMemory";
 import type { FsApi, TextPreview } from "../../files/api";
-import { FileBrowser } from "../../files/browser";
+import { FileBrowser, type FileRef } from "../../files/browser";
 import { baseName } from "../../files/paths";
 import { Recent } from "../../files/recent";
 import { FileSearch, type Found } from "../../files/search";
@@ -30,6 +30,8 @@ export interface FilesSession {
   expanded: Recent<readonly string[]>;
   /** The selected row's key (`files/outline.ts`), by Files tab and the folder the list starts at (`scrollKey`). */
   selections: Recent<string>;
+  /** The file the Preview panel keeps, by Files tab and the folder the list starts at (`scrollKey`): it stays when a folder is selected. */
+  previews: Recent<FileRef>;
   /**
    * A file's text, handed from the view leaving to the one taking its place (the Preview panel's file opened full
    * width, and Back to the panel): taken once by `useText`, and dropped once the place has changed, so it is never a
@@ -97,6 +99,7 @@ export function filesSession(app: AppController, host: KnownHost): FilesSession 
     scroll: new Recent(SCROLLS_KEPT),
     expanded: new Recent(SCROLLS_KEPT),
     selections: new Recent(SCROLLS_KEPT),
+    previews: new Recent(SCROLLS_KEPT),
     handed: null,
     opened: (file) => {
       const all = app.view.get("opened");

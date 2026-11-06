@@ -31,7 +31,6 @@
 .selected, .selected:hover { background: var(--color-bg-selected-idle); }
 /* The selection is blue while the keys move it: the list holds focus, or the path field drives it. */
 .list:focus .selected, .keyed .selected { background: var(--color-bg-selected); }
-.row[data-fresh] { background: var(--color-bg-selected); }
 .keyed { cursor: default; }
 /* Folders, then a breath, then files: at the top level only (an open folder's rows sit tight under it). */
 .row:not(.up, [data-kind="file"][data-depth="0"]) + .row[data-kind="file"][data-depth="0"] { margin-top: 6px; }

@@ -5015,6 +5015,12 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
   click ends that. The listing it asks for isn't dropped: it is the folder being entered, from the same
   cache. A double-click's click at the 33rd open folder can close the oldest, and the undo doesn't bring
   it back; that is rare and costs one reopen.
+- **Amended after review, same day:** the kept file is the session's, per tab and root (`previews`, beside
+  `selections`), because held in the panel a remount (Search, the toggle, a tab switch) lost it, and Back
+  from a folder did too. A file the app selected is shown without counting as opened. One gone from a folder
+  held in full is let go. A file landing in the folder on screen is selected on a desktop, which is how
+  Paste shows it; the "fresh" row mark, the same blue as the selection, stays on the phone only (Jimmy: "pasting
+  something doesn't immediately open it in preview", and a screenshot of two blue rows).
 - **Rejected:** the panel showing a blank or the folder's contents on a folder click (it still loses the
   file); a delay on the click to tell it from a double-click (every open would lag).
 

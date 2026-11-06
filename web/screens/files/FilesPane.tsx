@@ -79,6 +79,10 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
     }
   }, [place, root]);
 
+  // What just landed in the folder on screen is picked on a desktop, so the Preview panel shows it; the phone marks its row.
+  const { fresh } = view;
+  useEffect(() => { if (!phone && fresh !== null && root === parentOf(fresh)) tree.reveal(fresh); }, [fresh]);
+
   // The Preview panel and the divider are remembered on this device.
   const [preview, setPreview] = useState(() => app.view.get("preview"));
   const [stored, setStored] = useState(() => app.view.get("listWidth"));
@@ -148,7 +152,7 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
               onWidth={(px) => { setStored(px); app.view.set("listWidth", px); }}
               onReset={() => { setStored(null); app.view.set("listWidth", null); }}
             />
-            <PreviewPanel session={session} root={pages} from={search ? "search" : "outline"} selection={search ? found?.path ?? null : tree.selection} known={search ? found : tree.known} hidden={hidden} held={held} onOpen={open} onLink={onLink} />
+            <PreviewPanel session={session} tab={tab.id} root={pages} from={search ? "search" : "outline"} selection={search ? found?.path ?? null : tree.selection} known={search ? found : tree.known} hidden={hidden} held={held} onOpen={open} onLink={onLink} />
           </>
         )}
       </div>
