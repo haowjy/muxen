@@ -40,8 +40,13 @@ final class AppSchemeHandler: NSObject, WKURLSchemeHandler, URLSessionDataDelega
     private var awaitingCheck: [String: [WKURLSchemeTask]] = [:]
     /// The held requests WebKit has not stopped.
     private var held = Set<ObjectIdentifier>()
-    /// Has no delegate, so its tasks never reach the proxy's delegate callbacks.
-    private let infoSession = URLSession(configuration: .ephemeral)
+    /// Has no delegate, so its tasks never reach the proxy's delegate callbacks. Gives up after 10 s, so a dead
+    /// host's check frees the requests held behind it (the proxy session keeps the 60 s default).
+    private let infoSession = URLSession(configuration: {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 10
+        return configuration
+    }())
 
     init(model: MuxenAppModel, bundle: Bundle = .main) {
         self.model = model
