@@ -5,6 +5,7 @@ version section on release.
 
 ## [Unreleased]
 
+- Remove this device and Clear local data ask in the same dialog as Delete, with the same red button.
 - A Settings save onto a full disk says the server is out of disk space instead of "Something went wrong".
 - Settings accepts `~` as the Uploads folder, as `config.toml` already did: uploads land in your home folder.
 - The file routes answer a malformed request the way the rest of the API does: a create, rename or delete with a body over 16 KiB, not JSON or the wrong shape gets 413, 415 or 422 instead of 400, and an upload with `text=2` is refused with 400 instead of saved.

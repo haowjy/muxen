@@ -7,14 +7,14 @@
 // app, when Face ID asks again; and a section per server for what its config.toml keeps
 // (`ServerSection`). Each destructive action confirms in its own overlay, so Back from
 // the confirmation returns here.
-import { useState } from "preact/hooks";
 import { useApp, useAppView, useOverlay } from "../../app/context";
+import { useRequest } from "../../app/useRequest";
 import type { HostClient } from "../../net/hosts";
 import type { Appearance, Relock, TextSize } from "../../platform/types";
 import { Button } from "../../ui/primitives/Button";
 import { Choice } from "../../ui/primitives/Choice";
+import { ConfirmDialog } from "../../ui/primitives/ConfirmDialog";
 import { Dialog } from "../../ui/primitives/Dialog";
-import { TitleBar } from "../../ui/primitives/DialogBars";
 import { ScreenBar } from "../../ui/primitives/ScreenBar";
 import { Section, serverName } from "./Section";
 import { ServerSection } from "./ServerSection";
@@ -49,31 +49,14 @@ function Confirm({ name, title, confirmLabel, run, children }: {
 }) {
   const app = useApp();
   const { open, close } = useOverlay("settings", name);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { busy, error, run: request } = useRequest();
   const confirm = async (): Promise<void> => {
-    setBusy(true);
-    setError(null);
-    const failed = await run();
-    setBusy(false);
-    if (failed) setError(failed);
-    else app.router.closeAllOverlays(); // a finished action leaves nothing open
+    if (await request(run, title)) app.router.closeAllOverlays(); // a finished action leaves nothing open
   };
   return (
-    <Dialog open={open} title={title} header={<TitleBar title={title} onClose={close} />} onClose={close}>
-      {open && (
-        <div class={styles.confirm}>
-          <p>{children}</p>
-          {error && <p class={styles.error} role="alert">{error}</p>}
-          <div class={styles.actions}>
-            <Button variant="quiet" onClick={close}>Cancel</Button>
-            <Button variant="primary" busy={busy} onClick={() => { void confirm(); }}>
-              {busy ? "Working…" : confirmLabel}
-            </Button>
-          </div>
-        </div>
-      )}
-    </Dialog>
+    <ConfirmDialog open={open} title={title} confirm={confirmLabel} confirming="Working…" error={error} busy={busy} onConfirm={() => { void confirm(); }} onClose={close}>
+      {children}
+    </ConfirmDialog>
   );
 }
 

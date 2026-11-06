@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { TargetedSubmitEvent } from "preact";
 import { useAppView } from "../../app/context";
+import { useRequest } from "../../app/useRequest";
 import { describeError } from "./failure";
 import { Button } from "../../ui/primitives/Button";
 import { Dialog } from "../../ui/primitives/Dialog";
@@ -8,7 +9,6 @@ import { TitleBar } from "../../ui/primitives/DialogBars";
 import { Spinner } from "../../ui/primitives/Spinner";
 import { TextField } from "../../ui/primitives/TextField";
 import type { FilesSession } from "./session";
-import { useRequest } from "./useRequest";
 import styles from "./NameEntry.module.css";
 
 interface Props {

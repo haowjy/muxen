@@ -1,5 +1,6 @@
 import { useState } from "preact/hooks";
 import { useApp } from "../../app/context";
+import { useRequest } from "../../app/useRequest";
 import type { HostClient } from "../../net/hosts";
 import { Button } from "../../ui/primitives/Button";
 import { CodeField } from "../../ui/primitives/CodeField";
@@ -23,18 +24,17 @@ export function Enrol({ host }: { host: HostClient }) {
   const [deviceName, setDeviceName] = useState(nodeName);
   // The code step first either way: a link fills the cells and the reader sees what it carried.
   const [step, setStep] = useState<"code" | "name">("code");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { busy, error, clear, run } = useRequest();
 
   const submit = async (): Promise<void> => {
     if (busy || code.length !== CODE_LENGTH) return;
-    setBusy(true);
-    setError(null);
-    const result = await app.hosts.enrol(host.entry.handle, code, deviceName.trim() || nodeName);
-    setBusy(false);
-    if (result.kind === "badCode") setError("That code is wrong or has expired");
-    else if (result.kind === "tryAgain") setError("muxen is busy, try again");
-    else if (result.kind === "enrolled") app.enrolled(origin);
+    await run(async () => {
+      const result = await app.hosts.enrol(host.entry.handle, code, deviceName.trim() || nodeName);
+      if (result.kind === "badCode") return "That code is wrong or has expired";
+      if (result.kind === "tryAgain") return "muxen is busy, try again";
+      if (result.kind === "enrolled") app.enrolled(origin);
+      return null;
+    }, "Couldn't enrol");
     // `enrolled` and `nodeRefused` change the host's admission, which swaps this screen out.
   };
 
@@ -67,7 +67,7 @@ export function Enrol({ host }: { host: HostClient }) {
             <TextField label="Device name" value={deviceName} onInput={setDeviceName} hint="Shown in the server's device list." />
             {error && <p class={styles.error} role="alert">{error}</p>}
             <div class={styles.actions}>
-              <Button onClick={() => { setError(null); setStep("code"); }} busy={busy}>Back</Button>
+              <Button onClick={() => { clear(); setStep("code"); }} busy={busy}>Back</Button>
               <Button variant="primary" type="submit" busy={busy}>
                 {busy ? "Enrolling…" : "Enrol this device"}
               </Button>

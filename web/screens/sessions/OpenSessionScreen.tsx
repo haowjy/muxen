@@ -5,6 +5,7 @@
 import { useRef, useState } from "preact/hooks";
 import { useFocus } from "../../ui/focus";
 import { useApp, useAppView, useBells, useOverlay } from "../../app/context";
+import { useRequest } from "../../app/useRequest";
 import { serverState, type HostClient } from "../../net/hosts";
 import { tabId } from "../../platform/tabKey";
 import { bellLook } from "../../sessions/bells";
@@ -62,8 +63,7 @@ function Body({ host, workspace }: { host: HostClient; workspace: Workspace }) {
   const sessions = useStore(app.sessions, (s) => s.hosts[handle]);
   const bells = useBells();
   const [query, setQuery] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { busy, error, clear, run } = useRequest();
   // New session with the field empty asks for a name there instead of creating one tmux names.
   const [asked, setAsked] = useState(false);
   const focus = useFocus();
@@ -93,11 +93,10 @@ function Body({ host, workspace }: { host: HostClient; workspace: Workspace }) {
       if (field) focus.focusElement(field);
       return;
     }
-    setBusy(true);
-    setError(null);
-    const result = await openOrCreate(app, workspace, host, typed);
-    setBusy(false);
-    if ("error" in result) setError(result.error);
+    await run(async () => {
+      const result = await openOrCreate(app, workspace, host, typed);
+      return "error" in result ? result.error : null;
+    }, `Couldn't open ${typed}`);
   };
   // Return does what the first row does.
   const submit = (e: Event): void => {
@@ -142,7 +141,7 @@ function Body({ host, workspace }: { host: HostClient; workspace: Workspace }) {
 
   return (
     <form ref={form} class={styles.page} onSubmit={submit}>
-      <TextField label="Session name" value={query} onInput={(v) => { setQuery(v); setError(null); setAsked(false); }} hint={asked ? "Type a name for the new session" : undefined} error={error} data-initial-focus="" />
+      <TextField label="Session name" value={query} onInput={(v) => { setQuery(v); clear(); setAsked(false); }} hint={asked ? "Type a name for the new session" : undefined} error={error} data-initial-focus="" />
       {list}
     </form>
   );
