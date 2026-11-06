@@ -29,7 +29,6 @@ Files rename and delete, left small:
 - The phone's proxy keeps URLSession's 60 s timeout: a longer delete shows "can't reach" while it finishes.
 
 File editor, left small:
-- A Files tab on a file renamed from another tab shows the refusal: `left` moves the edit, previews and recents but no tab's place. The edit is at the new name.
 - A host id change (a reset state directory) drops open edits unflushed: `filesSession` calls `forget`, and the old `Edits` is unreachable.
 - A Reload refused `denied` reads with Save's words: `EditView` has one `useRequest` for both.
 - No harness fixture opens straight into the editor; `filesCode` reaches it through the ⋯ menu.

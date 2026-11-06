@@ -131,9 +131,8 @@ export function filesSession(app: AppController, host: KnownHost): FilesSession 
       throw refused;
     }
   };
-  /** What was at `path` left it, for `to` or for good: the previews, recents and edits go with it. */
+  /** What was at `path` left it, for `to` or for good: the previews and recents go with it. */
   const left = (path: string, to: string | null): void => {
-    edits.left(path, to);
     session.previews.revise((file) => {
       if (!within(file.path, path)) return file;
       if (to === null) return null;
@@ -171,8 +170,6 @@ export function filesSession(app: AppController, host: KnownHost): FilesSession 
     },
     rename: async (path, to, opens) => {
       const dir = parentOf(path);
-      // The file there went outside muxen, but its unsaved text is still under that name.
-      if (edits.changedWithin(join(dir, to)).length > 0) throw new HttpRefusal(409, "exists");
       await changing(dir, null, () => browser.api.rename(dir, baseName(path), to));
       app.notify(`Renamed to ${to}`);
       left(path, join(dir, to));

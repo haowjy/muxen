@@ -1,5 +1,4 @@
 import type { Entry } from "../../files/api";
-import { baseName } from "../../files/paths";
 import { describeError } from "./failure";
 import { useRequest } from "../../app/useRequest";
 import { ConfirmDialog } from "../../ui/primitives/ConfirmDialog";
@@ -22,12 +21,9 @@ export function DeleteEntry({ session, path, entry, onClose }: Props) {
   const confirm = async (): Promise<void> => {
     if (await run(() => session.remove(path), `Couldn't delete ${entry.name}`)) close();
   };
-  const what = entry.link ? "Only the link is deleted, not what it points to." : folder ? "Everything in this folder is deleted as well." : null;
-  const [first, ...more] = entry.link ? [] : session.edits.changedWithin(path);
-  const unsaved = first === undefined ? null : `Unsaved changes to ${more.length > 0 ? `${String(more.length + 1)} files` : baseName(first)} are deleted too.`;
   return (
     <ConfirmDialog title={title} confirm="Delete" confirming="Deleting…" cancel={busy ? "Hide" : "Cancel"} error={error} busy={busy} onConfirm={() => { void confirm(); }} onClose={close}>
-      {what && unsaved ? `${what} ${unsaved}` : what ?? unsaved}
+      {entry.link ? "Only the link is deleted, not what it points to." : folder ? "Everything in this folder is deleted as well." : null}
     </ConfirmDialog>
   );
 }

@@ -759,10 +759,9 @@ unsaved one on each server is written to view memory as the page goes away, so t
 reopens into the editor after a relaunch. Clear local data drops it. A file opened in the
 desktop's Preview panel stays a viewer, and Edit opens it full width.
 
-An edit follows a rename in muxen. A rename onto a name whose edit has unsaved text is
-refused. A delete takes the edits below it, and its dialog names any with unsaved text. A
-file that goes outside muxen stays open in the editor while it has unsaved text, and its
-save says the file no longer exists.
+An edit stays on the path it opened: after a rename or delete, its save says the file no
+longer exists and the text stays on screen. Unsaved text can be lost this way, or when a
+second browser tab flushes; only the file on disk is protected.
 
 **Photo → terminal (MVP),** native ([ios-shell.md](ios-shell.md#files-and-sharing)):
 pick, take or paste a photo (`^V img`, or the file manager's upload button); HEIC is

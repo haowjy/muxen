@@ -5107,7 +5107,7 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
   the viewer: of a test build that restored the text only after Edit, "it doesn't save the state that
   I was in the edit".
 - **What:** `Edits`, one store per host's `FilesSession`, owns each open edit from Edit to Done (ETag,
-  line ending, CodeMirror state, save, reload, a rename, the remembered copy); a view holds none of it,
+  line ending, CodeMirror state, save, reload, the remembered copy); a view holds none of it,
   so a save's or reload's answer that lands after the view has gone finds the edit by path. `FileView` renders the editor whenever its file has an edit, so a tab switch, Back
   and a relaunch need no route of their own. The latest changed edit per host goes to view memory only
   from `persist.onFlush`. The upload flush interval drops from 2 MiB to 1 MiB so the save's 1 MiB
@@ -5138,7 +5138,7 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
 - **What:** a dialog's title carries it when it can: "Discard your changes?" and a file's "Delete
   notes.txt?" have no body. Body text stays for a consequence the title leaves out: a folder's
   "Everything in this folder is deleted as well.", a link's "Only the link is deleted, not what it
-  points to.", and unsaved changes a delete takes. Settings' Terminal text size has no detail line. A
+  points to." Settings' Terminal text size has no detail line. A
   verb says what happens: "is deleted", never "goes".
 - **Rejected:** "goes with it", which doesn't say where anything goes; dialog text that explains how a
   control works.
@@ -5623,6 +5623,17 @@ the check starts at the third timeout rather than the second, the limit is 15 s 
   banner on every screen but Home.
 - **Rejected:** every host's banner on every screen; the folder body carrying its own "Can't reach"
   and Retry beside the banner.
+
+### Unsaved text gets no special defence
+
+- **Decided:** 2026-11-06, Jimmy.
+- **What:** an edit stays on the path it opened. muxen doesn't follow a rename, warn on a delete, or
+  guard a remembered edit against a second browser tab. Only the file on disk is protected: the
+  ETag check, one file's text never saved into another, a save never blanking a file.
+- **Why:** "unsaved data lost is... kinda par for the course". Each defence added a flag or a rule
+  for a case people rarely hit.
+- **Rejected:** moving edits on rename, refusing a rename onto a name with unsaved text, naming
+  unsaved changes in the delete dialog, preferring the live edit at flush.
 
 ### Every view reads one derived server state
 

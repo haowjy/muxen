@@ -64,9 +64,8 @@ export function FileView({ session, file, back, onExpand, onLink, children }: Pr
   const within = onExpand ? shown.slice(0, shown.length - file.name.length) : "";
   const url = session.browser.api.rawUrl(file.path);
   const edit = useStore(session.edits, (s) => s.open.get(file.path));
-  // The Preview panel shows the file: its editor is full width, and an edit waits there. A file that can't be shown still
-  // has its unsaved text, which only the editor can reach.
-  const editing = edit && !onExpand && (!children || edit.changed) ? edit : null;
+  // The Preview panel shows the file: its editor is full width, and an edit waits there.
+  const editing = edit && !onExpand && !children ? edit : null;
   const readable = kind === "code" || kind === "markdown";
   const [text, setText] = useText(session, file.path, !children && !editing && readable);
   const editable = readable && text.kind === "done" ? text.value.editable : null;
