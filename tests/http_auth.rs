@@ -16,8 +16,8 @@ use tokio_tungstenite::tungstenite::{Error as WsError, Message};
 mod daemon;
 
 use daemon::{
-    LOGIN, LOOPBACK_SECRET, WAIT, request, send, send_owned, send_with_host, start, start_as,
-    start_loopback, start_with_fake, start_without_allow_login,
+    LOGIN, LOOPBACK_SECRET, Options, WAIT, request, send, send_owned, send_with_host, start,
+    start_loopback, start_with, wait_for,
 };
 
 /// Every `/fs` route and `/complete`, with a body where it takes one.
@@ -90,7 +90,14 @@ async fn every_route_needs_the_tailscale_login() {
 
 #[tokio::test]
 async fn the_default_allowlist_admits_the_shell_websocket_and_fs() {
-    let daemon = start_without_allow_login("default-allow-idle").await;
+    let daemon = start_with(
+        "default-allow-idle",
+        Options {
+            explicit_allowlist: false,
+            ..Options::default()
+        },
+    )
+    .await;
     let login = [("Tailscale-User-Login", LOGIN)];
     assert_eq!(
         send(daemon.serve_port, "GET", "/auth/info", &login, &[])
@@ -372,7 +379,14 @@ async fn serve_host_and_funnel_checks_precede_every_route() {
 
 #[tokio::test]
 async fn serve_decodes_q_encoded_logins_before_matching_the_allowlist() {
-    let daemon = start_as("encoded-login", "josé@example.test", false, false, true).await;
+    let daemon = start_with(
+        "encoded-login",
+        Options {
+            login: "josé@example.test",
+            ..Options::default()
+        },
+    )
+    .await;
     let reply = send(
         daemon.serve_port,
         "GET",
@@ -569,7 +583,14 @@ async fn node_rules_refuse_ineligible_nodes_and_allow_exit_node_routes() {
 
 #[tokio::test]
 async fn whois_failure_is_retryable_and_never_looks_like_an_unenrolled_node() {
-    let daemon = start_with_fake("whois-unavailable", false, false, false).await;
+    let daemon = start_with(
+        "whois-unavailable",
+        Options {
+            whois_available: false,
+            ..Options::default()
+        },
+    )
+    .await;
     let reply = send(
         daemon.serve_port,
         "GET",
@@ -648,17 +669,14 @@ async fn whois_shares_same_address_flights_and_bounds_distinct_waiters() {
 
     // Repeats of an address already in flight join its call.
     let active = vec![lookup(103), lookup(104), lookup(103), lookup(103)];
-    for _ in 0..200 {
-        if daemon
+    wait_for(|| {
+        daemon
             .fake
             .whois_calls
             .load(std::sync::atomic::Ordering::SeqCst)
             == 2
-        {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(5)).await;
-    }
+    })
+    .await;
     assert_eq!(
         daemon
             .fake
@@ -767,7 +785,15 @@ async fn a_stored_node_with_an_old_login_is_not_enrolled_and_tokens_stay_native(
 
 #[tokio::test]
 async fn a_second_serve_handler_or_tcp_forward_removes_the_browser_origin() {
-    let daemon = start_with_fake("bad-origin", true, true, true).await;
+    let daemon = start_with(
+        "bad-origin",
+        Options {
+            extra_handler: true,
+            tcp_forward: true,
+            ..Options::default()
+        },
+    )
+    .await;
     let login = [("Tailscale-User-Login", LOGIN)];
     let (status, body) = request(daemon.serve_port, "GET", "/auth/info", &login, "").await;
     assert_eq!(status, 200, "{body}");

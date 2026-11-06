@@ -4,7 +4,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, SystemTime};
 
 use bytes::Bytes;
@@ -53,6 +53,7 @@ pub struct Daemon {
     serve_proxy: JoinHandle<()>,
     fake_api: JoinHandle<()>,
     pub fake: FakeLocalApi,
+    device: OnceLock<Vec<(String, String)>>,
 }
 
 #[derive(Clone, Default)]
@@ -72,6 +73,36 @@ pub struct FakeLocalApi {
 }
 
 impl FakeLocalApi {
+    /// Answers whois and status for `login`, and holds Serve's `serve_config`.
+    fn answering(login: &str, whois_available: bool, serve_config: serde_json::Value) -> Self {
+        Self {
+            whois_available: Arc::new(AtomicBool::new(whois_available)),
+            whois_answer: Arc::new(Mutex::new(serde_json::json!({
+                "Node": {
+                    "StableID": "nLAPTOP0123456789CNTRL",
+                    "Tags": [],
+                    "Sharer": 0,
+                    "Addresses": ["100.101.102.103/32"],
+                    "AllowedIPs": ["100.101.102.103/32"],
+                    "DNSName": "laptop.ts.net."
+                },
+                "UserProfile": { "LoginName": login }
+            }))),
+            status_answer: Arc::new(Mutex::new(serde_json::json!({
+                "BackendState": "Running",
+                "Self": {
+                    "ID": "nSELF0123456789CNTRL",
+                    "UserID": 1,
+                    "DNSName": "devbox.ts.net."
+                },
+                "User": { "1": { "LoginName": login } },
+                "Peer": {}
+            }))),
+            serve_config: Arc::new(Mutex::new(serve_config)),
+            ..Self::default()
+        }
+    }
+
     pub fn allow_whois(&self, allowed: bool) {
         self.whois_available.store(allowed, Ordering::SeqCst);
     }
@@ -109,19 +140,40 @@ impl Drop for Daemon {
 }
 
 impl Daemon {
-    /// Enrolls a device: the headers that pass both checks.
+    /// The headers that pass both checks, from a device enrolled on first use.
     pub fn device(&self) -> Vec<(String, String)> {
-        let added = self
-            .store
-            .add_device("phone", SystemTime::now())
-            .expect("a device");
-        vec![
-            ("Tailscale-User-Login".to_owned(), LOGIN.to_owned()),
-            (
-                "Authorization".to_owned(),
-                format!("Bearer {}", added.token),
-            ),
-        ]
+        self.device
+            .get_or_init(|| {
+                let added = self
+                    .store
+                    .add_device("phone", SystemTime::now())
+                    .expect("a device");
+                vec![
+                    ("Tailscale-User-Login".to_owned(), LOGIN.to_owned()),
+                    (
+                        "Authorization".to_owned(),
+                        format!("Bearer {}", added.token),
+                    ),
+                ]
+            })
+            .clone()
+    }
+
+    /// One request from the enrolled device, with `headers` besides its own.
+    pub async fn call(
+        &self,
+        method: &str,
+        path: &str,
+        headers: &[(&str, &str)],
+        body: &[u8],
+    ) -> Reply {
+        let device = self.device();
+        let mut all: Vec<(&str, &str)> = device
+            .iter()
+            .map(|(name, value)| (name.as_str(), value.as_str()))
+            .collect();
+        all.extend_from_slice(headers);
+        send(self.port, method, path, &all, body).await
     }
 
     /// `relative` under `$HOME`.
@@ -137,51 +189,42 @@ fn live_config(path: &Path) -> Arc<LiveConfig> {
 }
 
 pub async fn start(name: &str) -> Daemon {
-    start_with_fake(name, false, false, true).await
+    start_with(name, Options::default()).await
 }
 
-pub async fn start_with_fake(
-    name: &str,
-    extra_handler: bool,
-    tcp_forward: bool,
-    whois_available: bool,
-) -> Daemon {
-    start_as(name, LOGIN, extra_handler, tcp_forward, whois_available).await
+/// What a test varies about the daemon on its Unix sockets.
+pub struct Options<'a> {
+    /// The Tailscale login the fake LocalAPI answers for.
+    pub login: &'a str,
+    /// Serve also proxies `/grafana`.
+    pub extra_handler: bool,
+    /// Serve also forwards a TCP port to the daemon.
+    pub tcp_forward: bool,
+    pub whois_available: bool,
+    /// `--allow-login`; without it the owner's login comes from the tailnet-state cell
+    /// (the production default).
+    pub explicit_allowlist: bool,
 }
 
-pub async fn start_as(
-    name: &str,
-    login: &str,
-    extra_handler: bool,
-    tcp_forward: bool,
-    whois_available: bool,
-) -> Daemon {
-    start_as_with_allowlist(
-        name,
-        login,
-        extra_handler,
-        tcp_forward,
-        whois_available,
-        true,
-    )
-    .await
-}
-
-/// Starts the production default-allowlist path, where the owner's login comes from
-/// the tailnet-state cell instead of `--allow-login`.
-pub async fn start_without_allow_login(name: &str) -> Daemon {
-    start_as_with_allowlist(name, LOGIN, false, false, true, false).await
+impl Default for Options<'_> {
+    fn default() -> Self {
+        Self {
+            login: LOGIN,
+            extra_handler: false,
+            tcp_forward: false,
+            whois_available: true,
+            explicit_allowlist: true,
+        }
+    }
 }
 
 /// Starts the Mac Loopback front against a TCP fake LocalAPI that requires Basic auth.
 pub async fn start_loopback(name: &str) -> Daemon {
     use base64::Engine as _;
 
-    let dir = std::env::temp_dir().join(format!("muxen-http-{}-{name}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let store = Store::open(dir.join("state")).expect("a state dir");
-    let serve_socket = dir.join("serve.sock");
-    let local_socket = dir.join("local.sock");
+    let site = Site::new(name);
+    let serve_socket = site.dir.join("serve.sock");
+    let local_socket = site.dir.join("local.sock");
     let front_listener = TcpListener::bind("127.0.0.1:0")
         .await
         .expect("front listener");
@@ -194,91 +237,31 @@ pub async fn start_loopback(name: &str) -> Daemon {
         .local_addr()
         .expect("fake LocalAPI address");
     let fake = FakeLocalApi {
-        whois_available: Arc::new(AtomicBool::new(true)),
-        whois_answer: Arc::new(Mutex::new(serde_json::json!({
-            "Node": {
-                "StableID": "nLAPTOP0123456789CNTRL",
-                "Tags": [],
-                "Sharer": 0,
-                "Addresses": ["100.101.102.103/32"],
-                "AllowedIPs": ["100.101.102.103/32"],
-                "DNSName": "laptop.ts.net."
-            },
-            "UserProfile": { "LoginName": LOGIN }
-        }))),
-        status_answer: Arc::new(Mutex::new(serde_json::json!({
-            "BackendState": "Running",
-            "Self": {
-                "ID": "nSELF0123456789CNTRL",
-                "UserID": 1,
-                "DNSName": "devbox.ts.net."
-            },
-            "User": { "1": { "LoginName": LOGIN } },
-            "Peer": {}
-        }))),
-        serve_config: Arc::new(Mutex::new(serde_json::json!({
-            "UnknownRoot": { "keep": true }
-        }))),
         conflict_next_serve_write: Arc::new(AtomicBool::new(true)),
         expected_authorization: Arc::new(Mutex::new(Some(format!(
             "Basic {}",
             base64::engine::general_purpose::STANDARD.encode(format!(":{FAKE_LOCALAPI_TOKEN}"))
         )))),
-        ..FakeLocalApi::default()
+        ..FakeLocalApi::answering(
+            LOGIN,
+            true,
+            serde_json::json!({ "UnknownRoot": { "keep": true } }),
+        )
     };
     let fake_api = tokio::spawn(serve_fake_localapi_tcp(fake_api_listener, fake.clone()));
 
-    let paste_dir = dir.join("paste");
-    std::fs::create_dir_all(&paste_dir).expect("a paste dir");
-    let home = dir.join("home");
-    std::fs::create_dir_all(&home).expect("a home");
-    let home = std::fs::canonicalize(home).expect("canonical");
-    let config = dir.join("config.toml");
-    std::fs::write(&config, "").expect("a config");
-    let live = live_config(&config);
-    let endpoint = Endpoint {
-        program: PathBuf::from("tmux"),
-        socket: Socket::Name(format!("muxen-http-test-{}", std::process::id())),
-    };
-    let (hub, _task) = hub::spawn(
-        Endpoints { main: endpoint },
-        DEFAULT_CAPS.control_clients,
-        "test".to_owned(),
-        None,
-    );
     let lanes = Lanes::default();
     let api = LocalApi::at_tcp(fake_api_address, FAKE_LOCALAPI_TOKEN);
     let (target, publication, gate) = MacFront::new(front_port, LOOPBACK_SECRET).into_parts();
     let auth = Auth::with_local_api(
-        store.clone(),
+        site.store.clone(),
         vec![LOGIN.to_owned()],
         lanes.auth.clone(),
         api,
         Some(target),
         Some(publication),
     );
-    let app = App {
-        auth,
-        hub,
-        host: HostInfo {
-            id: store.host_id().expect("a host id"),
-            name: "test".to_owned(),
-        },
-        paste_dir,
-        upload_record: dir.join("upload-part"),
-        state_dir: std::env::temp_dir().join("muxen-no-state"),
-        config: live,
-        complete: complete::Settings::new(
-            &Default::default(),
-            complete::Environment {
-                home: home.clone(),
-                ..Default::default()
-            },
-        ),
-        caps: DEFAULT_CAPS,
-        home: home.clone(),
-        lanes,
-    };
+    let app = site.app(auth, lanes);
     let server = tokio::spawn(http::serve(
         vec![
             (Listener::Tcp(front_listener), gate),
@@ -294,37 +277,33 @@ pub async fn start_loopback(name: &str) -> Daemon {
         .port();
     let proxy = tokio::spawn(relay_local(local_relay, local_socket.clone()));
     let serve_proxy = tokio::spawn(async {});
-    Daemon {
-        port: local_port,
-        serve_port: front_port,
-        store,
-        dir,
-        home,
-        config,
-        serve_socket,
-        local_socket,
+    let tasks = Tasks {
         server,
         proxy,
         serve_proxy,
         fake_api,
+    };
+    site.daemon(
+        (local_port, front_port),
+        [serve_socket, local_socket],
+        tasks,
         fake,
-    }
+    )
 }
 
-async fn start_as_with_allowlist(
-    name: &str,
-    login: &str,
-    extra_handler: bool,
-    tcp_forward: bool,
-    whois_available: bool,
-    explicit_allowlist: bool,
-) -> Daemon {
-    let dir = std::env::temp_dir().join(format!("muxen-http-{}-{name}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let store = Store::open(dir.join("state")).expect("a state dir");
-    let serve_socket = dir.join("serve.sock");
-    let local_socket = dir.join("local.sock");
-    let api_socket = dir.join("tailscaled.sock");
+/// Starts the daemon on private Unix sockets behind a fake `tailscaled`.
+pub async fn start_with(name: &str, options: Options<'_>) -> Daemon {
+    let Options {
+        login,
+        extra_handler,
+        tcp_forward,
+        whois_available,
+        explicit_allowlist,
+    } = options;
+    let site = Site::new(name);
+    let serve_socket = site.dir.join("serve.sock");
+    let local_socket = site.dir.join("local.sock");
+    let api_socket = site.dir.join("tailscaled.sock");
     let serve_listener = UnixListener::bind(&serve_socket).expect("serve socket");
     let local_listener = UnixListener::bind(&local_socket).expect("local socket");
     let fake_api_listener = UnixListener::bind(&api_socket).expect("fake LocalAPI socket");
@@ -349,94 +328,23 @@ async fn start_as_with_allowlist(
             "2222": { "TCPForward": format!("unix:{}", serve_socket.display()) }
         });
     }
-    let fake = FakeLocalApi {
-        whois_available: Arc::new(AtomicBool::new(whois_available)),
-        whois_answer: Arc::new(Mutex::new(serde_json::json!({
-            "Node": {
-                "StableID": "nLAPTOP0123456789CNTRL",
-                "Tags": [],
-                "Sharer": 0,
-                "Addresses": ["100.101.102.103/32"],
-                "AllowedIPs": ["100.101.102.103/32"],
-                "DNSName": "laptop.ts.net."
-            },
-            "UserProfile": { "LoginName": login }
-        }))),
-        status_answer: Arc::new(Mutex::new(serde_json::json!({
-            "BackendState": "Running",
-            "Self": {
-                "ID": "nSELF0123456789CNTRL",
-                "UserID": 1,
-                "DNSName": "devbox.ts.net."
-            },
-            "User": { "1": { "LoginName": login } },
-            "Peer": {}
-        }))),
-        serve_config: Arc::new(Mutex::new(serve_config)),
-        whois_calls: Arc::new(AtomicUsize::new(0)),
-        whois_queries: Arc::new(Mutex::new(Vec::new())),
-        hold_whois: Arc::new(AtomicBool::new(false)),
-        release_whois: Arc::new(Notify::new()),
-        whois_delay: Arc::new(Mutex::new(Duration::ZERO)),
-        expected_authorization: Arc::new(Mutex::new(None)),
-        serve_etag: Arc::new(AtomicUsize::new(0)),
-        conflict_next_serve_write: Arc::new(AtomicBool::new(false)),
-    };
+    let fake = FakeLocalApi::answering(login, whois_available, serve_config);
     let fake_api = tokio::spawn(serve_fake_localapi(fake_api_listener, fake.clone()));
 
-    let paste_dir = dir.join("paste");
-    std::fs::create_dir_all(&paste_dir).expect("a paste dir");
-    let home = dir.join("home");
-    std::fs::create_dir_all(&home).expect("a home");
-    let home = std::fs::canonicalize(home).expect("canonical");
-    let config = dir.join("config.toml");
-    std::fs::write(&config, "").expect("a config");
-    let live = live_config(&config);
-    let endpoint = Endpoint {
-        program: PathBuf::from("tmux"),
-        socket: Socket::Name(format!("muxen-http-test-{}", std::process::id())),
-    };
-    let (hub, _task) = hub::spawn(
-        Endpoints { main: endpoint },
-        DEFAULT_CAPS.control_clients,
-        "test".to_owned(),
+    let lanes = Lanes::default();
+    let auth = Auth::with_local_api(
+        site.store.clone(),
+        if explicit_allowlist {
+            vec![login.to_owned()]
+        } else {
+            Vec::new()
+        },
+        lanes.auth.clone(),
+        LocalApi::at(api_socket),
+        Some(ServeTarget::unix(serve_socket.clone()).expect("serve socket identity")),
         None,
     );
-    let lanes = Lanes::default();
-    let app = App {
-        auth: Auth::with_local_api(
-            store.clone(),
-            if explicit_allowlist {
-                vec![login.to_owned()]
-            } else {
-                Vec::new()
-            },
-            lanes.auth.clone(),
-            LocalApi::at(api_socket),
-            Some(ServeTarget::unix(serve_socket.clone()).expect("serve socket identity")),
-            None,
-        ),
-        hub,
-        host: HostInfo {
-            id: store.host_id().expect("a host id"),
-            name: "test".to_owned(),
-        },
-        paste_dir,
-        upload_record: dir.join("upload-part"),
-        state_dir: std::env::temp_dir().join("muxen-no-state"),
-        config: live,
-        // No history, no PATH, no carapace: only paths complete.
-        complete: complete::Settings::new(
-            &Default::default(),
-            complete::Environment {
-                home: home.clone(),
-                ..Default::default()
-            },
-        ),
-        caps: DEFAULT_CAPS,
-        home: home.clone(),
-        lanes,
-    };
+    let app = site.app(auth, lanes);
     let server = tokio::spawn(http::serve(
         vec![
             (Listener::Unix(serve_listener), Front::UnixServe),
@@ -453,21 +361,117 @@ async fn start_as_with_allowlist(
         .expect("a Serve test port");
     let serve_port = serve_listener.local_addr().expect("an address").port();
     let serve_proxy = tokio::spawn(relay_local(serve_listener, serve_socket.clone()));
-    Daemon {
-        port,
-        serve_port,
-        store,
-        dir,
-        home,
-        config,
-        serve_socket,
-        local_socket,
+    let tasks = Tasks {
         server,
         proxy,
         serve_proxy,
         fake_api,
+    };
+    site.daemon(
+        (port, serve_port),
+        [serve_socket, local_socket],
+        tasks,
         fake,
+    )
+}
+
+/// What both starts build the same way: a scratch folder with the state dir, the
+/// daemon's `$HOME`, an empty `config.toml` and the paste folder.
+struct Site {
+    dir: PathBuf,
+    store: Store,
+    home: PathBuf,
+    config: PathBuf,
+}
+
+impl Site {
+    fn new(name: &str) -> Self {
+        let dir = std::env::temp_dir().join(format!("muxen-http-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = Store::open(dir.join("state")).expect("a state dir");
+        std::fs::create_dir_all(dir.join("paste")).expect("a paste dir");
+        let home = dir.join("home");
+        std::fs::create_dir_all(&home).expect("a home");
+        let home = std::fs::canonicalize(home).expect("canonical");
+        let config = dir.join("config.toml");
+        std::fs::write(&config, "").expect("a config");
+        Self {
+            dir,
+            store,
+            home,
+            config,
+        }
     }
+
+    /// The daemon's state around `auth`, with a hub on a tmux socket nothing uses. Path
+    /// completion only: no history, no PATH, no carapace.
+    fn app(&self, auth: Auth, lanes: Lanes) -> App {
+        let endpoint = Endpoint {
+            program: PathBuf::from("tmux"),
+            socket: Socket::Name(format!("muxen-http-test-{}", std::process::id())),
+        };
+        let (hub, _task) = hub::spawn(
+            Endpoints { main: endpoint },
+            DEFAULT_CAPS.control_clients,
+            "test".to_owned(),
+            None,
+        );
+        App {
+            auth,
+            hub,
+            host: HostInfo {
+                id: self.store.host_id().expect("a host id"),
+                name: "test".to_owned(),
+            },
+            paste_dir: self.dir.join("paste"),
+            upload_record: self.dir.join("upload-part"),
+            state_dir: std::env::temp_dir().join("muxen-no-state"),
+            config: live_config(&self.config),
+            complete: complete::Settings::new(
+                &Default::default(),
+                complete::Environment {
+                    home: self.home.clone(),
+                    ..Default::default()
+                },
+            ),
+            caps: DEFAULT_CAPS,
+            home: self.home.clone(),
+            lanes,
+        }
+    }
+
+    fn daemon(
+        self,
+        (port, serve_port): (u16, u16),
+        [serve_socket, local_socket]: [PathBuf; 2],
+        tasks: Tasks,
+        fake: FakeLocalApi,
+    ) -> Daemon {
+        Daemon {
+            port,
+            serve_port,
+            store: self.store,
+            dir: self.dir,
+            home: self.home,
+            config: self.config,
+            serve_socket,
+            local_socket,
+            server: tasks.server,
+            proxy: tasks.proxy,
+            serve_proxy: tasks.serve_proxy,
+            fake_api: tasks.fake_api,
+            fake,
+            device: OnceLock::new(),
+        }
+    }
+}
+
+/// The tasks a `Daemon` aborts when dropped.
+struct Tasks {
+    server: JoinHandle<std::io::Result<()>>,
+    proxy: JoinHandle<()>,
+    serve_proxy: JoinHandle<()>,
+    fake_api: JoinHandle<()>,
 }
 
 async fn relay_local(listener: TcpListener, socket: PathBuf) {
@@ -741,4 +745,14 @@ pub fn url(route: &str, path: &Path) -> String {
         }
     }
     url
+}
+
+/// Polls `condition` every 10 ms until it holds, or fails after `WAIT`.
+pub async fn wait_for(condition: impl Fn() -> bool) {
+    let waited = tokio::time::timeout(WAIT, async {
+        while !condition() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    });
+    waited.await.expect("in time");
 }

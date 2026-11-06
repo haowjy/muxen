@@ -136,6 +136,27 @@ pub(crate) mod test_tree {
         pub fn root(&self) -> &Path {
             &self.0
         }
+
+        /// The names in the root, sorted.
+        pub fn names(&self) -> Vec<String> {
+            names_in(&self.0)
+        }
+    }
+
+    /// The names in `dir`, sorted.
+    pub fn names_in(dir: &Path) -> Vec<String> {
+        let mut names: Vec<String> = std::fs::read_dir(dir)
+            .expect("the folder")
+            .map(|entry| {
+                entry
+                    .expect("an entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        names.sort();
+        names
     }
 
     impl Drop for Tree {

@@ -442,21 +442,6 @@ mod tests {
             .expect("a permit")
     }
 
-    fn names(tree: &Tree) -> Vec<String> {
-        let mut names: Vec<String> = std::fs::read_dir(tree.root())
-            .expect("the folder")
-            .map(|entry| {
-                entry
-                    .expect("an entry")
-                    .file_name()
-                    .to_string_lossy()
-                    .into_owned()
-            })
-            .collect();
-        names.sort();
-        names
-    }
-
     fn body(chunks: Vec<Vec<u8>>) -> impl Stream<Item = Result<Bytes, io::Error>> + Unpin {
         stream::iter(chunks.into_iter().map(|chunk| Ok(Bytes::from(chunk))))
     }
@@ -509,7 +494,7 @@ mod tests {
         )
         .await;
         assert!(matches!(refused, Err(FsError::TooLarge)), "{refused:?}");
-        assert!(names(&tree).is_empty());
+        assert!(tree.names().is_empty());
     }
 
     #[tokio::test(start_paused = true)]
@@ -530,7 +515,7 @@ mod tests {
         .await;
         assert!(matches!(refused, Err(FsError::BadRequest)), "{refused:?}");
         assert!(started.elapsed() >= IDLE);
-        assert!(names(&tree).is_empty());
+        assert!(tree.names().is_empty());
     }
 
     #[test]
@@ -562,7 +547,7 @@ mod tests {
         assert_eq!(saved.size, 6);
         assert_eq!(std::fs::read(&saved.path).expect("read"), b"hello\n");
         assert!(saved.path.contains("/pasted-") && saved.path.ends_with(".txt"));
-        assert_eq!(names(&tree).len(), 1, "{:?}", names(&tree));
+        assert_eq!(tree.names().len(), 1, "{:?}", tree.names());
         assert!(!record.exists());
     }
 
@@ -584,7 +569,7 @@ mod tests {
         reaps(".muxen-upload-cccc.part");
         reaps("missing/.muxen-upload-dddd.part");
         assert_eq!(
-            names(&tree),
+            tree.names(),
             [
                 ".muxen-upload-aaaa.part",
                 ".muxen-upload-bbbb.part",
@@ -594,7 +579,7 @@ mod tests {
         );
         reaps(".muxen-upload-aaaa.part");
         assert_eq!(
-            names(&tree),
+            tree.names(),
             [
                 ".muxen-upload-bbbb.part",
                 ".muxen-upload-cccc.part",

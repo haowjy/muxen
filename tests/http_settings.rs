@@ -5,17 +5,12 @@
 #[path = "support/daemon.rs"]
 mod daemon;
 
-use daemon::{Daemon, Reply, send, start};
+use daemon::{Daemon, Reply, start};
 use serde_json::{Value, json};
 
 async fn request(daemon: &Daemon, method: &str, path: &str, body: &str) -> Reply {
-    let device = daemon.device();
-    let mut headers: Vec<(&str, &str)> = device
-        .iter()
-        .map(|(k, v)| (k.as_str(), v.as_str()))
-        .collect();
-    headers.push(("Content-Type", "application/json"));
-    send(daemon.port, method, path, &headers, body.as_bytes()).await
+    let headers = [("Content-Type", "application/json")];
+    daemon.call(method, path, &headers, body.as_bytes()).await
 }
 
 fn json(reply: &Reply) -> Value {

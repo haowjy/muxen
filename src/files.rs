@@ -290,11 +290,6 @@ mod tests {
             (read("taken.jpg"), read("free.jpg")),
             (b"the original".to_vec(), b"new".to_vec())
         );
-        let mut names: Vec<_> = std::fs::read_dir(tree.root())
-            .expect("the folder")
-            .map(|entry| entry.expect("an entry").file_name())
-            .collect();
-        names.sort();
-        assert_eq!(names, ["free.jpg", "taken.jpg"]);
+        assert_eq!(tree.names(), ["free.jpg", "taken.jpg"]);
     }
 }

@@ -546,40 +546,19 @@ fn io_at(path: &Path) -> impl FnOnce(io::Error) -> StoreError + '_ {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicU32, Ordering};
-
     use super::*;
+    use crate::fs::test_tree::{Tree, names_in};
 
-    /// Removes the directory when the test ends.
-    struct Cleanup(PathBuf);
-
-    impl Drop for Cleanup {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
-        }
-    }
-
-    fn temp_store() -> (Store, Cleanup) {
-        static NEXT: AtomicU32 = AtomicU32::new(0);
-        let n = NEXT.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!("muxen-store-{}-{n}", std::process::id()));
-        let _ = fs::remove_dir_all(&dir);
-        (Store::open(dir.clone()).expect("a state dir"), Cleanup(dir))
+    fn temp_store() -> (Store, Tree) {
+        let tree = Tree::new("store");
+        (
+            Store::open(tree.root().to_owned()).expect("a state dir"),
+            tree,
+        )
     }
 
     fn files(store: &Store) -> Vec<String> {
-        let mut names: Vec<String> = fs::read_dir(store.dir())
-            .expect("the state dir")
-            .map(|entry| {
-                entry
-                    .expect("an entry")
-                    .file_name()
-                    .to_string_lossy()
-                    .into_owned()
-            })
-            .collect();
-        names.sort();
-        names
+        names_in(store.dir())
     }
 
     #[test]

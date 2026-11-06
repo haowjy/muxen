@@ -11,28 +11,24 @@ use tokio::net::TcpStream;
 #[path = "support/daemon.rs"]
 mod daemon;
 
-use daemon::{Daemon, Reply, send, start, url};
+use daemon::{Daemon, Reply, start, url, wait_for};
 
 async fn get(daemon: &Daemon, path: &str, extra: &[(&str, &str)]) -> Reply {
-    let device = daemon.device();
-    let mut headers: Vec<(&str, &str)> = device
-        .iter()
-        .map(|(k, v)| (k.as_str(), v.as_str()))
-        .collect();
-    headers.extend_from_slice(extra);
-    send(daemon.port, "GET", path, &headers, b"").await
+    daemon.call("GET", path, extra, b"").await
 }
 
 async fn post(daemon: &Daemon, path: &str, body: &[u8], json: bool) -> Reply {
-    let device = daemon.device();
-    let mut headers: Vec<(&str, &str)> = device
-        .iter()
-        .map(|(k, v)| (k.as_str(), v.as_str()))
-        .collect();
-    if json {
-        headers.push(("Content-Type", "application/json"));
-    }
-    send(daemon.port, "POST", path, &headers, body).await
+    let headers: &[(&str, &str)] = if json {
+        &[("Content-Type", "application/json")]
+    } else {
+        &[]
+    };
+    daemon.call("POST", path, headers, body).await
+}
+
+/// An upload of `body` with the query `query`.
+async fn upload(daemon: &Daemon, query: &str, body: &[u8]) -> Reply {
+    post(daemon, &format!("/fs/upload?{query}"), body, false).await
 }
 
 #[tokio::test]
@@ -110,7 +106,7 @@ async fn a_video_streams_by_range_with_a_stable_etag() {
 async fn uploads_land_one_at_a_time_and_leave_no_part_file() {
     let daemon = start("fs-upload").await;
     let jpeg = b"\xff\xd8\xff\xe0 not really a JPEG";
-    let uploaded = post(&daemon, "/fs/upload?name=IMG_0001.JPEG", jpeg, false).await;
+    let uploaded = upload(&daemon, "name=IMG_0001.JPEG", jpeg).await;
     assert_eq!(uploaded.status, 201, "{}", uploaded.text());
     let body = uploaded.json();
     let path = body["path"].as_str().expect("a path");
@@ -159,13 +155,13 @@ async fn uploads_land_one_at_a_time_and_leave_no_part_file() {
             .any(|entry| entry.file_name().to_string_lossy().ends_with(".part"))
     };
     wait_for(part).await;
-    let second = post(&daemon, "/fs/upload?name=c.png", b"x", false).await;
+    let second = upload(&daemon, "name=c.png", b"x").await;
     assert_eq!((second.status, second.text()), (503, r#"{"error":"busy"}"#));
     assert_eq!(second.header("retry-after"), Some("1"));
     // The client goes away mid-body: its part file goes too, and the slot frees.
     drop(first);
     wait_for(|| !part()).await;
-    let third = post(&daemon, "/fs/upload?name=c.png", b"x", false).await;
+    let third = upload(&daemon, "name=c.png", b"x").await;
     assert_eq!(third.status, 201, "{}", third.text());
     assert_eq!(std::fs::read_dir(&uploads).expect("the folder").count(), 2);
 }
@@ -182,13 +178,7 @@ async fn an_upload_can_name_its_folder_and_never_replaces_a_file() {
 
     // An image goes into the folder, with the same name shape as a default upload.
     let png = b"\x89PNG not really";
-    let image = post(
-        &daemon,
-        &format!("/fs/upload?name=a.PNG&{}", dir(&folder)),
-        png,
-        false,
-    )
-    .await;
+    let image = upload(&daemon, &format!("name=a.PNG&{}", dir(&folder)), png).await;
     assert_eq!(image.status, 201, "{}", image.text());
     let path = image.json()["path"].as_str().expect("a path").to_owned();
     assert!(
@@ -202,9 +192,9 @@ async fn an_upload_can_name_its_folder_and_never_replaces_a_file() {
     );
 
     // Text is a new file holding exactly the text; a second one never replaces the first.
-    let url = format!("/fs/upload?text=1&name=ignored.png&{}", dir(&folder));
-    let first = post(&daemon, &url, b"one\n", false).await;
-    let second = post(&daemon, &url, b"two\n", false).await;
+    let query = format!("text=1&name=ignored.png&{}", dir(&folder));
+    let first = upload(&daemon, &query, b"one\n").await;
+    let second = upload(&daemon, &query, b"two\n").await;
     let paths: Vec<String> = [&first, &second]
         .iter()
         .map(|reply| {
@@ -235,62 +225,42 @@ async fn an_upload_can_name_its_folder_and_never_replaces_a_file() {
             .as_encoded_bytes(),
     )
     .expect("a record");
-    let after = post(
-        &daemon,
-        &format!("/fs/upload?name=b.png&{}", dir(&folder)),
-        b"y",
-        false,
-    )
-    .await;
+    let after = upload(&daemon, &format!("name=b.png&{}", dir(&folder)), b"y").await;
     assert_eq!(after.status, 201, "{}", after.text());
     // The delete runs on the fs lane, not awaited by the upload.
-    for _ in 0..200 {
-        if !folder.join(".muxen-upload-old.part").exists() {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-    assert!(!folder.join(".muxen-upload-old.part").exists());
+    wait_for(|| !folder.join(".muxen-upload-old.part").exists()).await;
 
     // `~/…` works, a missing folder is not found, a file is not a directory.
-    let home = post(&daemon, "/fs/upload?name=c.png&dir=~%2Fcode", b"z", false).await;
+    let home = upload(&daemon, "name=c.png&dir=~%2Fcode", b"z").await;
     assert_eq!(home.status, 201, "{}", home.text());
-    let missing = post(
+    let missing = upload(
         &daemon,
-        &format!("/fs/upload?name=c.png&{}", dir(&daemon.home("nope"))),
+        &format!("name=c.png&{}", dir(&daemon.home("nope"))),
         b"z",
-        false,
     )
     .await;
     assert_eq!(
         (missing.status, missing.text()),
         (404, r#"{"error":"not_found"}"#)
     );
-    let file = post(
+    let file = upload(
         &daemon,
-        &format!("/fs/upload?name=c.png&{}", dir(std::path::Path::new(&path))),
+        &format!("name=c.png&{}", dir(std::path::Path::new(&path))),
         b"z",
-        false,
     )
     .await;
     assert_eq!(
         (file.status, file.text()),
         (409, r#"{"error":"not_a_directory"}"#)
     );
-    let relative = post(&daemon, "/fs/upload?name=c.png&dir=code", b"z", false).await;
+    let relative = upload(&daemon, "name=c.png&dir=code", b"z").await;
     assert_eq!(relative.status, 400, "{}", relative.text());
 
     // A folder the daemon's user can't write: refused, nothing left behind.
     let locked = daemon.home("locked");
     std::fs::create_dir_all(&locked).expect("a dir");
     std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o500)).expect("locked");
-    let denied = post(
-        &daemon,
-        &format!("/fs/upload?name=c.png&{}", dir(&locked)),
-        b"z",
-        false,
-    )
-    .await;
+    let denied = upload(&daemon, &format!("name=c.png&{}", dir(&locked)), b"z").await;
     assert_eq!(
         (denied.status, denied.text()),
         (403, r#"{"error":"denied"}"#)
@@ -351,7 +321,7 @@ async fn config_edits_apply_at_a_reload_and_a_broken_one_changes_nothing() {
     std::fs::write(daemon.home("code/node_modules/pkg/found"), b"").expect("a file");
     let search = url("/fs/search/", &daemon.home("code")) + "?q=**";
     let landed = async || {
-        let upload = post(&daemon, "/fs/upload?name=a.png", b"x", false).await;
+        let upload = upload(&daemon, "name=a.png", b"x").await;
         assert_eq!(upload.status, 201, "{}", upload.text());
         upload.text().to_owned()
     };
@@ -406,13 +376,4 @@ async fn raw_exchange(port: u16, request: &[u8]) -> String {
         .expect("an answer in time")
         .expect("read");
     String::from_utf8_lossy(&reply[..n]).into_owned()
-}
-
-async fn wait_for(condition: impl Fn() -> bool) {
-    let waited = tokio::time::timeout(Duration::from_secs(5), async {
-        while !condition() {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    });
-    waited.await.expect("in time");
 }
