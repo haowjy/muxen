@@ -8,7 +8,7 @@ interface Props {
   open?: boolean;
   title: string;
   /** Says what the action does and whether it can be undone. */
-  children: ComponentChildren;
+  children?: ComponentChildren;
   /** The action, named: "Delete". */
   confirm: string;
   /** The action's label while it runs. */
@@ -28,7 +28,7 @@ export function ConfirmDialog({ open = true, title, children, confirm, confirmin
     <Dialog open={open} title={title} header={<TitleBar title={title} onClose={onClose} />} onClose={onClose}>
       {open && (
         <div class={styles.body}>
-          <p>{children}</p>
+          {children && <p>{children}</p>}
           {error && <p class={styles.error} role="alert">{error}</p>}
           <div class={styles.actions}>
             <Button variant="quiet" onClick={onClose}>{cancel}</Button>

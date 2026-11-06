@@ -15,9 +15,9 @@ import styles from "./EditView.module.css";
 
 /** Where a save's refusal means more than the same code does on a read. */
 const SAVE_WORDS: Partial<Record<string, string>> = {
-  too_large: "That's over the 1 MiB this editor saves.",
-  denied: "Can't save over this file: it's read-only, another user's, or has another hard link.",
-  not_found: "This file is gone. Copy your text before you leave.",
+  too_large: "Over the 1 MiB save limit.",
+  denied: "Can't save: this file is read-only, another user's, or hard-linked.",
+  not_found: "This file is gone.",
 };
 
 interface Props {
@@ -51,7 +51,7 @@ export function EditView({ session, file, edit, onSaved }: Props) {
   const reload = (): void => {
     void run(async () => {
       const fresh = await edits.reload(path);
-      if (!fresh) return "This file can't be edited here any more.";
+      if (!fresh) return "Can't edit this file any more.";
       onSaved(fresh);
       return null;
     }, `Couldn't reload ${file.name}`);
@@ -69,7 +69,7 @@ export function EditView({ session, file, edit, onSaved }: Props) {
       {error && <p class={styles.problem} role="alert">{error}</p>}
       {edit.conflict && (
         <div class={styles.problem} role="alert">
-          <p>{file.name} changed on {session.hostName} since you opened it.</p>
+          <p>{file.name} changed on {session.hostName}.</p>
           <div class={styles.actions}>
             <Button variant="quiet" onClick={reload}>Reload theirs</Button>
             <Button variant="danger" onClick={() => { save(true); }}>Overwrite with mine</Button>
@@ -89,9 +89,7 @@ export function EditView({ session, file, edit, onSaved }: Props) {
         onLeave={(handle, state) => { edits.detach(handle, state); }}
       />
       {discarding && (
-        <ConfirmDialog title="Discard your changes?" confirm="Discard" confirming="Discarding…" error={null} busy={false} onConfirm={finish} onClose={() => { setDiscarding(false); }}>
-          {`What you changed in ${file.name} goes. The file stays as it was last saved.`}
-        </ConfirmDialog>
+        <ConfirmDialog title="Discard your changes?" confirm="Discard" confirming="Discarding…" error={null} busy={false} onConfirm={finish} onClose={() => { setDiscarding(false); }} />
       )}
     </div>
   );
