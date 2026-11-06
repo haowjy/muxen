@@ -114,6 +114,7 @@ impl From<&SaveError> for Refusal {
             SaveError::BadRequest => Self::from(HttpError::BadRequest),
             SaveError::Busy => Self::from(HttpError::Busy),
             SaveError::ReadOnly(_) => Self::from(HttpError::ConfigReadOnly),
+            SaveError::NoSpace(_) => Self::from(HttpError::NoSpace),
             SaveError::Unavailable(error) => Self::from(error),
             SaveError::Internal(_) => Self::from(HttpError::Internal),
         }

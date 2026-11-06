@@ -212,10 +212,10 @@ async fn write(
 ) -> Result<Vec<u8>, FsError> {
     let file = file.clone();
     lane.run(move || {
-        file.write_all_at(&chunk, at).map_err(FsError::write)?;
+        file.write_all_at(&chunk, at).map_err(FsError::io)?;
         if flush {
             // The one wait with no deadline: a slow disk slows the upload to its pace.
-            file.sync_data().map_err(FsError::write)?;
+            file.sync_data().map_err(FsError::io)?;
             #[cfg(target_os = "linux")]
             let _ = rustix::fs::fadvise(&*file, 0, None, rustix::fs::Advice::DontNeed);
         }
@@ -284,13 +284,13 @@ impl Part {
         reap(&lane, &record);
         let name = format!(
             "{PART_PREFIX}{}{PART_SUFFIX}",
-            random(16).map_err(FsError::write)?
+            random(16).map_err(FsError::io)?
         );
         let path = Path::new(dir_path).join(&name);
         std::fs::write(&record, path.as_os_str().as_encoded_bytes()).map_err(FsError::Internal)?;
         let temp = Temp::create(dir, name.as_ref(), 0o600).map_err(|error| {
             forget(&record);
-            FsError::write(error)
+            FsError::io(error)
         })?;
         Ok(Self {
             file: temp.file().clone(),

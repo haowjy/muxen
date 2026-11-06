@@ -28,7 +28,7 @@ fn refused(errno: Errno) -> FsError {
         Errno::NAMETOOLONG => FsError::BadRequest,
         // A mount below, or `TOO_DEEP`.
         Errno::XDEV | TOO_DEEP => FsError::Denied,
-        errno => FsError::write(errno.into()),
+        errno => FsError::io(errno.into()),
     }
 }
 
@@ -120,7 +120,7 @@ pub fn delete(request: &DeleteRequest, home: &Path, state: &Path) -> Result<(), 
     let DeleteRequest { dir, name } = request;
     let dir = folder(dir, name, home)?;
     refuse_holders(&dir, name, [home, state])?;
-    let beneath = Beneath::new(&dir.file).map_err(FsError::write)?;
+    let beneath = Beneath::new(&dir.file).map_err(FsError::io)?;
     remove(&beneath, dir.file.as_fd(), name.as_str(), 0).map_err(refused)?;
     info!(dir = dir.path, name, "deleted");
     Ok(())

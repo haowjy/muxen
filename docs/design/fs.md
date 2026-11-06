@@ -535,7 +535,7 @@ The auth middleware also uses this body for `forbidden`, `auth_required`,
 | 503 | `busy` | no slot within the wait, too many waiting, or the upload slot taken; `Retry-After: 1` |
 | 503 | `config_unavailable` | `/settings`: `config.toml` exists but can't be read or parsed; `detail` says where (`line 3, column 7`) |
 | 503 | `identity_unavailable` | LocalAPI could not establish the current Tailscale identity |
-| 507 | `no_space` | `ENOSPC` or `EDQUOT` during an upload |
+| 507 | `no_space` | `ENOSPC` or `EDQUOT` during an upload or a Settings save |
 | 500 | `internal` | any other I/O error, including an upload's rename on a filesystem with no no-replace support; the cause is logged, never sent |
 
 ## Limits and the memory ceiling

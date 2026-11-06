@@ -57,6 +57,7 @@ async fn save(
             match &refused {
                 SaveError::ReadOnly(cause) => warn!(%cause, "config.toml can't be written"),
                 SaveError::Unavailable(cause) => warn!(%cause, "config.toml not written"),
+                SaveError::NoSpace(cause) => warn!(%cause, "config.toml not written"),
                 SaveError::Internal(cause) => error!(%cause, "config.toml not written"),
                 SaveError::BadRequest | SaveError::Busy => {}
             }

@@ -56,26 +56,20 @@ pub enum FsError {
 }
 
 impl FsError {
-    /// An I/O error while resolving or opening a path.
+    /// What an I/O error means to a client, whether it came resolving a path, listing, or
+    /// writing through a descriptor `open` returned.
     pub fn io(error: io::Error) -> Self {
+        use rustix::io::Errno;
+        match error.raw_os_error().map(Errno::from_raw_os_error) {
+            Some(Errno::NOSPC | Errno::DQUOT) => return Self::NoSpace,
+            Some(Errno::ACCESS | Errno::PERM | Errno::ROFS) => return Self::Denied,
+            // A folder deleted under its descriptor, a link met at open.
+            Some(Errno::NOENT | Errno::NOTDIR | Errno::LOOP) => return Self::NotFound,
+            _ => {}
+        }
         match error.kind() {
             io::ErrorKind::NotFound | io::ErrorKind::NotADirectory => Self::NotFound,
             io::ErrorKind::PermissionDenied => Self::Denied,
-            _ if error.raw_os_error() == Some(rustix::io::Errno::LOOP.raw_os_error()) => {
-                Self::NotFound
-            }
-            _ => Self::Internal(error),
-        }
-    }
-
-    /// An I/O error while writing through a descriptor `open` returned.
-    pub fn write(error: io::Error) -> Self {
-        use rustix::io::Errno;
-        match error.raw_os_error().map(Errno::from_raw_os_error) {
-            Some(Errno::NOSPC | Errno::DQUOT) => Self::NoSpace,
-            Some(Errno::ACCESS | Errno::PERM | Errno::ROFS) => Self::Denied,
-            // The folder was deleted under its descriptor.
-            Some(Errno::NOENT) => Self::NotFound,
             _ => Self::Internal(error),
         }
     }

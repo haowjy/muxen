@@ -9,12 +9,12 @@ use std::io;
 use std::os::unix::fs::{DirBuilderExt as _, PermissionsExt as _};
 use std::path::{Path, PathBuf};
 
-use rustix::io::Errno;
 use thiserror::Error;
 use toml_edit::{Array, DocumentMut, Item, Value};
 
 use super::{Config, ConfigError};
 use crate::files::{Dir, Stamp, Temp};
+use crate::fs::FsError;
 use crate::proto::settings::{Patch, SettingsChange};
 
 /// Writes retried when the file changed under one, before `busy`.
@@ -31,6 +31,8 @@ pub enum SaveError {
     Busy,
     #[error("config.toml can't be written: {0}")]
     ReadOnly(io::Error),
+    #[error("config.toml can't be written, no space left: {0}")]
+    NoSpace(io::Error),
     /// The file exists and doesn't parse: it is never written.
     #[error(transparent)]
     Unavailable(#[from] ConfigError),
@@ -371,11 +373,15 @@ pub(super) struct Before {
 }
 
 /// A file Jimmy can't write (read-only filesystem, a link into `/nix/store`) is a
-/// conflict, not a failure.
+/// conflict and a full disk is `no_space`; anything else is a failure. `FsError::io`
+/// decides, and the log keeps the cause it would drop.
 fn write_error(error: io::Error) -> SaveError {
-    match error.raw_os_error().map(Errno::from_raw_os_error) {
-        Some(Errno::ROFS | Errno::ACCESS | Errno::PERM) => SaveError::ReadOnly(error),
-        _ => SaveError::Internal(error),
+    let cause = io::Error::new(error.kind(), error.to_string());
+    match FsError::io(error) {
+        FsError::Denied => SaveError::ReadOnly(cause),
+        FsError::NoSpace => SaveError::NoSpace(cause),
+        FsError::Internal(error) => SaveError::Internal(error),
+        _ => SaveError::Internal(cause),
     }
 }
 
