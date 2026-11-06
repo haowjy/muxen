@@ -30,7 +30,35 @@ export function parsingTerminal(options: { cols?: number; rows?: number; scrollb
   const term = new Terminal({ ...options, allowProposedApi: true, disableStdin: true });
   term.loadAddon(new Unicode11Addon());
   term.unicode.activeVersion = "11";
+  claimQueries(term);
   return term;
+}
+
+/**
+ * Claim every terminal query xterm would answer, so the answer never reaches `onData`, where the
+ * desktop input path forwards it to the pane as typing. tmux is the terminal the pane's program
+ * talks to and answers for itself (DA, DSR, DECRQM, DECRQSS, colour queries, from the pane's
+ * state); a second answer from each attached browser tab would be stray input. Queries have no
+ * drawing effect. An OSC 4/10/11/12 with a colour value still applies, and only the `?` slot is
+ * claimed.
+ */
+function claimQueries(term: Terminal): void {
+  const { parser } = term;
+  const csi = (id: { prefix?: string; intermediates?: string; final: string }): void => {
+    parser.registerCsiHandler(id, () => true);
+  };
+  csi({ final: "c" }); // DA1
+  csi({ prefix: ">", final: "c" }); // DA2
+  csi({ prefix: "=", final: "c" }); // DA3
+  csi({ final: "n" }); // DSR 5, CPR
+  csi({ prefix: "?", final: "n" }); // DECDSR variants
+  csi({ intermediates: "$", final: "p" }); // DECRQM, ANSI modes
+  csi({ prefix: "?", intermediates: "$", final: "p" }); // DECRQM, private modes
+  parser.registerEscHandler({ final: "Z" }, () => true); // DECID
+  parser.registerDcsHandler({ intermediates: "$", final: "q" }, () => true); // DECRQSS
+  for (const ident of [4, 10, 11, 12]) {
+    parser.registerOscHandler(ident, (data) => data.split(";").includes("?"));
+  }
 }
 
 /** The one xterm internal the model reaches: nothing public runs before a scroll moves a line out of the screen. */

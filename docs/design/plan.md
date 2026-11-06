@@ -825,7 +825,16 @@ or malformed file returns a retryable unavailable response (HTTP 503, socket clo
 row. One unprotected route is remote code execution.
 
 **Rendered content is untrusted:** DOMPurify on all rendered HTML, Mermaid with
-`securityLevel: "strict"`, and the CSP above.
+`securityLevel: "strict"`, and the CSP above. A diagram cannot set Mermaid's theme, theme
+CSS, theme variables, fonts or look (`secure` in `web/files/render/mermaid.ts`), and a
+stylesheet Mermaid returns loses any rule with a CSS escape, `@font-face`, `@keyframes` or
+`@import`, and any external `url()`.
+
+**Terminal queries are tmux's to answer:** xterm never replies to a query in the pane's
+output (DA, DSR, DECRQM, DECRQSS, OSC 4/10/11/12 colour queries, DECID); `parsingTerminal`
+claims them, because the desktop path forwards xterm's `onData` to the pane as typing. tmux
+answers the same queries from the pane's own state, on 3.4 and newer, so every attached
+tab would otherwise add a second reply to the program's stdin.
 
 **Logging:** never log terminal contents, control-client input or output, pastes, or
 file contents. File writes are logged by path and action.

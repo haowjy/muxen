@@ -5682,3 +5682,16 @@ the check starts at the third timeout rather than the second, the limit is 15 s 
   holds); `forbidAll` while keeping the header (another port on the same host still got the
   token); download then play (16 MB against about 4 MB for 5 s of a test file, against "every
   byte costs the user"); a SwiftUI cover (it sits under native screens).
+
+### Terminal queries stay with tmux; a document can't style its diagrams
+
+- **Decided:** 2026-11-06, security audit.
+- **What:** parser hooks claim every query xterm would answer (DA, DSR, DECRQM, DECRQSS, DECID
+  and the `?` forms of OSC 4, 10, 11, 12). Mermaid's `secure` list holds every key that reaches
+  CSS, and its style hook drops a rule with a CSS escape, `@font-face`, `@keyframes` or `@import`.
+- **Why:** tmux answers the pane's queries itself, so xterm's reply was a second copy per tab,
+  arriving on stdin as typing. The literal `url(` filter was bypassed by `\75rl(`, leaving only
+  the CSP to stop a fetch.
+- **Rejected:** telling replies from keys in `onData` (private xterm internals); stripping `\`
+  from a whole stylesheet (deletes Mermaid's own styling); letting a document pick `theme` (it
+  overrides the app's dark mode and can't be separated from `themeVariables`).
