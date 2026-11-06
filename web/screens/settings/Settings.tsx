@@ -93,11 +93,11 @@ export function Settings() {
             <Section title="Appearance" detail="System follows your device's light or dark setting.">
               <Choice label="Appearance" options={APPEARANCES} value={preferences.appearance} onChange={(v) => { app.platform.setPreference("appearance", v); }} />
             </Section>
-            <Section title="Terminal text size" detail="Applies to every terminal. The window you open next is resized to fit this screen at that size.">
+            <Section title="Terminal text size">
               <Choice label="Terminal text size" options={TEXT_SIZES} value={preferences.textSize} onChange={(v) => { app.platform.setPreference("textSize", v); }} />
             </Section>
             {setRelock && preferences.relock && (
-              <Section title="Ask for Face ID" detail="How long muxen can stay in the background before it asks for Face ID again. At launch asks once each time the app starts. A longer wait asks for Face ID now.">
+              <Section title="Ask for Face ID" detail="Asks after this long in the background.">
                 <Choice label="Ask for Face ID" options={RELOCKS} value={preferences.relock} onChange={setRelock} />
               </Section>
             )}
@@ -105,7 +105,7 @@ export function Settings() {
             {manageHosts && (
               <Section
                 title="Servers"
-                detail={<>The servers this app connects to. Add one, pair it again with a code from <code>muxen enroll</code>, or remove it.</>}
+                detail={<>Pair with a code from <code>muxen enroll</code>.</>}
               >
                 <Button variant="secondary" onClick={manageHosts}>Manage servers</Button>
               </Section>
@@ -150,7 +150,7 @@ export function Settings() {
           return null;
         }}
       >
-        Drafts and the saved tabs on this device are deleted. Tabs open now stay until you close them, and are not saved again.
+        Deletes drafts and saved tabs on this device.
       </Confirm>
     </>
   );

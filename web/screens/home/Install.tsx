@@ -13,7 +13,7 @@ export function Install() {
         <li>Tap Share in Safari.</li>
         <li>Tap Add to Home Screen.</li>
       </ol>
-      <p class={styles.detail}>The installed app and Safari keep separate drafts and tabs, though one enrolment covers both.</p>
+      <p class={styles.detail}>The app and Safari keep separate drafts and tabs.</p>
     </section>
   );
 }

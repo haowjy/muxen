@@ -23,7 +23,7 @@ export function DeleteEntry({ session, path, entry, onClose }: Props) {
   };
   return (
     <ConfirmDialog title={title} confirm="Delete" confirming="Deleting…" cancel={busy ? "Hide" : "Cancel"} error={error} busy={busy} onConfirm={() => { void confirm(); }} onClose={close}>
-      {entry.link ? "Only the link goes, not what it points to." : folder ? "Everything in this folder goes with it. This can't be undone." : "This can't be undone."}
+      {entry.link ? "Only the link goes, not what it points to." : folder ? "Everything in this folder goes with it." : null}
     </ConfirmDialog>
   );
 }
