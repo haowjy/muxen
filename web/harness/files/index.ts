@@ -116,8 +116,6 @@ export const fixtures: Fixtures = {
   filesBig: at({ kind: "dir", path: BIG }, bigTree(), undefined, BIG_PAGE),
   /** The desktop outline: two folders open in place, a file in one selected; `notes` has more than a page. */
   filesOutline: outlined(at({ kind: "dir", path: REPO }), [`${REPO}/src`, `${REPO}/notes`], `${REPO}/src/main.rs`),
-  /** The Preview panel on a selected folder with no README: its facts and Go into. (`filesFolder` shows the list's own README, `filesOutsideFile`'s folder its facts.) */
-  filesPanelFolder: outlined(at({ kind: "dir", path: REPO }), [`${REPO}/docs`], `${REPO}/docs`),
   /** The Preview panel off: the list takes the window's width. */
   filesPanelOff: outlined(at({ kind: "dir", path: REPO }), [`${REPO}/src`, `${REPO}/notes`], `${REPO}/src/main.rs`, false),
   /** Open folders that are loading (`src` never answers), refused (`docs`) and empty. */

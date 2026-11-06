@@ -1,15 +1,11 @@
-import { useEffect } from "preact/hooks";
 import type { Entry, Listing } from "../../files/api";
 import { describeError, type FileRef } from "../../files/browser";
-import type { Held } from "../../files/folders";
 import { formatTime, shorten } from "../../files/format";
 import { baseName, join } from "../../files/paths";
 import type { LinkTarget } from "../../files/render/markdown";
 import type { FilesPlace } from "../../platform/types";
 import { Button } from "../../ui/primitives/Button";
-import { EmptyState } from "../../ui/primitives/EmptyState";
 import { Icon } from "../../ui/primitives/Icon";
-import { Spinner } from "../../ui/primitives/Spinner";
 import { useStore } from "../../ui/store";
 import { CopyButton, InsertButton } from "./FileActions";
 import type { FilesSession } from "./session";
@@ -22,14 +18,10 @@ const README = /^readme\.(md|markdown)$/i;
 
 interface Props {
   session: FilesSession;
-  /** The folder, canonical. */
-  path: string;
+  /** The folder the list starts at. */
+  listing: Listing;
   /** Its own row's entry, from its parent's listing, when that is held: its time. */
   entry: Entry | null;
-  /** What is held of it; null until asked. */
-  record: Held | null;
-  /** The folder the list starts at: no "Go into" for it. */
-  root: string;
   onOpen: (place: FilesPlace) => void;
   onLink: (target: LinkTarget) => void;
 }
@@ -44,37 +36,22 @@ function contents(listing: Listing): string {
 }
 
 /**
- * The Preview panel on a folder (the one selected, or the list's own when nothing is): one header line with Copy
- * path and Insert, then its README rendered if it has one, else what it holds, when it changed, where it is.
+ * The Preview panel with no file to show, on the folder the list starts at: one header line with Copy path and Insert,
+ * then its README rendered if it has one, else what it holds, when it changed, where it is.
  */
-export function FolderSummary({ session, path, entry, record, root, onOpen, onLink }: Props) {
+export function FolderSummary({ session, listing, entry, onOpen, onLink }: Props) {
   const { browser } = session;
   const home = useStore(browser, (s) => s.home);
-  const hidden = useStore(browser, (s) => s.hidden);
-  const listing = record?.listing ?? null;
+  const { path } = listing;
   const shown = shorten(path, home);
   const name = baseName(shown);
   const within = shown.slice(0, shown.length - name.length);
-  const readme = listing?.entries.find((e) => e.kind === "file" && README.test(e.name)) ?? null;
+  const readme = listing.entries.find((e) => e.kind === "file" && README.test(e.name)) ?? null;
   const readmeRef: FileRef | null = readme && { path: join(path, readme.name), name: readme.name, size: readme.size ?? null, mtime: readme.mtime ?? null, mime: readme.mime ?? null };
   const text = useText(session, readmeRef?.path ?? "", readmeRef !== null);
 
-  // The folder is listed once it is the panel's (the selection settled on it), and kept while it is.
-  const asked = record !== null;
-  useEffect(() => {
-    if (!asked) void browser.folders.load(path, hidden);
-  }, [browser, path, hidden, asked]);
-  useEffect(() => {
-    browser.folders.pin("panel", [{ path, hidden }]);
-    return () => { browser.folders.pin("panel", []); };
-  }, [browser, path, hidden]);
-
   let body;
-  if (record?.error && !listing) {
-    body = <EmptyState icon="alert" title={describeError(record.error, session.hostName)} action={<Button onClick={() => { void browser.folders.load(path, hidden); }}>Try again</Button>} />;
-  } else if (!listing) {
-    body = <div class={viewers.loading}><Spinner label="Loading the folder" /><p>Loading the folder</p></div>;
-  } else if (readmeRef) {
+  if (readmeRef) {
     body = (
       <div class={viewers.viewer}>
         <Button variant="quiet" icon="fileText" class={styles.source} onClick={() => { onOpen({ kind: "file", path: readmeRef.path }); }}>{readmeRef.name}</Button>
@@ -91,11 +68,6 @@ export function FolderSummary({ session, path, entry, record, root, onOpen, onLi
             {entry?.mtime !== undefined && <><dt>Modified</dt><dd>{formatTime(entry.mtime)}</dd></>}
             <dt>Path</dt><dd class={viewers.mono}>{shown}{path === "/" ? "" : "/"}</dd>
           </dl>
-          {path !== root && (
-            <div class={viewers.cardActions}>
-              <Button icon="folderOpen" onClick={() => { onOpen({ kind: "dir", path }); }}>Go into {name}</Button>
-            </div>
-          )}
         </div>
       </div>
     );
@@ -107,7 +79,7 @@ export function FolderSummary({ session, path, entry, record, root, onOpen, onLi
         <h2 class={bar.name} title={shown}>
           <Icon name="folder" size={16} class={styles.folder} />
           <span class={bar.text}>{within && <span class={bar.within}>{within}</span>}<span class={bar.base}>{name}</span></span>
-          {readmeRef && listing && <span class={bar.facts}>{contents(listing)}</span>}
+          {readmeRef && <span class={bar.facts}>{contents(listing)}</span>}
         </h2>
         <CopyButton value={shown} label="Copy path" icon="copy" />
         <InsertButton path={path} />

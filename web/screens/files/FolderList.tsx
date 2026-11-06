@@ -197,7 +197,7 @@ interface FolderListboxProps {
   rows: readonly OutlineRow[];
   selected: string | null;
   fresh?: string | null | undefined;
-  /** The desktop's outline: a click selects, the disclosure opens or closes a folder in place, a double-click or Enter goes in. */
+  /** The desktop's outline: a click selects, and opens or closes a folder in place; a double-click or Enter goes in. */
   tree?: TreeProps | undefined;
   onSelect: (selection: string | null) => void;
   onOpen: (place: FilesPlace) => void;
@@ -256,7 +256,7 @@ function FolderListbox({ rows, selected, fresh, tree, onSelect, onOpen, onKeyNav
     ...(goUp && { onUp: goUp }),
     ...(tree && { onToggle: tree.onToggle }),
   });
-  /** The outline's click looks: it selects, and only a folder's disclosure opens or closes it in place. A flat list's tap opens. */
+  /** The outline's click selects, and opens or closes a folder in place. A flat list's tap opens. */
   const onPress = (row: OutlineRow, e: MouseEvent): void => {
     if (row.kind === "up") onUp?.();
     else if (!tree) { if (row.place) onOpen(row.place); }
@@ -264,11 +264,15 @@ function FolderListbox({ rows, selected, fresh, tree, onSelect, onOpen, onKeyNav
     // The second click of a double-click is the double-click's: it doesn't ask for a folder's next page twice.
     else if (e.detail < 2) {
       onSelect(row.key);
+      if (row.place?.kind === "dir") tree.onToggle(row.key, !row.expanded);
       if (row.kind === "rest") rest(row);
     }
   };
   const onDouble = (row: OutlineRow, e: MouseEvent): void => {
-    if (tree && row.kind !== "up" && row.place && !onDisclosure(e)) onOpen(row.place);
+    if (!tree || row.kind === "up" || !row.place || onDisclosure(e)) return;
+    // The double-click's first click opened or closed the folder: going in leaves it behind as it was.
+    if (row.place.kind === "dir") tree.onToggle(row.key, !row.expanded);
+    onOpen(row.place);
   };
   return (
     <div

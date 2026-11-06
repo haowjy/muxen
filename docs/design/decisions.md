@@ -4998,6 +4998,26 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
   per folder entered); the click toggling and the double-click undoing it (a flicker, and a listing
   asked for and dropped).
 
+### A folder never replaces the Preview panel; a click on one opens it in place
+
+- **Decided:** 2026-11-05, Jimmy, on the desktop: "clicking a folder on desktop webapp shouldn't open the
+  'folder' in the view", and "the folder replacing the preview thing? that shouldn't happen in the first
+  place". **Supersedes** "The outline's disclosure is the one target that opens a folder in place". That
+  the click opens the folder is the lead's reading of what it should do instead; Jimmy named only what it
+  shouldn't.
+- **What:** only a file moves the Preview panel. A click on a folder row selects it and opens or closes it
+  in place, the panel unchanged; so do the arrow keys. A double-click still goes in, and puts the folder
+  back as it was in its parent's outline. The panel's folder summary is only ever the list's own root, so
+  "Go into", and the summary's own listing, pin and loading states, are gone.
+- **Why:** the panel was reading the file, and a click meant to look inside a folder threw it away.
+- **Why the double-click restores it:** the superseded decision kept the click from opening folders
+  because a double-click left the folder open behind, holding one of the tab's 32 slots. Undoing the first
+  click ends that. The listing it asks for isn't dropped: it is the folder being entered, from the same
+  cache. A double-click's click at the 33rd open folder can close the oldest, and the undo doesn't bring
+  it back; that is rare and costs one reopen.
+- **Rejected:** the panel showing a blank or the folder's contents on a folder click (it still loses the
+  file); a delay on the click to tell it from a double-click (every open would lag).
+
 ### The folder cache asks for two first pages at a time, the outline's last
 
 - **Decided:** 2026-11-05, from the phase 2 review (p546): Show hidden re-listed every open folder at

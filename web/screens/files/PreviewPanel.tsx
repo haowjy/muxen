@@ -14,9 +14,6 @@ import styles from "./PreviewPanel.module.css";
 /** The panel waits this long after the selection last moved, so a held arrow key costs no read per row. */
 const PANEL_SETTLE_MS = 200;
 
-/** What the panel shows: a file, or a folder's summary. */
-type Shown = { kind: "file"; file: FileRef } | { kind: "dir"; path: string; entry: Entry | null };
-
 interface Props {
   session: FilesSession;
   /** The folder the list starts at, and its pages. */
@@ -33,60 +30,54 @@ interface Props {
 }
 
 /**
- * The desktop's Preview panel, beside the outline: the selected file's viewer, or the selected folder's summary (the
- * list's own folder with nothing, `..` or a row's end selected). It follows the selection once it settles, so the
- * reads of the rows passed over are never made, and a viewer's read for a row left is aborted (`useText`).
+ * The desktop's Preview panel, beside the outline: the file last selected, or with none the summary of the folder the
+ * list starts at. Only a file moves it: a folder, `..` or a row's end leaves it where it is. It follows once the
+ * selection settles, so the reads of the rows passed over are never made, and a viewer's read for a row left is aborted
+ * (`useText`).
  */
 export function PreviewPanel({ session, root, from, selection, known, hidden, held, onOpen, onLink }: Props) {
   const listingOf = (path: string): Listing | null => (path === root.path ? root : held.get(folderKey(path, hidden))?.listing ?? null);
   const entryOf = (path: string): Entry | null => (known?.path === path ? known.entry : listingOf(parentOf(path))?.entries.find((e) => e.name === baseName(path)) ?? null);
-  /** A file row shows its viewer, a folder row its summary; anything else (nothing, `..`, a folder's end) the root's. */
-  const shownFor = (key: string | null): Shown => {
+  const fileAt = (key: string | null): FileRef | null => {
     const entry = key === null || key === UP ? null : entryOf(key);
-    if (key !== null && entry && entry.utf8 !== false) {
-      if (entry.kind === "file") return { kind: "file", file: { path: key, name: entry.name, size: entry.size ?? null, mtime: entry.mtime ?? null, mime: entry.mime ?? null } };
-      if (entry.kind === "dir") return { kind: "dir", path: key, entry };
-    }
-    return { kind: "dir", path: root.path, entry: entryOf(root.path) };
+    return entry?.kind === "file" && entry.utf8 !== false ? { path: key as string, name: entry.name, size: entry.size ?? null, mtime: entry.mtime ?? null, mime: entry.mime ?? null } : null;
   };
 
+  const picked = fileAt(selection);
   // A move within the list waits to settle; a new root, or the other list, shows at once.
-  const [settled, setSettled] = useState({ key: selection, root: root.path, from });
+  const [settled, setSettled] = useState({ file: picked, root: root.path, from });
   const moved = settled.root !== root.path || settled.from !== from;
-  const showing = moved ? selection : settled.key;
-  const shown = shownFor(showing);
+  // The file stays once its folder is closed and its row gone: `settled` is why the panel doesn't lose it.
+  const file = moved ? picked : settled.file && (fileAt(settled.file.path) ?? settled.file);
   useEffect(() => {
     if (moved) {
-      setSettled({ key: selection, root: root.path, from });
+      setSettled({ file: picked, root: root.path, from });
       return undefined;
     }
-    if (selection === settled.key) return undefined;
-    const next = shownFor(selection);
+    if (!picked || picked.path === settled.file?.path) return undefined;
     const timer = setTimeout(() => {
-      setSettled({ key: selection, root: root.path, from });
+      setSettled({ file: picked, root: root.path, from });
       // The user moved the selection here and it stayed: a file shown is opened, for Search's recents. What shows at
       // once (the selection a tab kept, a new root's) was nobody's pick now.
-      if (next.kind === "file") session.opened(next.file);
+      session.opened(picked);
     }, PANEL_SETTLE_MS);
     return () => { clearTimeout(timer); };
-  }, [selection, root.path, from, settled.key, moved]);
+  }, [picked?.path, root.path, from, settled.file?.path, moved]);
   return (
     <section class={styles.panel} aria-label="Preview">
-      {shown.kind === "file" ? (
+      {file ? (
         <FileView
           session={session}
-          file={shown.file}
-          onExpand={() => { onOpen({ kind: "file", path: shown.file.path }); }}
+          file={file}
+          onExpand={() => { onOpen({ kind: "file", path: file.path }); }}
           onLink={onLink}
         />
       ) : (
         <FolderSummary
-          key={shown.path}
+          key={root.path}
           session={session}
-          path={shown.path}
-          entry={shown.entry}
-          record={shown.path === root.path ? { listing: root, loading: false, error: null } : held.get(folderKey(shown.path, hidden)) ?? null}
-          root={root.path}
+          listing={root}
+          entry={entryOf(root.path)}
           onOpen={onOpen}
           onLink={onLink}
         />

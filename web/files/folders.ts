@@ -53,7 +53,7 @@ export class Folders extends Store<FoldersView> {
   /** The newest request per folder: a page that lands after a newer request began belongs to the past and is dropped. */
   private readonly latest = new Map<string, number>();
   private serial = 0;
-  /** The folders each owner has on screen (the browser's place, the outline's open folders, the Preview panel's folder). */
+  /** The folders each owner has on screen (the browser's place, the outline's open folders). */
   private readonly pins = new Map<string, Set<string>>();
   /** Pages under way, at most `LISTINGS_AT_ONCE`; the rest wait their turn, by folder, the ones asked `behind` last. */
   private running = 0;
@@ -93,7 +93,7 @@ export class Folders extends Store<FoldersView> {
   /**
    * Lists `path` now (Go cannot wait out the settle), or joins the listing under way. The refusal is the record's, not
    * thrown. `behind`: the folder is one of many asked together (the outline's open folders), so what the user is looking
-   * at (the place, the Preview panel, the path field) goes first; asked for again without `behind`, a queued folder
+   * at (the place, the path field) goes first; asked for again without `behind`, a queued folder
    * moves ahead of them.
    */
   load(path: string, hidden: boolean, behind = false): Promise<void> {
