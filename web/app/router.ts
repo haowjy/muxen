@@ -2,6 +2,7 @@
 // "Keyboard ownership and navigation history"). Each entry's state holds the route (Home, a
 // workspace's overview, or one of its tabs), the overlay open on it (the tab list over a tab is one), and a record of the tab's Files place. The hash names the
 // place in words (`hashOf`, the controller's), so a reload or a bookmark finds it again. Everyone else learns of navigation one way: `navigated`, after every push, replace and pop.
+import { under } from "../files/paths";
 import { samePlace, type FilesPlace } from "../platform/types";
 import { isPlace } from "../workspace/saved";
 import type { Landing } from "../workspace/state";
@@ -219,7 +220,7 @@ export class Router {
 
   /** The nearest folder below the current entry in Files tab `tab` that holds `path`: where Back from a file opened full width returns. Null with none (a reload, a deep link). */
   folderBelow(tab: string, path: string): string | null {
-    const below = this.stack.slice(0, this.at).findLast((e) => e.route === "tab" && e.tab === tab && e.overlay === null && e.place?.kind === "dir" && path.startsWith(e.place.path === "/" ? "/" : `${e.place.path}/`));
+    const below = this.stack.slice(0, this.at).findLast((e) => e.route === "tab" && e.tab === tab && e.overlay === null && e.place?.kind === "dir" && under(path, e.place.path));
     return below?.route === "tab" && below.place ? below.place.path : null;
   }
 

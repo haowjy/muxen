@@ -3,7 +3,7 @@ import { useApp, useAppView, useOverlay } from "../../app/context";
 import { parentPlace } from "../../files/browser";
 import { folderKey } from "../../files/folders";
 import type { Found, SearchView } from "../../files/search";
-import { baseName, parentOf } from "../../files/paths";
+import { baseName, parentOf, under } from "../../files/paths";
 import type { FilesTab } from "../../workspace/state";
 import type { LinkTarget } from "../../files/render/markdown";
 import type { HttpRefusal } from "../../net/http";
@@ -77,14 +77,14 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
   useEffect(() => {
     if (place.kind === "file") lastFile.current = place.file.path;
     else if (root !== null && lastFile.current !== null) {
-      if (!phone && lastFile.current.startsWith(`${root === "/" ? "" : root}/`)) tree.reveal(lastFile.current);
+      if (!phone && under(lastFile.current, root)) tree.reveal(lastFile.current);
       lastFile.current = null;
     }
   }, [place, root]);
 
   // What just landed under the list is selected once on a desktop, so the Preview panel shows it; the phone marks its row.
   const { fresh } = view;
-  const here = !phone && root !== null && wanted.kind === "dir" && fresh !== null && fresh.path.startsWith(`${root === "/" ? "" : root}/`);
+  const here = !phone && root !== null && wanted.kind === "dir" && fresh !== null && under(fresh.path, root);
   useEffect(() => {
     if (!here) return;
     tree.reveal(fresh.path, { opens: fresh.opens });

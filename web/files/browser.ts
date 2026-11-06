@@ -1,7 +1,7 @@
 import type { HostClient } from "../net/hosts";
 import { HttpRefusal } from "../net/http";
 import { refusalWords } from "../net/refusalWords";
-import type { FsApi, Listing } from "./api";
+import type { Entry, FsApi, Listing } from "./api";
 import { samePlace, type FilesPlace } from "../platform/types";
 import { hostProblem, type HostProblem } from "../ui/hostProblem";
 import { Store } from "../ui/store";
@@ -18,6 +18,9 @@ export interface FileRef {
   mtime: number | null;
   mime: string | null;
 }
+
+/** The file a listing's `entry` at `path` is. */
+export const fileRefOf = (path: string, entry: Entry): FileRef => ({ path, name: entry.name, size: entry.size ?? null, mtime: entry.mtime ?? null, mime: entry.mime ?? null });
 
 /** Where the file manager is: the active Files tab's place, with the viewed file's details. */
 export type Place = { kind: "dir"; path: string } | { kind: "file"; file: FileRef };
@@ -221,7 +224,7 @@ export class FileBrowser extends Store<FilesView> {
     const keep: FolderRef | null = shown?.path === dir ? shown : this.folders.peek(dir, hidden) && { path: dir, hidden };
     const entry = keep && this.folders.peek(keep.path, keep.hidden)?.entries.find((e) => e.name === baseName(path) && e.kind === "file");
     const file = entry
-      ? { path, name: entry.name, size: entry.size ?? null, mtime: entry.mtime ?? null, mime: entry.mime ?? null }
+      ? fileRefOf(path, entry)
       : this.probed.get(path);
     if (file) {
       this.go({ place: { kind: "file", file }, dir: keep, error: null, loading: false });

@@ -185,7 +185,7 @@ export function filesSession(app: AppController, host: KnownHost): FilesSession 
 
 /** The files opened below `root`, as Search's rows. */
 function recentsBelow(opened: readonly OpenedFile[], root: string): Found[] {
-  const prefix = root === "/" ? "/" : `${root}/`;
+  const prefix = join(root, "");
   return opened.filter((f) => f.path.startsWith(prefix)).map((f) => ({
     path: f.path,
     rel: f.path.slice(prefix.length),

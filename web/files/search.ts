@@ -6,6 +6,7 @@ import type { Match, Stopped } from "../proto/generated/messages";
 import { Store } from "../ui/store";
 import type { Entry, FsApi } from "./api";
 import { SETTLE_MS } from "./folders";
+import { join } from "./paths";
 
 /** A query with `*` or `?` is a glob; anything else is fuzzy (fs.md "Matching"). */
 export const isGlob = (q: string): boolean => /[*?]/.test(q);
@@ -42,13 +43,10 @@ export interface SearchView {
   chosen: boolean;
 }
 
-/** `root/rel`, for a canonical root. */
-const below = (root: string, rel: string): string => (root === "/" ? `/${rel}` : `${root}/${rel}`);
-
 function foundOf(root: string, match: Match): Found {
   const { path, hits, name, kind, link, size, mtime, mime } = match;
   return {
-    path: below(root, path),
+    path: join(root, path),
     rel: path,
     hits,
     entry: { name, kind, link, ...(size !== undefined && { size }), ...(mtime !== undefined && { mtime }), ...(mime !== undefined && { mime }) },

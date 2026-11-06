@@ -1,5 +1,5 @@
 import type { Entry, Listing } from "../../files/api";
-import type { FileRef } from "../../files/browser";
+import { fileRefOf, type FileRef } from "../../files/browser";
 import { formatTime, shorten } from "../../files/format";
 import { baseName, join } from "../../files/paths";
 import type { LinkTarget } from "../../files/render/markdown";
@@ -47,7 +47,7 @@ export function FolderSummary({ session, listing, entry, onOpen, onLink }: Props
   const name = baseName(shown);
   const within = shown.slice(0, shown.length - name.length);
   const readme = listing.entries.find((e) => e.kind === "file" && README.test(e.name)) ?? null;
-  const readmeRef: FileRef | null = readme && { path: join(path, readme.name), name: readme.name, size: readme.size ?? null, mtime: readme.mtime ?? null, mime: readme.mime ?? null };
+  const readmeRef: FileRef | null = readme && fileRefOf(join(path, readme.name), readme);
   const text = useText(session, readmeRef?.path ?? "", readmeRef !== null);
 
   let body;

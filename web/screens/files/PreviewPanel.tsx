@@ -1,6 +1,6 @@
 import { useLayoutEffect, useReducer, useRef } from "preact/hooks";
 import type { Entry, Listing } from "../../files/api";
-import type { FileRef } from "../../files/browser";
+import { fileRefOf, type FileRef } from "../../files/browser";
 import { folderKey, type Held } from "../../files/folders";
 import { loadedOf, UP } from "../../files/outline";
 import { baseName, parentOf } from "../../files/paths";
@@ -47,7 +47,7 @@ export function PreviewPanel({ session, tab, root, pick, known, hidden, held, on
   const entryOf = (path: string): Entry | null => (known?.path === path ? known.entry : listingOf(parentOf(path))?.entries.find((e) => e.name === baseName(path)) ?? null);
   const fileAt = (key: string | null): FileRef | null => {
     const entry = key === null || key === UP ? null : entryOf(key);
-    return entry?.kind === "file" && entry.utf8 !== false ? { path: key as string, name: entry.name, size: entry.size ?? null, mtime: entry.mtime ?? null, mime: entry.mime ?? null } : null;
+    return entry?.kind === "file" && entry.utf8 !== false ? fileRefOf(key as string, entry) : null;
   };
   /** The kept file as its row has it now. With no row: a folder closed, or paged no further, keeps it; a folder held in full has lost it. */
   const stillThere = (file: FileRef): FileRef | null => {

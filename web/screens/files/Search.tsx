@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from "preact/hooks";
 import { useApp, useAppView } from "../../app/context";
-import type { OutlineRow } from "../../files/outline";
-import { baseName } from "../../files/paths";
+import { entryPlace, type OutlineRow } from "../../files/outline";
+import { baseName, parentOf } from "../../files/paths";
 import { isGlob, marked, tooLong, type FileSearch, type Found } from "../../files/search";
 import type { FilesPlace } from "../../platform/types";
 import type { Stopped } from "../../proto/generated/messages";
@@ -37,10 +37,7 @@ interface Props {
   onClose: () => void;
 }
 
-const placeOf = ({ path, entry }: Found): FilesPlace | null => {
-  if (entry.utf8 === false) return null;
-  return entry.kind === "dir" ? { kind: "dir", path } : entry.kind === "file" ? { kind: "file", path } : null;
-};
+const placeOf = ({ path, entry }: Found): FilesPlace | null => entryPlace(parentOf(path), entry);
 
 /** The walk stopped at a cap: what it covered, and the way to the rest. */
 function stoppedWords(stopped: Stopped): string {

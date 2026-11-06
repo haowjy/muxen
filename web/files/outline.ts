@@ -5,7 +5,7 @@
 // filter. Rows are named by `key`, so a selection survives a page arriving or a folder expanding.
 import type { Entry, Listing } from "./api";
 import type { FilesPlace } from "../platform/types";
-import { join } from "./paths";
+import { join, under, within } from "./paths";
 
 /** How much of a folder is held: nothing, some pages (more can be asked for), or all of it. A folder the daemon cut short at its scan cap is never all. */
 export type Loaded = "none" | "some" | "all";
@@ -42,14 +42,14 @@ export const restFolder = (key: string): string => key.slice(0, -1);
 export function withExpanded(expanded: readonly string[], path: string, open: boolean, root: string): string[] {
   const rest = expanded.filter((p) => p !== path);
   if (!open) return rest;
-  const holds = (p: string): boolean => path.startsWith(p === "/" ? "/" : `${p}/`);
+  const holds = (p: string): boolean => within(path, p);
   const next = [...rest.filter((p) => !holds(p)), ...rest.filter(holds), path];
   const set = new Set(next);
-  const shows = (p: string): boolean => p.startsWith(root === "/" ? "/" : `${root}/`) && foldersBetween(root, p).every((f) => set.has(f));
+  const shows = (p: string): boolean => under(p, root) && foldersBetween(root, p).every((f) => set.has(f));
   for (const hidden of [true, false]) {
     for (let i = 0; next.length > MAX_EXPANDED && i < next.length;) {
       const p = next[i] as string;
-      if (!holds(p) && p !== path && shows(p) !== hidden) next.splice(i, 1);
+      if (!holds(p) && shows(p) !== hidden) next.splice(i, 1);
       else i++;
     }
   }
@@ -58,7 +58,7 @@ export function withExpanded(expanded: readonly string[], path: string, open: bo
 
 /** The folders between `root` and `path` (both canonical), outermost first: what to expand so `path` shows in `root`'s outline. */
 export function foldersBetween(root: string, path: string): string[] {
-  const prefix = root === "/" ? "/" : `${root}/`;
+  const prefix = join(root, "");
   if (!path.startsWith(prefix)) return [];
   const parts = path.slice(prefix.length).split("/").slice(0, -1);
   return parts.map((_, i) => prefix + parts.slice(0, i + 1).join("/"));
