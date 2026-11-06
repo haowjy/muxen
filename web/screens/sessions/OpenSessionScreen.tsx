@@ -5,13 +5,13 @@
 import { useRef, useState } from "preact/hooks";
 import { useFocus } from "../../ui/focus";
 import { useApp, useAppView, useBells, useOverlay } from "../../app/context";
-import type { HostClient } from "../../net/hosts";
+import { serverState, type HostClient } from "../../net/hosts";
 import { tabId } from "../../platform/tabKey";
 import { bellLook } from "../../sessions/bells";
 import { ago, matching, windowCount } from "../../sessions/groups";
 import type { SessionListing, TmuxListing } from "../../proto/generated/messages";
 import { BellDot } from "../../ui/primitives/BellDot";
-import { hostProblem, offlineWords } from "../../ui/hostProblem";
+import { admissionCopy, hostProblem, offlineWords, type ProblemCopy } from "../../ui/hostProblem";
 import { Button } from "../../ui/primitives/Button";
 import { Dialog } from "../../ui/primitives/Dialog";
 import { ScreenBar } from "../../ui/primitives/ScreenBar";
@@ -35,11 +35,23 @@ export function OpenSessionScreen() {
   );
 }
 
+const KEPT = "Your open tabs and drafts are kept.";
+
 /** Why nothing can be created on `host`, if so. */
-function blockedBy(host: HostClient): string | undefined {
-  if (host.shown === "noNetwork") return offlineWords(host.entry.pageOrigin === null);
-  if (host.shown === "unreachable") return hostProblem("unreachable", host.name ?? "the server").title;
-  return host.hostId === null ? "Checking access" : undefined;
+function blockedBy(host: HostClient): ProblemCopy | undefined {
+  const name = host.name ?? "the server";
+  const state = serverState(host);
+  switch (state.kind) {
+    case "attention":
+      return admissionCopy(state.admission, name, host.entry.pageOrigin === null) ?? undefined;
+    case "noNetwork":
+      return { title: offlineWords(host.entry.pageOrigin === null), hint: KEPT };
+    case "unreachable":
+      return hostProblem("unreachable", name);
+    case "checking":
+    case "up":
+      return host.hostId === null ? { title: "Checking access", hint: null } : undefined;
+  }
 }
 
 const lastActivity = (s: SessionListing): number => Math.max(0, ...s.windows.map((w) => w.activity));
@@ -95,14 +107,14 @@ function Body({ host, workspace }: { host: HostClient; workspace: Workspace }) {
     else if (listing !== null) void commit();
   };
 
-  const unreachable = hostProblem("unreachable", name);
-  const title = failure !== null ? `${name} refused the request` : host.shown === "noNetwork" ? offlineWords(host.entry.pageOrigin === null) : unreachable.title;
-  const detail = failure === null && host.shown !== "noNetwork" ? unreachable.hint : "Your open tabs and drafts are kept.";
+  // Nothing loaded: the daemon's refusal, else why nothing can be asked; a server still answering or checking is loading.
+  const state = serverState(host);
+  const why = failure !== null ? { title: `${name} refused the request`, hint: KEPT } : blocked;
   let list;
   if (listing === undefined) {
-    list = blocked === undefined && failure === null
+    list = why === undefined || (failure === null && (state.kind === "checking" || state.kind === "up"))
       ? <div class={styles.loading}><Spinner label="Loading sessions" /><span>Loading sessions</span></div>
-      : <EmptyState icon="alert" title={title} action={host.shown === "noNetwork" ? undefined : retry}>{detail}</EmptyState>;
+      : <EmptyState icon="alert" title={why.title} action={state.kind === "noNetwork" || state.kind === "attention" ? undefined : retry}>{why.hint}</EmptyState>;
   } else if (listing === null) {
     list = <EmptyState icon="terminal" title={`No tmux server is running on ${name}`} action={retry}>muxen never starts one. Start tmux on the server, then retry.</EmptyState>;
   } else {
@@ -122,7 +134,7 @@ function Body({ host, workspace }: { host: HostClient; workspace: Workspace }) {
         ))}
         <li>
           <Row icon={exact ? "terminal" : "plus"} label={busy ? "Opening…" : create} disabled={busy || blocked !== undefined} onClick={() => { void commit(); }} />
-          {blocked !== undefined && <p class={styles.note}>{blocked}</p>}
+          {blocked !== undefined && <p class={styles.note}>{blocked.title}</p>}
         </li>
       </ul>
     );

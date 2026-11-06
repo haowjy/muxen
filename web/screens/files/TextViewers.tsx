@@ -6,7 +6,7 @@ import { HIGHLIGHT_MAX, highlightedLines, plainLines } from "../../files/render/
 import { linkTarget, renderMarkdown, type LinkTarget } from "../../files/render/markdown";
 import { mountDiagrams } from "../../files/render/diagrams";
 import { lazyImages } from "../../files/images";
-import { useAppView } from "../../app/context";
+import { useApp, useAppView } from "../../app/context";
 import { formatSize } from "../../files/format";
 import { languageFor, type Language } from "../../files/kinds";
 import { HttpRefusal } from "../../net/http";
@@ -14,42 +14,48 @@ import { Button } from "../../ui/primitives/Button";
 import { EmptyState } from "../../ui/primitives/EmptyState";
 import { Spinner } from "../../ui/primitives/Spinner";
 import { cx } from "../../ui/cx";
-import { useStore } from "../../ui/store";
 import { useFailure } from "./failure";
 import styles from "./Viewers.module.css";
 
 /** The code and Markdown viewers read at most this much, with Range (fs.md "Text previews"). */
 export const TEXT_LIMIT = 1024 * 1024;
 
-export type Loaded<T> = { kind: "loading" } | { kind: "done"; value: T } | { kind: "error"; error: HttpRefusal };
+/** `retry` reads the file again; the failure is shown until then. */
+export type Loaded<T> = { kind: "loading" } | { kind: "done"; value: T } | { kind: "error"; error: HttpRefusal; retry: () => void };
 
 /**
  * A file's first MiB as text, fetched once per path while `wanted` (a text viewer is showing) and abandoned when it
  * closes. The file's header copies it. A view that mounts in place of another showing the same file (the Preview
  * panel's file opened full width, and Back) takes the text that one handed over (`FilesSession.handed`) instead of
- * reading it again; nothing else is kept, so a file shown again later is read fresh.
+ * reading it again; nothing else is kept, so a file shown again later is read fresh. A read that failed for want of
+ * a connection is read again once the server answers (plan.md "Requests"), and by its Try again; neither touches a read in flight.
  */
 export function useText(session: FilesSession, path: string, wanted: boolean): Loaded<TextPreview> {
-  // `recoveries` when a failure came: one for want of a connection is read again once the server has answered since.
-  const recoveries = useStore(session.browser, (s) => s.recoveries);
-  const [state, setState] = useState<{ path: string; loaded: Loaded<TextPreview>; recoveries: number } | null>(() => {
+  const app = useApp();
+  const [state, setState] = useState<{ path: string; loaded: Loaded<TextPreview> } | null>(() => {
     const handed = session.handed?.path === path ? session.handed.text : null;
     if (!handed) return null;
     session.handed = null;
-    return { path, loaded: { kind: "done", value: handed }, recoveries };
+    return { path, loaded: { kind: "done", value: handed } };
   });
-  const have = state?.path === path && !(state.loaded.kind === "error" && state.loaded.error.code === "network" && state.recoveries !== recoveries);
+  const have = state?.path === path;
   useEffect(() => {
     if (!wanted || have) return undefined;
     const abort = new AbortController();
     session.browser.api.text(path, TEXT_LIMIT, abort.signal).then(
-      (value) => { setState({ path, loaded: { kind: "done", value }, recoveries }); },
-      (error: unknown) => { if (!abort.signal.aborted) setState({ path, loaded: { kind: "error", error: error instanceof HttpRefusal ? error : new HttpRefusal(0, "internal") }, recoveries }); },
+      (value) => { setState({ path, loaded: { kind: "done", value } }); },
+      (error: unknown) => {
+        if (abort.signal.aborted) return;
+        setState({ path, loaded: { kind: "error", error: error instanceof HttpRefusal ? error : new HttpRefusal(0, "internal"), retry: () => { setState(null); } } });
+      },
     );
     return () => { abort.abort(); };
-  }, [session, path, wanted, recoveries]);
+  }, [session, path, wanted, have]);
+  useEffect(() => app.hosts.recovered(session.handle, () => {
+    setState((now) => (now?.loaded.kind === "error" && now.loaded.error.code === "network" ? null : now));
+  }), [app, session.handle]);
   // Another file's text, from before a switch, is never this one's.
-  return have ? state.loaded : { kind: "loading" };
+  return state?.path === path ? state.loaded : { kind: "loading" };
 }
 
 function Loading({ what }: { what: string }) {
@@ -57,10 +63,10 @@ function Loading({ what }: { what: string }) {
 }
 
 /** A file that did not load: waiting for the server says so as its title; a connection that failed while the server answers offers Try again. */
-function Failed({ error, session }: { error: HttpRefusal; session: FilesSession }) {
+function Failed({ error, retry: again, session }: { error: HttpRefusal; retry: () => void; session: FilesSession }) {
   const { describe, waiting } = useFailure(session);
   if (waiting(error)) return <EmptyState icon="alert" title={describe(error)} />;
-  const retry = error.code === "network" ? <Button onClick={() => { session.browser.reread(); }}>Try again</Button> : undefined;
+  const retry = error.code === "network" ? <Button onClick={again}>Try again</Button> : undefined;
   return <EmptyState icon="alert" title="Can't show this file" action={retry}>{describe(error)}</EmptyState>;
 }
 
@@ -108,7 +114,7 @@ export function CodeViewer({ session, text, file, wrap, plain }: { session: File
     return () => { live = false; };
   }, [text, file.name, plain]);
   if (text.kind === "loading") return <Loading what="Loading the file" />;
-  if (text.kind === "error") return <Failed error={text.error} session={session} />;
+  if (text.kind === "error") return <Failed error={text.error} retry={text.retry} session={session} />;
   return (
     <div class={cx(styles.text, styles.sunken)}>
       <Truncated preview={text.value} />
@@ -136,7 +142,7 @@ export function MarkdownViewer({ session, text, file, onLink }: { session: Files
     if (html === null || !root) return undefined;
     return mountDiagrams(root, scheme);
   }, [html, scheme]);
-  if (text.kind === "error") return <Failed error={text.error} session={session} />;
+  if (text.kind === "error") return <Failed error={text.error} retry={text.retry} session={session} />;
   if (text.kind === "loading" || html === null) return <Loading what="Loading the document" />;
   return (
     <div

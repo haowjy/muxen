@@ -46,8 +46,6 @@ export interface FilesView {
   hidden: boolean;
   /** What was just added (an upload, a paste, a create): the phone's list marks it and scrolls to it, a desktop selects it once. Any navigation clears it. */
   fresh: { path: string; opens: boolean } | null;
-  /** How many times the server has answered again after a failure: a view that keeps a `network` failure of its own loads again when this changes. */
-  recoveries: number;
 }
 
 export interface BrowserOptions {
@@ -88,7 +86,7 @@ export class FileBrowser extends Store<FilesView> {
   private asked: Promise<string> | null = null;
 
   constructor(opts: BrowserOptions) {
-    super({ place: { kind: "dir", path: HOME }, home: opts.home ?? null, dir: null, loading: true, error: null, hidden: opts.hidden, fresh: null, recoveries: 0 });
+    super({ place: { kind: "dir", path: HOME }, home: opts.home ?? null, dir: null, loading: true, error: null, hidden: opts.hidden, fresh: null });
     this.api = opts.api;
     this.folders = new Folders(opts.api);
   }
@@ -160,11 +158,10 @@ export class FileBrowser extends Store<FilesView> {
   /**
    * The server answers again (plan.md "Requests"): what failed for want of a connection loads again, with no tap. The
    * place is reloaded in place, so a user who has moved on is not moved back; pinned folders that failed are listed
-   * again, and views that keep a failure of their own hear it in `recoveries`.
+   * again.
    */
   async recovered(): Promise<void> {
-    const { place, error, home, hidden, recoveries } = this.snapshot;
-    this.update({ recoveries: recoveries + 1 });
+    const { place, error, home, hidden } = this.snapshot;
     const mine = error?.code === "network";
     // A place `~` is the first thing asked for, home included; any other place asks for home on its own.
     if (home === null && (place.kind === "file" || place.path !== HOME)) void this.home().catch(() => undefined);
@@ -173,11 +170,6 @@ export class FileBrowser extends Store<FilesView> {
       // The place's own listing is `reload`'s, not asked a second time.
       this.folders.recovered(mine && place.kind === "dir" ? folderKey(place.path, hidden) : undefined),
     ]);
-  }
-
-  /** A view that keeps a `network` failure of its own was asked to try again (its Try again): it hears this as it hears a recovery. */
-  reread(): void {
-    this.update({ recoveries: this.snapshot.recoveries + 1 });
   }
 
   /** The next page, when the list scrolls near its end. */

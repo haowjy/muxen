@@ -97,7 +97,7 @@ describe("FileBrowser", () => {
       fs.offline = false;
       await browser.recovered();
       await Promise.resolve();
-      expect(browser.snapshot).toMatchObject({ error: null, loading: false, home: "/home/j", recoveries: 1 });
+      expect(browser.snapshot).toMatchObject({ error: null, loading: false, home: "/home/j" });
       expect(pagesOf(browser)?.path).toBe("/home/j/repo");
     });
 

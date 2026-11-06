@@ -2167,6 +2167,7 @@ behind it are Jimmy's ([Shell integration](#shell-integration)); see the
   `<html>` overrides the system preference. The supported floor is Safari/iOS 17.5,
   Chrome 123 and Firefox 120. The browser minimums in [auth.md](auth.md) reflect this
   floor as well as the required `Sec-Fetch-Site` request metadata.
+  The iOS app's deployment target (`ios/project.yml`) follows it, so `AbortSignal.any` needs no fallback.
 - **Why:** the only target device runs current iOS, and one token block avoids a flash
   while the scheme is applied.
 - **Rejected:** separate dark and light scheme blocks, which would preserve Safari/iOS
@@ -5536,3 +5537,17 @@ carry the design lead's recommended answer to a question put to Jimmy and not ye
   banner on every screen but Home.
 - **Rejected:** every host's banner on every screen; the folder body carrying its own "Can't reach"
   and Retry beside the banner.
+
+### Every view reads one derived server state
+
+- **Decided:** 2026-11-06, tech lead.
+- **What:** `serverState(host)` returns `attention | noNetwork | unreachable | checking | up`, derived
+  from admission, the shown reachability and the refusal, never stored. The card, the banner, the tab
+  strip and pill, Open session and Settings switch on it; each keeps its own words. A tab's own
+  states (closed, session limit, detached, a failed watch) come before it. A refusal is the banner's
+  alone: the strip stays quiet. On a terminal tab the banner says unreachable when the tab's own state
+  fills the strip, so it is said once.
+- **Why:** six views had each re-derived the order, and each had drifted: two messages for one refusal,
+  a dead Retry, a tab joined after a refusal reading "Connecting", Open session spinning on a refused host.
+- **Rejected:** a function returning words (the card, banner and strip word the same state differently,
+  and rightly).

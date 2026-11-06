@@ -1,6 +1,6 @@
 import { createContext, type ComponentChildren } from "preact";
 import { useContext, useEffect } from "preact/hooks";
-import { hostById } from "../net/hosts";
+import { hostById, serverState } from "../net/hosts";
 import type { BellsState } from "../sessions/bells";
 import type { HostLook } from "../tabs/status";
 import { FocusContext } from "../ui/focus";
@@ -55,12 +55,12 @@ export function useHostName(): (hostId: string) => string {
   return (hostId) => hosts.find((h) => h.hostId === hostId)?.name ?? hostId;
 }
 
-/** What a tab says of its server: the name and the shown reachability, by host id. */
+/** What a tab says of its server: the name and the server's state, by host id. */
 export function useHostLook(): (hostId: string) => HostLook {
   const hosts = useAppView((v) => v.hosts);
   return (hostId) => {
     const host = hostById(hosts, hostId);
-    return { name: host?.name ?? hostId, shown: host?.shown ?? "checking", byToken: host?.entry.pageOrigin === null };
+    return { name: host?.name ?? hostId, server: host ? serverState(host) : { kind: "checking", connecting: true }, byToken: host?.entry.pageOrigin === null };
   };
 }
 

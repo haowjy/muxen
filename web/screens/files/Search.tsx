@@ -60,7 +60,6 @@ export function Search({ session, search, where, onOpen, onReveal, onClose: clos
   const phone = useAppView((v) => v.viewport.layout === "phone");
   const view = useStore(search, (s) => s);
   const hidden = useStore(session.browser, (s) => s.hidden);
-  const recoveries = useStore(session.browser, (s) => s.recoveries);
   const failure = useFailure(session);
   const { text, shown, asking, error } = view;
   const query = text.trim() !== "";
@@ -102,8 +101,6 @@ export function Search({ session, search, where, onOpen, onReveal, onClose: clos
     return () => { search.stop(); };
   }, [search]);
   useEffect(() => { search.setHidden(hidden); }, [search, hidden]);
-  // The server answers again after a search failed for want of it.
-  useEffect(() => { if (search.snapshot.error?.code === "network") search.resume(); }, [search, recoveries]);
   useEffect(() => {
     if (asking || !waiting.current) return;
     waiting.current = false;

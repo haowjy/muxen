@@ -10,6 +10,7 @@ const STATES: Array<[string, Partial<HostClient>]> = [
   ["the phone has no network", { shown: "noNetwork" }],
   ["over the connection cap", { refusing: "overCap" }],
   ["the daemon can't decide right now", { refusing: "authUnavailable" }],
+  ["a native host's daemon speaks another version", { entry: { handle: "native", pageOrigin: null } as HostClient["entry"], admission: { kind: "incompatible" } }],
   ["undecided for 10 s", { admission: { kind: "deciding" }, checkingSince: Date.now() - 11_000 }],
 ];
 

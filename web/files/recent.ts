@@ -35,6 +35,10 @@ export class Recent<V> {
     }
   }
 
+  values(): IterableIterator<V> {
+    return this.items.values();
+  }
+
   clear(): void {
     this.items.clear();
   }

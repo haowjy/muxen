@@ -1,6 +1,6 @@
 // What one server's row says on Home (browser-behaviors.md "Home"): its state, derived once from the host and
 // its sessions cache. The body decides the status word, so a row can't read "live" over an offline body.
-import type { HostClient } from "../../net/hosts";
+import { serverState, type HostClient } from "../../net/hosts";
 import type { HostSessions } from "../../sessions/cache";
 
 export type CardStatus = "live" | "checking" | "offline" | "attention";
@@ -28,14 +28,21 @@ export const STATUS: Record<CardBody["kind"], CardStatus> = {
   ok: "live",
 };
 
-/** The status word's order (browser-behaviors.md "Home"): admission that needs the user, then what the shown state says, then undecided admission. */
+/** The status word's order is {@link serverState}'s (browser-behaviors.md "Home"); the listing decides only for a server that is up. */
 export function cardBody(host: HostClient, sessions: HostSessions | undefined): CardBody {
-  const { admission, shown } = host;
-  if (admission.kind !== "admitted" && admission.kind !== "deciding") return { kind: "attention" };
-  if (shown === "unreachable" || shown === "noNetwork") return { kind: "offline", reachedAt: host.reachedAt, noNetwork: shown === "noNetwork" };
-  if (shown === "checking") return { kind: "checking", connecting: true };
-  if (admission.kind === "deciding") return { kind: "checking", connecting: false };
-  const listing = sessions?.listing;
-  if (listing === undefined) return sessions?.failure ? { kind: "failed" } : { kind: "ok" };
-  return listing === null ? { kind: "noTmux" } : { kind: "ok" };
+  const state = serverState(host);
+  switch (state.kind) {
+    case "attention":
+      return { kind: "attention" };
+    case "noNetwork":
+    case "unreachable":
+      return { kind: "offline", reachedAt: host.reachedAt, noNetwork: state.kind === "noNetwork" };
+    case "checking":
+      return { kind: "checking", connecting: state.connecting };
+    case "up": {
+      const listing = sessions?.listing;
+      if (listing === undefined) return sessions?.failure ? { kind: "failed" } : { kind: "ok" };
+      return listing === null ? { kind: "noTmux" } : { kind: "ok" };
+    }
+  }
 }

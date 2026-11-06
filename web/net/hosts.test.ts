@@ -4,7 +4,9 @@ import { FakeLink } from "../platform/test/host";
 import type { HostEntry } from "../platform/types";
 import { TabDriver } from "../tabs/driver";
 import type { TabPort } from "./host";
-import { HostRegistry } from "./hosts";
+import type { Admission } from "./admission";
+import type { Reach } from "./host";
+import { HostRegistry, serverState, type ServerState } from "./hosts";
 
 const port: TabPort = { linkUp: () => undefined, linkLost: () => undefined, paused: () => undefined, message: () => undefined, frame: () => undefined };
 
@@ -556,26 +558,24 @@ describe("a host removed from the list", () => {
   });
 });
 
-describe("a request with its own signal", () => {
-  it("ends when either signal fires, with no AbortSignal.any", async () => {
-    const original = Object.getOwnPropertyDescriptor(AbortSignal, "any");
-    // @ts-expect-error iOS 17.0 has no AbortSignal.any
-    delete AbortSignal.any;
-    try {
-      const hold = { on: true, sent: [] as string[] };
-      const t = await boot(undefined, {}, (inner) => holding(inner, hold));
-      t.host()?.socket.join(port);
-      await vi.advanceTimersByTimeAsync(0);
-      const own = new AbortController();
-      const fs = t.host()?.fs;
-      const caught = fs?.search("/", "x", false, own.signal).catch((e: unknown) => e);
-      own.abort();
-      expect(await caught).toMatchObject({ name: "AbortError" });
-      const other = fs?.search("/", "y", false, new AbortController().signal).catch((e: unknown) => e);
-      t.platform.links.at(-1)?.drop(1006, "idle"); // the host turns unreachable: its own signal fires
-      expect(await other).toMatchObject({ code: "network" });
-    } finally {
-      if (original) Object.defineProperty(AbortSignal, "any", original);
-    }
+describe("serverState", () => {
+  const admitted: Admission = { kind: "admitted" };
+  const deciding: Admission = { kind: "deciding" };
+  const refused: Admission = { kind: "notEnrolled", nodeName: null };
+  const incompatible: Admission = { kind: "incompatible" };
+  type Row = [Admission, Reach | "noNetwork", ServerState["kind"], boolean?];
+  // Admission that needs the user first, then the network, then the answers, then undecided admission.
+  const rows: Row[] = [
+    [admitted, "reachable", "up"], [admitted, "checking", "checking", true], [admitted, "unreachable", "unreachable"], [admitted, "noNetwork", "noNetwork"],
+    [deciding, "reachable", "checking", false], [deciding, "checking", "checking", true], [deciding, "unreachable", "unreachable"], [deciding, "noNetwork", "noNetwork"],
+    ...[refused, incompatible].flatMap((a): Row[] => (["reachable", "checking", "unreachable", "noNetwork"] as const).map((shown) => [a, shown, "attention"])),
+  ];
+
+  it.each(rows)("%j shown %s reads %s", (admission, shown, kind, connecting) => {
+    const state = serverState({ admission, shown, refusing: "overCap" });
+    expect(state.kind).toBe(kind);
+    if (state.kind === "checking") expect(state.connecting).toBe(connecting);
+    if (state.kind === "up") expect(state.refusing).toBe("overCap");
+    if (state.kind === "attention") expect(state.admission).toBe(admission);
   });
 });

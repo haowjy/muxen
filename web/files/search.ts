@@ -66,6 +66,8 @@ export class FileSearch extends Store<SearchView> {
   private request: AbortController | null = null;
   /** What the rows shown answer: the text and the hidden setting it was asked with; null for the recents. */
   private answered: string | null = null;
+  /** Its results are on screen: only then is a failed ask worth repeating. */
+  private watched = false;
 
   constructor(private readonly api: FsApi, readonly root: string, private hidden: boolean, private readonly recents: readonly Found[]) {
     super({ text: "", shown: { rows: recents, stopped: null }, asking: false, error: null, selected: recents[0]?.path ?? null, chosen: false });
@@ -73,7 +75,7 @@ export class FileSearch extends Store<SearchView> {
 
   /** The field's text: asked for once typing pauses; emptied, the recents are back at once. */
   type(text: string): void {
-    this.stop();
+    this.cancel();
     if (text.trim() === "") {
       this.answered = null;
       this.update({ text, shown: { rows: this.recents, stopped: null }, error: null, selected: this.recents[0]?.path ?? null, chosen: false });
@@ -98,7 +100,7 @@ export class FileSearch extends Store<SearchView> {
   setHidden(hidden: boolean): void {
     if (hidden === this.hidden) return;
     this.hidden = hidden;
-    this.stop();
+    this.cancel();
     this.resume();
   }
 
@@ -109,12 +111,24 @@ export class FileSearch extends Store<SearchView> {
 
   /** Try again, or the results came back on screen: `text` is asked for unless its answer is up. */
   resume(): void {
+    this.watched = true;
     const { text, asking } = this.snapshot;
     if (text.trim() !== "" && !tooLong(text) && this.answered !== this.key(text) && !asking) this.ask();
   }
 
+  /** The server answers again (plan.md "Requests"): a search on screen that failed for want of it is asked again. */
+  recovered(): void {
+    if (this.watched && this.snapshot.error?.code === "network") this.resume();
+  }
+
   /** The results left the screen: nothing more is asked or waited for. */
   stop(): void {
+    this.watched = false;
+    this.cancel();
+  }
+
+  /** Drops what is asked or waited for; the results stay on screen. */
+  private cancel(): void {
     clearTimeout(this.timer);
     this.request?.abort();
     this.request = null;
@@ -126,7 +140,7 @@ export class FileSearch extends Store<SearchView> {
   }
 
   private ask(): void {
-    this.stop();
+    this.cancel();
     const { text } = this.snapshot;
     // What the answer answers is fixed now: the hidden setting may change while it is on its way.
     const key = this.key(text);

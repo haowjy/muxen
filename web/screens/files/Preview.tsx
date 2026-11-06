@@ -1,5 +1,5 @@
 import type { ComponentChildren } from "preact";
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { useApp } from "../../app/context";
 import { formatSize, formatTime, shorten } from "../../files/format";
 import type { FileRef } from "../../files/browser";
@@ -10,7 +10,7 @@ import { EmptyState } from "../../ui/primitives/EmptyState";
 import { Icon } from "../../ui/primitives/Icon";
 import { useStore } from "../../ui/store";
 import { DownloadButton } from "./FileActions";
-import { useReachableOnce } from "./failure";
+import { useShown } from "./failure";
 import { fileIcon } from "./fileIcon";
 import { ImageViewer } from "./ImageViewer";
 import type { FilesSession } from "./session";
@@ -30,10 +30,12 @@ function Meta({ session, file }: { session: FilesSession; file: FileRef }) {
   );
 }
 
-/** A viewer that loads by URL starts when the server answers, and stays once it has. */
+/** A viewer that loads by URL starts unless the server is off or the phone offline, as the guard sends a GET, and once started is never cut short (plan.md "Requests"). */
 function Waits({ session, children }: { session: FilesSession; children: ComponentChildren }) {
-  const started = useReachableOnce(session);
-  return started ? <>{children}</> : <EmptyState icon="alert" title={`Waiting for ${session.hostName}`} />;
+  const shown = useShown(session);
+  const started = useRef(false);
+  if (shown !== "unreachable" && shown !== "noNetwork") started.current = true;
+  return started.current ? <>{children}</> : <EmptyState icon="alert" title={`Waiting for ${session.hostName}`} />;
 }
 
 /** Video and audio: native's player opens on arrival; the browser plays them inline over Range requests. */

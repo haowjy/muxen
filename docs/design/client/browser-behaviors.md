@@ -138,7 +138,9 @@ that server's banner only; other servers' problems show on Home. Admission that 
 comes first, as on the card. Otherwise an unreachable server's banner
 reads "Can't reach pop-os", with the hint and Retry; with no network it reads "This iPhone is
 offline." with no Retry. Either replaces "Checking access…". A terminal tab shows neither: its
-status strip says the same, with the same Retry. Other banners, such as the
+status strip says the same, with the same Retry, unless the tab's own state fills the strip (closed,
+at its session limit, detached, a failed watch); then the banner says it, so it is said once. A
+refusal is the banner's alone: a tab's strip stays quiet and its pill reads disconnected. Other banners, such as the
 connection cap's, still show there. The Shell shows no banner over Home: each card carries its own
 server's banner as its notice, and an offline card's note replaces it. Every Retry for a server is
 the same one ([plan.md](../plan.md#reachability), "Retry").

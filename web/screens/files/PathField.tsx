@@ -47,7 +47,6 @@ export function PathField({ session, rest, here, actions, onEditing, onOpen }: P
   const home = useStore(browser, (s) => s.home);
   const showHidden = useStore(browser, (s) => s.hidden);
   const held = useStore(browser.folders, (s) => s.held);
-  const recoveries = useStore(browser, (s) => s.recoveries);
   const failure = useFailure(session);
   const input = useRef<HTMLInputElement>(null);
   /** The typed text; null at rest. */
@@ -69,8 +68,7 @@ export function PathField({ session, rest, here, actions, onEditing, onOpen }: P
 
   // The folder the field names is listed once typing settles; leaving cancels a pending one.
   const ask = view?.ask ?? null;
-  // Asked again when the server answers after a failure: the narrowed folder may be one that failed.
-  useEffect(() => { browser.folders.ask(ask); }, [browser, ask?.path, ask?.hidden, recoveries]);
+  useEffect(() => { browser.folders.ask(ask); }, [browser, ask?.path, ask?.hidden]);
   const rows = view?.out.rows ?? [];
   // NarrowedList draws the listbox only for a typed folder that did not fail.
   const listed = rows.length > 0 && !!view?.typed && !view.record?.error;

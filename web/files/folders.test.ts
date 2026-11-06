@@ -135,6 +135,19 @@ describe("Folders", () => {
     expect(record(folders, "/home/j/up")).toMatchObject({ error: { code: "network" } });
   });
 
+  it("lists again the folder the field asked for last, though nothing pins it", async () => {
+    const { fs, folders } = setup();
+    fs.offline = true;
+    folders.ask({ path: "/home/j/up", hidden: false });
+    await vi.advanceTimersByTimeAsync(SETTLE_MS);
+    folders.ask({ path: "/home/j/repos", hidden: false });
+    await vi.advanceTimersByTimeAsync(SETTLE_MS);
+    fs.offline = false;
+    fs.calls.length = 0;
+    await folders.recovered();
+    expect(fs.calls).toEqual(["list /home/j/repos 0"]);
+  });
+
   it("recovery skips a folder under way or named by the caller, so none is asked twice", async () => {
     const { fs, folders } = setup();
     folders.pin("place", [{ path: "/home/j/repos", hidden: false }, { path: "/home/j/up", hidden: false }]);

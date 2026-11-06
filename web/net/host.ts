@@ -86,9 +86,7 @@ export interface HostOptions {
   onRefused(code: typeof CloseCode.BadToken | typeof CloseCode.AuthUnavailable | typeof CloseCode.Incompatible): void;
   /** The socket is welcomed: the daemon's identity, for admission to check against its saved id. */
   onWelcome?(welcome: WelcomeMsg): void;
-  /** The daemon is turning sockets away (4005, 4503), or has stopped: a host problem, not a tab's. */
-  onRefusing?(refusing: Refusing | null): void;
-  /** `reach` or `reachedAt` changed. */
+  /** `reach`, `reachedAt` or `refusing` changed. */
   onReach(): void;
   /** Whether the phone reports a network. An attempt that fails without one says nothing about the server. */
   online(): boolean;
@@ -116,7 +114,7 @@ export class Host {
   private readonly pastes = new Map<number, TabPort>();
   private pingRtt = 0;
   private status: Status = "idle";
-  private refusing: Refusing | null = null;
+  private _refusing: Refusing | null = null;
   private link: Link | null = null;
   private attempt = 0;
   /** Connect timeouts in a row. */
@@ -137,6 +135,11 @@ export class Host {
 
   private now(): number {
     return this.opts.now?.() ?? Date.now();
+  }
+
+  /** The daemon is turning sockets away (4005, 4503), until a socket is welcomed or this stops: a host problem, not a tab's. */
+  get refusing(): Refusing | null {
+    return this._refusing;
   }
 
   get reach(): Reach {
@@ -360,9 +363,9 @@ export class Host {
   }
 
   private setRefusing(refusing: Refusing | null): void {
-    if (this.refusing === refusing) return;
-    this.refusing = refusing;
-    this.opts.onRefusing?.(refusing);
+    if (this._refusing === refusing) return;
+    this._refusing = refusing;
+    this.opts.onReach();
   }
 
   /** No tab and no request needs the socket: nothing is held for a host nobody views. */

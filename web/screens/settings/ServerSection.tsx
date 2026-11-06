@@ -5,11 +5,11 @@
 // server's latest answer when its turn comes, so quick taps can't undo each other.
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { useApp, useAppView } from "../../app/context";
-import type { HostClient } from "../../net/hosts";
+import { serverState, type HostClient } from "../../net/hosts";
 import { refusalWords } from "../../net/refusalWords";
 import type { SettingsFailure } from "../../net/settings";
 import type { ServerSettings } from "../../proto/generated/messages";
-import { offlineWords } from "../../ui/hostProblem";
+import { admissionCopy, offlineWords } from "../../ui/hostProblem";
 import { Button } from "../../ui/primitives/Button";
 import { IconButton } from "../../ui/primitives/IconButton";
 import { Spinner } from "../../ui/primitives/Spinner";
@@ -91,19 +91,21 @@ export function ServerSection({ host, name }: { host: HostClient; name: string }
     app.focus.refocus(next);
   });
 
-  if (host.shown === "noNetwork") {
+  const state = serverState(host);
+  if (state.kind === "attention" || state.kind === "noNetwork") {
+    const words = state.kind === "noNetwork" ? offlineWords(host.entry.pageOrigin === null) : admissionCopy(state.admission, name, host.entry.pageOrigin === null)?.title;
     return (
       <Section title={name}>
-        <p class={styles.detail}>{offlineWords(host.entry.pageOrigin === null)}</p>
+        <p class={styles.detail}>{words}</p>
       </Section>
     );
   }
-  if (host.shown === "unreachable" || view.unreachable) {
+  if (state.kind === "unreachable" || view.unreachable) {
     return (
       <Section title={name}>
         <div class={styles.unreachable}>
           <p class={styles.detail}>Can't reach {name}</p>
-          <Button variant="secondary" onClick={() => { if (host.shown === "reachable") client.read(); else app.retryHost(host.entry.handle); }}>Try again</Button>
+          <Button variant="secondary" onClick={() => { if (state.kind === "up") client.read(); else app.retryHost(host.entry.handle); }}>Try again</Button>
         </div>
       </Section>
     );

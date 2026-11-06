@@ -3,7 +3,7 @@
 import type { Frame } from "../../proto/frames";
 import type { ClientMsg, ServerMsg } from "../../proto/generated/messages";
 import type { LinkClose, LinkHandlers } from "../../proto/link";
-import { Host, type Link } from "../../net/host";
+import { Host, type Link, type Refusing } from "../../net/host";
 
 export class FakeLink implements Link {
   ready = false;
@@ -40,12 +40,15 @@ export function makeHost() {
   const limits: number[] = [];
   const network = { online: true };
   const stuck = { calls: 0 };
+  let refusing: Refusing | null = null;
   const host: Host = new Host({
     open: (h, limit) => { const l = new FakeLink(h); links.push(l); limits.push(limit); return l; },
     onRefused: (code) => events.push(`refused ${String(code)}`),
     onStuck: () => { stuck.calls++; events.push("stuck"); },
-    onRefusing: (refusing) => events.push(refusing === "overCap" ? "capped" : refusing === "authUnavailable" ? "unavailable" : "uncapped"),
-    onReach: () => reaches.push(host.reach),
+    onReach: () => {
+      if (host.refusing !== refusing) events.push((refusing = host.refusing) === "overCap" ? "capped" : refusing === "authUnavailable" ? "unavailable" : "uncapped");
+      else reaches.push(host.reach);
+    },
     online: () => network.online,
     random: () => 0.5, // exact backoff base
   });

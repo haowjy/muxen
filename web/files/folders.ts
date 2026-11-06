@@ -63,6 +63,9 @@ export class Folders extends Store<FoldersView> {
   private running = 0;
   private readonly waiting: { key: string; go: () => void; behind: boolean }[] = [];
 
+  /** The folder the field names now, asked again when the server answers after it failed. */
+  private asked: { path: string; hidden: boolean } | null = null;
+
   constructor(private readonly api: FsApi) {
     super({ held: new Map() });
   }
@@ -79,6 +82,7 @@ export class Folders extends Store<FoldersView> {
   /** The folder the field names now: listed once typing settles, unless held or already under way. */
   ask(target: { path: string; hidden: boolean } | null): void {
     clearTimeout(this.timer);
+    this.asked = target;
     if (!target) return;
     if (this.answered(target.path, target.hidden)) {
       this.put(target.path, target.hidden, {});
@@ -89,11 +93,12 @@ export class Folders extends Store<FoldersView> {
   }
 
   /**
-   * The server answers again: pinned folders whose last listing failed for want of a connection are listed again, except
-   * `except`, which the caller lists itself. An unpinned record is asked for again when something wants it (`answered`).
+   * The server answers again: pinned folders and the one the field asked for, whose last listing failed for want of a
+   * connection, are listed again, except `except`, which the caller lists itself. An unpinned record is asked for again when something wants it (`answered`).
    */
   async recovered(except?: string): Promise<void> {
-    const failed = [...this.snapshot.held].filter(([key, record]) => key !== except && record.error?.code === "network" && !record.loading && this.pinned(key));
+    const asked = this.asked && folderKey(this.asked.path, this.asked.hidden);
+    const failed = [...this.snapshot.held].filter(([key, record]) => key !== except && record.error?.code === "network" && !record.loading && (key === asked || this.pinned(key)));
     await Promise.all(failed.map(([key]) => this.relist(folderOf(key), key.startsWith("1"))));
   }
 

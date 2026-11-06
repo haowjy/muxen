@@ -45,6 +45,27 @@ export interface HostClient {
   readonly settings: SettingsClient;
 }
 
+/**
+ * What every view reads of one server, in the order they all agree on: admission that needs the user, then the
+ * network, then what the daemon's answers say, then undecided admission. Derived, never stored; each view keeps
+ * its own words (plan.md "Reachability"), and a new state is a compile error in each.
+ */
+export type ServerState =
+  | { kind: "attention"; admission: Admission }
+  | { kind: "noNetwork" }
+  | { kind: "unreachable" }
+  /** No answer yet (`connecting`), or the server answers and admission is undecided. */
+  | { kind: "checking"; connecting: boolean }
+  | { kind: "up"; refusing: Refusing | null };
+
+export function serverState({ admission, shown, refusing }: Pick<HostClient, "admission" | "shown" | "refusing">): ServerState {
+  if (admission.kind !== "admitted" && admission.kind !== "deciding") return { kind: "attention", admission };
+  if (shown === "noNetwork" || shown === "unreachable") return { kind: shown };
+  if (shown === "checking") return { kind: "checking", connecting: true };
+  if (admission.kind === "deciding") return { kind: "checking", connecting: false };
+  return { kind: "up", refusing };
+}
+
 /** The host a saved id names. A lone host whose id isn't known yet (a browser launched offline) stands for the saved workspace's. */
 export function hostById(hosts: readonly HostClient[], hostId: string): HostClient | undefined {
   return hosts.find((h) => h.hostId === hostId) ?? (hosts.length === 1 && hosts[0]?.hostId === null ? hosts[0] : undefined);
@@ -224,7 +245,6 @@ export class HostRegistry {
       open: (handlers, connectTimeoutMs) => this.opts.transport.openSocket(handle, handlers, connectTimeoutMs),
       onRefused: (code) => { this.onRefused(handle, code); },
       onWelcome: (welcome) => { this.learnHostId(handle, welcome.host.id); },
-      onRefusing: (refusing) => { this.refusing(handle, refusing); },
       onReach: () => { const slot = this.slots.get(handle); if (slot) this.reflect(slot); },
       online: () => this.lifecycle.online,
       onStuck: () => { const slot = this.slots.get(handle); if (slot) void this.stuck(slot); },
@@ -271,35 +291,17 @@ export class HostRegistry {
     const method = init?.method?.toUpperCase();
     if (!slot || (method !== undefined && method !== "GET" && method !== "HEAD")) return this.fetchFn(input, init);
     if (slot.client.shown === "unreachable" || slot.client.shown === "noNetwork") return Promise.reject(new TypeError("network"));
-    const own = slot.abort.signal;
-    const theirs = init?.signal;
-    if (!theirs) return this.fetchFn(input, { ...init, signal: own });
-    // `AbortSignal.any` needs iOS 17.4. Either signal aborts the request, body read included, so the link stays until one fires
-    // or the fetch fails; a signal that never fires is the caller's own, per request, and goes with it.
-    const both = new AbortController();
-    const stop = (): void => { both.abort(); };
-    const unlink = (): void => {
-      own.removeEventListener("abort", stop);
-      theirs.removeEventListener("abort", stop);
-    };
-    if (own.aborted || theirs.aborted) both.abort();
-    else {
-      own.addEventListener("abort", stop, { once: true });
-      theirs.addEventListener("abort", stop, { once: true });
-    }
-    return this.fetchFn(input, { ...init, signal: both.signal }).catch((error: unknown) => {
-      unlink();
-      throw error;
-    });
+    const signal = init?.signal ? AbortSignal.any([slot.abort.signal, init.signal]) : slot.abort.signal;
+    return this.fetchFn(input, { ...init, signal });
   }
 
-  /** Copies the socket's reachability, with the phone's network, onto the client, and acts on the edges. */
+  /** Copies the socket's reachability and refusal, with the phone's network, onto the client, and acts on the edges. */
   private reflect(slot: Slot): void {
     const { client } = slot;
     const shown = this.lifecycle.online ? client.socket.reach : "noNetwork";
-    const { reachedAt } = client.socket;
-    if (shown === client.shown && reachedAt === client.reachedAt) return;
-    slot.client = { ...client, shown, reachedAt };
+    const { reachedAt, refusing } = client.socket;
+    if (shown === client.shown && reachedAt === client.reachedAt && refusing === client.refusing) return;
+    slot.client = { ...client, shown, reachedAt, refusing };
     if (shown !== client.shown) {
       if (shown === "unreachable" || shown === "noNetwork") {
         slot.abort.abort();
@@ -362,14 +364,6 @@ export class HostRegistry {
   private learnHostId(handle: string, hostId: string): void {
     const slot = this.slots.get(handle);
     if (slot && slot.client.hostId !== hostId) this.patch(slot, { hostId });
-  }
-
-  /** Not `patch`: a host being stopped reports `null`, and `applyRunning` would start it again. */
-  private refusing(handle: string, refusing: Refusing | null): void {
-    const slot = this.slots.get(handle);
-    if (!slot) return;
-    slot.client = { ...slot.client, refusing };
-    this.emit();
   }
 
   private onRefused(handle: string, code: typeof CloseCode.BadToken | typeof CloseCode.AuthUnavailable | typeof CloseCode.Incompatible): void {
