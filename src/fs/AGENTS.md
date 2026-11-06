@@ -17,10 +17,10 @@ Rules the code relies on, which are easy to break:
   with `list::Scan`; `check_shape` is also `/complete`'s `cwd` check.
 - Every blocking call runs on the fs lane (`Slots::lane`, see `src/blocking.rs`), which
   moves the thread's permit into the closure; the scan, search and raw slots wait in that
-  lane's queue. Work under a slot goes through the slot's method (`Slots::scan`, `search`,
-  `settings`, i.e. `PermitPool::run`), which moves the slot into the lane work too: a
-  request dropped mid-call frees nothing until its work ends. Never hold a slot in the
-  handler around `lane.run`. Only the raw producer holds its slot itself, across chunks. clippy forbids `spawn_blocking`, and tokio's `fs` feature is off
+  lane's queue. Work under a slot goes through `Slot::run` (`Slots::scan`, `search`,
+  `delete`, `settings`), which moves the permit into the lane work too: a
+  request dropped mid-call frees nothing until its work ends. Never hold a permit in the
+  handler around `lane.try_run`. Only the raw producer holds its permit itself (`Slot::acquire`), across chunks. clippy forbids `spawn_blocking`, and tokio's `fs` feature is off
   (`tokio::fs::File`'s buffer grows to 2 MiB). Take an fs thread last and release it
   before waiting for any other slot.
 - Search opens each directory below its root only through `search::Below`, relative to the

@@ -108,11 +108,12 @@ async fn listing(
     let listed = async {
         let (asked, home) = (path.clone(), ctx.app.home.clone());
         ctx.fs
-            .scan(move || {
+            .scan
+            .run(move || {
                 let dir = crate::fs::open(&asked, &home, Want::Dir)?;
                 list::list(&dir, filter, query.offset).map_err(FsError::io)
             })
-            .await?
+            .await
     }
     .await;
     debug!(%path, offset = query.offset, ok = listed.is_ok(), "listed");
@@ -140,12 +141,13 @@ async fn searched(
         let (asked, home, cancel) = (path.clone(), ctx.app.home.clone(), cancel.0.clone());
         let skip = search::skip(&ctx.app.config);
         ctx.fs
-            .search(move || {
+            .search
+            .run(move || {
                 let root = crate::fs::open(&asked, &home, Want::Dir)?;
                 search::search(&root, &pattern, filter, &skip, &search::CAPS, &cancel)
                     .map_err(FsError::io)
             })
-            .await?
+            .await
     }
     .await;
     if let Ok(found) = &found {
@@ -170,13 +172,13 @@ async fn raw(State(ctx): State<Arc<Ctx>>, path: WirePath, headers: HeaderMap) ->
         return respond("", Err(FsError::BadRequest));
     };
     let sent = async {
-        let slot = ctx.fs.raw().await?;
+        let slot = ctx.fs.raw.acquire().await?;
         let (asked, home) = (path.clone(), ctx.app.home.clone());
         let opened = ctx
             .fs
             .lane
-            .run(move || crate::fs::open(&asked, &home, Want::File))
-            .await??;
+            .try_run(move || crate::fs::open(&asked, &home, Want::File))
+            .await?;
         let size = opened.meta.len();
         let etag = Stamp::of(&opened.meta).etag();
         let header = |name| headers.get(name).and_then(|value| value.to_str().ok());
@@ -239,8 +241,8 @@ async fn upload(
         let dir = ctx
             .fs
             .lane
-            .run(move || upload::open_dir(&uploads_dir, &home, dest.as_deref()))
-            .await??;
+            .try_run(move || upload::open_dir(&uploads_dir, &home, dest.as_deref()))
+            .await?;
         let naming = if query.text == 1 {
             Naming::PastedText
         } else {
@@ -281,8 +283,8 @@ async fn created(
     let done = async {
         ctx.fs
             .lane
-            .run(move || entry::create(&request, &home))
-            .await?
+            .try_run(move || entry::create(&request, &home))
+            .await
     }
     .await;
     respond(&dir, done.map(|()| StatusCode::NO_CONTENT.into_response()))
@@ -301,8 +303,8 @@ async fn renamed(
     let done = async {
         ctx.fs
             .lane
-            .run(move || entry::rename(&request, &home, &state))
-            .await?
+            .try_run(move || entry::rename(&request, &home, &state))
+            .await
     }
     .await;
     respond(&dir, done.map(|()| StatusCode::NO_CONTENT.into_response()))
@@ -320,8 +322,9 @@ async fn deleted(
     let (home, state) = (ctx.app.home.clone(), ctx.app.state_dir.clone());
     let done = async {
         ctx.fs
-            .delete(move || entry::delete(&request, &home, &state))
-            .await?
+            .delete
+            .run(move || entry::delete(&request, &home, &state))
+            .await
     }
     .await;
     respond(&dir, done.map(|()| StatusCode::NO_CONTENT.into_response()))

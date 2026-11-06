@@ -39,6 +39,13 @@ pub enum SaveError {
     Internal(io::Error),
 }
 
+/// No fs thread or settings slot in time: the same answer as a save that kept losing.
+impl From<crate::blocking::Busy> for SaveError {
+    fn from(crate::blocking::Busy: crate::blocking::Busy) -> Self {
+        Self::Busy
+    }
+}
+
 /// `change` as it will be written, or `BadRequest`: duplicate patterns dropped, order
 /// kept.
 pub fn validated(change: SettingsChange) -> Result<SettingsChange, SaveError> {

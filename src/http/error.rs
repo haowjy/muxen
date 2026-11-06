@@ -8,6 +8,7 @@ use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 
 use crate::auth::AuthError;
+use crate::blocking::Busy;
 use crate::config::{ConfigError, SaveError};
 use crate::fs::FsError;
 use crate::proto::{CloseCode, ErrorBody, ErrorNode, HttpError};
@@ -76,9 +77,9 @@ impl From<JsonRejection> for Refusal {
     }
 }
 
-impl From<crate::blocking::Busy> for HttpError {
-    fn from(crate::blocking::Busy: crate::blocking::Busy) -> Self {
-        Self::Busy
+impl From<Busy> for Refusal {
+    fn from(Busy: Busy) -> Self {
+        Self::from(HttpError::Busy)
     }
 }
 

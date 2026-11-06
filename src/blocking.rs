@@ -104,6 +104,40 @@ struct Inner {
     threads: PermitPool,
 }
 
+/// A route's share of a lane: a pool of permits bound to the lane its work runs on.
+#[derive(Debug, Clone)]
+pub struct Slot {
+    pool: PermitPool,
+    lane: Lane,
+}
+
+impl Slot {
+    /// Runs `work` on the lane holding one of this slot's permits, which moves into the
+    /// work: a caller that stops waiting frees the permit only when the work ends, so
+    /// work stuck on a hung disk holds its permit, not another lane thread. `Busy`, from
+    /// the permit or the lane, becomes `E::from(Busy)`.
+    pub async fn run<T, E, F>(&self, work: F) -> Result<T, E>
+    where
+        F: FnOnce() -> Result<T, E> + Send + 'static,
+        T: Send + 'static,
+        E: From<Busy> + Send + 'static,
+    {
+        let permit = self.pool.acquire().await?;
+        self.lane
+            .try_run(move || {
+                let _permit = permit;
+                work()
+            })
+            .await
+    }
+
+    /// A permit for a holder that spans many lane calls, like a raw response's producer.
+    /// Never hold one around `run` on the same slot.
+    pub async fn acquire(&self) -> Result<OwnedSemaphorePermit, Busy> {
+        self.pool.acquire().await
+    }
+}
+
 /// A bounded set of permits with one waiter budget shared by related pools. The
 /// optional deadline distinguishes request lanes from routes that wait until a slot
 /// opens or the caller disconnects.
@@ -150,6 +184,17 @@ impl Lane {
         })
     }
 
+    /// `run` for work that can fail with `E`: a `Busy` becomes `E::from(Busy)`, so the
+    /// caller sees one `Result`.
+    pub async fn try_run<T, E, F>(&self, work: F) -> Result<T, E>
+    where
+        F: FnOnce() -> Result<T, E> + Send + 'static,
+        T: Send + 'static,
+        E: From<Busy> + Send + 'static,
+    {
+        self.run(work).await.map_err(E::from)?
+    }
+
     /// `run`, not waited for: a cleanup whose caller can't wait (a `Drop`). A busy lane
     /// drops it unrun; outside a runtime it runs here.
     pub fn spawn(&self, work: impl FnOnce() + Send + 'static) {
@@ -162,9 +207,12 @@ impl Lane {
         }
     }
 
-    /// Another permit count in this lane; shares its total waiter cap and deadline.
-    pub fn permits(&self, count: usize) -> PermitPool {
-        self.0.threads.with_slots(count)
+    /// A slot of `count` permits in this lane; shares its total waiter cap and deadline.
+    pub fn slot(&self, count: usize) -> Slot {
+        Slot {
+            pool: self.0.threads.with_slots(count),
+            lane: self.clone(),
+        }
     }
 }
 
@@ -190,22 +238,6 @@ impl PermitPool {
             waiters,
             deadline,
         }
-    }
-
-    /// Runs `work` on `lane` holding one of these permits, which moves into the work: a
-    /// caller that stops waiting frees the permit only when the work ends, so work stuck
-    /// on a hung disk holds its permit, not another lane thread.
-    pub async fn run<T, F>(&self, lane: &Lane, work: F) -> Result<T, Busy>
-    where
-        F: FnOnce() -> T + Send + 'static,
-        T: Send + 'static,
-    {
-        let permit = self.acquire().await?;
-        lane.run(move || {
-            let _permit = permit;
-            work()
-        })
-        .await
     }
 
     pub async fn acquire(&self) -> Result<OwnedSemaphorePermit, Busy> {
@@ -259,7 +291,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn waits_have_a_deadline_and_a_cap() {
         let fs = Lane::new(&FS);
-        let raw = fs.permits(2);
+        let raw = fs.slot(2).pool;
         let held: Vec<_> = (0..2)
             .map(|_| raw.slots.clone().try_acquire_owned().expect("free"))
             .collect();

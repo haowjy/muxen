@@ -12,10 +12,10 @@ use axum::{Json, Router};
 use tracing::{error, warn};
 
 use super::{Ctx, Refusal};
+use crate::blocking::Busy;
 use crate::config::{
-    self, ConfigError, DEFAULT_SEARCH_SKIP, DEFAULT_UPLOADS_DIR, LiveConfig, SaveError,
+    self, DEFAULT_SEARCH_SKIP, DEFAULT_UPLOADS_DIR, LiveConfig, SaveError,
 };
-use crate::proto::HttpError;
 use crate::proto::settings::{ServerSettings, SettingsChange, SettingsDefaults};
 
 /// 64 patterns of 255 bytes, escaped, and an `uploadsDir`.
@@ -32,9 +32,14 @@ pub(super) fn routes() -> Router<Arc<Ctx>> {
 
 async fn read(State(ctx): State<Arc<Ctx>>) -> Response {
     let app = ctx.clone();
-    match ctx.fs.settings(move || settings(&app.app.config)).await {
+    match ctx
+        .fs
+        .settings
+        .run(move || Ok::<_, Busy>(settings(&app.app.config)))
+        .await
+    {
         Ok(settings) => Json(settings).into_response(),
-        Err(busy) => Refusal::from(HttpError::from(busy)).into_response(),
+        Err(busy) => Refusal::from(busy).into_response(),
     }
 }
 
@@ -50,12 +55,12 @@ async fn save(
     let app = ctx.clone();
     let saved = ctx
         .fs
-        .settings(move || {
+        .settings
+        .run(move || {
             app.app.config.save(&change)?;
             Ok(settings(&app.app.config))
         })
-        .await
-        .unwrap_or(Err(SaveError::Busy));
+        .await;
     match saved {
         Ok(settings) => Json(settings).into_response(),
         Err(refused) => {
@@ -74,17 +79,17 @@ async fn reload(State(ctx): State<Arc<Ctx>>) -> Response {
     let app = ctx.clone();
     let reloaded = ctx
         .fs
-        .settings(move || {
+        .settings
+        .run(move || {
             let config = &app.app.config;
             // `reload` logs a failure.
-            config.reload()?;
-            Ok::<_, ConfigError>(settings(config))
+            config.reload().map_err(|error| Refusal::from(&error))?;
+            Ok::<_, Refusal>(settings(config))
         })
         .await;
     match reloaded {
-        Ok(Ok(reloaded)) => Json(reloaded).into_response(),
-        Ok(Err(error)) => Refusal::from(&error).into_response(),
-        Err(busy) => Refusal::from(HttpError::from(busy)).into_response(),
+        Ok(reloaded) => Json(reloaded).into_response(),
+        Err(refused) => refused.into_response(),
     }
 }
 
