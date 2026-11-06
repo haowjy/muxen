@@ -141,11 +141,7 @@ async fn device_check(State(ctx): State<Arc<Ctx>>, mut request: Request, next: N
         .extensions()
         .get::<Login>()
         .map_or("", |login| login.0.as_str());
-    let upgrade = request
-        .headers()
-        .get(header::UPGRADE)
-        .and_then(|value| value.to_str().ok())
-        .is_some_and(|value| value.eq_ignore_ascii_case("websocket"));
+    let upgrade = is_upgrade(&request);
     match ctx
         .app
         .auth
@@ -189,11 +185,7 @@ async fn node_check(State(ctx): State<Arc<Ctx>>, mut request: Request, next: Nex
         request.uri().path(),
         "/auth/node/enroll" | "/auth/node/remove"
     );
-    let upgrade = request
-        .headers()
-        .get(header::UPGRADE)
-        .and_then(|value| value.to_str().ok())
-        .is_some_and(|value| value.eq_ignore_ascii_case("websocket"));
+    let upgrade = is_upgrade(&request);
     match ctx
         .app
         .auth
@@ -216,12 +208,16 @@ async fn node_check(State(ctx): State<Arc<Ctx>>, mut request: Request, next: Nex
     }
 }
 
-async fn auth_refusal(request: Request, refused: AuthError) -> Response {
-    let upgrade = request
+fn is_upgrade(request: &Request) -> bool {
+    request
         .headers()
         .get(header::UPGRADE)
         .and_then(|value| value.to_str().ok())
-        .is_some_and(|value| value.eq_ignore_ascii_case("websocket"));
+        .is_some_and(|value| value.eq_ignore_ascii_case("websocket"))
+}
+
+async fn auth_refusal(request: Request, refused: AuthError) -> Response {
+    let upgrade = is_upgrade(&request);
     if upgrade {
         let (mut parts, _) = request.into_parts();
         if let Ok(upgrade) = WebSocketUpgrade::from_request_parts(&mut parts, &()).await {

@@ -30,23 +30,20 @@ pub(super) fn routes() -> Router<Arc<Ctx>> {
 async fn complete(
     State(ctx): State<Arc<Ctx>>,
     body: Result<Json<CompleteRequest>, JsonRejection>,
-) -> Response {
+) -> Result<Response, Refusal> {
     let Some(completer) = ctx.complete.as_ref() else {
-        return Json(Completion { chips: Vec::new() }).into_response();
+        return Ok(Json(Completion { chips: Vec::new() }).into_response());
     };
-    let request = match body {
-        Ok(Json(request)) => request,
-        Err(rejection) => return Refusal::from(rejection).into_response(),
-    };
+    let Json(request) = body?;
     let cwd_ok = request
         .cwd
         .as_deref()
         .is_none_or(|cwd| crate::fs::check_shape(cwd).is_ok());
     if !cwd_ok {
-        return Refusal::from(HttpError::BadRequest).into_response();
+        return Err(HttpError::BadRequest.into());
     }
     let Ok(_permit) = ctx.completing.clone().try_acquire_owned() else {
-        return Refusal::from(HttpError::Busy).into_response();
+        return Err(HttpError::Busy.into());
     };
-    Json(completer.complete(request).await).into_response()
+    Ok(Json(completer.complete(request).await).into_response())
 }

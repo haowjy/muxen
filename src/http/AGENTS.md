@@ -38,7 +38,9 @@ Rules the code relies on, which are easy to break:
 - Use `Refusal`/`HttpError` in `error.rs` for the shared route errors and
   status/header mapping. Browser admission's `bad_origin`, `node_refused`,
   `not_enrolled` and `identity_unavailable` codes are part of the shared generated
-  protocol type; don't hand-build error JSON or duplicate HTTP-code maps in handlers.
+  protocol type; don't hand-build error JSON or duplicate HTTP-code maps in handlers. Handlers return
+  `Result<_, Refusal>` and use `?`: `Refusal` has `From` for `HttpError`, `Busy`, and
+  the body, query and path rejections, so a new route adds no error plumbing.
 - In `ws.rs`, every `ToConn` goes into the `Outbox`, and `take_credit()` goes back
   as `FromConn::Credit` whenever it is non-zero. The connection's own JSON (welcome,
   pong, a paste's refusal) is never charged; it waits in `own`, and while `own` is

@@ -1,9 +1,9 @@
 //! Every HTTP refusal (fs.md "Errors", auth.md "Endpoints"): an `HttpError` in the JSON
 //! error body, with its status and the headers `busy` and `bad_range` carry. Built from
-//! a code, a JSON body axum refused, an `FsError`, a `SaveError` or an `AuthError`.
+//! a code, a body, query or path axum refused, a busy lane, an `FsError`, a `SaveError` or an `AuthError`.
 
 use axum::Json;
-use axum::extract::rejection::JsonRejection;
+use axum::extract::rejection::{JsonRejection, PathRejection, QueryRejection};
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 
@@ -16,10 +16,7 @@ use crate::proto::{CloseCode, ErrorBody, ErrorNode, HttpError};
 #[derive(Debug)]
 pub(super) struct Refusal {
     status: StatusCode,
-    error: HttpError,
-    reason: Option<String>,
-    node: Option<ErrorNode>,
-    detail: Option<String>,
+    body: ErrorBody,
     /// A 416's file size, for `Content-Range: bytes */<size>`.
     size: Option<u64>,
 }
@@ -46,10 +43,12 @@ impl From<HttpError> for Refusal {
         };
         Self {
             status,
-            error,
-            reason: None,
-            node: None,
-            detail: None,
+            body: ErrorBody {
+                error,
+                reason: None,
+                node: None,
+                detail: None,
+            },
             size: None,
         }
     }
@@ -68,12 +67,21 @@ impl From<JsonRejection> for Refusal {
         };
         Self {
             status,
-            error,
-            reason: None,
-            node: None,
-            detail: None,
-            size: None,
+            ..Self::from(error)
         }
+    }
+}
+
+/// A query string or path that doesn't decode.
+impl From<QueryRejection> for Refusal {
+    fn from(_: QueryRejection) -> Self {
+        Self::from(HttpError::BadRequest)
+    }
+}
+
+impl From<PathRejection> for Refusal {
+    fn from(_: PathRejection) -> Self {
+        Self::from(HttpError::BadRequest)
     }
 }
 
@@ -94,10 +102,9 @@ impl From<&ConfigError> for Refusal {
             ConfigError::Io { source, .. } => source.kind().to_string(),
             other => other.to_string(),
         };
-        Self {
-            detail: Some(detail),
-            ..Self::from(HttpError::ConfigUnavailable)
-        }
+        let mut refusal = Self::from(HttpError::ConfigUnavailable);
+        refusal.body.detail = Some(detail);
+        refusal
     }
 }
 
@@ -151,10 +158,10 @@ impl From<&AuthError> for Refusal {
         let mut response = Self::from(HttpError::from(refused));
         match refused {
             AuthError::NodeRefused(reason) => {
-                response.reason = Some(reason.as_str().to_owned());
+                response.body.reason = Some(reason.as_str().to_owned());
             }
             AuthError::NotEnrolled { node_name } => {
-                response.node = Some(ErrorNode {
+                response.body.node = Some(ErrorNode {
                     name: node_name.clone(),
                 });
             }
@@ -199,18 +206,9 @@ impl From<&AuthError> for CloseCode {
 
 impl IntoResponse for Refusal {
     fn into_response(self) -> Response {
-        let mut response = (
-            self.status,
-            Json(ErrorBody {
-                error: self.error,
-                reason: self.reason,
-                node: self.node,
-                detail: self.detail,
-            }),
-        )
-            .into_response();
+        let mut response = (self.status, Json(&self.body)).into_response();
         let headers = response.headers_mut();
-        if self.error == HttpError::Busy {
+        if self.body.error == HttpError::Busy {
             headers.insert(header::RETRY_AFTER, HeaderValue::from_static("1"));
         }
         if let Some(range) = self

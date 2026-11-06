@@ -122,7 +122,7 @@ them with `/`; the daemon decodes and prepends `/`. `~` and `~/…` ride bare af
 listing `/`. The
 native player then sees the file's extension in the URL, and the Markdown viewer
 resolves a relative `![](img.png)` against the document's own raw URL. A path that
-doesn't decode, or a bad query value, is answered as `400 bad_request` in the JSON
+doesn't decode, or a bad query value (a flag such as `hidden` or `text` is `0` or `1`), is answered as `400 bad_request` in the JSON
 error shape (handlers take `Result<Path<…>, PathRejection>`, as `enroll.rs` does for
 `Json`). Queries need axum's `query` feature.
 
@@ -516,7 +516,7 @@ SettingsChange = { searchSkip?: [string] | null, uploadsDir?: string | null }
 JSON `{"error": "<code>"}`, from the shared `HttpError` type ([auth.md](auth.md#endpoints)).
 The auth middleware also uses this body for `forbidden`, `auth_required`,
 `auth_unavailable`, `bad_origin`, `node_refused`, `not_enrolled` and
-`identity_unavailable`; axum JSON rejections use `bad_request` or `too_large`.
+`identity_unavailable`; axum JSON rejections use `bad_request` or `too_large`, on every JSON route, `/fs/create`, `rename` and `delete` included, with axum's status (400, 413, 415 or 422).
 
 | Status | `error` | Cause |
 |---|---|---|

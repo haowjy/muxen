@@ -13,9 +13,7 @@ use tracing::{error, warn};
 
 use super::{Ctx, Refusal};
 use crate::blocking::Busy;
-use crate::config::{
-    self, DEFAULT_SEARCH_SKIP, DEFAULT_UPLOADS_DIR, LiveConfig, SaveError,
-};
+use crate::config::{self, DEFAULT_SEARCH_SKIP, DEFAULT_UPLOADS_DIR, LiveConfig, SaveError};
 use crate::proto::settings::{ServerSettings, SettingsChange, SettingsDefaults};
 
 /// 64 patterns of 255 bytes, escaped, and an `uploadsDir`.
@@ -30,52 +28,44 @@ pub(super) fn routes() -> Router<Arc<Ctx>> {
         .route("/settings/reload", post(reload))
 }
 
-async fn read(State(ctx): State<Arc<Ctx>>) -> Response {
+async fn read(State(ctx): State<Arc<Ctx>>) -> Result<Response, Refusal> {
     let app = ctx.clone();
-    match ctx
+    let read = ctx
         .fs
         .settings
         .run(move || Ok::<_, Busy>(settings(&app.app.config)))
-        .await
-    {
-        Ok(settings) => Json(settings).into_response(),
-        Err(busy) => Refusal::from(busy).into_response(),
-    }
+        .await?;
+    Ok(Json(read).into_response())
 }
 
 async fn save(
     State(ctx): State<Arc<Ctx>>,
     body: Result<Json<SettingsChange>, JsonRejection>,
-) -> Response {
-    let change = match body.map(|Json(change)| config::validated(change)) {
-        Ok(Ok(change)) => change,
-        Ok(Err(refused)) => return Refusal::from(&refused).into_response(),
-        Err(rejection) => return Refusal::from(rejection).into_response(),
-    };
+) -> Result<Response, Refusal> {
+    let Json(change) = body?;
+    let change = config::validated(change).map_err(|refused| Refusal::from(&refused))?;
     let app = ctx.clone();
     let saved = ctx
         .fs
         .settings
         .run(move || {
             app.app.config.save(&change)?;
-            Ok(settings(&app.app.config))
+            Ok::<_, SaveError>(settings(&app.app.config))
         })
-        .await;
-    match saved {
-        Ok(settings) => Json(settings).into_response(),
-        Err(refused) => {
+        .await
+        .map_err(|refused| {
             match &refused {
                 SaveError::ReadOnly(cause) => warn!(%cause, "config.toml can't be written"),
                 SaveError::Unavailable(cause) => warn!(%cause, "config.toml not written"),
                 SaveError::Internal(cause) => error!(%cause, "config.toml not written"),
                 SaveError::BadRequest | SaveError::Busy => {}
             }
-            Refusal::from(&refused).into_response()
-        }
-    }
+            Refusal::from(&refused)
+        })?;
+    Ok(Json(saved).into_response())
 }
 
-async fn reload(State(ctx): State<Arc<Ctx>>) -> Response {
+async fn reload(State(ctx): State<Arc<Ctx>>) -> Result<Response, Refusal> {
     let app = ctx.clone();
     let reloaded = ctx
         .fs
@@ -86,11 +76,8 @@ async fn reload(State(ctx): State<Arc<Ctx>>) -> Response {
             config.reload().map_err(|error| Refusal::from(&error))?;
             Ok::<_, Refusal>(settings(config))
         })
-        .await;
-    match reloaded {
-        Ok(reloaded) => Json(reloaded).into_response(),
-        Err(refused) => refused.into_response(),
-    }
+        .await?;
+    Ok(Json(reloaded).into_response())
 }
 
 /// The running config's live keys, and whether the file has changed since. Blocks.

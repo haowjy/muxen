@@ -14,7 +14,7 @@ use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse as _, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer, de};
 use tracing::{debug, error, info, warn};
 
 use super::{Ctx, Refusal};
@@ -22,7 +22,7 @@ use crate::files::Stamp;
 use crate::fs::entry;
 use crate::fs::list::{self, Filter};
 use crate::fs::raw::{self, Span};
-use crate::fs::search::{self, Pattern};
+use crate::fs::search::{self, Pattern, Skip};
 use crate::fs::upload::{self, MAX_UPLOAD, Naming};
 use crate::fs::{FsError, Want, mime};
 use crate::proto::HttpError;
@@ -44,17 +44,12 @@ pub(super) fn routes() -> Router<Arc<Ctx>> {
             "/fs/upload",
             post(upload).layer(DefaultBodyLimit::disable()),
         )
-        .route(
-            "/fs/create",
-            post(created).layer(DefaultBodyLimit::max(ENTRY_BODY)),
-        )
-        .route(
-            "/fs/rename",
-            post(renamed).layer(DefaultBodyLimit::max(ENTRY_BODY)),
-        )
-        .route(
-            "/fs/delete",
-            post(deleted).layer(DefaultBodyLimit::max(ENTRY_BODY)),
+        .merge(
+            Router::new()
+                .route("/fs/create", post(created))
+                .route("/fs/rename", post(renamed))
+                .route("/fs/delete", post(deleted))
+                .layer(DefaultBodyLimit::max(ENTRY_BODY)),
         )
 }
 
@@ -66,16 +61,16 @@ struct ListQuery {
     #[serde(default)]
     offset: u32,
     /// `0` or `1`.
-    #[serde(default)]
-    hidden: u8,
+    #[serde(default, deserialize_with = "flag")]
+    hidden: bool,
 }
 
 #[derive(Debug, Deserialize)]
 struct SearchQuery {
     q: String,
     /// `0` or `1`.
-    #[serde(default)]
-    hidden: u8,
+    #[serde(default, deserialize_with = "flag")]
+    hidden: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -86,8 +81,17 @@ struct UploadQuery {
     /// The folder to upload into (`~`, `~/…` or absolute); absent: `uploads_dir`.
     dir: Option<String>,
     /// `1`: the body is pasted text, named `pasted-<time>.txt`; `name` is ignored.
-    #[serde(default)]
-    text: u8,
+    #[serde(default, deserialize_with = "flag")]
+    text: bool,
+}
+
+/// A query flag: `0` or `1`; any other value is a rejected query.
+fn flag<'de, D: Deserializer<'de>>(deserializer: D) -> Result<bool, D::Error> {
+    match u8::deserialize(deserializer)? {
+        0 => Ok(false),
+        1 => Ok(true),
+        other => Err(de::Error::custom(format!("{other} is not 0 or 1"))),
+    }
 }
 
 /// A page of any directory, holding the scan slot.
@@ -95,29 +99,22 @@ async fn listing(
     State(ctx): State<Arc<Ctx>>,
     path: WirePath,
     query: Result<Query<ListQuery>, QueryRejection>,
-) -> Response {
-    let (Some(path), Ok(Query(query))) = (wire_path(path), query) else {
-        return respond("", Err(FsError::BadRequest));
-    };
-    if query.hidden > 1 {
-        return respond(&path, Err(FsError::BadRequest));
-    }
+) -> Result<Response, Refusal> {
+    let (path, Query(query)) = (wire_path(path)?, query?);
     let filter = Filter {
-        hidden: query.hidden == 1,
+        hidden: query.hidden,
     };
-    let listed = async {
-        let (asked, home) = (path.clone(), ctx.app.home.clone());
-        ctx.fs
-            .scan
-            .run(move || {
-                let dir = crate::fs::open(&asked, &home, Want::Dir)?;
-                list::list(&dir, filter, query.offset).map_err(FsError::io)
-            })
-            .await
-    }
-    .await;
+    let (asked, app) = (path.clone(), ctx.clone());
+    let listed = ctx
+        .fs
+        .scan
+        .run(move || {
+            let dir = crate::fs::open(&asked, &app.app.home, Want::Dir)?;
+            list::list(&dir, filter, query.offset).map_err(FsError::io)
+        })
+        .await;
     debug!(%path, offset = query.offset, ok = listed.is_ok(), "listed");
-    respond(&path, listed.map(|listing| Json(listing).into_response()))
+    Ok(Json(listed.map_err(refuse(&path))?).into_response())
 }
 
 /// The best matches below a folder, holding the search slot until the walk ends.
@@ -125,35 +122,29 @@ async fn searched(
     State(ctx): State<Arc<Ctx>>,
     path: WirePath,
     query: Result<Query<SearchQuery>, QueryRejection>,
-) -> Response {
-    let (Some(path), Ok(Query(query))) = (wire_path(path), query) else {
-        return respond("", Err(FsError::BadRequest));
-    };
-    let Some(pattern) = Pattern::parse(&query.q).filter(|_| query.hidden <= 1) else {
-        return respond(&path, Err(FsError::BadRequest));
-    };
+) -> Result<Response, Refusal> {
+    let (path, Query(query)) = (wire_path(path)?, query?);
+    let pattern = Pattern::parse(&query.q).ok_or_else(|| refuse(&path)(FsError::BadRequest))?;
     let filter = Filter {
-        hidden: query.hidden == 1,
+        hidden: query.hidden,
     };
     // Dropped with this future when the client aborts: the walk stops at its next check.
     let cancel = Cancel(Arc::new(AtomicBool::new(false)));
-    let found = async {
-        let (asked, home, cancel) = (path.clone(), ctx.app.home.clone(), cancel.0.clone());
-        let skip = search::skip(&ctx.app.config);
-        ctx.fs
-            .search
-            .run(move || {
-                let root = crate::fs::open(&asked, &home, Want::Dir)?;
-                search::search(&root, &pattern, filter, &skip, &search::CAPS, &cancel)
-                    .map_err(FsError::io)
-            })
-            .await
-    }
-    .await;
+    let (asked, app, stop) = (path.clone(), ctx.clone(), cancel.0.clone());
+    let skip = Skip::new(&ctx.app.config.keys().search_skip());
+    let found = ctx
+        .fs
+        .search
+        .run(move || {
+            let root = crate::fs::open(&asked, &app.app.home, Want::Dir)?;
+            search::search(&root, &pattern, filter, &skip, &search::CAPS, &stop)
+                .map_err(FsError::io)
+        })
+        .await;
     if let Ok(found) = &found {
         debug!(root = %found.path, read = found.read, stopped = ?found.stopped, "searched");
     }
-    respond(&path, found.map(|found| Json(found).into_response()))
+    Ok(Json(found.map_err(refuse(&path))?).into_response())
 }
 
 /// Sets its flag when dropped.
@@ -167,17 +158,19 @@ impl Drop for Cancel {
 
 /// A file's bytes, or one range of them, holding a raw-response slot until the body
 /// is sent or aborted.
-async fn raw(State(ctx): State<Arc<Ctx>>, path: WirePath, headers: HeaderMap) -> Response {
-    let Some(path) = wire_path(path) else {
-        return respond("", Err(FsError::BadRequest));
-    };
+async fn raw(
+    State(ctx): State<Arc<Ctx>>,
+    path: WirePath,
+    headers: HeaderMap,
+) -> Result<Response, Refusal> {
+    let path = wire_path(path)?;
     let sent = async {
         let slot = ctx.fs.raw.acquire().await?;
-        let (asked, home) = (path.clone(), ctx.app.home.clone());
+        let (asked, app) = (path.clone(), ctx.clone());
         let opened = ctx
             .fs
             .lane
-            .try_run(move || crate::fs::open(&asked, &home, Want::File))
+            .try_run(move || crate::fs::open(&asked, &app.app.home, Want::File))
             .await?;
         let size = opened.meta.len();
         let etag = Stamp::of(&opened.meta).etag();
@@ -200,8 +193,7 @@ async fn raw(State(ctx): State<Arc<Ctx>>, path: WirePath, headers: HeaderMap) ->
             .header(header::CONTENT_LENGTH, len)
             .header(header::ETAG, etag)
             .header(header::ACCEPT_RANGES, "bytes")
-            // The native player fetches without the scheme handler, which adds these too.
-            .header(header::X_CONTENT_TYPE_OPTIONS, "nosniff")
+            // The native player fetches without the scheme handler, which adds this too.
             .header(header::CONTENT_SECURITY_POLICY, "sandbox");
         if status == StatusCode::PARTIAL_CONTENT {
             let end = start + len - 1;
@@ -213,7 +205,7 @@ async fn raw(State(ctx): State<Arc<Ctx>>, path: WirePath, headers: HeaderMap) ->
             .map_err(|cause| FsError::Internal(std::io::Error::other(cause)))
     }
     .await;
-    respond(&path, sent)
+    sent.map_err(refuse(&path))
 }
 
 /// `201 { path, size }`: the body, as is, into `dir` (default `uploads_dir`) under a name the daemon
@@ -223,32 +215,32 @@ async fn upload(
     query: Result<Query<UploadQuery>, QueryRejection>,
     headers: HeaderMap,
     body: Body,
-) -> Response {
-    let Ok(Query(query)) = query else {
-        return respond("", Err(FsError::BadRequest));
-    };
+) -> Result<Response, Refusal> {
+    let Query(query) = query?;
+    let refuse = refuse(query.dir.as_deref().unwrap_or(""));
     let declared = headers
         .get(header::CONTENT_LENGTH)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.parse::<u64>().ok());
     if declared.is_some_and(|len| len > MAX_UPLOAD) {
-        return respond("", Err(FsError::TooLarge));
+        return Err(refuse(FsError::TooLarge));
     }
     let uploaded = async {
         let slot = ctx.fs.upload()?;
-        let (home, dest) = (ctx.app.home.clone(), query.dir.clone());
-        let uploads_dir = ctx.app.config.keys().uploads_dir().to_owned();
+        let (app, dest) = (ctx.clone(), query.dir.clone());
         let dir = ctx
             .fs
             .lane
-            .try_run(move || upload::open_dir(&uploads_dir, &home, dest.as_deref()))
+            .try_run(move || {
+                let uploads_dir = app.app.config.keys().uploads_dir().to_owned();
+                upload::open_dir(&uploads_dir, &app.app.home, dest.as_deref())
+            })
             .await?;
-        let naming = if query.text == 1 {
+        let naming = if query.text {
             Naming::PastedText
         } else {
             Naming::Upload(&query.name)
         };
-        let body = body.into_data_stream();
         upload::receive(
             &ctx.fs.lane,
             slot,
@@ -256,105 +248,85 @@ async fn upload(
             &ctx.app.upload_record,
             naming,
             MAX_UPLOAD,
-            body,
+            body.into_data_stream(),
         )
         .await
     }
-    .await;
-    match uploaded {
-        Ok(uploaded) => {
-            info!(path = %uploaded.path, size = uploaded.size, "uploaded a file");
-            (StatusCode::CREATED, Json(uploaded)).into_response()
-        }
-        Err(refused) => respond(query.dir.as_deref().unwrap_or(""), Err(refused)),
-    }
+    .await
+    .map_err(refuse)?;
+    info!(path = %uploaded.path, size = uploaded.size, "uploaded a file");
+    Ok((StatusCode::CREATED, Json(uploaded)).into_response())
 }
 
 /// `204`: an empty file or a new folder. It never replaces anything: a taken name is `exists`.
 async fn created(
     State(ctx): State<Arc<Ctx>>,
     body: Result<Json<CreateRequest>, JsonRejection>,
-) -> Response {
-    let Ok(Json(request)) = body else {
-        return respond("", Err(FsError::BadRequest));
-    };
+) -> Result<StatusCode, Refusal> {
+    let Json(request) = body?;
     let dir = request.dir.clone();
-    let home = ctx.app.home.clone();
-    let done = async {
-        ctx.fs
-            .lane
-            .try_run(move || entry::create(&request, &home))
-            .await
-    }
-    .await;
-    respond(&dir, done.map(|()| StatusCode::NO_CONTENT.into_response()))
+    let app = ctx.clone();
+    ctx.fs
+        .lane
+        .try_run(move || entry::create(&request, &app.app.home))
+        .await
+        .map_err(refuse(&dir))?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// `204`: renamed in its folder. It never replaces anything: a taken name is `exists`.
 async fn renamed(
     State(ctx): State<Arc<Ctx>>,
     body: Result<Json<RenameRequest>, JsonRejection>,
-) -> Response {
-    let Ok(Json(request)) = body else {
-        return respond("", Err(FsError::BadRequest));
-    };
+) -> Result<StatusCode, Refusal> {
+    let Json(request) = body?;
     let dir = request.dir.clone();
-    let (home, state) = (ctx.app.home.clone(), ctx.app.state_dir.clone());
-    let done = async {
-        ctx.fs
-            .lane
-            .try_run(move || entry::rename(&request, &home, &state))
-            .await
-    }
-    .await;
-    respond(&dir, done.map(|()| StatusCode::NO_CONTENT.into_response()))
+    let app = ctx.clone();
+    ctx.fs
+        .lane
+        .try_run(move || entry::rename(&request, &app.app.home, &app.app.state_dir))
+        .await
+        .map_err(refuse(&dir))?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// `204`: deleted for good, a folder with all it holds.
 async fn deleted(
     State(ctx): State<Arc<Ctx>>,
     body: Result<Json<DeleteRequest>, JsonRejection>,
-) -> Response {
-    let Ok(Json(request)) = body else {
-        return respond("", Err(FsError::BadRequest));
-    };
+) -> Result<StatusCode, Refusal> {
+    let Json(request) = body?;
     let dir = request.dir.clone();
-    let (home, state) = (ctx.app.home.clone(), ctx.app.state_dir.clone());
-    let done = async {
-        ctx.fs
-            .delete
-            .run(move || entry::delete(&request, &home, &state))
-            .await
-    }
-    .await;
-    respond(&dir, done.map(|()| StatusCode::NO_CONTENT.into_response()))
+    let app = ctx.clone();
+    ctx.fs
+        .delete
+        .run(move || entry::delete(&request, &app.app.home, &app.app.state_dir))
+        .await
+        .map_err(refuse(&dir))?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
-/// `{*path}` decoded, with its `/` (just `/` without one); `None` if it doesn't decode.
-fn wire_path(path: WirePath) -> Option<String> {
-    let path = path.ok()?.map_or_else(String::new, |Path(path)| path);
+/// `{*path}` decoded, with its `/` (just `/` without one); a rejection if it doesn't decode.
+fn wire_path(path: WirePath) -> Result<String, Refusal> {
+    let path = path?.map_or_else(String::new, |Path(path)| path);
     // `~` and `~/…` ride bare: `fs::open` expands them to the daemon user's home.
-    Some(if path.starts_with('~') {
+    Ok(if path.starts_with('~') {
         path
     } else {
         format!("/{path}")
     })
 }
 
-/// The response, or the refusal in the JSON error shape, logged by fs.md's rules.
-/// `asked` is the path the client sent, if any.
-fn respond(asked: &str, result: Result<Response, FsError>) -> Response {
-    let refused = match result {
-        Ok(response) => return response,
-        Err(refused) => refused,
-    };
-    let code = HttpError::from(&refused);
-    match &refused {
-        FsError::Denied => {
-            warn!(path = asked, %code, "refused a file request");
+/// The refusal in the JSON error shape, logged by fs.md's rules. `asked` is the path the
+/// client sent, if any.
+fn refuse(asked: &str) -> impl FnOnce(FsError) -> Refusal + '_ {
+    move |refused| {
+        let code = HttpError::from(&refused);
+        match &refused {
+            FsError::Denied => warn!(path = asked, %code, "refused a file request"),
+            FsError::Internal(cause) => error!(%cause, path = asked, "a file request failed"),
+            _ => debug!(path = asked, %code, "refused a file request"),
         }
-        FsError::Internal(cause) => error!(%cause, path = asked, "a file request failed"),
-        _ => debug!(path = asked, %code, "refused a file request"),
+        Refusal::from(refused)
     }
-    Refusal::from(refused).into_response()
 }

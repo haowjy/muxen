@@ -53,14 +53,11 @@ pub(super) async fn enroll(
     Extension(Login(login)): Extension<Login>,
     headers: axum::http::HeaderMap,
     body: Result<Json<EnrollRequest>, JsonRejection>,
-) -> Response {
+) -> Result<Response, Refusal> {
     if headers.contains_key(header::ORIGIN) || headers.contains_key("sec-fetch-site") {
-        return Refusal::from(HttpError::BadOrigin).into_response();
+        return Err(HttpError::BadOrigin.into());
     }
-    let Json(request) = match body {
-        Ok(body) => body,
-        Err(rejection) => return Refusal::from(rejection).into_response(),
-    };
+    let Json(request) = body?;
     let store = ctx.app.auth.store().clone();
     let by = login.clone();
     let enrolled = ctx
@@ -68,27 +65,27 @@ pub(super) async fn enroll(
         .lanes
         .auth
         .run(move || store.enroll(&request.code, &request.device_name, &by, SystemTime::now()))
-        .await;
+        .await
+        .map_err(|busy| {
+            warn!("no auth thread for an enrolment in time");
+            Refusal::from(busy)
+        })?;
     match enrolled {
-        Ok(Ok(added)) => {
+        Ok(added) => {
             info!(device = %added.name, by = %login, "enrolled a device");
-            let response = EnrollResponse {
+            Ok(Json(EnrollResponse {
                 token: added.token,
                 device_name: added.name,
-            };
-            Json(response).into_response()
+            })
+            .into_response())
         }
-        Ok(Err(EnrollError::BadCode)) => {
+        Err(EnrollError::BadCode) => {
             warn!(by = %login, "refused an enrolment code");
-            Refusal::from(HttpError::BadCode).into_response()
+            Err(HttpError::BadCode.into())
         }
-        Ok(Err(EnrollError::Store(cause))) => {
+        Err(EnrollError::Store(cause)) => {
             error!(%cause, "can't enrol a device");
-            Refusal::from(HttpError::Internal).into_response()
-        }
-        Err(_busy) => {
-            warn!("no auth thread for an enrolment in time");
-            Refusal::from(HttpError::Busy).into_response()
+            Err(HttpError::Internal.into())
         }
     }
 }

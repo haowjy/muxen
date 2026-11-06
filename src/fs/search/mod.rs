@@ -15,7 +15,6 @@ use rustix::fs::{AtFlags, Dir, FileType, Mode, OFlags};
 
 use super::list::{self, Filter};
 use super::{Beneath, MAX_PATH, Opened};
-use crate::config::LiveConfig;
 use crate::proto::fs::{EntryKind, Match, Search, Stopped};
 
 mod matcher;
@@ -47,11 +46,6 @@ pub const CAPS: Caps = Caps {
     time: Duration::from_millis(500),
     queue: 1 << 20,
 };
-
-/// The running config's `search_skip`.
-pub fn skip(config: &LiveConfig) -> Skip {
-    Skip::new(&config.keys().search_skip())
-}
 
 /// The matches below `root` for `pattern`, best first. Only an error on the root itself
 /// fails; a directory below it that can't be opened or read is skipped. A directory `skip`
