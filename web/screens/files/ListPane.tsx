@@ -197,8 +197,8 @@ export function ListPane({ session, tab, view, pages, tree, up, search, onOpen }
         session={session}
         {...rowMenu}
         onCreate={ask}
-        onRename={() => { if (rowMenu.row.place && rowMenu.row.entry) ask(parentOf(rowMenu.row.place.path), rowMenu.row.entry.kind === "dir" ? "dir" : "file", rowMenu.row.entry.name); }}
-        onDelete={() => { if (rowMenu.row.place && rowMenu.row.entry) setDeleting({ path: rowMenu.row.place.path, entry: rowMenu.row.entry }); }}
+        onRename={() => { if (rowMenu.row.entry) ask(parentOf(rowMenu.row.key), rowMenu.row.entry.kind === "dir" ? "dir" : "file", rowMenu.row.entry.name); }}
+        onDelete={() => { if (rowMenu.row.entry) setDeleting({ path: rowMenu.row.key, entry: rowMenu.row.entry }); }}
         onClose={() => { setRowMenu(null); }}
       />}
       {deleting && <DeleteEntry session={session} {...deleting} onClose={(hadFocus) => { setDeleting(null); if (hadFocus) listTakesKeys(); }} />}

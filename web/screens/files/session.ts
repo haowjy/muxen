@@ -150,7 +150,8 @@ export function filesSession(app: AppController, host: KnownHost): FilesSession 
       try {
         await browser.api.rename(dir, baseName(path), to);
       } catch (refused) {
-        if (refused instanceof HttpRefusal && refused.code === "exists") void browser.folders.drop(dir);
+        // Taken, or gone from under its row: what is really there shows once the folder is listed again.
+        void browser.folders.drop(dir);
         throw refused;
       }
       app.notify(`Renamed to ${to}`);
@@ -164,6 +165,7 @@ export function filesSession(app: AppController, host: KnownHost): FilesSession 
       } catch (refused) {
         // Already gone is done: this delete's own lost answer, or the terminal's.
         if (!(refused instanceof HttpRefusal) || refused.code !== "not_found") {
+          void browser.folders.dropBelow(path);
           void browser.folders.drop(dir);
           throw refused;
         }

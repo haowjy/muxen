@@ -2,7 +2,7 @@ import { HttpRefusal } from "../net/http";
 import { Store } from "../ui/store";
 import type { FsApi, Listing } from "./api";
 import { fold } from "./outline";
-import { within } from "./paths";
+import { baseName, parentOf, within } from "./paths";
 
 /** Typing pauses this long before a folder is asked for. */
 export const SETTLE_MS = 250;
@@ -119,8 +119,8 @@ export class Folders extends Store<FoldersView> {
     const key = folderKey(path, hidden);
     this.put(path, hidden, { loading: true, error: null });
     const done = this.first(path, hidden, behind).then(
-      () => { this.put(path, hidden, { loading: false }); },
-      (error: unknown) => { this.put(path, hidden, { loading: false, error: error instanceof HttpRefusal ? error : new HttpRefusal(0, "internal") }); },
+      () => { if (this.inflight.get(key) === done) this.put(path, hidden, { loading: false }); },
+      (error: unknown) => { if (this.inflight.get(key) === done) this.put(path, hidden, { loading: false, error: error instanceof HttpRefusal ? error : new HttpRefusal(0, "internal") }); },
     ).finally(() => { if (this.inflight.get(key) === done) this.inflight.delete(key); });
     this.inflight.set(key, done);
     return done;
@@ -198,19 +198,42 @@ export class Folders extends Store<FoldersView> {
     const shown: { folder: string; hidden: boolean }[] = [];
     for (const folder of [path, ...(this.links.get(path) ?? [])]) {
       for (const hidden of [false, true]) {
-        if (this.pinned(folderKey(folder, hidden))) shown.push({ folder, hidden });
-        else held.delete(folderKey(folder, hidden));
+        const key = folderKey(folder, hidden);
+        if (this.pinned(key)) {
+          shown.push({ folder, hidden });
+          continue;
+        }
+        held.delete(key);
+        // An answer under way is from before the change: it must not bring the record back.
+        this.latest.delete(key);
+        this.inflight.delete(key);
       }
     }
     this.update({ held });
     await Promise.all(shown.map(({ folder, hidden }) => this.relist(folder, hidden)));
   }
 
-  /** `path` is no more: its pages go, and those of every folder under it. */
+  /** `path` and what is under it changed: every folder held there goes, as `drop` does. */
+  async dropBelow(path: string): Promise<void> {
+    const folders = new Set([path, ...[...this.snapshot.held.keys()].map((key) => key.slice(1)).filter((folder) => within(folder, path))]);
+    await Promise.all([...folders].map((folder) => this.drop(folder)));
+  }
+
+  /** `path` is no more: its row leaves the pages at once, so nothing goes on showing it, and nothing under it stays held. */
   forget(path: string): void {
     const held = new Map(this.snapshot.held);
-    for (const key of held.keys()) if (within(key.slice(1), path)) held.delete(key);
+    const dir = parentOf(path);
+    for (const folder of [dir, ...(this.links.get(dir) ?? [])]) {
+      for (const hidden of [false, true]) {
+        const record = held.get(folderKey(folder, hidden));
+        if (!record?.listing) continue;
+        const entries = record.listing.entries.filter((entry) => entry.name !== baseName(path));
+        const total = record.listing.total - (record.listing.entries.length - entries.length);
+        held.set(folderKey(folder, hidden), { ...record, listing: { ...record.listing, entries, total } });
+      }
+    }
     this.update({ held });
+    void this.dropBelow(path);
   }
 
   /** Runs `ask` once fewer than `LISTINGS_AT_ONCE` pages are under way; a finished one hands its turn on. */

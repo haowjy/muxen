@@ -30,34 +30,34 @@ export function RowMenu({ session, row, at, list, onCreate, onRename, onDelete, 
   const workspace = useAppView((v) => routeWorkspace(v.workspace));
   const { place, entry } = row;
   const { choices, insert } = useInsert(place?.path ?? "", null);
-  if (!place || !entry) return null;
-  const dir = place.kind === "dir";
-  // Home, and the folders it lies in: muxen's own state is in there, and no mis-tap should reach it.
+  if (!entry) return null;
+  const dir = place?.kind === "dir";
+  // Home, and the folders it lies in: the daemon refuses these too, by what they are, and this spares the question.
   const { home } = session.browser.snapshot;
-  const holdsHome = home !== null && within(home, place.path);
+  const holdsHome = home === null || within(home, row.key);
   const sections: MenuSection[] = [
-    {
+    ...(place ? [{
       items: [
-        { label: dir ? "Go into folder" : "Open", icon: dir ? "folder" : "open", ...(!phone && { hint: "↵" }), onSelect: () => { app.openPlace(place); } },
+        { label: dir ? "Go into folder" : "Open", icon: dir ? ("folder" as const) : ("open" as const), ...(!phone && { hint: "↵" }), onSelect: () => { app.openPlace(place); } },
         ...(workspace ? [{ label: "Open in new tab", icon: "newTab" as const, onSelect: () => { app.openFiles(workspace.id, place); } }] : []),
       ],
-    },
+    }] : []),
     ...(dir ? [{ items: [
-      { label: "New file here", icon: "newFile" as const, onSelect: () => { onCreate(place.path, "file"); } },
-      { label: "New folder here", icon: "newFolder" as const, onSelect: () => { onCreate(place.path, "dir"); } },
+      { label: "New file here", icon: "newFile" as const, onSelect: () => { onCreate(row.key, "file"); } },
+      { label: "New folder here", icon: "newFolder" as const, onSelect: () => { onCreate(row.key, "dir"); } },
     ] }] : []),
     {
       items: [
-        { label: "Copy path", icon: "copy", onSelect: () => { void copyPath(app, place.path, session.browser.snapshot.home); } },
-        ...(!dir ? [{
+        { label: "Copy path", icon: "copy", onSelect: () => { void copyPath(app, row.key, session.browser.snapshot.home); } },
+        ...(place && !dir ? [{
           label: "Download",
           icon: "download" as const,
           ...(entry.size !== undefined && { hint: formatSize(entry.size) }),
-          onSelect: () => { void download(app, session.browser.api.rawUrl(place.path), entry.name); },
+          onSelect: () => { void download(app, session.browser.api.rawUrl(row.key), entry.name); },
         }] : []),
       ],
     },
-    insertSection(choices, insert, null),
+    ...(place ? [insertSection(choices, insert, null)] : []),
     ...(!holdsHome ? [{ items: [
       { label: "Rename", icon: "rename" as const, onSelect: onRename },
       { label: "Delete", icon: "trash" as const, danger: true, onSelect: onDelete },

@@ -5,6 +5,7 @@
 
 use std::fs::{File, Metadata};
 use std::io;
+use std::os::fd::{AsFd, OwnedFd};
 use std::path::{Path, PathBuf};
 
 use rustix::fs::{Mode, OFlags};
@@ -141,6 +142,61 @@ pub fn check_shape(path: &str) -> Result<(), &'static str> {
     } else {
         Ok(())
     }
+}
+
+/// Opens folders below a starting one, by a path relative to any folder under it: never through a
+/// link, and never onto another mount, a bind mount of the same filesystem included where `openat2`
+/// exists. Without it (Linux before 5.6, macOS) a device check stands in, which a same-filesystem
+/// bind mount passes.
+pub struct Beneath {
+    dev: u64,
+    /// `openat2` exists (Linux 5.6 on).
+    #[cfg(target_os = "linux")]
+    openat2: std::cell::Cell<bool>,
+}
+
+impl Beneath {
+    pub fn new(root: impl AsFd) -> io::Result<Self> {
+        Ok(Self {
+            dev: device(root)?,
+            #[cfg(target_os = "linux")]
+            openat2: std::cell::Cell::new(true),
+        })
+    }
+
+    pub fn open(
+        &self,
+        from: impl AsFd,
+        relative: impl rustix::path::Arg + Copy,
+    ) -> rustix::io::Result<OwnedFd> {
+        let flags = OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC;
+        #[cfg(target_os = "linux")]
+        if self.openat2.get() {
+            use rustix::fs::ResolveFlags;
+            let resolve = ResolveFlags::BENEATH | ResolveFlags::NO_SYMLINKS | ResolveFlags::NO_XDEV;
+            match rustix::fs::openat2(&from, relative, flags, Mode::empty(), resolve) {
+                Err(Errno::NOSYS) => self.openat2.set(false),
+                opened => return opened,
+            }
+        }
+        // `O_NOFOLLOW_ANY` refuses a link in any component; the `O_NOFOLLOW` fallback only
+        // in the last, which the callers never pass through.
+        #[cfg(target_vendor = "apple")]
+        let flags = flags | OFlags::NOFOLLOW_ANY;
+        #[cfg(not(target_vendor = "apple"))]
+        let flags = flags | OFlags::NOFOLLOW;
+        let fd = rustix::fs::openat(&from, relative, flags, Mode::empty())?;
+        if device(&fd)? != self.dev {
+            return Err(Errno::XDEV);
+        }
+        Ok(fd)
+    }
+}
+
+/// `stat`'s `st_dev`, whose type differs by platform.
+#[allow(clippy::unnecessary_cast, clippy::useless_conversion)]
+fn device(fd: impl AsFd) -> rustix::io::Result<u64> {
+    Ok(rustix::fs::fstat(fd)?.st_dev as u64)
 }
 
 #[cfg(test)]

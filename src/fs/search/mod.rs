@@ -12,10 +12,9 @@ use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::time::{Duration, Instant};
 
 use rustix::fs::{AtFlags, Dir, FileType, Mode, OFlags};
-use rustix::io::Errno;
 
 use super::list::{self, Filter};
-use super::{MAX_PATH, Opened};
+use super::{Beneath, MAX_PATH, Opened};
 use crate::config::LiveConfig;
 use crate::proto::fs::{EntryKind, Match, Search, Stopped};
 
@@ -176,46 +175,21 @@ pub fn search(
 /// leaving the root's filesystem.
 struct Below<'a> {
     root: &'a Opened,
-    dev: u64,
-    /// `openat2` exists (Linux 5.6 on).
-    #[cfg(target_os = "linux")]
-    openat2: std::cell::Cell<bool>,
+    beneath: Beneath,
 }
 
 impl<'a> Below<'a> {
     fn new(root: &'a Opened) -> io::Result<Self> {
         Ok(Self {
             root,
-            dev: device(&root.file)?,
-            #[cfg(target_os = "linux")]
-            openat2: std::cell::Cell::new(true),
+            beneath: Beneath::new(&root.file)?,
         })
     }
 
     /// `relative` is "" for the root itself.
     fn open(&self, relative: &str) -> io::Result<OwnedFd> {
         let relative = if relative.is_empty() { "." } else { relative };
-        let flags = OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC;
-        #[cfg(target_os = "linux")]
-        if self.openat2.get() {
-            use rustix::fs::ResolveFlags;
-            let resolve = ResolveFlags::BENEATH | ResolveFlags::NO_SYMLINKS | ResolveFlags::NO_XDEV;
-            match rustix::fs::openat2(&self.root.file, relative, flags, Mode::empty(), resolve) {
-                Err(Errno::NOSYS) => self.openat2.set(false),
-                opened => return Ok(opened?),
-            }
-        }
-        // `O_NOFOLLOW_ANY` refuses a link in any component; the `O_NOFOLLOW` fallback only
-        // in the last, which the walk never queues.
-        #[cfg(target_vendor = "apple")]
-        let flags = flags | OFlags::NOFOLLOW_ANY;
-        #[cfg(not(target_vendor = "apple"))]
-        let flags = flags | OFlags::NOFOLLOW;
-        let fd = rustix::fs::openat(&self.root.file, relative, flags, Mode::empty())?;
-        if device(&fd)? != self.dev {
-            return Err(Errno::XDEV.into());
-        }
-        Ok(fd)
+        Ok(self.beneath.open(&self.root.file, relative)?)
     }
 }
 
@@ -237,12 +211,6 @@ fn cache_tagged(dir: impl AsFd) -> bool {
         .take(CACHE_SIGNATURE.len() as u64)
         .read_to_end(&mut head);
     read.is_ok() && head == CACHE_SIGNATURE
-}
-
-/// `stat`'s `st_dev`, whose type differs by platform.
-#[allow(clippy::unnecessary_cast, clippy::useless_conversion)]
-fn device(fd: impl std::os::fd::AsFd) -> io::Result<u64> {
-    Ok(rustix::fs::fstat(fd)?.st_dev as u64)
 }
 
 /// The directories still to read, breadth first: one ring of bytes, each relative path

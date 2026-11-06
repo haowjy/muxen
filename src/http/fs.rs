@@ -302,29 +302,25 @@ async fn renamed(
     let Ok(Json(request)) = body else {
         return respond("", Err(FsError::BadRequest));
     };
-    let (dir, name, to) = (
-        request.dir.clone(),
-        request.name.clone(),
-        request.to.clone(),
-    );
+    let dir = request.dir.clone();
     let home = ctx.app.home.clone();
     let done = async {
         ctx.fs
             .lane
-            .run(move || entry::rename(&request, &home))
+            .run(move || {
+                entry::rename(&request, &home)?;
+                let RenameRequest { dir, name, to } = request;
+                info!(dir, name, to, "renamed");
+                Ok(())
+            })
             .await?
     }
     .await;
-    respond(
-        &dir,
-        done.map(|()| {
-            info!(dir, name, to, "renamed");
-            StatusCode::NO_CONTENT.into_response()
-        }),
-    )
+    respond(&dir, done.map(|()| StatusCode::NO_CONTENT.into_response()))
 }
 
-/// `204`: deleted for good, a folder with all it holds.
+/// `204`: deleted for good, a folder with all it holds. Logged in the work: a big delete outlives a
+/// request that goes away.
 async fn deleted(
     State(ctx): State<Arc<Ctx>>,
     body: Result<Json<DeleteRequest>, JsonRejection>,
@@ -332,21 +328,20 @@ async fn deleted(
     let Ok(Json(request)) = body else {
         return respond("", Err(FsError::BadRequest));
     };
-    let (dir, name) = (request.dir.clone(), request.name.clone());
+    let dir = request.dir.clone();
     let home = ctx.app.home.clone();
     let done = async {
         ctx.fs
-            .delete(move || entry::delete(&request, &home))
+            .delete(move || {
+                entry::delete(&request, &home)?;
+                let DeleteRequest { dir, name } = request;
+                info!(dir, name, "deleted");
+                Ok(())
+            })
             .await?
     }
     .await;
-    respond(
-        &dir,
-        done.map(|()| {
-            info!(dir, name, "deleted");
-            StatusCode::NO_CONTENT.into_response()
-        }),
-    )
+    respond(&dir, done.map(|()| StatusCode::NO_CONTENT.into_response()))
 }
 
 /// `{*path}` decoded, with its `/` (just `/` without one); `None` if it doesn't decode.

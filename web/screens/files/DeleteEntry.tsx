@@ -17,7 +17,7 @@ interface Props {
   onClose: (hadFocus: boolean) => void;
 }
 
-/** Asks before a delete, which has no undo. The request is the session's: a dialog closed meanwhile only stops listening. */
+/** Asks before a delete, which has no undo. Once it runs it can't be stopped, so Cancel becomes Hide: the request is the session's. */
 export function DeleteEntry({ session, path, entry, onClose }: Props) {
   const app = useApp();
   const [busy, setBusy] = useState(false);
@@ -50,7 +50,7 @@ export function DeleteEntry({ session, path, entry, onClose }: Props) {
         <p>{entry.link ? "Only the link goes, not what it points to." : folder ? "Everything in this folder goes with it. This can't be undone." : "This can't be undone."}</p>
         {error && <p class={styles.error} role="alert">{error}</p>}
         <div class={styles.actions}>
-          <Button variant="quiet" onClick={close}>Cancel</Button>
+          <Button variant="quiet" onClick={close}>{busy ? "Hide" : "Cancel"}</Button>
           <Button variant="danger" busy={busy} onClick={() => { void confirm(); }}>{busy ? "Deleting…" : "Delete"}</Button>
         </div>
       </div>

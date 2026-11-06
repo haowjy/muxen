@@ -240,7 +240,8 @@ function FolderListbox({ rows, selected, fresh, naming, tree, onSelect, onOpen, 
   const menuRow = (el: Element | null): OutlineRow | null => {
     const id = el?.closest("[role=option], [role=treeitem]")?.id;
     const row = id === undefined ? undefined : rows.find((r) => box.optionId(r.key) === id);
-    return row && row.kind !== "up" && row.place ? row : null;
+    // A broken link has nowhere to open, and still a name to rename or delete. A name that isn't UTF-8 has none the client can send.
+    return row?.entry && row.entry.utf8 !== false ? row : null;
   };
   /** A pointer or a key selects the row the menu is for; a held touch leaves the phone's list unselected, as a tap does. */
   const ask = (row: OutlineRow, at: RowMenuAsk["at"], list: HTMLElement, select = true): void => {

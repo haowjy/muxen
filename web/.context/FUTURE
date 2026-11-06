@@ -20,3 +20,10 @@ A paste into a big folder pages down to its row: one relist plus each page befor
 The phone's fresh mark can vanish at once: `FileBrowser.more` goes through `run` and `go`, which clear `fresh`, so an end-of-list relist followed by the next page drops it (seen in the harness's small pages). `more` isn't a navigation: it shouldn't clear `fresh` or bump `seq`.
 
 Creating through a symlinked folder on the phone: `added` drops the link's path and `Folders.drop` only follows links from a target to its links, so the target's own record stays stale until it is next listed.
+
+Files rename and delete, left small:
+- A delete chases a process filling the folder: it ends when the writer stops, holding one fs thread. `rm -r` stops with ENOTEMPTY. Cap the passes per folder if it ever shows.
+- A rename leaves `session.expanded` and `selections` on the old paths, so open subfolders of a renamed folder close.
+- `Folders.drop` by a path under a link misses the record held by the canonical path until a refresh.
+- A rename form stays asked for when its row goes under it, and comes back if that name reappears.
+- The phone's proxy keeps URLSession's 60 s timeout: a longer delete shows "can't reach" while it finishes.

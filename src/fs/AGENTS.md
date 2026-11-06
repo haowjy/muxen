@@ -24,7 +24,8 @@ Rules the code relies on, which are easy to break:
   (`tokio::fs::File`'s buffer grows to 2 MiB). Take an fs thread last and release it
   before waiting for any other slot.
 - Search opens each directory below its root only through `search::Below`, relative to the
-  root's descriptor: `openat2` with `RESOLVE_BENEATH | NO_SYMLINKS | NO_XDEV` on Linux,
+  root's descriptor, and a delete each folder below the one named: both go through `open::Beneath`,
+  `openat2` with `RESOLVE_BENEATH | NO_SYMLINKS | NO_XDEV` on Linux,
   `O_NOFOLLOW_ANY` and a device check on macOS. One directory is open at a time (two
   descriptors with the root's, three during its `CACHEDIR.TAG` probe), and the walk runs
   under `Slots::search`, so an aborted search can't overlap the next.
