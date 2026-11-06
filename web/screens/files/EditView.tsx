@@ -17,7 +17,7 @@ import styles from "./EditView.module.css";
 const SAVE_WORDS: Partial<Record<string, string>> = {
   too_large: "Over the 1 MiB save limit.",
   denied: "Can't save: this file is read-only, another user's, or hard-linked.",
-  not_found: "This file is gone.",
+  not_found: "This file no longer exists.",
 };
 
 interface Props {

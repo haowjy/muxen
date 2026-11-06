@@ -17,13 +17,13 @@ export function DeleteEntry({ session, path, entry, onClose }: Props) {
   const title = `Delete ${entry.name}?`;
   const folder = entry.kind === "dir" && !entry.link;
   const close = (): void => { onClose(true); };
-  const { busy, error, run } = useRequest((refused) => `${describeError(refused, session.hostName)}${folder ? " Some of it may be gone." : ""}`);
+  const { busy, error, run } = useRequest((refused) => `${describeError(refused, session.hostName)}${folder ? " Some of it may already be deleted." : ""}`);
   const confirm = async (): Promise<void> => {
     if (await run(() => session.remove(path), `Couldn't delete ${entry.name}`)) close();
   };
   return (
     <ConfirmDialog title={title} confirm="Delete" confirming="Deleting…" cancel={busy ? "Hide" : "Cancel"} error={error} busy={busy} onConfirm={() => { void confirm(); }} onClose={close}>
-      {entry.link ? "Only the link goes, not what it points to." : folder ? "Everything in this folder goes with it." : null}
+      {entry.link ? "Only the link is deleted, not what it points to." : folder ? "Everything in this folder is deleted as well." : null}
     </ConfirmDialog>
   );
 }
