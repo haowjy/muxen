@@ -18,6 +18,7 @@ const WORDS: Record<HttpError, string> = {
   exists: "That name is already taken.",
   memory_backed: "That folder is on memory-backed storage.",
   config_read_only: "config.toml can't be written on the server: a broken link or a read-only file.",
+  changed: "This file changed since it was opened.",
   too_large: "That file is over the 128 MiB limit.",
   bad_range: "The server couldn't read that part of the file.",
   busy: "The server is busy. Try again in a moment.",

@@ -5580,6 +5580,24 @@ the check starts at the third timeout rather than the second, the limit is 15 s 
 - **Rejected:** every host's banner on every screen; the folder body carrying its own "Can't reach"
   and Retry beside the banner.
 
+### The editor's edit lives on the Files session; the save buffer comes from upload's
+
+- **Decided:** 2026-11-06, design lead, with Jimmy's calls on Edit in the ⋯ menu, the phone keeping
+  the key row, and unsaved text surviving a relaunch.
+- **What:** `Edits`, one store per host's `FilesSession`, holds each open edit (ETag, line ending,
+  CodeMirror state). `FileView` renders the editor whenever its file has an edit, so a tab switch, Back
+  and a relaunch need no route of their own. The latest changed edit per host goes to view memory only
+  from `persist.onFlush`. The upload flush interval drops from 2 MiB to 1 MiB so the save's 1 MiB
+  buffer leaves the memory ceiling where it was. A file that would not survive byte for byte (mixed
+  endings, a BOM, invalid UTF-8, read in part) offers no Edit.
+- **Why:** the keyboard belongs to whichever text box has it, so the focus controller needs a target,
+  not a new owner. Writing up to a MiB per keystroke would cost more than the rare loss it prevents.
+  The ceiling rule is that each tier fits its lowest budget, and an upload flushing twice as often
+  costs less than moving a tier.
+- **Rejected:** a focus `Owner` for the editor; a persisted draft per file (one per host covers a kill
+  and stays bounded); a dialog for a conflict (it would drop the keyboard); normalizing line endings
+  on save; moving a memory tier boundary; reusing an upload's part file for the save.
+
 ### Every view reads one derived server state
 
 - **Decided:** 2026-11-06, tech lead.

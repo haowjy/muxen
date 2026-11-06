@@ -744,11 +744,20 @@ files when empty): the daemon walks per settled query under hard caps and sends 
 video goes to the native player instead. MVP: list, search, raw (Range), upload (into `uploads_dir`, or a folder the request names) and create. v2: save
 an edit, rename.
 
-**Editing (v2).** With no file watcher, the conflict check is the ETag taken at open:
-a save whose `If-Match` no longer matches is refused, and the editor offers reload or
-overwrite. A create and a rename never replace a file. Only UTF-8 text under a size cap
-opens in the editor (CodeMirror 6, loaded on demand). It borrows the keyboard from the
-terminal input while open ([ios-shell.md](ios-shell.md#focus-one-controller-native)).
+**Editing.** Edit, in a text file's ⋯ menu, opens CodeMirror 6, loaded on demand, in place
+of the viewer: Cancel (Done once nothing is unsaved), the name, Save. On a phone it wraps,
+and the terminal's text keys (arrows, Tab, symbols) ride above the keyboard, with no Esc,
+modifiers or chords. Only a whole, valid UTF-8 file under 1 MiB with no BOM and one line
+ending offers Edit, because a save must keep every byte the user didn't touch; a CRLF file
+stays CRLF. With no file watcher, the conflict check is the ETag taken at open: a save
+whose `If-Match` no longer matches is refused, and a line under the header offers reload
+or overwrite, so the keyboard stays. A failed save keeps the text. A create and a rename
+never replace a file.
+
+An edit outlives its view: its undo stays through a tab switch or Back, and the latest
+unsaved one on each server is written to view memory as the page goes away, so the file
+reopens into the editor after a relaunch. Clear local data drops it. A file opened in the
+desktop's Preview panel stays a viewer, and Edit opens it full width.
 
 **Photo → terminal (MVP),** native ([ios-shell.md](ios-shell.md#files-and-sharing)):
 pick, take or paste a photo (`^V img`, or the file manager's upload button); HEIC is

@@ -5,6 +5,7 @@ version section on release.
 
 ## [Unreleased]
 
+- Files can edit text files: Edit is in a file's ⋯ menu. A save never replaces a change made elsewhere without asking, and unsaved text comes back after the app is closed.
 - A file that can't be shown offers Try again whatever the reason, like a folder that can't be.
 - A running upload in Files has a × that cancels it. The server deletes what it received.
 - Return that confirms an input method candidate (Chinese, Japanese) no longer opens the path or closes Search.

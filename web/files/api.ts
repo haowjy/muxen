@@ -35,6 +35,10 @@ export interface TextPreview {
   /** The whole file's size, when the response says. */
   size: number | null;
   truncated: boolean;
+  /** Of the file read; a save names it, so it can't replace a change made elsewhere. */
+  etag: string | null;
+  /** The file's one line ending, which a save keeps; null when an edit couldn't keep the file as it is (part of it read, not UTF-8, a BOM, mixed endings). */
+  ending: "\n" | "\r\n" | null;
 }
 
 /** What a one-byte read says about a path: its type and size, or that it is a directory. */
@@ -48,6 +52,8 @@ export interface FsApi {
   search(path: string, q: string, hidden: boolean, signal: AbortSignal): Promise<Search>;
   /** The URL an `<img>` loads a file from. */
   rawUrl(path: string): string;
+  /** The file's new text, if it is still `etag` (`*`: whatever it is), and its new ETag; `changed` if it moved (fs.md "PUT /fs/file"). */
+  save(path: string, text: string, etag: string): Promise<string>;
   /** An empty file or a new folder; `exists` if the name is taken (fs.md "POST /fs/create"). */
   create(dir: string, name: string, kind: CreateKind): Promise<void>;
   /** A new name in the same folder; `exists` if it is taken (fs.md "POST /fs/rename"). */
@@ -77,6 +83,20 @@ export function rawPathOf(urlPath: string): string | null {
 function totalOf(contentRange: string | null): number | null {
   const m = contentRange ? /\/(\d+)\s*$/.exec(contentRange) : null;
   return m?.[1] ? Number(m[1]) : null;
+}
+
+/** A file's bytes as text, and the one line ending that lets an editor keep every other byte as it is, if it has one. */
+function decodeText(bytes: Uint8Array): { text: string; ending: TextPreview["ending"] } {
+  let text: string;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+  } catch {
+    return { text: new TextDecoder().decode(bytes), ending: null };
+  }
+  if (text.startsWith("\uFEFF")) return { text: text.slice(1), ending: null };
+  const crlf = text.includes("\r\n");
+  if (/\r(?!\n)/.test(text) || (crlf && /(?<!\r)\n/.test(text))) return { text, ending: null };
+  return { text, ending: crlf ? "\r\n" : "\n" };
 }
 
 /**
@@ -112,22 +132,27 @@ export function httpFsApi(origin: string, fetchFn?: typeof fetch): FsApi {
       try {
         res = await send(url("raw", path), { headers: { Range: `bytes=0-${String(limit - 1)}` }, ...(signal && { signal }) }, fetchFn);
       } catch (error) {
-        if (error instanceof HttpRefusal && error.code === "bad_range") return { text: "", size: 0, truncated: false };
-        throw error;
+        // An empty file has no range to read, and its 416 no ETag.
+        if (!(error instanceof HttpRefusal && error.code === "bad_range")) throw error;
+        res = await send(url("raw", path), { ...(signal && { signal }) }, fetchFn);
       }
       const bytes = new Uint8Array(await readBody(res, signal, (r) => r.arrayBuffer()));
       const size = res.status === 206 ? totalOf(res.headers.get("Content-Range")) : bytes.length;
-      return {
-        text: new TextDecoder().decode(bytes),
-        size,
-        // Without Content-Range (a cross-origin header native may not expose), a full window means more may follow.
-        truncated: size !== null ? size > bytes.length : bytes.length >= limit,
-      };
+      // Without Content-Range (a cross-origin header native may not expose), a full window means more may follow.
+      const truncated = size !== null ? size > bytes.length : bytes.length >= limit;
+      const { text, ending } = decodeText(bytes);
+      const etag = res.headers.get("ETag");
+      return { text, size, truncated, etag, ending: truncated || etag === null ? null : ending };
     },
 
     search: (path, q, hidden, signal) => json<Search>(url("search", path, `?q=${encodeURIComponent(q)}&hidden=${hidden ? "1" : "0"}`), { signal }),
 
     rawUrl: (path) => url("raw", path),
+
+    save: async (path, text, etag) => {
+      const res = await send(url("file", path), { method: "PUT", headers: { "If-Match": etag, "Content-Type": "text/plain; charset=utf-8" }, body: text }, fetchFn);
+      return res.headers.get("ETag") ?? etag;
+    },
 
     create: async (dir, name, kind) => {
       const request: CreateRequest = { dir, name, kind };

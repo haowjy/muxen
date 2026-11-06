@@ -1,0 +1,5 @@
+/* A phone's text box stays at the size Safari won't zoom into. */
+.box { --editor-text: var(--text-small); }
+:root[data-layout="phone"] .box { --editor-text: var(--text-field); }
+.box { display: flex; flex: 1; flex-direction: column; min-height: 0; min-width: 0; }
+.loading { display: flex; justify-content: center; padding: var(--space-8) 0; color: var(--color-text-muted); }

@@ -11,6 +11,14 @@ export interface OpenedFile {
   at: number;
 }
 
+/** What of an edit outlives the page. */
+export interface UnsavedEdit {
+  path: string;
+  etag: string;
+  ending: "\n" | "\r\n";
+  text: string;
+}
+
 /** Every remembered setting and its type. */
 export interface ViewState {
   /** Files shows hidden files. */
@@ -21,15 +29,22 @@ export interface ViewState {
   listWidth: number | null;
   /** The files opened in Files, by host id, the most recent first. */
   opened: Readonly<Record<string, readonly OpenedFile[]>>;
+  /** The latest unsaved edit of each host, by host id, written as the page goes away. */
+  unsaved: Readonly<Record<string, UnsavedEdit>>;
   /** When a stuck socket last reloaded the page (ms since the epoch; 0: never), so a slow link can't loop reloads. */
   stuckReload: number;
 }
 
-const DEFAULTS: ViewState = { showHidden: false, preview: true, listWidth: null, opened: {}, stuckReload: 0 };
+const DEFAULTS: ViewState = { showHidden: false, preview: true, listWidth: null, opened: {}, unsaved: {}, stuckReload: 0 };
 
 const isOpened = (v: unknown): v is OpenedFile => {
   const o = v as Partial<Record<keyof OpenedFile, unknown>> | null;
   return typeof o === "object" && o !== null && typeof o.path === "string" && o.path.startsWith("/") && (o.mime === null || typeof o.mime === "string") && typeof o.at === "number";
+};
+
+const isUnsaved = (v: unknown): v is UnsavedEdit => {
+  const o = v as Partial<Record<keyof UnsavedEdit, unknown>> | null;
+  return typeof o === "object" && o !== null && typeof o.path === "string" && typeof o.etag === "string" && typeof o.text === "string" && (o.ending === "\n" || o.ending === "\r\n");
 };
 
 /** One reader per setting, since what is stored is text another build may have written. */
@@ -38,6 +53,9 @@ const READ: { [K in keyof ViewState]: (stored: unknown) => ViewState[K] | undefi
   preview: (stored) => (typeof stored === "boolean" ? stored : undefined),
   listWidth: (stored) => (typeof stored === "number" && Number.isFinite(stored) && stored > 0 ? stored : undefined),
   stuckReload: (stored) => (typeof stored === "number" && Number.isFinite(stored) && stored > 0 ? stored : undefined),
+  unsaved: (stored) => (typeof stored === "object" && stored !== null && !Array.isArray(stored)
+    ? Object.fromEntries(Object.entries(stored).filter((e): e is [string, UnsavedEdit] => isUnsaved(e[1])))
+    : undefined),
   // A host's list that doesn't parse is dropped, not the others'.
   opened: (stored) => (typeof stored === "object" && stored !== null && !Array.isArray(stored)
     ? Object.fromEntries(Object.entries(stored).filter((e): e is [string, OpenedFile[]] => Array.isArray(e[1]) && e[1].every(isOpened)))

@@ -587,6 +587,8 @@ Accept browser-reserved shortcuts rather than adding a custom shortcut system or
 
 The ordinary on-screen keyboard lacks Esc, Ctrl, Tab and arrows; the dock's key row supplies them in the browser, the PWA and the app alike.
 
+The file editor is a text box like any other: it has no owner of its own, the keyboard control under a Files tab raises it first, and its row holds only the keys that mean something in text ([plan.md](../plan.md), "Editing"). Escape does not leave the file while an edit is open.
+
 Proposed browser history rule: Home, tab overview and Terminal/Files transitions, folder drill-in, preview, and modal opening create reversible navigation entries; Back closes the top sheet/preview before leaving its parent destination. Opening or switching terminal tabs does not add browser history entries. Back must not kill a tmux session. Real history/swipe behavior remains an implementation gate; the static prototype uses explicit back/close controls only. Native shell follows the same logical hierarchy without browser URL history.
 
 ## Review scope and implementation gates

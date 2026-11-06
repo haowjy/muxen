@@ -9,6 +9,7 @@ import { FileBrowser, type FileRef } from "../../files/browser";
 import { baseName, join, moved, parentOf, within } from "../../files/paths";
 import { Recent } from "../../files/recent";
 import { FileSearch, type Found } from "../../files/search";
+import { Edits } from "../../files/edits";
 import { UploadTracker } from "../../files/uploads";
 import type { HostClient } from "../../net/hosts";
 import { HttpRefusal } from "../../net/http";
@@ -54,6 +55,12 @@ export interface FilesSession {
   rename: (path: string, to: string, opens: boolean) => Promise<void>;
   /** Deletes what is at `path` for good. A refusal rejects, and the folder is listed again: a folder may be partly gone. */
   remove: (path: string) => Promise<void>;
+  /** The files being edited on this host: they stay while the editor's view is away. */
+  edits: Edits;
+  /** Writes `text` to what is at `path`, in an edit, and answers its new ETag. `overwrite`: whatever is there now. A refusal rejects (`changed`: it moved). */
+  save: (path: string, text: string, overwrite: boolean) => Promise<string>;
+  /** Editing `path` is over: saved, or discarded. */
+  finishEdit: (path: string) => void;
   /** The tab's Search below `root`: the one it left there, so Back to its results finds them as they were, unless `fresh`. */
   search: (tab: string, root: string, fresh?: boolean) => FileSearch;
 }
@@ -101,13 +108,27 @@ export function filesSession(app: AppController, host: KnownHost): FilesSession 
   });
   const searches = new Recent<FileSearch>(SEARCHES_KEPT);
   // Clear local data forgets the recents: a kept Search would still show the ones it began with.
-  const unclear = app.persist.onClear(() => { searches.clear(); });
+  const unclear = app.persist.onClear(() => { searches.clear(); edits.clear(); });
   // What failed for want of the server loads again once it answers (plan.md "Requests"); stopped with the session.
   const unrecover = app.hosts.recovered(host.entry.handle, () => {
     void browser.recovered();
     for (const search of searches.values()) search.recovered();
   });
-  const forget = (): void => { unclear(); unrecover(); };
+  const edits = new Edits();
+  const unsaved = app.view.get("unsaved")[hostId];
+  if (unsaved) edits.begin(unsaved, true);
+  const forgetUnsaved = (path: string): void => {
+    const { [hostId]: mine, ...others } = app.view.get("unsaved");
+    if (mine?.path === path) app.view.set("unsaved", others);
+  };
+  // Only as the page goes away: a MiB of text is no per-keystroke write.
+  const unflush = app.persist.onFlush(() => {
+    const latest = [...edits.snapshot.open.values()].findLast((edit) => edit.changed);
+    if (!latest) return;
+    const { path, etag, ending } = latest;
+    app.view.set("unsaved", { ...app.view.get("unsaved"), [hostId]: { path, etag, ending, text: edits.textOf(latest) } });
+  });
+  const forget = (): void => { unclear(); unrecover(); unflush(); };
   /** `ask`, a change in `dir`. A refusal rejects, and what is really there shows once the folder is listed again: the name was taken, or gone, or (`partly`, a delete that stopped) part of it was. */
   const changing = async (dir: string, partly: string | null, ask: () => Promise<void>): Promise<void> => {
     try {
@@ -142,6 +163,19 @@ export function filesSession(app: AppController, host: KnownHost): FilesSession 
     selections: new Recent(SCROLLS_KEPT),
     previews: new Recent(SCROLLS_KEPT),
     handed: null,
+    edits,
+    save: async (path, text, overwrite) => {
+      const edit = edits.snapshot.open.get(path);
+      const etag = await browser.api.save(path, text, overwrite || !edit ? "*" : edit.etag);
+      edits.keep(path, { etag });
+      forgetUnsaved(path);
+      void browser.folders.changed(parentOf(path));
+      return etag;
+    },
+    finishEdit: (path) => {
+      edits.end(path);
+      forgetUnsaved(path);
+    },
     opened: (file) => {
       const all = app.view.get("opened");
       const before = (all[hostId] ?? []).filter((f) => f.path !== file.path);

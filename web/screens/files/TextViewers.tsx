@@ -24,10 +24,10 @@ export type Loaded = { kind: "loading" } | { kind: "done"; value: TextPreview } 
  * A file's first MiB as text, fetched once per path while `wanted` (a text viewer is showing) and abandoned when it
  * closes. The file's header copies it. A view that mounts in place of another showing the same file (the Preview
  * panel's file opened full width, and Back) takes the text that one handed over (`FilesSession.handed`) instead of
- * reading it again; nothing else is kept, so a file shown again later is read fresh. A read that failed for want of
+ * reading it again; an edit's save sets the text it wrote (the setter); nothing else is kept, so a file shown again later is read fresh. A read that failed for want of
  * a connection is read again once the server answers (plan.md "Requests"), and by its Try again; neither touches a read in flight.
  */
-export function useText(session: FilesSession, path: string, wanted: boolean): Loaded {
+export function useText(session: FilesSession, path: string, wanted: boolean): [Loaded, (value: TextPreview) => void] {
   const app = useApp();
   const [state, setState] = useState<{ path: string; loaded: Loaded } | null>(() => {
     const handed = session.handed?.path === path ? session.handed.text : null;
@@ -52,7 +52,7 @@ export function useText(session: FilesSession, path: string, wanted: boolean): L
     setState((now) => (now?.loaded.kind === "error" && now.loaded.error.code === "network" ? null : now));
   }), [app, session.handle]);
   // Another file's text, from before a switch, is never this one's.
-  return state?.path === path ? state.loaded : { kind: "loading" };
+  return [state?.path === path ? state.loaded : { kind: "loading" }, (value) => { setState({ path, loaded: { kind: "done", value } }); }];
 }
 
 function Failed({ error, retry, session }: { error: HttpRefusal; retry: () => void; session: FilesSession }) {

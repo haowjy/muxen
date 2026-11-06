@@ -1,5 +1,6 @@
 // The Files fixtures' file tree with content (platform/test/fs.ts is the listing; this adds
 // what the viewers read).
+import type { TextPreview } from "../../files/api";
 import { HttpRefusal } from "../../net/http";
 import type { FakeDaemon } from "../../platform/test";
 import type { Stopped } from "../../proto/generated/messages";
@@ -195,9 +196,9 @@ export class FilesFs extends FakeFs {
     return Promise.resolve(this.capped.has(path) ? { ...listing, truncated: true } : listing);
   }
 
-  override text(path: string): Promise<{ text: string; size: number; truncated: boolean }> {
-    const text = CONTENT[path] ?? `${path.split("/").pop() ?? path}\n`;
-    return Promise.resolve({ text, size: text.length, truncated: false });
+  override text(path: string): Promise<TextPreview> {
+    const text = this.saved.get(path) ?? CONTENT[path] ?? `${path.split("/").pop() ?? path}\n`;
+    return Promise.resolve({ text, size: text.length, truncated: false, etag: `"${String(this.saves)}"`, ending: "\n" });
   }
 }
 

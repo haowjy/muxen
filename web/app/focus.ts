@@ -111,9 +111,9 @@ export class FocusController extends Store<FocusView> implements FocusPort {
     else this.targets.get(owner)?.blur();
   }
 
-  /** A Files tab's keyboard control: its field (Search's while it is open, else the path field) takes the keyboard when it is down, and gives it up when it is up. */
+  /** A Files tab's keyboard control: its field (the editor's or Search's while open, else the path field) takes the keyboard when it is down, and gives it up when it is up. */
   toggleFilesKeyboard(up: boolean): void {
-    const field = this.targets.has("search") ? "search" : "path";
+    const field = this.targets.has("editor") ? "editor" : this.targets.has("search") ? "search" : "path";
     if (up) this.targets.get(field)?.blur();
     else this.focusTarget(field, true);
   }
@@ -131,9 +131,9 @@ export class FocusController extends Store<FocusView> implements FocusPort {
 
   /** `keyboard` falling while an input still holds focus means the system lowered it without telling the page: let go of the input. */
   viewportChanged(before: Viewport, after: Viewport): void {
-    const { owner } = this.snapshot;
-    if (!before.keyboard || after.keyboard || owner === "none") return;
-    this.targets.get(owner)?.blur();
+    if (!before.keyboard || after.keyboard) return;
+    const box = document.activeElement;
+    if (box instanceof HTMLElement && box.matches(TEXT_BOX)) box.blur();
   }
 
   /**

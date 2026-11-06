@@ -2,7 +2,7 @@
 // browser model's tests: any listed directory opens, dirs sort first, pages of `page` entries. Paths are already canonical.
 import { join, moved, within } from "../../files/paths";
 import { HttpRefusal } from "../../net/http";
-import type { Entry, FsApi, Listing } from "../../files/api";
+import type { Entry, FsApi, Listing, TextPreview } from "../../files/api";
 import type { CreateKind, CreateRequest, DeleteRequest, Match, RenameRequest, Search } from "../../proto/generated/messages";
 import type { FakeDaemon } from ".";
 import { defaultSettings, searchSkipOf } from "./settings";
@@ -26,6 +26,9 @@ export class FakeFs implements FsApi {
   hold = false;
   /** Every call fails as a dead network does. */
   offline = false;
+  saves = 0;
+  /** What saves wrote, read back by `text`. */
+  readonly saved = new Map<string, string>();
   private held: (() => void)[] = [];
   /** The `search_skip` patterns the search walk lists but doesn't enter: the fake daemon's settings once served (`serveFs`). */
   searchSkip: () => readonly string[] = () => searchSkipOf(defaultSettings());
@@ -87,9 +90,16 @@ export class FakeFs implements FsApi {
     });
   }
 
-  text(path: string): Promise<{ text: string; size: number; truncated: boolean }> {
+  save(path: string, text: string): Promise<string> {
+    return this.answer(`save ${path}`, () => {
+      this.saved.set(path, text);
+      return `"${String(++this.saves)}"`;
+    });
+  }
+
+  text(path: string): Promise<TextPreview> {
     if (this.tree.files[path] === undefined) return Promise.reject(new HttpRefusal(404, "not_found"));
-    return Promise.resolve({ text: "", size: 0, truncated: false });
+    return Promise.resolve({ text: "", size: 0, truncated: false, etag: `"${String(this.saves)}"`, ending: "\n" as const });
   }
 
   search(path: string, q: string, hidden: boolean, signal?: AbortSignal): Promise<Search> {
@@ -279,14 +289,19 @@ export function serveFs(fs: FakeFs, daemon: FakeDaemon): NonNullable<FakeDaemon[
     }
     if (method === "GET" && path.startsWith("/fs/list/")) return json(200, await fs.list(at("/fs/list"), ...page(query)));
     if (method === "GET" && path.startsWith("/fs/search/")) return json(200, await fs.search(at("/fs/search"), query.get("q") ?? "", query.get("hidden") === "1", signal ?? undefined));
+    if (method === "PUT" && path.startsWith("/fs/file/")) {
+      const etag = await fs.save(at("/fs/file"), String(body));
+      return new Response(null, { status: 204, headers: { ETag: etag } });
+    }
     if (method === "GET" && path.startsWith("/fs/raw/")) {
       const target = at("/fs/raw");
       const probed = await fs.probe(target);
       if (probed.kind === "dir") throw new HttpRefusal(400, "not_a_file");
-      const { text } = await fs.text(target);
-      if (text === "") throw new HttpRefusal(416, "bad_range");
+      const preview = await fs.text(target);
+      const { text } = preview;
+      if (text === "") return new Response("", { status: 200, headers: { ...(preview.etag && { ETag: preview.etag }) } });
       const bytes = new TextEncoder().encode(text).length;
-      return new Response(text, { status: 206, headers: { "Content-Type": probed.mime ?? "application/octet-stream", "Content-Range": `bytes 0-${String(bytes - 1)}/${String(bytes)}` } });
+      return new Response(text, { status: 206, headers: { "Content-Type": probed.mime ?? "application/octet-stream", "Content-Range": `bytes 0-${String(bytes - 1)}/${String(bytes)}`, ...(preview.etag && { ETag: preview.etag }) } });
     }
     return json(404, { error: "not_found" });
   };

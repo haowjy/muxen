@@ -48,7 +48,7 @@ export function FolderSummary({ session, listing, entry, onOpen, onLink }: Props
   const within = shown.slice(0, shown.length - name.length);
   const readme = listing.entries.find((e) => e.kind === "file" && README.test(e.name)) ?? null;
   const readmeRef: FileRef | null = readme && fileRefOf(join(path, readme.name), readme);
-  const text = useText(session, readmeRef?.path ?? "", readmeRef !== null);
+  const [text] = useText(session, readmeRef?.path ?? "", readmeRef !== null);
 
   let body;
   if (readmeRef) {

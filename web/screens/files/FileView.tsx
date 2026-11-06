@@ -11,6 +11,7 @@ import { IconButton } from "../../ui/primitives/IconButton";
 import { Menu } from "../../ui/primitives/Menu";
 import { Popover } from "../../ui/primitives/Popover";
 import { useStore } from "../../ui/store";
+import { EditView } from "./EditView";
 import { CopyButton, DownloadButton, InsertButton } from "./FileActions";
 import { fileIcon } from "./fileIcon";
 import { copyText } from "./copy";
@@ -61,7 +62,12 @@ export function FileView({ session, file, back, onExpand, onLink, children }: Pr
   const shown = shorten(file.path, home);
   const within = onExpand ? shown.slice(0, shown.length - file.name.length) : "";
   const url = session.browser.api.rawUrl(file.path);
-  const text = useText(session, file.path, !children && (kind === "code" || kind === "markdown"));
+  const edit = useStore(session.edits, (s) => s.open.get(file.path));
+  // The Preview panel shows the file: its editor is full width, and an edit waits there.
+  const editing = edit && !onExpand && !children ? edit : null;
+  const readable = kind === "code" || kind === "markdown";
+  const [text, setText] = useText(session, file.path, !children && !editing && readable);
+  const editable = readable && text.kind === "done" && text.value.ending !== null && text.value.etag !== null ? { ...text.value, ending: text.value.ending, etag: text.value.etag } : null;
   // Copy text copies what was read: a file past the first MiB copies only that much, and says so.
   const loaded = kind === "code" && text.kind === "done" ? text.value : null;
   const copyNote = loaded?.truncated ? `Copied the first ${formatSize(TEXT_LIMIT)} of ${file.name}` : null;
@@ -72,7 +78,9 @@ export function FileView({ session, file, back, onExpand, onLink, children }: Pr
   };
   const expand = onExpand && handOver(onExpand);
   const leave = back && handOver(back.onBack);
-  useFilesKey(LEAVE, () => { leave?.(); }, !phone && leave !== undefined);
+  useFilesKey(LEAVE, () => { leave?.(); }, !phone && leave !== undefined && !editing);
+
+  if (editing) return <EditView session={session} file={file} edit={editing} onSaved={setText} />;
 
   return (
     <div class={styles.view}>
@@ -121,6 +129,15 @@ export function FileView({ session, file, back, onExpand, onLink, children }: Pr
                   { label: "Wrap lines", checked: wrap, onSelect: () => { setWrap(!wrap); } },
                   { label: "Copy text", icon: "copyText" as const, disabled: loaded === null, onSelect: () => { if (loaded) void copyText(app, loaded.text, copyNote ?? `Copied the text of ${file.name}`); } },
                 ],
+              }] : []),
+              ...(editable ? [{
+                items: [{
+                  label: "Edit",
+                  onSelect: () => {
+                    session.edits.begin({ path: file.path, etag: editable.etag, ending: editable.ending, text: editable.text }, false);
+                    expand?.();
+                  },
+                }],
               }] : []),
               { items: [{ label: "Info", icon: "info", onSelect: () => { setInfo(menu); } }] },
             ]}

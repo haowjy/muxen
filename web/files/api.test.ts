@@ -44,8 +44,8 @@ describe("httpFsApi", () => {
       expect(new Headers(init?.headers).get("Range")).toBe("bytes=0-3");
       return Promise.resolve(response(206, "abcd", { "Content-Range": "bytes 0-3/10" }));
     });
-    await expect(api.text("/f", 4)).resolves.toEqual({ text: "abcd", size: 10, truncated: true });
-    const empty = httpFsApi("o", () => Promise.resolve(response(416, JSON.stringify({ error: "bad_range" }))));
-    await expect(empty.text("/f", 4)).resolves.toEqual({ text: "", size: 0, truncated: false });
+    await expect(api.text("/f", 4)).resolves.toEqual({ text: "abcd", size: 10, truncated: true, etag: null, ending: null });
+    const empty = httpFsApi("o", (_url, init) => Promise.resolve(new Headers(init?.headers).has("Range") ? response(416, JSON.stringify({ error: "bad_range" })) : response(200, "", { ETag: '"e"' })));
+    await expect(empty.text("/f", 4)).resolves.toEqual({ text: "", size: 0, truncated: false, etag: '"e"', ending: "\n" });
   });
 });
