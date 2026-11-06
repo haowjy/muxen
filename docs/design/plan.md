@@ -39,7 +39,7 @@ his tailnet. It needs:
   flags, paths).
 - **A built-in file manager:** upload or paste photos and insert the file path into
   the terminal (MVP); view images and video with range streaming, view code and
-  markdown (MVP) and diffs (v2); edit, create and rename files (v2).
+  markdown (MVP) and diffs (v2); create files and folders; edit and rename files (v2).
 
 Agent dashboards and notifications are out of scope: Jimmy's agent harness already
 handles notifications. The one exception: a terminal bell puts an attention dot on its
@@ -101,8 +101,8 @@ Jimmy's decisions, as they stand ([log](decisions.md#jimmys-decisions)):
 - **Shell:** shell-agnostic, with one OSC 133 snippet in his dotfiles and carapace for
   completion.
 - **Files:** any folder or file the daemon's user can read; no favorites (the path field is the way in); one default uploads folder, and Paste writes into the open folder; HEIC converted on
-  the phone; no video thumbnails; no file watcher. The MVP views and uploads; edit,
-  new file and rename come in v2. Move, mkdir and delete are done in the terminal.
+  the phone; no video thumbnails; no file watcher. Files views, uploads and creates empty files and folders; edit
+  and rename come in v2. Move and delete are done in the terminal.
 - **Auth:** allowlisted Tailscale login plus two device lanes: an iOS device token
   behind Face ID and an enrolled tailnet node for the browser/PWA. Both use the same
   one-time code and can be revoked with `muxen device remove` ([auth.md](auth.md)).
@@ -632,12 +632,12 @@ files when empty): the daemon walks per settled query under hard caps and sends 
 **API.** The routes, path resolution, the uploads folder, limits and errors are in
 [fs.md](fs.md). The web reaches them through its host's scheme-handler origin,
 `muxen-app://h-{host}/fs/…` ([ios-shell.md](ios-shell.md#where-the-web-ui-comes-from));
-video goes to the native player instead. MVP: list, search, raw (Range) and upload (into `uploads_dir`, or a folder the request names). v2: save
-an edit, new file, rename.
+video goes to the native player instead. MVP: list, search, raw (Range), upload (into `uploads_dir`, or a folder the request names) and create. v2: save
+an edit, rename.
 
 **Editing (v2).** With no file watcher, the conflict check is the ETag taken at open:
 a save whose `If-Match` no longer matches is refused, and the editor offers reload or
-overwrite. Creates and renames never replace a file. Only UTF-8 text under a size cap
+overwrite. A create (already built) and a rename never replace a file. Only UTF-8 text under a size cap
 opens in the editor (CodeMirror 6, loaded on demand). It borrows the keyboard from the
 terminal input while open ([ios-shell.md](ios-shell.md#focus-one-controller-native)).
 

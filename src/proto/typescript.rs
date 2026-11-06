@@ -11,7 +11,9 @@ use std::path::Path;
 use ts_rs::{Config, TS, TypeVisitor};
 
 use super::complete::{Chip, ChipSource, CompleteRequest, Completion};
-use super::fs::{Entry, EntryKind, Listing, Match, Search, Stopped, Uploaded};
+use super::fs::{
+    CreateKind, CreateRequest, Created, Entry, EntryKind, Listing, Match, Search, Stopped, Uploaded,
+};
 use super::settings::{ServerSettings, SettingsChange, SettingsDefaults};
 use super::*;
 
@@ -55,6 +57,9 @@ fn declarations(config: &Config) -> Vec<(TypeId, String)> {
         declare::<Match>(config),
         declare::<Stopped>(config),
         declare::<Uploaded>(config),
+        declare::<CreateKind>(config),
+        declare::<CreateRequest>(config),
+        declare::<Created>(config),
         declare::<ServerSettings>(config),
         declare::<SettingsDefaults>(config),
         declare::<SettingsChange>(config),

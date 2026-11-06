@@ -15,6 +15,7 @@ const WORDS: Record<HttpError, string> = {
   not_found: "It isn't there any more.",
   not_a_directory: "That isn't a folder.",
   not_a_file: "That isn't a regular file.",
+  exists: "That name is already taken.",
   memory_backed: "That folder is on memory-backed storage.",
   config_read_only: "config.toml can't be written on the server: a broken link or a read-only file.",
   too_large: "That file is over the 128 MiB limit.",

@@ -9,6 +9,7 @@ use thiserror::Error;
 
 use crate::blocking::Busy;
 
+pub mod create;
 pub mod list;
 pub mod mime;
 mod open;
@@ -35,6 +36,9 @@ pub enum FsError {
     NotADirectory,
     #[error("not a file")]
     NotAFile,
+    /// A create found the name taken: nothing here replaces a file.
+    #[error("already exists")]
+    Exists,
     #[error("can't upload to a memory-backed filesystem")]
     MemoryBacked,
     #[error("too large")]
@@ -60,6 +64,18 @@ impl FsError {
             _ if error.raw_os_error() == Some(rustix::io::Errno::LOOP.raw_os_error()) => {
                 Self::NotFound
             }
+            _ => Self::Internal(error),
+        }
+    }
+
+    /// An I/O error while writing through a descriptor `open` returned.
+    pub fn write(error: io::Error) -> Self {
+        use rustix::io::Errno;
+        match error.raw_os_error().map(Errno::from_raw_os_error) {
+            Some(Errno::NOSPC | Errno::DQUOT) => Self::NoSpace,
+            Some(Errno::ACCESS | Errno::PERM | Errno::ROFS) => Self::Denied,
+            // The folder was deleted under its descriptor.
+            Some(Errno::NOENT) => Self::NotFound,
             _ => Self::Internal(error),
         }
     }

@@ -64,6 +64,31 @@ pub struct Uploaded {
     pub size: u64,
 }
 
+/// What `POST /fs/create` makes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum CreateKind {
+    File,
+    Dir,
+}
+
+/// `POST /fs/create`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct CreateRequest {
+    /// The folder (`~`, `~/…` or absolute).
+    pub dir: String,
+    /// A plain name, not a path.
+    pub name: String,
+    pub kind: CreateKind,
+}
+
+/// `201` from `POST /fs/create`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct Created {
+    /// Absolute and canonical.
+    pub path: String,
+}
+
 /// `GET /fs/search/{*path}`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct Search {

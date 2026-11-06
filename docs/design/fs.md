@@ -77,8 +77,7 @@ Want   = Dir | File
 Opened = { file: File, path: String /* canonical */, meta: Metadata }
 ```
 
-A third `Want`, `Parent`, belongs to v2's writes ([below](#v2-what-this-must-not-preclude))
-and doesn't exist yet. `open` runs on the fs lane (the dir lane for completion
+`open` runs on the fs lane (the dir lane for completion
 listings), and does, in order:
 
 1. **Shape.** `path` must be absolute, or `~` or start with `~/`, which is the daemon user's
@@ -358,6 +357,16 @@ encoding and opens it with `Authorization: Bearer`. AVFoundation probes with `Ra
 bytes=0-1`, then reads ranges; it needs the `206`s, an exact `Content-Type` (`nosniff`
 stops it guessing), and an ETag that stays put while the file does.
 
+### `POST /fs/create`
+
+`POST /fs/create`, JSON `{ "dir": "<folder>", "name": "<name>", "kind": "file" | "dir" }`, at most 16 KiB: an empty file or a
+new folder. It never replaces anything. `dir` opens through `fs::open(…, Dir)` (`~` and `~/…` too; no tmpfs check, since an empty
+file charges nothing). `name` is one plain name: not empty, not `.` or `..`, no `/` or NUL, or `400 bad_request`; so is a result
+past 4,096 bytes, which no route could then open. Then, relative to the descriptor, `openat` with
+`O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC`, mode 0666, or `mkdirat`, mode 0777, both under the umask, with no fsync: an empty
+file lost in a crash costs nothing. `EEXIST` is `409 exists`, whatever holds the name, a dangling link included. A folder deleted
+under its descriptor is `404 not_found`. `201 { path }`, the canonical path, through any link in `dir`.
+
 ### `POST /fs/upload`
 
 `POST /fs/upload?name=<the client's file name>[&dir=<folder>][&text=1]`; the body is the
@@ -486,10 +495,11 @@ The auth middleware also uses this body for `forbidden`, `auth_required`,
 |---|---|---|
 | 400 | `bad_request` | a path that is relative, too long, has a NUL, doesn't decode, or canonicalizes to non-UTF-8; a bad query value; an upload body that stalled past the idle timeout or broke (the client went away) |
 | 401 | `not_enrolled` | the browser's current Tailscale node has no enrolled device row |
-| 403 | `denied` | `EACCES` or `EPERM`; an upload into a folder that is read-only or not writable (`EROFS` too) |
+| 403 | `denied` | `EACCES` or `EPERM`; an upload or a create in a folder that is read-only or not writable (`EROFS` too) |
 | 403 | `bad_origin` | Browser Origin, forwarded host or fetch metadata does not match the canonical Serve origin |
 | 403 | `node_refused` | The current Tailscale node fails a node-lane rule; includes the refusal reason |
 | 404 | `not_found` | `ENOENT`, `ENOTDIR` while resolving, `ELOOP` at open |
+| 409 | `exists` | a create found the name taken |
 | 409 | `not_a_directory`, `not_a_file` | the wrong kind for the route; a FIFO, socket or device is `not_a_file`; an upload when `uploads_dir` isn't an absolute or `~/` path, or the upload's `dir` or `uploads_dir` isn't a directory |
 | 409 | `memory_backed` | on Linux, an upload destination directory on tmpfs or ramfs; its pages would remain charged to muxen's unit while the file exists |
 | 409 | `config_read_only` | `config.toml`, or a directory on its way, is a dangling link or can't be written |
@@ -539,7 +549,7 @@ which is why they have a row and why the flush interval is 2 MiB, not larger.
 ## Logging
 
 - **Writes at `info`, by action and canonical path:** an upload's final path and
-  size (a `dir` upload too).
+  size (a `dir` upload too); a create's path.
 - **Refusals** (`denied`) at `warn` with the path
   asked for.
 - **Reads** (listings, raw ranges) at `debug` only: one video is dozens of requests. A search
@@ -577,13 +587,11 @@ step 4.
 
 ## v2: what this must not preclude
 
-Edit, new file and rename ([plan.md](plan.md#file-manager)) come as `PUT
+Edit and rename ([plan.md](plan.md#file-manager)) come as `PUT
 /fs/file/{*path}` (`If-Match` the ETag above; `412 changed` if it moved) and `POST
-/fs/create` and `/fs/rename` (`409 exists`). All go through `fs::open(…, Parent)`.
-`Want::Parent` is built with the first of these routes, not before. It checks the
-**parent directory** as in steps 1 to 4, returns its descriptor, and requires the last
-component to be a plain name (no `/`, not `.` or `..`). Every write
-is then relative to that descriptor (`openat` with `O_CREAT | O_EXCL | O_NOFOLLOW`; a
+/fs/rename` (`409 exists`). Like `POST /fs/create`, each opens the folder with `Want::Dir`
+and takes a plain name. Every write
+is then relative to that descriptor (a
 temp file, `fsync` and `renameat` for saves; `RENAME_NOREPLACE` for renames), so a write goes where the
 descriptor is. The ETag, the URL-path form, the error codes
 and the upload's part-file-then-rename shape carry over; resumable uploads extend the

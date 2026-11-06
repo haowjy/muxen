@@ -5024,6 +5024,27 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
 - **Rejected:** the panel showing a blank or the folder's contents on a folder click (it still loses the
   file); a delay on the click to tell it from a double-click (every open would lag).
 
+### Files makes empty files and folders
+
+- **Decided:** 2026-11-05, Jimmy: "is there no way to create an empty text file or a new folder...? I think we
+  should have the ability to do those things". **Supersedes**, in "Files: view and upload now, three write
+  operations in v2", new file's place in v2 and "mkdir ... done in the terminal".
+- **What:** New file and New folder in ⋯ and a folder row's menu; a name field among the rows on a desktop, a
+  dialog on the phone; `POST /fs/create` ([fs.md](fs.md#post-fscreate)), which never replaces anything. No editor
+  comes with it.
+- **Why `{ dir, name }` and `Want::Dir`:** fs.md planned `Want::Parent` to split a path's last component.
+  A client that sends the folder and the name has nothing to split, so the mode was never built.
+- **Why the field is drawn among the rows, not a row:** the list's model, its arrow keys and its selection stay as
+  they are, and the field's keys stop at its form.
+- **Why a landing is one path:** upload, paste and create all end in `FileBrowser.added`, which lists the folder again
+  wherever it shows and sets `fresh`. A create of its own would keep the stale-record bug the shared path fixed.
+- **Lead's calls within Jimmy's sketch:** leaving the field empty cancels and leaving it with a name keeps it; a "Created
+  <name>" notice, as Paste has; a new folder on the phone is marked, not entered, since "opens in place" means nothing in
+  a flat list.
+- **Rejected:** a dialog on the desktop too (no field among the rows, but not the naming in place Jimmy agreed to);
+  a pending kind of `OutlineRow` (a case in the row model, the key handling and the selection for a thing that is none
+  of those); `Want::Parent`.
+
 ### The folder cache asks for two first pages at a time, the outline's last
 
 - **Decided:** 2026-11-05, from the phase 2 review (p546): Show hidden re-listed every open folder at

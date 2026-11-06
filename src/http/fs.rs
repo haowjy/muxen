@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use axum::body::Body;
-use axum::extract::rejection::{PathRejection, QueryRejection};
+use axum::extract::rejection::{JsonRejection, PathRejection, QueryRejection};
 use axum::extract::{DefaultBodyLimit, Path, Query, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse as _, Response};
@@ -19,12 +19,14 @@ use tracing::{debug, error, info, warn};
 
 use super::{Ctx, Refusal};
 use crate::files::Stamp;
+use crate::fs::create;
 use crate::fs::list::{self, Filter};
 use crate::fs::raw::{self, Span};
 use crate::fs::search::{self, Pattern};
 use crate::fs::upload::{self, MAX_UPLOAD, Naming};
 use crate::fs::{FsError, Want, mime};
 use crate::proto::HttpError;
+use crate::proto::fs::CreateRequest;
 
 /// `{*path}`, or nothing on a route without one; a rejection if it doesn't decode.
 type WirePath = Result<Option<Path<String>>, PathRejection>;
@@ -42,7 +44,14 @@ pub(super) fn routes() -> Router<Arc<Ctx>> {
             "/fs/upload",
             post(upload).layer(DefaultBodyLimit::disable()),
         )
+        .route(
+            "/fs/create",
+            post(created).layer(DefaultBodyLimit::max(CREATE_BODY)),
+        )
 }
+
+/// A folder's path and a name, in JSON.
+const CREATE_BODY: usize = 16 * 1024;
 
 #[derive(Debug, Deserialize)]
 struct ListQuery {
@@ -248,6 +257,32 @@ async fn upload(
             (StatusCode::CREATED, Json(uploaded)).into_response()
         }
         Err(refused) => respond(query.dir.as_deref().unwrap_or(""), Err(refused)),
+    }
+}
+
+/// `201 { path }`: an empty file or a new folder. It never replaces anything: a taken name is `exists`.
+async fn created(
+    State(ctx): State<Arc<Ctx>>,
+    body: Result<Json<CreateRequest>, JsonRejection>,
+) -> Response {
+    let Ok(Json(request)) = body else {
+        return respond("", Err(FsError::BadRequest));
+    };
+    let dir = request.dir.clone();
+    let home = ctx.app.home.clone();
+    let made = async {
+        ctx.fs
+            .lane
+            .run(move || create::create(&request, &home))
+            .await?
+    }
+    .await;
+    match made {
+        Ok(created) => {
+            info!(path = %created.path, "created");
+            (StatusCode::CREATED, Json(created)).into_response()
+        }
+        Err(refused) => respond(&dir, Err(refused)),
     }
 }
 

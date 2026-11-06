@@ -17,7 +17,6 @@ use std::time::{Duration, SystemTime};
 
 use bytes::Bytes;
 use futures_util::{Stream, StreamExt as _};
-use rustix::io::Errno;
 use tokio::sync::OwnedSemaphorePermit;
 use tracing::{debug, info};
 
@@ -213,10 +212,10 @@ async fn write(
 ) -> Result<Vec<u8>, FsError> {
     let file = file.clone();
     lane.run(move || {
-        file.write_all_at(&chunk, at).map_err(write_error)?;
+        file.write_all_at(&chunk, at).map_err(FsError::write)?;
         if flush {
             // The one wait with no deadline: a slow disk slows the upload to its pace.
-            file.sync_data().map_err(write_error)?;
+            file.sync_data().map_err(FsError::write)?;
             #[cfg(target_os = "linux")]
             let _ = rustix::fs::fadvise(&*file, 0, None, rustix::fs::Advice::DontNeed);
         }
@@ -224,15 +223,6 @@ async fn write(
         Ok(chunk)
     })
     .await?
-}
-
-fn write_error(error: io::Error) -> FsError {
-    let errno = error.raw_os_error().map(Errno::from_raw_os_error);
-    match errno {
-        Some(Errno::NOSPC | Errno::DQUOT) => FsError::NoSpace,
-        Some(Errno::ACCESS | Errno::PERM | Errno::ROFS) => FsError::Denied,
-        _ => FsError::Internal(error),
-    }
 }
 
 /// `.muxen-upload-<random>.part` in the destination folder, deleted unless it landed. The
@@ -267,13 +257,13 @@ impl Part {
         reap(&lane, &record);
         let name = format!(
             "{PART_PREFIX}{}{PART_SUFFIX}",
-            random(16).map_err(write_error)?
+            random(16).map_err(FsError::write)?
         );
         let path = Path::new(dir_path).join(&name);
         std::fs::write(&record, path.as_os_str().as_encoded_bytes()).map_err(FsError::Internal)?;
         let temp = Temp::create(dir, name.as_ref(), 0o600).map_err(|error| {
             forget(&record);
-            write_error(error)
+            FsError::write(error)
         })?;
         Ok(Self {
             file: temp.file().clone(),

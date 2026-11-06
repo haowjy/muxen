@@ -32,7 +32,9 @@ impl From<HttpError> for Refusal {
             AuthRequired | NotEnrolled => StatusCode::UNAUTHORIZED,
             Forbidden | BadOrigin | NodeRefused | BadCode | Denied => StatusCode::FORBIDDEN,
             NotFound => StatusCode::NOT_FOUND,
-            NotADirectory | NotAFile | MemoryBacked | ConfigReadOnly => StatusCode::CONFLICT,
+            NotADirectory | NotAFile | Exists | MemoryBacked | ConfigReadOnly => {
+                StatusCode::CONFLICT
+            }
             TooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             BadRange => StatusCode::RANGE_NOT_SATISFIABLE,
             Busy | AuthUnavailable | IdentityUnavailable | ConfigUnavailable => {
@@ -131,6 +133,7 @@ impl From<&FsError> for HttpError {
             FsError::NotFound => Self::NotFound,
             FsError::NotADirectory => Self::NotADirectory,
             FsError::NotAFile => Self::NotAFile,
+            FsError::Exists => Self::Exists,
             FsError::MemoryBacked => Self::MemoryBacked,
             FsError::TooLarge => Self::TooLarge,
             FsError::BadRange { .. } => Self::BadRange,
