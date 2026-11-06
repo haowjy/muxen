@@ -255,7 +255,7 @@ itself.
 | Shown state | Means |
 |---|---|
 | reachable | The daemon answered, and no attempt since has failed 1.5 s or more into an outage |
-| checking | No answer yet and not yet unreachable, a failed attempt ended 1.5–10 s into an outage, or a tapped Retry is in flight |
+| checking (reads "connecting") | No answer yet and not yet unreachable, a failed attempt ended 1.5–10 s into an outage, or a tapped Retry is in flight |
 | unreachable | An attempt failed 10 s or more into an outage, or an open socket went silent |
 | no network | The phone reports no network. Not stored: it overlays any of the three |
 

@@ -5236,6 +5236,8 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
 
 ## Server reachability (2026-11-05)
 
+The word users see for the checking state is "connecting" (2026-11-06). Jimmy on the iPhone: "the word \"checking\" doesn't make any sense". The app is trying to connect, and the note and the terminal strip already said so. "Checking access…" stays: it names what is being checked. Rejected: "reconnecting", which is wrong at launch.
+
 The design under the decision "A server's reachability is one state, shown on Home and read
 everywhere". Jimmy's part of that entry is its quote; the rest are agents' proposals, in force as
 built. The rules are in [plan.md](plan.md#reachability). Entries marked **Jimmy to confirm** carry

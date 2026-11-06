@@ -28,7 +28,7 @@ const PILL: Record<Tone, { tone: PillTone; state: string }> = {
 export function lookOf(tab: TerminalTab, status: TabStatus | undefined, host: HostLook, onScreen: boolean, now: number): TabLook {
   const known = status ?? { state: initialState, downSince: now, retryAt: null };
   const described = describe(known.state, known.downSince, known.retryAt, now, host, onScreen);
-  // A restored tab is unproven until the daemon finds its session: reconnecting colour, "Checking…", no input.
+  // A restored tab is unproven until the daemon finds its session: reconnecting colour, "Connecting…", no input.
   // With the server off or the phone offline nothing is being checked: it reads as reconnecting. A refused one
   // is not restoring, it is halted.
   const { kind } = host.server;
@@ -36,8 +36,8 @@ export function lookOf(tab: TerminalTab, status: TabStatus | undefined, host: Ho
     const checking = described.tone === "connecting" || described.tone === "idle" || described.tone === "live";
     return {
       tone: "reconnecting",
-      state: kind === "unreachable" || kind === "noNetwork" ? "reconnecting" : "checking",
-      status: checking ? { ...described, tone: "connecting", detail: onScreen && now - known.downSince >= 1_500 ? "Checking…" : null } : described,
+      state: kind === "unreachable" || kind === "noNetwork" ? "reconnecting" : "connecting",
+      status: checking ? { ...described, tone: "connecting", detail: onScreen && now - known.downSince >= 1_500 ? "Connecting…" : null } : described,
     };
   }
   return { ...PILL[described.tone], status: described };
@@ -63,7 +63,7 @@ export function pillOf(tab: Tab, env: PillEnv): Pill {
   return { id: tab.id, host: tab.host, kind: tab.kind, session: label.session, window: label.window, full: label.full, tone: look.tone, state: look.state, bell: bellLook(env.bells, tab.id).ring };
 }
 
-/** A pill's connection as a list row says it, when it isn't fine: "Checking…", "Reconnecting…", "Disconnected". */
+/** A pill's connection as a list row says it, when it isn't fine: "Connecting…", "Reconnecting…", "Disconnected". */
 export function pillMeta({ tone, state }: Pill): string | undefined {
   if (tone === "live" || tone === "idle") return undefined;
   const word = state.charAt(0).toUpperCase() + state.slice(1);

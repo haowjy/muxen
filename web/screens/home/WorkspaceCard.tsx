@@ -11,7 +11,7 @@ import { hostProblem, offlineWords } from "../../ui/hostProblem";
 import { STATUS, type CardBody, type CardStatus } from "./card";
 import styles from "./WorkspaceCard.module.css";
 
-const STATUS_WORDS: Record<CardStatus, string> = { live: "connected", checking: "checking", offline: "offline", attention: "needs attention" };
+const STATUS_WORDS: Record<CardStatus, string> = { live: "connected", checking: "connecting", offline: "offline", attention: "needs attention" };
 
 export interface WorkspaceCardProps {
   name: string;

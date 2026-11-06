@@ -112,7 +112,7 @@ status colour, and how many tabs are open (Jimmy, 2026-10-30: "home should only 
 workspaces"). Home lists no sessions or files. A row opens that workspace on the tab it last
 showed; a workspace with no tabs opens its tab overview. One and several servers use the same
 rows; a single server does not auto-navigate past Home. Add server leads to enrolment. An
-offline server's tabs remain open, reading reconnecting. A restored terminal tab reads “Checking…”
+offline server's tabs remain open, reading reconnecting. A restored terminal tab reads “Connecting…”
 until a listing proves its session, or “Reconnecting…” while unreachable. Phone Safari Home also
 offers Add to Home Screen instructions.
 
@@ -125,7 +125,7 @@ and admission, the first that applies:
    ("Last reached 4 min ago.", or "Not reached since muxen opened.") and how to fix it ("Check that
    it's on and that Tailscale is on."), with Retry. When it is no network the note says "This iPhone
    is offline." ("This device is offline." in a browser), without Retry.
-3. **checking** when the shown state is checking, with the note "Connecting to pop-os…", or when
+3. **connecting** when the shown state is checking, with the note "Connecting to pop-os…", or when
    admission is undecided on a server that answers, with the server's banner ("Checking access…"
    after 10 s) and no note.
 4. Otherwise **connected**, with a note if tmux isn't running, and the card's notice while the daemon is

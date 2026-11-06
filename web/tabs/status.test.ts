@@ -61,8 +61,8 @@ describe("a restored tab's pill", () => {
   const tab = { restoring: true } as TerminalTab;
   const pill = (host: HostLook) => lookOf(tab, undefined, host, false, 0);
 
-  it("reads checking while the server answers, reconnecting while it is off or the phone is offline", () => {
-    expect(pill(up).state).toBe("checking");
+  it("reads connecting while the server answers, reconnecting while it is off or the phone is offline", () => {
+    expect(pill(up).state).toBe("connecting");
     expect(pill(unreachable).state).toBe("reconnecting");
     expect(pill(look({ kind: "noNetwork" })).state).toBe("reconnecting");
   });
