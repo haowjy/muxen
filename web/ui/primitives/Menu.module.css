@@ -1,16 +1,5 @@
-/* The Dialog popover's look (radius-3, dialog-bg, shadow-2), placed by script against its anchor. */
-.menu {
-  position: fixed;
-  z-index: var(--z-menu);
-  min-width: 12rem;
-  max-width: calc(100% - 2 * var(--space-2));
-  overflow-y: auto;
-  padding: var(--space-1);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-3);
-  background: var(--dialog-bg);
-  box-shadow: var(--shadow-2);
-}
+/* Rows inside the Popover frame. */
+.menu { padding: var(--space-1); }
 .section + .section { margin-top: var(--space-1); padding-top: var(--space-1); border-top: 1px solid var(--color-border); }
 .title { padding: var(--space-1) var(--space-3); font-size: var(--text-small); color: var(--color-text-muted); }
 .item {
@@ -37,5 +26,3 @@
 .check { color: var(--color-accent); }
 .disabled { color: var(--color-text-muted); cursor: default; }
 .disabled:hover { background: none; }
-/* Info: a small list of facts in the popover's frame. */
-.facts { padding: var(--space-3) var(--space-4); }

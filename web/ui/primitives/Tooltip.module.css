@@ -43,3 +43,5 @@
 }
 :root[data-density="touch"] .root:hover .tip,
 :root[data-density="touch"] .root:focus-within .tip { display: none; }
+/* A control whose menu or popover is open: the label would sit over what it opened. */
+.root:has([aria-expanded="true"]) .tip { display: none; }

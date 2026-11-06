@@ -1,4 +1,4 @@
-.view { display: flex; flex: 1; flex-direction: column; min-height: 0; container: files-bar / inline-size; }
+.view { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 /* One line: Back, the file, its viewer's controls, then its actions. The viewer runs edge to edge below it. */
 .bar {
   display: flex;
@@ -33,3 +33,5 @@
 .toggle[aria-pressed="true"] { color: var(--color-accent); background: var(--color-bg-pressed); }
 /* In the Preview panel: the file's folder, quiet before its name. */
 .within { flex: 0 100 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 400; color: var(--color-text-muted); }
+/* Info: the file's facts in a popover off ⋯. */
+.info { padding: var(--space-3) var(--space-4); }

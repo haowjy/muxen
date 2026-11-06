@@ -110,7 +110,7 @@ export function FolderSummary({ session, path, entry, record, root, onOpen, onLi
           {readmeRef && listing && <span class={bar.facts}>{contents(listing)}</span>}
         </h2>
         <CopyButton value={shown} label="Copy path" icon="copy" />
-        <InsertButton path={path} compact />
+        <InsertButton path={path} />
       </header>
       {body}
     </div>

@@ -9,6 +9,7 @@ import { Button } from "../../ui/primitives/Button";
 import { Icon } from "../../ui/primitives/Icon";
 import { IconButton } from "../../ui/primitives/IconButton";
 import { Menu } from "../../ui/primitives/Menu";
+import { Popover } from "../../ui/primitives/Popover";
 import { useStore } from "../../ui/store";
 import { CopyButton, DownloadButton, InsertButton } from "./FileActions";
 import { fileIcon } from "./fileIcon";
@@ -39,13 +40,14 @@ interface Props {
  * A file, under one header line: Back named for its folder, the name, the viewer's controls, then Copy
  * path, Download and Insert ▾ as icons and ⋯ (File options), whose Info holds the size, time and path. A path reads
  * `~/…` under the host's home and absolute elsewhere, as in the path field; Copy path copies that form, Insert the
- * absolute one. In the desktop's Preview panel there is no Back: the line ends with the expand button, and leaves
+ * absolute one. In the desktop's Preview panel there is no Back: the line ends with ⋯ and the expand button, and leaves
  * room for the panel's toggle (FilesPane's).
  */
 export function FileView({ session, file, back, onExpand, onLink, children }: Props) {
   const app = useApp();
   const home = useStore(session.browser, (s) => s.home);
   const phone = useAppView((v) => v.viewport.layout === "phone");
+  const fine = useAppView((v) => v.viewport.density !== "touch");
   // "Open as text" is one file's: the view stays mounted from file to file (Wrap lines carries over), so it names the file.
   const [textOf, setTextOf] = useState<string | null>(null);
   const asText = textOf === file.path;
@@ -93,9 +95,13 @@ export function FileView({ session, file, back, onExpand, onLink, children }: Pr
         {!children && (
           <>
             <CopyButton value={shown} label="Copy path" icon="copy" />
-            <DownloadButton url={url} name={file.name} size={size} />
-            <InsertButton path={file.path} compact shortcut />
+            <DownloadButton url={url} name={file.name} />
+            <InsertButton path={file.path} shortcut />
           </>
+        )}
+        {!children && (
+          // Its click closes what it opened, Info included: a press on the anchor is left to the anchor.
+          <IconButton icon="more" label="File options" aria-haspopup="menu" aria-expanded={menu !== null || info !== null} onClick={(e) => { if (menu || info) { setMenu(null); setInfo(null); } else setMenu(e.currentTarget); }} />
         )}
         {expand && (
           <>
@@ -103,14 +109,11 @@ export function FileView({ session, file, back, onExpand, onLink, children }: Pr
             <IconButton icon="expand" label="Open full width" onClick={expand} />
           </>
         )}
-        {!children && (
-          <IconButton icon="more" label="File options" aria-haspopup="menu" aria-expanded={menu !== null} onClick={(e) => { setMenu(menu ? null : e.currentTarget); }} />
-        )}
         {menu && (
           <Menu
             anchor={menu}
             label="File options"
-            focusFirst={false}
+            focusFirst={fine}
             onClose={() => { setMenu(null); }}
             sections={[
               ...(phone && kind === "code" ? [{
@@ -124,20 +127,13 @@ export function FileView({ session, file, back, onExpand, onLink, children }: Pr
           />
         )}
         {info && (
-          <Menu
-            anchor={info}
-            label="Info"
-            sections={[]}
-            focusFirst={false}
-            onClose={() => { setInfo(null); }}
-            facts={
-              <dl class={viewers.meta}>
-                {size !== null && <><dt>Size</dt><dd>{size}</dd></>}
-                {file.mtime !== null && <><dt>Modified</dt><dd>{formatTime(file.mtime)}</dd></>}
-                <dt>Path</dt><dd class={viewers.mono}>{shown}</dd>
-              </dl>
-            }
-          />
+          <Popover anchor={info} role="dialog" label={`Info: ${file.name}`} focus={fine} class={styles.info} onClose={() => { setInfo(null); }}>
+            <dl class={viewers.meta}>
+              {size !== null && <><dt>Size</dt><dd>{size}</dd></>}
+              {file.mtime !== null && <><dt>Modified</dt><dd>{formatTime(file.mtime)}</dd></>}
+              <dt>Path</dt><dd class={viewers.mono}>{shown}</dd>
+            </dl>
+          </Popover>
         )}
       </header>
       {children ?? <Preview session={session} file={file} text={text} kind={kind} plain={asText} wrap={wrap} onAsText={() => { setTextOf(file.path); }} onLink={onLink} />}

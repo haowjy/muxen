@@ -60,7 +60,10 @@ export function useTabOutline(session: FilesSession, tab: string, root: string |
       const folders = foldersBetween(root, path);
       // A hidden name on the way (`~/.config/…`) has no row while Show hidden files is off, so the reveal would stop
       // at the folder above it: asking for the file is asking to see it, so the setting goes on.
-      if (!session.browser.snapshot.hidden && [...folders, path].some((p) => baseName(p).startsWith("."))) void session.browser.toggleHidden();
+      // The toggle relists the root itself, so the root's level waits for that listing instead of asking a second time.
+      const showing = !session.browser.snapshot.hidden && [...folders, path].some((p) => baseName(p).startsWith("."))
+        ? session.browser.toggleHidden()
+        : Promise.resolve();
       expand(folders.reduce((all: readonly string[], folder) => withExpanded(all, folder, true, root), open));
       select(path);
       setRevealed(entry ? { path, entry } : null);
@@ -70,7 +73,8 @@ export function useTabOutline(session: FilesSession, tab: string, root: string |
       [root, ...folders].forEach((folder, i) => {
         const next = folders[i];
         const until = next === undefined ? { name: baseName(path), dir: entry?.kind === "dir" } : { name: baseName(next), dir: true };
-        session.browser.folders.rest(folder, hidden, until).catch(() => undefined);
+        const level = folder === root ? showing.then(() => session.browser.folders.rest(folder, hidden, until)) : session.browser.folders.rest(folder, hidden, until);
+        level.catch(() => undefined);
       });
     },
     known: revealed?.path === selection ? revealed : null,

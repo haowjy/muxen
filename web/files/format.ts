@@ -15,7 +15,7 @@ export function formatTime(unixSeconds: number): string {
   return new Date(unixSeconds * 1000).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
-/** `/home/j/repo` → `~/repo`: how a path reads on the phone. */
+/** `/home/j/repo` → `~/repo`: how every Files path reads and copies (Insert sends the absolute one). */
 export function shorten(path: string, home: string | null): string {
   if (home && (path === home || path.startsWith(`${home}/`))) return `~${path.slice(home.length)}`;
   return path;

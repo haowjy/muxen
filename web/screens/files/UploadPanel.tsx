@@ -42,7 +42,7 @@ function Item({ session, item, onPreview }: { session: FilesSession; item: Uploa
       <div class={styles.text}>
         <p class={styles.title} role="status">Saved {baseName(item.path)}</p>
         <div class={styles.actions}>
-          <InsertButton path={item.path} first={item.target} onInserted={dismiss} />
+          <InsertButton path={item.path} first={item.target} labelled onInserted={dismiss} />
           <Button variant="quiet" onClick={() => { onPreview(item.path); }}>Preview</Button>
         </div>
       </div>

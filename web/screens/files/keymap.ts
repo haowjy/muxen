@@ -37,7 +37,7 @@ const bindings: Binding[] = [];
 
 /** Keys are free for Files when no dialog or menu is open, no one claimed the key, and no text field has it (unless the chord allows that). */
 function free(e: Event, chord: Chord): boolean {
-  if (e.defaultPrevented || document.querySelector("dialog[open], [role=menu]")) return false;
+  if (e.defaultPrevented || document.querySelector("dialog[open], [role=menu], [role=dialog]")) return false;
   const target = e.target;
   if (chord.inList) return target === document.body || (target instanceof HTMLElement && target.matches("[role=tree], [role=listbox]"));
   return chord.inField === true || !(target instanceof HTMLElement && target.closest("input, textarea, [contenteditable]"));

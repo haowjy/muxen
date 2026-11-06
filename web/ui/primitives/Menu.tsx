@@ -1,9 +1,8 @@
-import type { ComponentChildren } from "preact";
-import { useLayoutEffect, useEffect, useRef } from "preact/hooks";
-import { createPortal } from "preact/compat";
+import type { TargetedKeyboardEvent } from "preact";
 import { cx } from "../cx";
 import { useFocus } from "../focus";
 import { Icon, type IconName } from "./Icon";
+import { Popover } from "./Popover";
 import styles from "./Menu.module.css";
 
 export interface MenuItem {
@@ -35,110 +34,28 @@ interface MenuProps {
   at?: { x: number; y: number } | undefined;
   label: string;
   sections: MenuSection[];
-  /** Facts shown in the same popover instead of rows (a file's Info): it reads as a dialog, and no row takes the arrow keys. */
-  facts?: ComponentChildren;
   onClose: () => void;
   /** A fine pointer or a keyboard opened it: the first row takes focus. Touch never focuses, so a raised keyboard stays up. */
   focusFirst: boolean;
 }
 
-/** The click that ends this press, if any, goes nowhere. Ended by the next press, a press that became a scroll, or a second. */
-function swallowClick(): void {
-  const stop = (e: Event): void => {
-    e.preventDefault();
-    e.stopPropagation();
-    done();
-  };
-  const done = (): void => {
-    clearTimeout(timer);
-    document.removeEventListener("click", stop, true);
-    document.removeEventListener("pointerdown", done, true);
-    document.removeEventListener("pointercancel", done, true);
-  };
-  // Added while this press is being dispatched, so the press itself doesn't end it.
-  document.addEventListener("click", stop, true);
-  document.addEventListener("pointerdown", done, true);
-  document.addEventListener("pointercancel", done, true);
-  const timer = setTimeout(done, 1_000);
-}
+const firstRow = (menu: HTMLElement): HTMLElement | null => menu.querySelector<HTMLElement>("button:not([aria-disabled])");
 
-/** Space between the menu and its anchor, and between it and the window's edge. */
-const GAP_PX = 8;
-
-/**
- * A small non-modal menu in the popover look (Dialog's), placed against a control. Not a
- * `<dialog>`: a modal would take focus and lower the keyboard. Every row cancels its pointerdown,
- * like a dock control. A press outside, Escape (focus returns to the anchor), or a chosen row closes it.
- */
-export function Menu({ anchor, at, label, sections, facts, onClose, focusFirst }: MenuProps) {
-  const ref = useRef<HTMLDivElement>(null);
+/** A small non-modal menu in a {@link Popover}. Every row cancels its pointerdown, like a dock control; a chosen row closes it. */
+export function Menu({ anchor, at, label, sections, onClose, focusFirst }: MenuProps) {
   const focus = useFocus();
+  const arrows = (e: TargetedKeyboardEvent<HTMLDivElement>): void => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    const rows = [...e.currentTarget.querySelectorAll<HTMLElement>("button:not([aria-disabled])")];
+    const at = rows.findIndex((row) => row === document.activeElement);
+    const next = rows[(at + (e.key === "ArrowDown" ? 1 : -1) + rows.length) % rows.length];
+    if (!next) return;
+    e.preventDefault();
+    focus.focusElement(next);
+  };
 
-  useLayoutEffect(() => {
-    const menu = ref.current;
-    if (!menu) return;
-    const rect = at ? { top: at.y, bottom: at.y, left: at.x } : anchor.getBoundingClientRect();
-    const root = document.documentElement;
-    const { clientWidth, clientHeight } = root;
-    // The keyboard is a system window over the page: nothing drawn under it shows. Only the space above it counts.
-    const visibleBottom = clientHeight - (parseFloat(getComputedStyle(root).getPropertyValue("--keyboard-inset")) || 0);
-    const above = rect.top;
-    const below = visibleBottom - rect.bottom;
-    const up = above > below;
-    menu.style.maxHeight = `${String((up ? above : below) - 2 * GAP_PX)}px`;
-    menu.style.top = up ? "" : `${String(rect.bottom + GAP_PX)}px`;
-    menu.style.bottom = up ? `${String(clientHeight - rect.top + GAP_PX)}px` : "";
-    // A control in the right half (a header's ⋯) hangs the menu from its right edge, so it opens inwards.
-    const right = at ? at.x : anchor.getBoundingClientRect().right;
-    const start = !at && rect.left > clientWidth / 2 ? right - menu.offsetWidth : rect.left;
-    menu.style.left = `${String(Math.max(GAP_PX, Math.min(start, clientWidth - menu.offsetWidth - GAP_PX)))}px`;
-    if (focusFirst) {
-      const first = menu.querySelector<HTMLElement>("button:not([aria-disabled])");
-      if (first) focus.focusElement(first);
-    }
-  }, [anchor, at?.x, at?.y]);
-
-  const pointed = at !== undefined;
-  useEffect(() => {
-    const away = (e: PointerEvent): void => {
-      const target = e.target as Node | null;
-      // A control's own click toggles its menu: closing here too would reopen it. A menu opened at a point
-      // (a row's) has no control under it, and its anchor (a whole list) is only where focus returns.
-      if (ref.current?.contains(target) || (!pointed && anchor.contains(target))) return;
-      // On touch the tap that closes a menu only closes it, as on iOS: what is under it doesn't also act.
-      if (e.pointerType === "touch") swallowClick();
-      onClose();
-    };
-    const keys = (e: KeyboardEvent): void => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        // Focus goes back to the anchor only when the menu held it: on touch it never did, and a raised keyboard stays up.
-        const held = ref.current?.contains(document.activeElement) ?? false;
-        onClose();
-        if (held) focus.focusElement(anchor);
-        return;
-      }
-      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-      const rows = [...(ref.current?.querySelectorAll<HTMLElement>("button:not([aria-disabled])") ?? [])];
-      const at = rows.indexOf(document.activeElement as HTMLElement);
-      const next = rows[(at + (e.key === "ArrowDown" ? 1 : -1) + rows.length) % rows.length];
-      if (next && ref.current?.contains(document.activeElement)) {
-        e.preventDefault();
-        focus.focusElement(next);
-      }
-    };
-    document.addEventListener("pointerdown", away, true);
-    document.addEventListener("keydown", keys, true);
-    return () => {
-      document.removeEventListener("pointerdown", away, true);
-      document.removeEventListener("keydown", keys, true);
-    };
-  }, [anchor, pointed, onClose]);
-
-  return createPortal(
-    <div ref={ref} class={cx(styles.menu, facts !== undefined && styles.facts)} role={facts === undefined ? "menu" : "dialog"} aria-label={label}>
-      {facts}
+  return (
+    <Popover anchor={anchor} at={at} role="menu" label={label} onClose={onClose} focus={focusFirst} focusTarget={firstRow} class={styles.menu} onKeyDown={arrows}>
       {sections.map((section, i) => (
         <div key={i} class={styles.section} role="group" aria-label={section.title}>
           {section.title && <p class={styles.title}>{section.title}</p>}
@@ -161,7 +78,6 @@ export function Menu({ anchor, at, label, sections, facts, onClose, focusFirst }
           ))}
         </div>
       ))}
-    </div>,
-    document.body,
+    </Popover>
   );
 }
