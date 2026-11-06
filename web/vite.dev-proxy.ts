@@ -124,9 +124,11 @@ export function devProxy(): Plugin {
               configure: (proxy) => {
                 proxy.on("proxyReq", (proxyReq) => {
                   proxyReq.removeHeader("cookie");
+                  proxyReq.removeHeader("origin"); // checked above; a native client sends none
                   proxyReq.setHeader("Authorization", `Bearer ${token()}`);
                 });
                 proxy.on("proxyReqWs", (proxyReq) => {
+                  proxyReq.removeHeader("origin");
                   proxyReq.setHeader("Sec-WebSocket-Protocol", `muxen.v1, muxen.auth.${token()}`);
                 });
               },

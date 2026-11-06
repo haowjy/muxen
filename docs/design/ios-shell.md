@@ -152,8 +152,9 @@ are URLSession requests too, so they take the rule (see "Video").
 For HTTP endpoints, P4b builds proxy URLs from `PlatformHost.handle`; native resolves
 them to the private `baseURL` and supplies the per-host token. The production browser
 adapter uses `location.origin` and carries no credential; the daemon judges it as an
-enrolled tailnet node. Native requests use the same endpoints without browser Origin
-checks.
+enrolled tailnet node. Native requests use the same endpoints and send no `Origin`
+(the scheme handler forwards none); the daemon refuses a native token's request whose
+`Origin` is present and isn't `muxen-app://ui`, which is the page's own socket.
 
 ### Web content security
 

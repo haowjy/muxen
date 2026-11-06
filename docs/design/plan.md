@@ -816,7 +816,9 @@ handler of one HTTPS entry with Funnel off. It checks `Host: localhost`, one
 `X-Forwarded-Host` matching that origin, exact `Origin` on upgrades and mutations,
 and `Sec-Fetch-Site: same-origin` on reads. API responses are `no-store` with
 `Cross-Origin-Resource-Policy: same-origin`; the embedded shell has a restrictive
-CSP. Native auth remains cookie-free and needs no Origin exception.
+CSP. Native auth remains cookie-free; on the native lane a request's `Origin`,
+if present, must be exactly `muxen-app://ui` (the app's page), so a leaked token is
+useless from a browser page.
 The native UI at `muxen-app://ui` has a separate scheme-handler CSP and sandbox for
 daemon responses ([ios-shell.md](ios-shell.md#web-content-security)).
 

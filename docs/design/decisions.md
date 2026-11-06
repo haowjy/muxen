@@ -1333,14 +1333,22 @@ Decided 2026-10-22 by the tech lead.
 - **Why:** a browser WebSocket can't see a refused upgrade's status (it reports 1006,
   like a network failure), so an HTTP 401 would leave the app retrying a dead token.
 
-### No `Origin` check (native lane only)
+### The native lane refuses a foreign `Origin`
 
-- **Decided:** 2026-10-21, design.
-- **What:** the native-token lane does not require an Origin check. The browser/node
-  lane requires exact Origin and fetch metadata checks.
-- **Why:** Origin checks protect ambient credentials from cross-site use. Native bearer
-  tokens are not ambient credentials a foreign page can read; enrolled node identity is
-  ambient, so browser requests require the additional checks.
+- **Decided:** 2026-11-06, Jimmy.
+- **What:** a request that presents a native token and carries an `Origin` other than
+  exactly `muxen-app://ui` is `403 bad_origin` (a duplicate `Origin` too; a refused
+  upgrade gets a plain 403). A request with no `Origin` is admitted. One check in
+  `Auth::check`, so it covers `/ws`, `/fs/*`, `/complete` and `/settings*` on both
+  fronts. The node lane is unchanged.
+- **Why:** a leaked token (the media player could once send it to a hostile host) could otherwise be used
+  from a page in a browser on the tailnet, where Serve adds the login; shown in real
+  Chromium and WebKit. Every real native client either sends no `Origin`
+  (URLSession) or sends the app's page (its WebKit socket).
+- **Rejected:** no `Origin` check on the native lane, on the claim that bearer tokens
+  aren't ambient credentials a foreign page can read (true until a token leaks); a
+  test or dev bypass in the daemon (the dev proxy strips `Origin` instead, as a native
+  client would look).
 
 ### An unreadable `auth.toml` fails closed but retryable: 503 and close 4503
 

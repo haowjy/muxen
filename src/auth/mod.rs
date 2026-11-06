@@ -25,6 +25,10 @@ pub use store::{AuthFile, Device, DeviceKind, Store, StoreError};
 /// The subprotocol that carries a native token on a WebSocket.
 pub const SUBPROTOCOL_PREFIX: &str = "muxen.auth.";
 
+/// The one `Origin` a native token's request may carry: the app's own page. Native
+/// URLSession clients send none.
+const APP_ORIGIN: &str = "muxen-app://ui";
+
 /// Whether a listener permits tokenless browser-node authentication.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NodeLane {
@@ -291,7 +295,11 @@ impl Auth {
         allow_unenrolled: bool,
     ) -> Result<Session, AuthError> {
         match presented(headers)? {
-            Some(token) => self.check_native(token).await.map(Session::Native),
+            Some(token) => {
+                let device = self.check_native(token).await?;
+                native_origin(headers)?;
+                Ok(Session::Native(device))
+            }
             None if node_lane == NodeLane::Refused => Err(AuthError::NoToken),
             None => {
                 self.check_node(method, headers, upgrade, login, allow_unenrolled)
@@ -507,6 +515,17 @@ fn map_node_error(error: node::Error) -> AuthError {
         node::Error::BadOrigin => AuthError::BadOrigin,
         node::Error::ForwardedAddress => AuthError::Forbidden,
         node::Error::Refused(reason) => AuthError::NodeRefused(reason),
+    }
+}
+
+/// A browser page on another origin can't borrow a leaked token: with `Origin` present
+/// it must be exactly the app's page, and a repeated header is refused.
+fn native_origin(headers: &HeaderMap) -> Result<(), AuthError> {
+    let mut origins = headers.get_all(header::ORIGIN).iter();
+    match (origins.next(), origins.next()) {
+        (None, _) => Ok(()),
+        (Some(value), None) if value.as_bytes() == APP_ORIGIN.as_bytes() => Ok(()),
+        _ => Err(AuthError::BadOrigin),
     }
 }
 

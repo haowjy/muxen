@@ -37,7 +37,9 @@ execution for whoever passes it, so the checks guard against:
 - **pages on any other origin using an enrolled node's identity through the
   browser**: other sites, pages served by other machines in the tailnet (all one
   "site", since `ts.net` is a public suffix), other ports on the dev box, another
-  user's muxen ([Browser admission](#browser-admission));
+  user's muxen ([Browser admission](#browser-admission)), and the same pages holding
+  a leaked native token ([Carrying the token](#carrying-the-token): a token's
+  request with any other `Origin` is refused);
 - **anything else served at muxen's origin, or anything else reaching the
   front**: another app mounted beside muxen in its Serve entry, or a Serve TCP
   forward to the front ([Canonical origin](#canonical-origin));
@@ -73,7 +75,9 @@ holding the 64 connection permits; other Unix users on a Linux box can't.
   browser script cannot reach that mint. The token uses the native lane from any
   node and does not re-run the source node's Tailscale rules; it remains usable if
   those rules later fail, until the node is removed from muxen. Removing the node
-  revokes the token.
+  revokes the token. A leaked token is usable by a non-browser client on any
+  allowed node, never from a page in a browser: a browser sends its page's `Origin`
+  and the native lane refuses it.
 - Anyone holding Jimmy's unlocked laptop or phone can use the browser client. A lock
   screen drawn by the page would protect nothing the node isn't already sending. The
   native app is also usable while it remains unlocked, including between background trips
@@ -618,7 +622,7 @@ WebSocket subprotocol. `Cookie` is ignored.
 
 | Presented | Lane |
 |---|---|
-| exactly one `Authorization: Bearer <token>`, or exactly one `muxen.auth.<token>` subprotocol | native, on either front: today's rules, no origin check, no node identity. Another scheme, or an empty token, is `401 auth_required` |
+| exactly one `Authorization: Bearer <token>`, or exactly one `muxen.auth.<token>` subprotocol | native, on either front: the token, no node identity. If `Origin` is present it must be exactly one header, `muxen-app://ui` (the app's page); anything else is `403 bad_origin`, and a refused upgrade gets a plain 403 and no socket. A request with no `Origin` (the app's URLSession clients, the `muxen` CLI) is admitted. Another scheme, or an empty token, is `401 auth_required` |
 | nothing | node, on a Serve front only: [Node identity](#node-identity), [Canonical origin](#canonical-origin) and [Browser admission](#browser-admission). On `local.sock`, `401 auth_required` |
 | two `Authorization` headers, two `muxen.auth.` subprotocols, or one of each | ambiguous: `401 auth_required` / close 4401 |
 

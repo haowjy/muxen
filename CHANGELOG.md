@@ -5,6 +5,7 @@ version section on release.
 
 ## [Unreleased]
 
+- Security: a device token no longer works from a web page in a browser. The server refuses a token's request that carries any `Origin` other than the app's own, so a leaked token can't be used through a browser on your tailnet.
 - A save no longer tries to carry a file's setuid, setgid or sticky bit onto the new file.
 - The systemd unit sets `NoNewPrivileges`, `LockPersonality`, `RestrictRealtime` and `RestrictSUIDSGID`; rerun `muxen setup --background` to pick it up. CI and release workflows pin third-party actions to commit SHAs.
 - Security: terminal query replies no longer reach the pane as typing, so a `cat` of a hostile file can't put stray characters at your prompt. A Markdown diagram can no longer set Mermaid's theme or fonts, and the styles left in a diagram can't name another host.
