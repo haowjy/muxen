@@ -128,6 +128,9 @@ and admission, the first that applies:
 3. **connecting** when the shown state is checking, with the note "Connecting to pop-os…", or when
    admission is undecided on a server that answers, with the server's banner ("Checking access…"
    after 10 s) and no note.
+   The shown state is also checking while an open socket has had no answer to an ask for 3 s, so Home
+   reads "connecting" when a tab does; a live terminal on screen shows nothing for it, and offline
+   still waits for the socket to be declared dead.
 4. Otherwise **connected**, with a note if tmux isn't running, and the card's notice while the daemon is
    turning sockets away: over the connection cap, or unable to decide right now (4503).
 

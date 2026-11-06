@@ -5426,10 +5426,15 @@ the check starts at the third timeout rather than the second, the limit is 15 s 
 - **Why:** while the socket is open the server can't be anything but reachable (the link closes
   itself within 35 s of silence), so a per-message answer would only move a timestamp, on the
   terminal's hottest path.
-- **Jimmy to confirm:** accepting "within about 35 s" for a server that goes off while muxen is open
-  on it. Faster means a shorter heartbeat (more bytes for every user, all the time) or showing
-  "checking" after one missed pong (one more timer, no bytes), which could follow later.
-- **Rejected:** a receive callback per message.
+- **Jimmy answered** ("sure", 2026-11-06), keeping "within about 35 s" for offline and approving the
+  faster word: when an ask (a `watch` or a request sent; not keystrokes, resizes or pings) gets
+  nothing back, no message or frame of any kind, for 3 s, the reach goes from reachable to checking, so
+  Home reads "connecting" with a tab that does. Any message or frame returns it to reachable. The host
+  compares the socket's last-receive time with when the ask went out when one timer fires, so nothing
+  is added to the receive path but a check of one flag. Stopping the socket undoes it.
+- **Rejected:** a receive callback per message that moves a timestamp; checking after one missed pong
+  (it depends on the ping interval, and flips Home with nobody waiting on the server); a shorter
+  heartbeat (bytes for every user, all the time).
 
 ### A stuck socket recreates the web view only if the server answers
 

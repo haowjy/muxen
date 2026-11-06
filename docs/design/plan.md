@@ -255,19 +255,19 @@ itself.
 | Shown state | Means |
 |---|---|
 | reachable | The daemon answered, and no attempt since has failed 1.5 s or more into an outage |
-| checking (reads "connecting") | No answer yet and not yet unreachable, a failed attempt ended 1.5–10 s into an outage, or a tapped Retry is in flight |
+| checking (reads "connecting") | No answer yet and not yet unreachable, a failed attempt ended 1.5–10 s into an outage, a tapped Retry is in flight, or an open socket has not answered an ask for 3 s |
 | unreachable | An attempt failed 10 s or more into an outage, or an open socket went silent |
 | no network | The phone reports no network. Not stored: it overlays any of the three |
 
 Home's status word follows from these and admission, in the order in
 [browser-behaviors.md](client/browser-behaviors.md#home).
 
-**Decided when an attempt ends.** The host's socket keeps two times: *trouble since*, when the first
+**Decided when an attempt ends, and when an ask goes unanswered.** The host's socket keeps two times: *trouble since*, when the first
 unanswered attempt of the current outage began, and *last reached*, when the daemon last answered
 (now while the socket is open; once it closes or stops, the time of the last message it received).
 Every path that opens a socket (a tab joining, a request, a nudge, Retry, the foreground, a backoff
 step) goes through one connect, which notes when the attempt began. Reachability changes only on the
-rows below, so no timer runs for it.
+rows below. The one timer is the open socket's, for an unanswered ask.
 
 | When | The socket next | Reachability |
 |---|---|---|
@@ -276,8 +276,9 @@ rows below, so no timer runs for it.
 | Server closes with any other 4xxx (4005 over the cap, 4503 can't decide now) | One backoff step; in a browser, a 4503 stops the socket and the admission check takes over | Reachable, last reached now; trouble cleared |
 | An open socket's idle close (25–35 s after its last message) | One backoff step | Unreachable, last reached = its last message, trouble since = the close. With no network: as the next row |
 | Any other close: a connect timeout, an error (1006), a clean close (1000, 1001), the link's own 4003, a socket that opened and got no `welcome`, native opening no socket (1006, or 4401 when it holds no token, which also halts and refuses) | One backoff step, or the [connect-timeout rule](#reconnect) | Unanswered. Trouble since = this attempt's start (the close, for a socket that was open), if unset. Then unreachable if 10 s have passed since then; from reachable, checking if 1.5 s have; else unchanged. A socket that was open also sets last reached to its last message |
+| An open socket, reachable, has heard nothing for 3 s after an ask (a `watch`, or a request sent). Keystrokes, resizes and pings are not asks | Open | Checking. Any message or frame on that socket, a pong included, returns it to reachable (last reached now). The idle close and the rows above still apply, so a socket that stays quiet goes on to unreachable. Stopping the socket (the last row) undoes it |
 | A connect starts (any path above) | Connecting | Unchanged |
-| Stop: nothing needs the socket, background, host removed, or browser admission check paused | Stopped | Unchanged, but last reached = the last message of a socket that was open; trouble cleared |
+| Stop: nothing needs the socket, background, host removed, or browser admission check paused | Stopped | Unchanged (a checking set by an unanswered ask returns to reachable: nothing was proven), but last reached = the last message of a socket that was open; trouble cleared |
 
 - An attempt is answered by a `welcome` or by a 4xxx close the server sent. The socket marks every
   close the client made itself, native's no-token 4401 among them; those are unanswered.
@@ -289,6 +290,9 @@ rows below, so no timer runs for it.
   last word. With fast failures, offline appears at the 10 s threshold plus one backoff step. An off
   server's first connect times out at 5 s (checking) and its second, sent at once, at about 10 s
   (offline).
+- An unanswered ask is how a tab that reads "Connecting" and Home agree within seconds when a server
+  goes off under an open socket, rather than 25–35 s apart. A slow reply that comes with output or
+  pongs inside the 3 s changes nothing. A live terminal on screen gains no banner from it.
 - From unreachable, automatic attempts leave the state alone until an answer arrives.
 - Stopping clears trouble, including when a browser admission check is paused, so a page hidden or
   an app locked mid-outage decides nothing: the first attempt after it starts a new outage.
