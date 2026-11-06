@@ -5629,7 +5629,7 @@ the check starts at the third timeout rather than the second, the limit is 15 s 
 - **Decided:** 2026-11-06, Jimmy.
 - **What:** an edit stays on the path it opened. muxen doesn't follow a rename, warn on a delete, or
   guard a remembered edit against a second browser tab. Only the file on disk is protected: the
-  ETag check, one file's text never saved into another, a save never blanking a file.
+  ETag check, one file's text never saved into another without the ETag asking first, a save never blanking a file.
 - **Why:** "unsaved data lost is... kinda par for the course". Each defence added a flag or a rule
   for a case people rarely hit.
 - **Rejected:** moving edits on rename, refusing a rename onto a name with unsaved text, naming
