@@ -1,5 +1,5 @@
 import { useCallback, useState } from "preact/hooks";
-import { useApp, useAppView, useBells, useHostLook } from "../../app/context";
+import { useApp, useAppView, useBells, useDocked, useHostLook } from "../../app/context";
 import { cx } from "../../ui/cx";
 import { DockButton } from "../../ui/primitives/DockButton";
 import { Icon } from "../../ui/primitives/Icon";
@@ -23,7 +23,7 @@ export function TabRow({ place }: { place: "top" | "dock" }) {
   const workspace = useAppView((v) => v.workspace);
   const keyboard = useAppView((v) => v.viewport.keyboard);
   // Touch input ends in the dock (phone and iPad): a press on the row must not take the keyboard's focus from the input holding it.
-  const touchInput = useAppView((v) => v.viewport.directInput !== "xterm");
+  const touchInput = useDocked();
   const owner = useStore(app.focus, (s) => s.owner);
   const statuses = useStore(terminals, (s) => s.tabs);
   const host = useHostLook();

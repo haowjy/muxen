@@ -17,13 +17,13 @@ export class HttpRefusal extends Error {
 }
 
 /** `busy` is answered with `Retry-After: 1`; a couple of retries ride out a burst. */
-export const BUSY_RETRIES = 2;
+const BUSY_RETRIES = 2;
 
 /**
  * One request to a host's HTTP origin. A refusal becomes an {@link HttpRefusal} with the
- * daemon's code, a dead network `network`; `busy` is retried `retries` times.
+ * daemon's code, a dead network `network`; `busy` is retried.
  */
-export async function send(target: string, init: RequestInit = {}, retries = BUSY_RETRIES, fetchFn: typeof fetch = (input, opts) => fetch(input, opts)): Promise<Response> {
+export async function send(target: string, init: RequestInit = {}, fetchFn: typeof fetch = (input, opts) => fetch(input, opts)): Promise<Response> {
   for (let attempt = 0; ; attempt++) {
     let res: Response;
     try {
@@ -39,7 +39,7 @@ export async function send(target: string, init: RequestInit = {}, retries = BUS
     const code = body?.error;
     const detail = typeof body?.detail === "string" ? body.detail : undefined;
     const err = new HttpRefusal(res.status, typeof code === "string" ? code : `http_${String(res.status)}`, detail);
-    if (err.code !== "busy" || attempt >= retries) throw err;
+    if (err.code !== "busy" || attempt >= BUSY_RETRIES) throw err;
     const wait = Number(res.headers.get("Retry-After")) || 1;
     await new Promise((resolve) => setTimeout(resolve, wait * 1000));
   }
@@ -60,5 +60,5 @@ export async function readBody<T>(res: Response, signal: AbortSignal | null | un
 
 /** {@link send} and the JSON body of its answer. */
 export async function sendJson<T>(target: string, init?: RequestInit, fetchFn?: typeof fetch): Promise<T> {
-  return (await readBody(await send(target, init, BUSY_RETRIES, fetchFn), init?.signal, (res) => res.json())) as T;
+  return (await readBody(await send(target, init, fetchFn), init?.signal, (res) => res.json())) as T;
 }

@@ -21,7 +21,7 @@ import styles from "./Viewers.module.css";
 export const TEXT_LIMIT = 1024 * 1024;
 
 /** `retry` reads the file again; the failure is shown until then. */
-export type Loaded<T> = { kind: "loading" } | { kind: "done"; value: T } | { kind: "error"; error: HttpRefusal; retry: () => void };
+export type Loaded = { kind: "loading" } | { kind: "done"; value: TextPreview } | { kind: "error"; error: HttpRefusal; retry: () => void };
 
 /**
  * A file's first MiB as text, fetched once per path while `wanted` (a text viewer is showing) and abandoned when it
@@ -30,9 +30,9 @@ export type Loaded<T> = { kind: "loading" } | { kind: "done"; value: T } | { kin
  * reading it again; nothing else is kept, so a file shown again later is read fresh. A read that failed for want of
  * a connection is read again once the server answers (plan.md "Requests"), and by its Try again; neither touches a read in flight.
  */
-export function useText(session: FilesSession, path: string, wanted: boolean): Loaded<TextPreview> {
+export function useText(session: FilesSession, path: string, wanted: boolean): Loaded {
   const app = useApp();
-  const [state, setState] = useState<{ path: string; loaded: Loaded<TextPreview> } | null>(() => {
+  const [state, setState] = useState<{ path: string; loaded: Loaded } | null>(() => {
     const handed = session.handed?.path === path ? session.handed.text : null;
     if (!handed) return null;
     session.handed = null;
@@ -76,7 +76,6 @@ function Truncated({ preview }: { preview: TextPreview }) {
   return <p class={styles.note}>Showing the first {formatSize(TEXT_LIMIT)}{of}. Open it in the terminal for the rest.</p>;
 }
 
-/** Source and text, coloured by Shiki when the extension is on the allowlist and the file is small. */
 /** The facts Info adds for a file read as text. */
 const LANGUAGE_NAMES: Record<Language, string> = {
   bash: "Shell", c: "C", diff: "Diff", go: "Go", javascript: "JavaScript", json: "JSON", markdown: "Markdown", python: "Python",
@@ -97,7 +96,7 @@ export function TextFacts({ name, preview, plain }: { name: string; preview: Tex
 }
 
 /** Source and text, numbered, edge to edge; coloured by Shiki when the extension is on the allowlist and the file is small. */
-export function CodeViewer({ session, text, file, wrap, plain }: { session: FilesSession; text: Loaded<TextPreview>; file: FileRef; wrap: boolean; plain: boolean }) {
+export function CodeViewer({ session, text, file, wrap, plain }: { session: FilesSession; text: Loaded; file: FileRef; wrap: boolean; plain: boolean }) {
   const ref = useRef<HTMLElement>(null);
   const gutter = useRef<HTMLSpanElement>(null);
   useEffect(() => {
@@ -125,7 +124,7 @@ export function CodeViewer({ session, text, file, wrap, plain }: { session: File
 }
 
 /** Rendered Markdown. Links to files open here; links to the web leave the app. */
-export function MarkdownViewer({ session, text, file, onLink }: { session: FilesSession; text: Loaded<TextPreview>; file: FileRef; onLink: (target: LinkTarget) => void }) {
+export function MarkdownViewer({ session, text, file, onLink }: { session: FilesSession; text: Loaded; file: FileRef; onLink: (target: LinkTarget) => void }) {
   const [html, setHtml] = useState<string | null>(null);
   const article = useRef<HTMLElement>(null);
   const scheme = useAppView((v) => v.viewport.scheme);

@@ -4,7 +4,7 @@
 // mounted once and hidden rather than unmounted (§6.5); the renderer, the drivers and tmux's
 // size belong to `terminals.ts`, so this file only places things and draws state.
 import { useEffect, useRef } from "preact/hooks";
-import { useApp, useAppView, useHostLook } from "../../app/context";
+import { useApp, useAppView, useDocked, useHostLook } from "../../app/context";
 import { hostById } from "../../net/hosts";
 import { EmptyState } from "../../ui/primitives/EmptyState";
 import { StatusBand } from "../../ui/primitives/StatusBand";
@@ -26,7 +26,7 @@ export function TerminalScreen({ active }: { active: boolean }) {
   const workspace = useAppView((v) => v.workspace);
   const phone = useAppView((v) => v.viewport.layout === "phone");
   // Touch input (a phone, or an iPad without a trackpad) ends in the dock.
-  const dock = useAppView((v) => v.viewport.directInput !== "xterm");
+  const dock = useDocked();
 
   useEffect(() => {
     if (slot.current) terminals.mount(slot.current);

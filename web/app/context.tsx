@@ -49,12 +49,6 @@ export function useBells(): BellsState {
   return useStore(app.bells, (s) => s);
 }
 
-/** A host's name for a host id, falling back to the id while the host is unknown. */
-export function useHostName(): (hostId: string) => string {
-  const hosts = useAppView((v) => v.hosts);
-  return (hostId) => hosts.find((h) => h.hostId === hostId)?.name ?? hostId;
-}
-
 /** What a tab says of its server: the name and the server's state, by host id. */
 export function useHostLook(): (hostId: string) => HostLook {
   const hosts = useAppView((v) => v.hosts);

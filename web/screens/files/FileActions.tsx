@@ -81,8 +81,7 @@ export async function download(app: AppController, url: string, name: string): P
   if (failure !== null) app.notify(`Couldn't download ${name}: ${failure}`);
 }
 
-/** Download: the platform's save of `/fs/raw` (the browser's download, the app's share sheet). `big` is the one a file muxen can't show offers, with its size. */
-/** The header's Download icon, or with `big` the can't-preview card's button, which names the size. */
+/** Download, the platform's save of `/fs/raw`: the header's icon, or with `big` the can't-preview card's button, which names the size. */
 export function DownloadButton({ url, name, size = null, big }: { url: string; name: string; size?: string | null; big?: boolean }) {
   const app = useApp();
   const save = (): void => { void download(app, url, name); };

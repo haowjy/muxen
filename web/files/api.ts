@@ -1,7 +1,7 @@
 // The file API client (fs.md). Hand-written wire types until src/proto/fs.rs is generated
 // for TypeScript like the WebSocket messages; keep them in step with fs.md "Routes".
 
-import { BUSY_RETRIES, HttpRefusal, readBody, send, sendJson } from "../net/http";
+import { HttpRefusal, readBody, send, sendJson } from "../net/http";
 import type { CreateKind, CreateRequest, DeleteRequest, RenameRequest, Search } from "../proto/generated/messages";
 
 export interface Entry {
@@ -96,7 +96,7 @@ export function httpFsApi(origin: string, fetchFn?: typeof fetch): FsApi {
 
     async probe(path) {
       try {
-        const res = await send(url("raw", path), { headers: { Range: "bytes=0-0" } }, BUSY_RETRIES, fetchFn);
+        const res = await send(url("raw", path), { headers: { Range: "bytes=0-0" } }, fetchFn);
         void res.body?.cancel();
         const size = res.status === 206 ? totalOf(res.headers.get("Content-Range")) : Number(res.headers.get("Content-Length") ?? NaN);
         return { kind: "file", mime: res.headers.get("Content-Type"), size: Number.isFinite(size) ? size : null };
@@ -110,7 +110,7 @@ export function httpFsApi(origin: string, fetchFn?: typeof fetch): FsApi {
     async text(path, limit, signal) {
       let res: Response;
       try {
-        res = await send(url("raw", path), { headers: { Range: `bytes=0-${String(limit - 1)}` }, ...(signal && { signal }) }, BUSY_RETRIES, fetchFn);
+        res = await send(url("raw", path), { headers: { Range: `bytes=0-${String(limit - 1)}` }, ...(signal && { signal }) }, fetchFn);
       } catch (error) {
         if (error instanceof HttpRefusal && error.code === "bad_range") return { text: "", size: 0, truncated: false };
         throw error;
@@ -131,17 +131,17 @@ export function httpFsApi(origin: string, fetchFn?: typeof fetch): FsApi {
 
     create: async (dir, name, kind) => {
       const request: CreateRequest = { dir, name, kind };
-      await send(`${origin}/fs/create`, post(request), BUSY_RETRIES, fetchFn);
+      await send(`${origin}/fs/create`, post(request), fetchFn);
     },
 
     rename: async (dir, name, to) => {
       const request: RenameRequest = { dir, name, to };
-      await send(`${origin}/fs/rename`, post(request), BUSY_RETRIES, fetchFn);
+      await send(`${origin}/fs/rename`, post(request), fetchFn);
     },
 
     delete: async (dir, name) => {
       const request: DeleteRequest = { dir, name };
-      await send(`${origin}/fs/delete`, post(request), BUSY_RETRIES, fetchFn);
+      await send(`${origin}/fs/delete`, post(request), fetchFn);
     },
   };
 }

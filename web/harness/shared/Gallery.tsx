@@ -12,7 +12,7 @@ import { Spinner } from "../../ui/primitives/Spinner";
 import { StatusBand } from "../../ui/primitives/StatusBand";
 import { TabStrip, type Pill } from "../../ui/primitives/TabStrip";
 import { CodeField } from "../../ui/primitives/CodeField";
-import { SearchField, TextField } from "../../ui/primitives/TextField";
+import { TextField } from "../../ui/primitives/TextField";
 import { Toast } from "../../ui/primitives/Toast";
 import styles from "./Gallery.module.css";
 
@@ -39,7 +39,6 @@ function Section({ title, children }: { title: string; children: preact.Componen
 export function Gallery() {
   const [dialog, setDialog] = useState<"dialog" | "page" | null>(null);
   const [active, setActive] = useState("a");
-  const [query, setQuery] = useState("");
   const [code, setCode] = useState("7KQ4");
   const [name, setName] = useState("");
   const [menu, setMenu] = useState<HTMLElement | null>(null);
@@ -71,7 +70,6 @@ export function Gallery() {
         <TextField label="Name (optional)" value={name} onInput={setName} hint="Leave blank to let tmux choose." />
         <TextField label="Start directory" value="relative/path" onInput={() => undefined} error="Use an absolute directory path, or leave blank." />
         <CodeField label="Code" value={code} onInput={setCode} />
-        <SearchField label="Find a session or window" placeholder="Find a session or window" value={query} onInput={setQuery} />
       </Section>
       <Section title="Rows">
         <div class={styles.stack}>
@@ -129,7 +127,6 @@ export function Gallery() {
       </Section>
       <Toast message="2 tabs closed: their windows are gone" onDismiss={() => undefined} />
       <Dialog open={dialog !== null} variant={dialog ?? "dialog"} title="Open session" header={<TitleBar title="Open session" onClose={() => { setDialog(null); }} />} onClose={() => { setDialog(null); }}>
-        <SearchField label="Find a session or window" value="" onInput={() => undefined} />
         <EmptyState icon="sessions" title="No matching sessions or windows." />
       </Dialog>
     </main>

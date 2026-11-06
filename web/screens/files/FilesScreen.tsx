@@ -1,6 +1,6 @@
 // Files: the screen of the active Files tab (its folder or preview), on every layout. On touch the
 // tab row is its bottom bar, with a keyboard control for the path field.
-import { useApp, useAppView } from "../../app/context";
+import { useApp, useAppView, useDocked } from "../../app/context";
 import { hostById } from "../../net/hosts";
 import { EmptyState } from "../../ui/primitives/EmptyState";
 import { Spinner } from "../../ui/primitives/Spinner";
@@ -16,7 +16,7 @@ export function FilesScreen() {
   const host = useAppView((v) => v.hosts.find((h): h is KnownHost => h.hostId === tab?.host));
   // A browser launched while its server is off knows the host but not its id: it waits for the server.
   const waitingOn = useAppView((v) => (tab && !v.hosts.some((h) => h.hostId === tab.host) ? hostById(v.hosts, tab.host) : undefined));
-  const dock = useAppView((v) => v.viewport.directInput !== "xterm");
+  const dock = useDocked();
   if (!tab) return null;
   return (
     <div class={styles.screen}>

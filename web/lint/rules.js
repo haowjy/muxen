@@ -6,12 +6,12 @@
 const TS = ["**/*.ts", "**/*.tsx"];
 
 // Rule 1: raw editable and interactive elements live only in primitives and the three
-// input owners. Screens use TextField, SearchField and Button.
+// input owners. Screens use TextField and Button.
 const RAW = "button|input|textarea|select";
 const rule1 = [
   {
     selector: `JSXOpeningElement[name.name=/^(${RAW})$/]`,
-    message: "Raw <button>/<input>/<textarea>/<select> live only in ui/primitives (and the input owners): use Button, IconButton, Row, TextField or SearchField.",
+    message: "Raw <button>/<input>/<textarea>/<select> live only in ui/primitives (and the input owners): use Button, IconButton, Row or TextField.",
   },
   { selector: "JSXAttribute[name.name=/^(contentEditable|contenteditable)$/]", message: "contenteditable is banned: use a TextField." },
   {

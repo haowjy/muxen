@@ -14,7 +14,6 @@ import { useShown } from "./failure";
 import { fileIcon } from "./fileIcon";
 import { ImageViewer } from "./ImageViewer";
 import type { FilesSession } from "./session";
-import type { TextPreview } from "../../files/api";
 import { CodeViewer, MarkdownViewer, type Loaded } from "./TextViewers";
 import styles from "./Viewers.module.css";
 
@@ -89,7 +88,7 @@ function Unsupported({ session, file, onAsText }: { session: FilesSession; file:
 }
 
 /** The viewer for `kind`, under the file's header (`FileView`), which owns the viewer's controls. */
-export function Preview({ session, file, text, kind, plain, wrap, onAsText, onLink }: { session: FilesSession; file: FileRef; text: Loaded<TextPreview>; kind: ViewerKind; plain: boolean; wrap: boolean; onAsText: () => void; onLink: (target: LinkTarget) => void }) {
+export function Preview({ session, file, text, kind, plain, wrap, onAsText, onLink }: { session: FilesSession; file: FileRef; text: Loaded; kind: ViewerKind; plain: boolean; wrap: boolean; onAsText: () => void; onLink: (target: LinkTarget) => void }) {
   const api = session.browser.api;
   return (
     <div class={styles.viewer}>
