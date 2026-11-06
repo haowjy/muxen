@@ -6,16 +6,16 @@ import type { Found, SearchView } from "../../files/search";
 import { baseName, parentOf, under } from "../../files/paths";
 import type { FilesTab } from "../../workspace/state";
 import type { LinkTarget } from "../../files/render/markdown";
-import type { HttpRefusal } from "../../net/http";
+import { asRefusal } from "../../net/http";
 import type { FilesPlace } from "../../platform/types";
 import { Store, useStore } from "../../ui/store";
 import { cx } from "../../ui/cx";
 import { IconButton } from "../../ui/primitives/IconButton";
 import { Divider } from "./Divider";
-import { useFailure } from "./failure";
+import { Loading, Refused, useFailure } from "./failure";
 import { FileView } from "./FileView";
 import { useFilesKey, type Chord } from "./keymap";
-import { ListPane, Loading, Refused } from "./ListPane";
+import { ListPane } from "./ListPane";
 import { PreviewPanel } from "./PreviewPanel";
 import type { FilesSession } from "./session";
 import { useTabOutline } from "./tabOutline";
@@ -118,7 +118,7 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
     else if (target.kind === "path") {
       const token = wantsNow.current;
       const here = (): boolean => wantsNow.current === token;
-      browser.resolve(target.path).then((to) => { if (here()) open(to); }, (e: unknown) => { if (here()) app.notify(e instanceof Error && "code" in e ? failure.describe(e as HttpRefusal) : "That link can't be opened."); });
+      browser.resolve(target.path).then((to) => { if (here()) open(to); }, (e: unknown) => { if (here()) app.notify(failure.describe(asRefusal(e))); });
     }
   };
 
@@ -126,7 +126,7 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
 
   // A file full width that can't be shown yet: refused, or still being probed.
   const fileBody = place.kind !== "file" ? null
-    : error ? <Refused session={session} error={error} />
+    : error ? <Refused failure={failure} error={error} onRetry={() => { void session.browser.reload(); }} />
     : loading && place.file.mime === null && place.file.size === null ? <Loading what="Opening the file" /> : null;
   // A text handed from the view that left is the next one's only: past this place nothing takes it.
   useEffect(() => { session.handed = null; }, [session, place]);

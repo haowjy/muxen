@@ -2,10 +2,9 @@ import { shorten } from "../../files/format";
 import type { FieldView } from "../../files/pathfield";
 import type { FilesPlace } from "../../platform/types";
 import { Button } from "../../ui/primitives/Button";
-import { EmptyState } from "../../ui/primitives/EmptyState";
 import { Spinner } from "../../ui/primitives/Spinner";
 import { cx } from "../../ui/cx";
-import type { Failure } from "./failure";
+import { Refused, type Failure } from "./failure";
 import { RowList } from "./FolderList";
 import type { Listbox } from "./useListbox";
 import styles from "./FolderList.module.css";
@@ -36,7 +35,7 @@ export function NarrowedList({ view, home, failure, box, loadingRest, onOpen, on
   const { typed, record, out, up } = view;
   if (!typed) return <p class={find.note}>Type a path that starts with ~ or /.</p>;
   if (record?.error) {
-    return <EmptyState icon="alert" title={failure.describe(record.error)} action={failure.waiting(record.error) ? undefined : <Button onClick={onRetry}>Try again</Button>} />;
+    return <Refused failure={failure} error={record.error} onRetry={onRetry} />;
   }
   const listing = record?.listing ?? null;
   const where = shorten(typed.parent, home);

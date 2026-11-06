@@ -7,11 +7,10 @@ import type { FilesPlace } from "../../platform/types";
 import type { Stopped } from "../../proto/generated/messages";
 import { cx } from "../../ui/cx";
 import { Button } from "../../ui/primitives/Button";
-import { EmptyState } from "../../ui/primitives/EmptyState";
 import { PathInput } from "../../ui/primitives/PathInput";
 import { Spinner } from "../../ui/primitives/Spinner";
 import { useStore } from "../../ui/store";
-import { useFailure } from "./failure";
+import { Refused, useFailure } from "./failure";
 import { EntryCells, whyNot } from "./FolderList";
 import { SEARCH, SEARCH_SLASH, SHOW_HIDDEN_IN_SEARCH, useFilesKey, type Chord } from "./keymap";
 import type { FilesSession } from "./session";
@@ -148,7 +147,7 @@ export function Search({ session, search, where, onOpen, onReveal, onClose: clos
       </div>
       <div ref={scroller} class={pane.scroll} onScroll={(e) => { search.scroll = e.currentTarget.scrollTop; }}>
         {error ? (
-          <EmptyState icon="alert" title={failure.describe(error)} action={failure.waiting(error) ? undefined : <Button onClick={() => { search.resume(); }}>Try again</Button>} />
+          <Refused failure={failure} error={error} onRetry={() => { search.resume(); }} />
         ) : (
           <div class={list.wrap} aria-busy={asking}>
             {asking && <p class={styles.label}><Spinner label="Searching" /><span>Searching</span></p>}

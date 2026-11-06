@@ -7,7 +7,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { useApp, useAppView } from "../../app/context";
 import { serverState, type HostClient } from "../../net/hosts";
 import { refusalWords } from "../../net/refusalWords";
-import type { SettingsFailure } from "../../net/settings";
+import type { HttpRefusal } from "../../net/http";
 import type { ServerSettings } from "../../proto/generated/messages";
 import { admissionCopy, offlineWords } from "../../ui/hostProblem";
 import { Button } from "../../ui/primitives/Button";
@@ -65,7 +65,7 @@ export function ServerSection({ host, name }: { host: HostClient; name: string }
     if (client.snapshot.settings === null || client.snapshot.unreachable) client.read();
   }), [app, client, host.entry.handle]);
 
-  const why = (failed: SettingsFailure | null): string | null => {
+  const why = (failed: HttpRefusal | null): string | null => {
     if (!failed) return null;
     if (failed.code === "network") return `Can't reach ${name}. Nothing changed.`;
     if (failed.code === "config_unavailable") return `config.toml on ${name} doesn't parse${failed.detail ? `: ${failed.detail}` : ""}. Fix it there.`;

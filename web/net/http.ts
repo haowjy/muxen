@@ -16,6 +16,9 @@ export class HttpRefusal extends Error {
   }
 }
 
+/** `error` as a refusal: one from a request, or `internal` for anything else that failed reading it. */
+export const asRefusal = (error: unknown): HttpRefusal => (error instanceof HttpRefusal ? error : new HttpRefusal(0, "internal"));
+
 /** `busy` is answered with `Retry-After: 1`; a couple of retries ride out a burst. */
 const BUSY_RETRIES = 2;
 

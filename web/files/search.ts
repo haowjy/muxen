@@ -1,7 +1,7 @@
 // Files' Search (browser-behaviors.md "Files", Search): one search below one folder, as typed. The daemon matches and
 // ranks (fs.md "GET /fs/search"); this asks once typing settles, aborts what the text has moved past, and keeps the
 // last answer up, quieted, until the next lands. Nothing here matches: `hits` come from the daemon and are only drawn.
-import { HttpRefusal } from "../net/http";
+import { asRefusal, type HttpRefusal } from "../net/http";
 import type { Match, Stopped } from "../proto/generated/messages";
 import { Store } from "../ui/store";
 import type { Entry, FsApi } from "./api";
@@ -156,7 +156,7 @@ export class FileSearch extends Store<SearchView> {
       (error: unknown) => {
         if (this.request !== request) return;
         this.request = null;
-        this.update({ asking: false, error: error instanceof HttpRefusal ? error : new HttpRefusal(0, "internal") });
+        this.update({ asking: false, error: asRefusal(error) });
       },
     );
   }

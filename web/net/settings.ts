@@ -4,7 +4,7 @@
 // through, so they reach the daemon one at a time and in order whatever screen is open:
 // Settings draws from it, and can close mid-save without losing the save or its outcome.
 
-import { HttpRefusal, sendJson, type RefusalCode } from "./http";
+import { HttpRefusal, sendJson } from "./http";
 import type { ServerSettings, SettingsChange } from "../proto/generated/messages";
 import { Store } from "../ui/store";
 
@@ -30,12 +30,6 @@ export function httpSettingsApi(origin: string, fetchFn?: typeof fetch): Setting
 /** What a save changes, so its failure is shown beside that field. */
 export type SettingsField = "searchSkip" | "uploadsDir";
 
-/** Why a request failed: the refusal's code (`network` when the server didn't answer) and its detail. */
-export interface SettingsFailure {
-  code: RefusalCode;
-  detail: string | null;
-}
-
 export interface SettingsView {
   /** The server's latest answer; null until the first. */
   settings: ServerSettings | null;
@@ -49,11 +43,11 @@ export interface SettingsView {
   /** The last reload found config.toml doesn't parse (`where`: the parser's line and column), until an answer says the file is what runs. */
   broken: { where: string | null } | null;
   /** The last failure of a save of each field, and of a reload, until that succeeds or the user edits the field. */
-  failed: Record<SettingsField | "reload", SettingsFailure | null>;
+  failed: Record<SettingsField | "reload", HttpRefusal | null>;
 }
 
-const failure = (error: unknown): SettingsFailure =>
-  error instanceof HttpRefusal && error.code !== "network" ? { code: error.code, detail: error.detail ?? null } : { code: "network", detail: null };
+/** Anything that isn't a daemon's refusal reads as no answer. */
+const failure = (error: unknown): HttpRefusal => (error instanceof HttpRefusal ? error : new HttpRefusal(0, "network"));
 
 export class SettingsClient extends Store<SettingsView> {
   private queue: Promise<unknown> = Promise.resolve();
@@ -110,7 +104,7 @@ export class SettingsClient extends Store<SettingsView> {
         this.update({ failed: { searchSkip: null, uploadsDir: null, reload: null } });
       } catch (error) {
         const failed = failure(error);
-        if (failed.code === "config_unavailable") this.update({ broken: { where: failed.detail } });
+        if (failed.code === "config_unavailable") this.update({ broken: { where: failed.detail ?? null } });
         else this.fail("reload", failed);
       } finally {
         this.update({ reloading: false });
@@ -133,7 +127,7 @@ export class SettingsClient extends Store<SettingsView> {
     this.update({ settings, unreachable: false, ...(!settings.fileChanged && { broken: null }) });
   }
 
-  private fail(key: SettingsField | "reload", failed: SettingsFailure | null): void {
+  private fail(key: SettingsField | "reload", failed: HttpRefusal | null): void {
     if (this.snapshot.failed[key] !== failed) this.update({ failed: { ...this.snapshot.failed, [key]: failed } });
   }
 }

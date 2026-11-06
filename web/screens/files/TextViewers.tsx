@@ -9,12 +9,9 @@ import { lazyImages } from "../../files/images";
 import { useApp, useAppView } from "../../app/context";
 import { formatSize } from "../../files/format";
 import { languageFor, type Language } from "../../files/kinds";
-import { HttpRefusal } from "../../net/http";
-import { Button } from "../../ui/primitives/Button";
-import { EmptyState } from "../../ui/primitives/EmptyState";
-import { Spinner } from "../../ui/primitives/Spinner";
+import { asRefusal, type HttpRefusal } from "../../net/http";
 import { cx } from "../../ui/cx";
-import { useFailure } from "./failure";
+import { Loading, Refused, useFailure } from "./failure";
 import styles from "./Viewers.module.css";
 
 /** The code and Markdown viewers read at most this much, with Range (fs.md "Text previews"). */
@@ -46,7 +43,7 @@ export function useText(session: FilesSession, path: string, wanted: boolean): L
       (value) => { setState({ path, loaded: { kind: "done", value } }); },
       (error: unknown) => {
         if (abort.signal.aborted) return;
-        setState({ path, loaded: { kind: "error", error: error instanceof HttpRefusal ? error : new HttpRefusal(0, "internal"), retry: () => { setState(null); } } });
+        setState({ path, loaded: { kind: "error", error: asRefusal(error), retry: () => { setState(null); } } });
       },
     );
     return () => { abort.abort(); };
@@ -58,16 +55,8 @@ export function useText(session: FilesSession, path: string, wanted: boolean): L
   return state?.path === path ? state.loaded : { kind: "loading" };
 }
 
-function Loading({ what }: { what: string }) {
-  return <div class={styles.loading}><Spinner label={what} /><p>{what}</p></div>;
-}
-
-/** A file that did not load: waiting for the server says so as its title; a connection that failed while the server answers offers Try again. */
-function Failed({ error, retry: again, session }: { error: HttpRefusal; retry: () => void; session: FilesSession }) {
-  const { describe, waiting } = useFailure(session);
-  if (waiting(error)) return <EmptyState icon="alert" title={describe(error)} />;
-  const retry = error.code === "network" ? <Button onClick={again}>Try again</Button> : undefined;
-  return <EmptyState icon="alert" title="Can't show this file" action={retry}>{describe(error)}</EmptyState>;
+function Failed({ error, retry, session }: { error: HttpRefusal; retry: () => void; session: FilesSession }) {
+  return <Refused failure={useFailure(session)} error={error} onRetry={retry} title="Can't show this file" />;
 }
 
 function Truncated({ preview }: { preview: TextPreview }) {

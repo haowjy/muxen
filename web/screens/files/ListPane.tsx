@@ -7,13 +7,10 @@ import { shorten } from "../../files/format";
 import { baseName, parentOf } from "../../files/paths";
 import type { FilesPlace } from "../../platform/types";
 import { cx } from "../../ui/cx";
-import { Button } from "../../ui/primitives/Button";
-import { EmptyState } from "../../ui/primitives/EmptyState";
-import { Spinner } from "../../ui/primitives/Spinner";
 import { readPaste } from "../terminal/paste";
 import { DirList, MissingFolder, type RowMenuAsk } from "./FolderList";
 import { useEntryTasks } from "./entryTasks";
-import { useFailure } from "./failure";
+import { Loading, Refused, useFailure } from "./failure";
 import type { CreateKind } from "../../proto/generated/messages";
 import { FolderActions } from "./FolderActions";
 import { PASTE, SEARCH, SEARCH_SLASH, useFilesKey } from "./keymap";
@@ -56,6 +53,7 @@ interface Props {
 export function ListPane({ session, tab, view, pages, tree, up, search, onOpen }: Props) {
   const app = useApp();
   const { browser } = session;
+  const failure = useFailure(session);
   const phone = useAppView((v) => v.viewport.layout === "phone");
   const scroller = useRef<HTMLDivElement>(null);
   const [rowMenu, setRowMenu] = useState<RowMenuAsk | null>(null);
@@ -103,7 +101,7 @@ export function ListPane({ session, tab, view, pages, tree, up, search, onOpen }
   const body = mode === "missing" ? (
     <MissingFolder onKeyNavigate={() => { app.focus.keepKeyboardOn("list"); }} {...(up && { parent: { path: up.path, onOpen: () => { app.toPlace(up); } } })} />
   ) : mode === "list" && place.kind === "dir" && !showing ? (
-    error ? <Refused session={session} error={error} /> : <Loading what="Loading the folder" />
+    error ? <Refused failure={failure} error={error} onRetry={() => { void session.browser.reload(); }} /> : <Loading what="Loading the folder" />
   ) : null;
 
   // The path line's text: the folder with its trailing `/`, the same text the field starts with.
@@ -169,14 +167,4 @@ export function ListPane({ session, tab, view, pages, tree, up, search, onOpen }
       {tasks.dialog}
     </div>
   );
-}
-
-/** A listing or a file the host refused, in the file manager's words, with Try again. */
-export function Refused({ session, error }: { session: FilesSession; error: NonNullable<FilesView["error"]> }) {
-  const { describe, waiting } = useFailure(session);
-  return <EmptyState icon="alert" title={describe(error)} action={waiting(error) ? undefined : <Button onClick={() => { void session.browser.reload(); }}>Try again</Button>} />;
-}
-
-export function Loading({ what }: { what: string }) {
-  return <div class={styles.loading}><Spinner label={what} /><p>{what}</p></div>;
 }

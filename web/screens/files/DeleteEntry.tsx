@@ -1,5 +1,5 @@
 import type { Entry } from "../../files/api";
-import { describeError } from "../../files/browser";
+import { describeError } from "./failure";
 import { Button } from "../../ui/primitives/Button";
 import { Dialog } from "../../ui/primitives/Dialog";
 import { TitleBar } from "../../ui/primitives/DialogBars";

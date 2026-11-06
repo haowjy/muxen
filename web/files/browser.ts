@@ -1,9 +1,6 @@
-import type { HostClient } from "../net/hosts";
-import { HttpRefusal } from "../net/http";
-import { refusalWords } from "../net/refusalWords";
+import { asRefusal, type HttpRefusal } from "../net/http";
 import type { Entry, FsApi, Listing } from "./api";
 import { samePlace, type FilesPlace } from "../platform/types";
-import { hostProblem, type HostProblem } from "../ui/hostProblem";
 import { Store } from "../ui/store";
 import { baseName, parentOf, within } from "./paths";
 import { Folders, folderKey } from "./folders";
@@ -289,28 +286,6 @@ export class FileBrowser extends Store<FilesView> {
     const { place, dir } = this.snapshot;
     // Another folder's entries mustn't stand in for the one that failed.
     const stale = place.kind === "dir" && dir?.path !== place.path;
-    this.update({ loading: false, error: error instanceof HttpRefusal ? error : new HttpRefusal(0, "internal"), ...(stale && { dir: null }) });
-  }
-}
-
-/** A `network` failure while the server isn't known to answer: nothing to try, since it loads again by itself (plan.md "Requests"). */
-export function isWaiting(error: HttpRefusal, shown: HostClient["shown"]): boolean {
-  return error.code === "network" && shown !== "reachable";
-}
-
-/**
- * One line for a refusal, in the file manager's words (fs.md "Errors"). `shown` is the server's shown state; a write
- * form, whose request is always sent, leaves it out.
- */
-export function describeError(error: HttpRefusal, host: string, shown: HostClient["shown"] = "reachable"): string {
-  const problem = (kind: HostProblem): string => {
-    const { title, hint } = hostProblem(kind, host);
-    return hint ? `${title}. ${hint}` : title;
-  };
-  switch (error.code) {
-    case "network": return isWaiting(error, shown) ? `Waiting for ${host}` : problem("unreachable");
-    case "incompatible": return problem("incompatible");
-    case "auth_required": case "forbidden": case "http_401": return problem("unauthorized");
-    default: return refusalWords(error.code);
+    this.update({ loading: false, error: asRefusal(error), ...(stale && { dir: null }) });
   }
 }

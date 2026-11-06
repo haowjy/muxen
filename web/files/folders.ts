@@ -1,4 +1,4 @@
-import { HttpRefusal } from "../net/http";
+import { asRefusal, type HttpRefusal } from "../net/http";
 import { Store } from "../ui/store";
 import type { FsApi, Listing } from "./api";
 import { fold } from "./outline";
@@ -135,7 +135,7 @@ export class Folders extends Store<FoldersView> {
     this.put(path, hidden, { loading: true, error: null });
     const done = this.first(path, hidden, behind).then(
       () => { if (this.inflight.get(key) === done) this.put(path, hidden, { loading: false }); },
-      (error: unknown) => { if (this.inflight.get(key) === done) this.put(path, hidden, { loading: false, error: error instanceof HttpRefusal ? error : new HttpRefusal(0, "internal") }); },
+      (error: unknown) => { if (this.inflight.get(key) === done) this.put(path, hidden, { loading: false, error: asRefusal(error) }); },
     ).finally(() => { if (this.inflight.get(key) === done) this.inflight.delete(key); });
     this.inflight.set(key, done);
     return done;
