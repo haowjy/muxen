@@ -7,13 +7,19 @@ import { baseName } from "../../files/paths";
 import type { HttpRefusal } from "../../net/http";
 import { useStore } from "../../ui/store";
 import type { OutlineProps } from "./FolderList";
+import type { PanelPick } from "./PreviewPanel";
 import { scrollKey, type FilesSession } from "./session";
 
 export interface TabOutline {
   expanded: ReadonlySet<string>;
   /** The selected row's key under the folder the list starts at; null when nothing is. */
   selection: string | null;
+  /** What the Preview panel follows: the selection, and who made it. */
+  pick: PanelPick | null;
+  /** The user's selection. */
   select: (key: string | null) => void;
+  /** The panel has followed the user's selection, so from now on it is just the selection. */
+  settled: () => void;
   toggle: (folder: string, open: boolean) => void;
   /**
    * Opens the folders between the list's root and `path` (turning Show hidden files on when a name on the way is
@@ -35,13 +41,14 @@ export function useTabOutline(session: FilesSession, tab: string, root: string |
   const [open, setOpen] = useState(() => session.expanded.get(tab) ?? []);
   const kept = (at: string | null): string | null => (at === null ? null : session.selections.get(scrollKey(tab, at)) ?? null);
   // The selection belongs to the root it was made under; another root starts from what the session kept for it.
-  const [picked, setPicked] = useState(() => ({ root, key: kept(root) }));
+  const [picked, setPicked] = useState<{ root: string | null; key: string | null; by: PanelPick["by"] }>(() => ({ root, key: kept(root), by: "app" }));
   const selection = picked.root === root ? picked.key : kept(root);
+  const by = picked.root === root ? picked.by : "app";
   const expanded = useMemo(() => new Set(open), [open]);
   const [revealed, setRevealed] = useState<{ path: string; entry: Entry } | null>(null);
 
-  const select = (key: string | null): void => {
-    setPicked({ root, key });
+  const choose = (key: string | null, who: PanelPick["by"]): void => {
+    setPicked({ root, key, by: who });
     if (root === null) return;
     if (key === null) session.selections.delete(scrollKey(tab, root));
     else session.selections.set(scrollKey(tab, root), key);
@@ -53,7 +60,9 @@ export function useTabOutline(session: FilesSession, tab: string, root: string |
   return {
     expanded,
     selection,
-    select,
+    pick: selection === null ? null : { path: selection, by },
+    select: (key) => { choose(key, "user"); },
+    settled: () => { setPicked((now) => ({ ...now, by: "app" })); },
     toggle: (folder, on) => { if (root !== null) expand(withExpanded(open, folder, on, root)); },
     reveal: (path, entry) => {
       if (root === null) return;
@@ -65,7 +74,7 @@ export function useTabOutline(session: FilesSession, tab: string, root: string |
         ? session.browser.toggleHidden()
         : Promise.resolve();
       expand(folders.reduce((all: readonly string[], folder) => withExpanded(all, folder, true, root), open));
-      select(path);
+      choose(path, "app");
       setRevealed(entry ? { path, entry } : null);
       // Each level at once, ahead of the outline's other folders: the row is what the user asked for. A refused page
       // (busy is already retried) stops that level; its folder row offers the rest as for any folder.

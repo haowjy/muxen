@@ -79,9 +79,14 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
     }
   }, [place, root]);
 
-  // What just landed in the folder on screen is picked on a desktop, so the Preview panel shows it; the phone marks its row.
+  // What just landed under the list is selected once on a desktop, so the Preview panel shows it; the phone marks its row.
   const { fresh } = view;
-  useEffect(() => { if (!phone && fresh !== null && root === parentOf(fresh)) tree.reveal(fresh); }, [fresh]);
+  const here = !phone && root !== null && wanted.kind === "dir" && fresh !== null && fresh.startsWith(`${root === "/" ? "" : root}/`);
+  useEffect(() => {
+    if (!here) return;
+    tree.reveal(fresh);
+    browser.freshSeen();
+  }, [here, fresh]);
 
   // The Preview panel and the divider are remembered on this device.
   const [preview, setPreview] = useState(() => app.view.get("preview"));
@@ -152,7 +157,7 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
               onWidth={(px) => { setStored(px); app.view.set("listWidth", px); }}
               onReset={() => { setStored(null); app.view.set("listWidth", null); }}
             />
-            <PreviewPanel session={session} tab={tab.id} root={pages} from={search ? "search" : "outline"} selection={search ? found?.path ?? null : tree.selection} known={search ? found : tree.known} hidden={hidden} held={held} onOpen={open} onLink={onLink} />
+            <PreviewPanel session={session} tab={tab.id} root={pages} pick={search ? found && { path: found.path, by: "user" } : tree.pick} known={search ? found : tree.known} hidden={hidden} held={held} onSettled={tree.settled} onOpen={open} onLink={onLink} />
           </>
         )}
       </div>

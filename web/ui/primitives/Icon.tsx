@@ -11,7 +11,6 @@ const ICONS = {
   back: ChevronLeft,
   sessions: Server,
   folder: Folder,
-  /** Go into a folder. */
   /** The Files Preview panel's toggle. */
   panel: PanelRight,
   /** Open a preview full width. */

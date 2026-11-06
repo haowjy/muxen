@@ -5018,7 +5018,7 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
 - **Amended after review, same day:** the kept file is the session's, per tab and root (`previews`, beside
   `selections`), because held in the panel a remount (Search, the toggle, a tab switch) lost it, and Back
   from a folder did too. A file the app selected is shown without counting as opened. One gone from a folder
-  held in full is let go. A file landing in the folder on screen is selected on a desktop, which is how
+  held in full is let go and forgotten. Who moved the selection is carried with it (`PanelPick`), so nothing infers it. A file landing in the folder on screen is selected on a desktop, which is how
   Paste shows it; the "fresh" row mark, the same blue as the selection, stays on the phone only (Jimmy: "pasting
   something doesn't immediately open it in preview", and a screenshot of two blue rows).
 - **Rejected:** the panel showing a blank or the folder's contents on a folder click (it still loses the

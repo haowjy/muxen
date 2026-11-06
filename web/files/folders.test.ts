@@ -53,7 +53,7 @@ describe("Folders", () => {
     expect(await taken).toMatchObject({ path: "/home/j/repos/muxen" });
     expect(folders.peek("/home/j/repos/muxen", false)).not.toBeNull();
     expect(folders.peek("/home/j/repos/muxen", true)).toBeNull();
-    folders.drop("/home/j/repos/muxen");
+    void folders.drop("/home/j/repos/muxen");
     expect(folders.peek("/home/j/repos/muxen", false)).toBeNull();
     expect(fs.calls).toHaveLength(2);
   });
@@ -113,7 +113,7 @@ describe("Folders", () => {
     expect(folders.peek("/b", false)).toBeNull();
     expect(folders.peek("/c", false)).not.toBeNull();
     // a folder on screen is listed again in place, never removed
-    folders.drop("/a");
+    void folders.drop("/a");
     expect(folders.peek("/a", false)).not.toBeNull();
     await folders.settled("/a", false);
     expect(folders.peek("/a", false)).not.toBeNull();

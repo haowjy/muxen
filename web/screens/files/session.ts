@@ -95,7 +95,7 @@ export function filesSession(app: AppController, host: KnownHost): FilesSession 
     handle: host.entry.handle,
     get hostName() { return app.hosts.get(host.entry.handle)?.name ?? "the server"; },
     browser,
-    uploads: new UploadTracker((path) => { void browser.uploaded(path); }),
+    uploads: new UploadTracker((path) => { void browser.added(path); }),
     scroll: new Recent(SCROLLS_KEPT),
     expanded: new Recent(SCROLLS_KEPT),
     selections: new Recent(SCROLLS_KEPT),
@@ -161,7 +161,7 @@ async function followPaste(app: AppController, session: FilesSession, events: As
     if ("error" in event) app.notify(`Couldn't paste: ${event.error}`);
     else if ("path" in event) {
       app.notify(`Pasted ${baseName(event.path)}`);
-      await session.browser.uploaded(event.path);
+      await session.browser.added(event.path);
     }
   }
 }

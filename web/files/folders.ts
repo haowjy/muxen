@@ -43,13 +43,15 @@ export interface FoldersView {
  * screen) is never removed, so a screen that names one always finds its record: `drop` of a pinned
  * folder lists it again in place, its old pages staying up until the new ones land. Holding a page
  * costs no request when it is shown again on a tab switch or a Back. The path field's folder is asked
- * for once typing settles, never once per keystroke. Records are keyed by canonical path; `~` is the
+ * for once typing settles, never once per keystroke. Records are keyed by canonical path, and a symlink's also by the link's own (the row that names it); `~` is the
  * browser's to resolve (it knows home) before it asks here.
  */
 export class Folders extends Store<FoldersView> {
   private timer: ReturnType<typeof setTimeout> | undefined;
   /** One request at a time per folder: a second ask for the next page joins the first. */
   private readonly inflight = new Map<string, Promise<void>>();
+  /** A folder's links seen so far, by its canonical path: each holds its own record, which `drop` must reach. */
+  private readonly links = new Map<string, ReadonlySet<string>>();
   /** The newest request per folder: a page that lands after a newer request began belongs to the past and is dropped. */
   private readonly latest = new Map<string, number>();
   private serial = 0;
@@ -147,8 +149,11 @@ export class Folders extends Store<FoldersView> {
     const listing = await this.turn(key, behind, () => this.api.list(path, 0, hidden));
     if (this.landed(key, ticket)) {
       this.put(listing.path, hidden, { listing, error: null });
-      // A symlink's listing is named for its target; the folder asked for, under its own path, is held too, or it stays "Loading".
-      if (listing.path !== path) this.put(path, hidden, { listing, error: null });
+      // A symlink's listing is named for its target; the link, a row of its own, is held too or it stays "Loading".
+      if (listing.path !== path && path.startsWith("/")) {
+        this.put(path, hidden, { listing, error: null });
+        this.links.set(listing.path, new Set(this.links.get(listing.path)).add(path));
+      }
     }
     return listing;
   }
@@ -183,13 +188,21 @@ export class Folders extends Store<FoldersView> {
     }
   }
 
-  /** A refresh or an upload changed `path`: its pages go, or if it is on screen they are replaced when the new ones land. */
-  drop(path: string): void {
+  /**
+   * A refresh or an upload changed `path`: its pages go, and those of the links seen to it, or if they are on screen
+   * they are replaced when the new ones land, which the answer waits for.
+   */
+  async drop(path: string): Promise<void> {
     const held = new Map(this.snapshot.held);
-    const shown = [false, true].filter((hidden) => this.pinned(folderKey(path, hidden)));
-    for (const hidden of [false, true]) if (!shown.includes(hidden)) held.delete(folderKey(path, hidden));
+    const shown: { folder: string; hidden: boolean }[] = [];
+    for (const folder of [path, ...(this.links.get(path) ?? [])]) {
+      for (const hidden of [false, true]) {
+        if (this.pinned(folderKey(folder, hidden))) shown.push({ folder, hidden });
+        else held.delete(folderKey(folder, hidden));
+      }
+    }
     this.update({ held });
-    for (const hidden of shown) void this.relist(path, hidden);
+    await Promise.all(shown.map(({ folder, hidden }) => this.relist(folder, hidden)));
   }
 
   /** Runs `ask` once fewer than `LISTINGS_AT_ONCE` pages are under way; a finished one hands its turn on. */

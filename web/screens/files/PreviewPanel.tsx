@@ -1,4 +1,4 @@
-import { useEffect, useState } from "preact/hooks";
+import { useLayoutEffect, useReducer, useRef } from "preact/hooks";
 import type { Entry, Listing } from "../../files/api";
 import type { FileRef } from "../../files/browser";
 import { folderKey, type Held } from "../../files/folders";
@@ -14,18 +14,24 @@ import styles from "./PreviewPanel.module.css";
 /** The panel waits this long after the selection last moved, so a held arrow key costs no read per row. */
 const PANEL_SETTLE_MS = 200;
 
+/** The row the panel may follow. `by: "app"` (a reveal, a row a tab kept) shows when it can; only the user's waits to settle, and counts as opened. */
+export interface PanelPick {
+  path: string;
+  by: "user" | "app";
+}
+
 interface Props {
   session: FilesSession;
   tab: string;
   /** The folder the list starts at, and its pages. */
   root: Listing;
-  /** The list the selection is in: a switch (Search opening or closing) shows at once, as a new root does. */
-  from: "outline" | "search";
-  selection: string | null;
-  /** The selected row's entry when no listing held holds it: a Search result, or a revealed one until its row loads. */
+  pick: PanelPick | null;
+  /** The picked row's entry when no listing held holds it: a Search result, or a revealed one until its row loads. */
   known?: { path: string; entry: Entry } | null;
   hidden: boolean;
   held: ReadonlyMap<string, Held>;
+  /** The user's pick has settled: it is no longer a move, so a list coming back to it shows it at once. */
+  onSettled: () => void;
   onOpen: (place: FilesPlace) => void;
   onLink: (target: LinkTarget) => void;
 }
@@ -36,7 +42,7 @@ interface Props {
  * or a row's end leaves it where it is. It follows once the selection settles, so the reads of the rows passed over are
  * never made, and a viewer's read for a row left is aborted (`useText`).
  */
-export function PreviewPanel({ session, tab, root, from, selection, known, hidden, held, onOpen, onLink }: Props) {
+export function PreviewPanel({ session, tab, root, pick, known, hidden, held, onSettled, onOpen, onLink }: Props) {
   const listingOf = (path: string): Listing | null => (path === root.path ? root : held.get(folderKey(path, hidden))?.listing ?? null);
   const entryOf = (path: string): Entry | null => (known?.path === path ? known.entry : listingOf(parentOf(path))?.entries.find((e) => e.name === baseName(path)) ?? null);
   const fileAt = (key: string | null): FileRef | null => {
@@ -50,30 +56,32 @@ export function PreviewPanel({ session, tab, root, from, selection, known, hidde
   };
 
   const keep = scrollKey(tab, root.path);
-  const picked = fileAt(selection);
-  // A move within the list waits to settle; a new root, or the other list, shows at once.
-  const [settled, setSettled] = useState({ selection, root: root.path, from });
-  const moved = settled.root !== root.path || settled.from !== from;
-  // Not a move: what the app selected (a tab's row whose folder lands late) shows when it can, and was nobody's pick.
-  const atOnce = moved || selection === settled.selection ? picked : null;
-  const kept = session.previews.get(keep);
-  const file = atOnce ?? (kept ? stillThere(kept) : null);
-  useEffect(() => {
-    if (atOnce) session.previews.set(keep, atOnce);
-    if (moved) setSettled({ selection, root: root.path, from });
-    if (moved || selection === settled.selection) return undefined;
-    if (!picked) {
-      setSettled({ selection, root: root.path, from });
+  const picked = fileAt(pick?.path ?? null);
+  const kept = session.previews.get(keep) ?? null;
+  const file = kept && stillThere(kept);
+  const [, rerender] = useReducer((n: number) => n + 1, 0);
+  // The first pick a panel sees was made before it, so it isn't a move.
+  const mounted = useRef(false);
+  useLayoutEffect(() => {
+    const atOnce = pick?.by === "app" || !mounted.current;
+    mounted.current = true;
+    if (kept && !file) session.previews.delete(keep);
+    if (!picked || picked.path === file?.path) return undefined;
+    const show = (): void => {
+      session.previews.set(keep, picked);
+      rerender(0);
+    };
+    if (atOnce) {
+      show();
       return undefined;
     }
     const timer = setTimeout(() => {
-      session.previews.set(keep, picked);
-      setSettled({ selection, root: root.path, from });
-      // The user moved the selection here and it stayed: a file shown is opened, for Search's recents.
+      show();
       session.opened(picked);
+      onSettled();
     }, PANEL_SETTLE_MS);
     return () => { clearTimeout(timer); };
-  }, [keep, selection, picked?.path, atOnce?.path, root.path, from, settled.selection, moved]);
+  }, [keep, pick?.by, picked?.path, file?.path]);
   return (
     <section class={styles.panel} aria-label="Preview">
       {file ? (

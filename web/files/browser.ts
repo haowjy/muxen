@@ -43,7 +43,7 @@ export interface FilesView {
   /** Why the place couldn't load; the screen offers to try again. */
   error: HttpRefusal | null;
   hidden: boolean;
-  /** The path of the file just added to the folder shown (an upload or a paste): the list marks it and scrolls to it. Any navigation clears it. */
+  /** The path of the file just added to the folder shown (an upload or a paste): the phone's list marks it and scrolls to it, a desktop selects it once. Any navigation clears it. */
   fresh: string | null;
 }
 
@@ -168,17 +168,16 @@ export class FileBrowser extends Store<FilesView> {
     if (place.kind === "dir") await this.load(place);
   }
 
-  /** An upload landed at `path`: relist if it is in the folder on screen. */
-  async uploaded(path: string): Promise<void> {
+  /** `path` landed (an upload, a paste): its folder is listed again wherever it shows, and held nowhere stale. */
+  async added(path: string): Promise<void> {
     this.probed.delete(path);
-    const { place } = this.snapshot;
-    // The folder on screen is replaced when it has been listed again, so its rows stay up meanwhile.
-    if (place.kind !== "dir" || place.path !== parentOf(path)) {
-      this.folders.drop(parentOf(path));
-      return;
-    }
-    await this.reload();
-    if (this.snapshot.place.kind === "dir" && this.snapshot.place.path === parentOf(path)) this.update({ fresh: path });
+    await this.folders.drop(parentOf(path));
+    this.update({ fresh: path });
+  }
+
+  /** The desktop selected what landed: `fresh` is an event there, and a return to the list must not repeat it. */
+  freshSeen(): void {
+    this.update({ fresh: null });
   }
 
   private openFile(path: string): Promise<void> {

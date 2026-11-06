@@ -14,3 +14,5 @@ Nice-to-have, by area:
   line-field command history, worth revisiting only if ↑ and ^R prove not enough for recall;
   spacebar-trackpad arrows (Jimmy: "kinda works, but not that well"; the terminal's input is a
   hidden text box, so the trackpad moves nothing there).
+
+A paste into a big folder pages down to its row: one relist plus each page before where the name sorts (up to about 25 at the 5,000-entry cap), because `tree.reveal` always loads the row. Showing the file needs no row: the landing could supply the entry `reveal` already accepts and page only when the user scrolls.
