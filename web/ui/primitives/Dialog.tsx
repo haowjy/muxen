@@ -1,5 +1,5 @@
 import type { ComponentChildren } from "preact";
-import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
+import { useLayoutEffect, useRef } from "preact/hooks";
 import { cx } from "../cx";
 import { useFocus } from "../focus";
 import { useCloseByTap } from "./DialogBars";
@@ -10,7 +10,7 @@ interface DialogProps {
   /** Escape, the backdrop, the close button. The parent decides what closing means (usually the router's Back). */
   onClose: () => void;
   title: string;
-  /** Where it sits: centred (`dialog`), or filling the screen (`page`). What its top row holds is `header`'s. Focus returns to the control `app.openOverlay` was given, else the one focused at opening; a field marked `data-initial-focus=""` takes focus on opening with a fine pointer. */
+  /** Where it sits: centred (`dialog`), or filling the screen (`page`). What its top row holds is `header`'s. Focus returns to the control `app.openOverlay` was given, else the one focused at opening; a field marked `data-initial-focus=""` takes focus on opening with a fine pointer, one marked `"typing"` on touch too. */
   variant?: "dialog" | "page";
   /** The top row: a `TitleBar` or `ScreenBar`, or null for none. `title` is the dialog's accessible name. */
   header: ComponentChildren;
@@ -33,7 +33,8 @@ export function Dialog({ open, onClose, title, variant = "dialog", header, child
   }, [open]);
 
   // A dialog unmounted while open must not leave the page inert.
-  useEffect(() => () => {
+  // A layout effect: an effect's cleanup runs after paint, when the ref is already gone.
+  useLayoutEffect(() => () => {
     const dialog = ref.current;
     if (dialog?.open) focus.closeDialog(dialog);
   }, []);

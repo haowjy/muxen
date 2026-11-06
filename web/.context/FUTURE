@@ -16,3 +16,7 @@ Nice-to-have, by area:
   hidden text box, so the trackpad moves nothing there).
 
 A paste into a big folder pages down to its row: one relist plus each page before where the name sorts (up to about 25 at the 5,000-entry cap), because `tree.reveal` always loads the row. Showing the file needs no row: the landing could supply the entry `reveal` already accepts and page only when the user scrolls.
+
+The phone's fresh mark can vanish at once: `FileBrowser.more` goes through `run` and `go`, which clear `fresh`, so an end-of-list relist followed by the next page drops it (seen in the harness's small pages). `more` isn't a navigation: it shouldn't clear `fresh` or bump `seq`.
+
+Creating through a symlinked folder on the phone: `added` drops the link's path and `Folders.drop` only follows links from a target to its links, so the target's own record stays stale until it is next listed.

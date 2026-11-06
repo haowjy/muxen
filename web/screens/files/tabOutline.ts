@@ -24,10 +24,10 @@ export interface TabOutline {
   /**
    * Opens the folders between the list's root and `path` (turning Show hidden files on when a name on the way is
    * hidden), selects it, and loads each folder's pages until the next
-   * name down is held, so its row exists. `entry`, when the caller has it (a Search result), stands in for the row's
+   * name down is held, so its row exists. `also.entry`, when the caller has it (a Search result), stands in for the row's
    * until then, so the Preview panel shows the file meanwhile. `opens`: `path` is a new folder, opened too.
    */
-  reveal: (path: string, entry?: Entry, opens?: boolean) => void;
+  reveal: (path: string, also?: { entry?: Entry; opens?: boolean }) => void;
   /** The entry `reveal` was given, while that path is still the selection. */
   known: { path: string; entry: Entry } | null;
 }
@@ -64,7 +64,7 @@ export function useTabOutline(session: FilesSession, tab: string, root: string |
     select: (key) => { choose(key, "user"); },
     settled: () => { setPicked((now) => ({ ...now, by: "app" })); },
     toggle: (folder, on) => { if (root !== null) expand(withExpanded(open, folder, on, root)); },
-    reveal: (path, entry, opens = false) => {
+    reveal: (path, { entry, opens = false } = {}) => {
       if (root === null) return;
       const folders = foldersBetween(root, path);
       // A hidden name on the way (`~/.config/…`) has no row while Show hidden files is off, so the reveal would stop

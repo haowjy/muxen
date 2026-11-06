@@ -1,3 +1,4 @@
+import type { CreateKind } from "../proto/generated/messages";
 import { HttpRefusal } from "../net/http";
 import { refusalWords } from "../net/refusalWords";
 import type { FsApi, Listing } from "./api";
@@ -170,13 +171,13 @@ export class FileBrowser extends Store<FilesView> {
 
   /**
    * `path` landed (an upload, a paste, a create): its folder is listed again wherever it shows, and held nowhere stale.
-   * A dot name was asked for by name, so it shows. `opens`: a new folder, which a desktop opens in place.
+   * `made`, a create: a dot name was asked for by name, so it shows, and a desktop opens a new folder in place.
    */
-  async added(path: string, opens = false): Promise<void> {
+  async added(path: string, made?: CreateKind): Promise<void> {
     this.probed.delete(path);
     await this.folders.drop(parentOf(path));
-    if (baseName(path).startsWith(".") && !this.snapshot.hidden) await this.toggleHidden();
-    this.update({ fresh: { path, opens } });
+    if (made && baseName(path).startsWith(".") && !this.snapshot.hidden) await this.toggleHidden();
+    this.update({ fresh: { path, opens: made === "dir" } });
   }
 
   /** The desktop selected what landed: `fresh` is an event there, and a return to the list must not repeat it. */

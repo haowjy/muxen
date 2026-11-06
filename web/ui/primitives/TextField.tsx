@@ -25,7 +25,7 @@ interface FieldProps {
   error?: string | null | undefined;
   /** Registers the input with the focus controller under this name. */
   focusTarget?: FocusTarget;
-  /** Takes focus when its dialog opens, with a fine pointer (`Dialog`). */
+  /** Takes focus when its dialog opens: "" with a fine pointer, "typing" on touch too (`FocusController.openDialog`). */
   "data-initial-focus"?: string;
   /** A control in the input's row, after it (Add): what Return does, for touch, which shows no Return. */
   action?: ComponentChildren;

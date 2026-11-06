@@ -84,7 +84,7 @@ export function FilesPane({ session, tab }: { session: FilesSession; tab: FilesT
   const here = !phone && root !== null && wanted.kind === "dir" && fresh !== null && fresh.path.startsWith(`${root === "/" ? "" : root}/`);
   useEffect(() => {
     if (!here) return;
-    tree.reveal(fresh.path, undefined, fresh.opens);
+    tree.reveal(fresh.path, { opens: fresh.opens });
     browser.freshSeen();
   }, [here, fresh]);
 

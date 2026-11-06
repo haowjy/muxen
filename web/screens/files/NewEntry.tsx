@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { TargetedSubmitEvent } from "preact";
 import { useApp, useAppView } from "../../app/context";
 import { describeError } from "../../files/browser";
@@ -42,8 +42,23 @@ export function NewEntry({ session, dir, kind, onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
   const form = useRef<HTMLFormElement>(null);
   const mounted = useRef(true);
-  useEffect(() => () => { mounted.current = false; }, []);
-  const close = (): void => { onClose(form.current?.contains(document.activeElement) === true); };
+  useLayoutEffect(() => () => { mounted.current = false; }, []);
+  const holdsFocus = (): boolean => form.current?.contains(document.activeElement) === true;
+  const close = (): void => { onClose(holdsFocus()); };
+  // A press that takes focus from an empty field: the row under it stays put until the press ends, so the click lands.
+  const pressing = useRef(false);
+  useLayoutEffect(() => {
+    const down = (): void => { pressing.current = true; };
+    const up = (): void => { pressing.current = false; };
+    window.addEventListener("pointerdown", down, true);
+    window.addEventListener("pointerup", up, true);
+    window.addEventListener("pointercancel", up, true);
+    return () => {
+      window.removeEventListener("pointerdown", down, true);
+      window.removeEventListener("pointerup", up, true);
+      window.removeEventListener("pointercancel", up, true);
+    };
+  }, []);
 
   const submit = async (e: TargetedSubmitEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
@@ -78,8 +93,10 @@ export function NewEntry({ session, dir, kind, onClose }: Props) {
       onFocusOut={(e) => {
         const to = e.relatedTarget;
         // Another window took the focus when the field is still the document's active element: it stays to come back to.
-        const staying = form.current?.contains(document.activeElement) === true || (to instanceof Node && form.current?.contains(to));
-        if (!phone && name === "" && !busy && !staying) onClose(false);
+        const staying = holdsFocus() || (to instanceof Node && form.current?.contains(to));
+        if (phone || name !== "" || staying) return;
+        if (pressing.current) window.addEventListener("click", () => { onClose(false); }, { once: true });
+        else onClose(false);
       }}
     >
       <TextField label={label} hideLabel placeholder={kind === "file" ? "File name" : "Folder name"} value={name} onInput={(v) => { setName(v); setError(null); }} readOnly={busy} error={error} focusTarget="name" data-initial-focus="typing" />

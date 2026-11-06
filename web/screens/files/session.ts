@@ -123,7 +123,7 @@ export function filesSession(app: AppController, host: KnownHost): FilesSession 
         throw refused;
       }
       app.notify(`Created ${name}`);
-      void browser.added(join(dir, name), kind === "dir");
+      void browser.added(join(dir, name), kind);
     },
     search: (tab, root, fresh = false) => {
       const kept = searches.get(scrollKey(tab, root));

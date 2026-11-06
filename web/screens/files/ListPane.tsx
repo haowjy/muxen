@@ -103,7 +103,7 @@ export function ListPane({ session, tab, view, pages, tree, up, search, onOpen }
     if (folder === null) return;
     if (!phone && dir !== folder) tree.toggle(dir, true);
     if (creating?.dir === dir && creating.kind === kind) app.focus.focusTarget("name", true);
-    else app.focus.keepKeyboardOn("name"); // inside this tap: iOS raises the keyboard only then
+    else app.focus.keepKeyboardOn("name"); // the desktop's field; the phone's takes it as its dialog opens, marked `typing`
     setCreating({ dir, kind, root: folder });
   };
   const named = creating?.root === folder && showing ? creating : null;
@@ -117,7 +117,7 @@ export function ListPane({ session, tab, view, pages, tree, up, search, onOpen }
       kind={naming.kind}
       onClose={(hadFocus) => {
         setCreating(null);
-        if (hadFocus) app.focus.focusTarget("list");
+        if (hadFocus) listTakesKeys(); // a frame on: a dialog closing still holds the page until then
       }}
     />
   );
@@ -143,7 +143,7 @@ export function ListPane({ session, tab, view, pages, tree, up, search, onOpen }
           onOpen={onOpen}
           onReveal={(found) => {
             // Selected before Search closes, so the Preview panel goes straight to it, not through the outline's last row.
-            tree.reveal(found.path, found.entry);
+            tree.reveal(found.path, { entry: found.entry });
             app.router.closeOverlay(listTakesKeys);
           }}
           onClose={() => { app.router.closeOverlay(listTakesKeys); }}
