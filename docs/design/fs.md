@@ -357,7 +357,8 @@ The web picks a code viewer's language by extension, not by type. SVG goes out a
 **Video** plays in `AVPlayerViewController`, not the web view
 ([ios-shell.md](ios-shell.md#web-content-security)): the web sends `playVideo { host,
 path }`, native builds `{baseURL}/fs/raw/{encoded path}` with the same segment
-encoding and opens it with `Authorization: Bearer`. AVFoundation probes with `Range:
+encoding and loads it through a resource loader that adds `Authorization: Bearer`
+(ios-shell.md, "Video"). AVFoundation probes with `Range:
 bytes=0-1`, then reads ranges; it needs the `206`s, an exact `Content-Type` (`nosniff`
 stops it guessing), and an ETag that stays put while the file does.
 
@@ -669,12 +670,6 @@ the error codes are shared by `raw` and the save.
 
 ## Open risks
 
-- **AVPlayer with an Authorization header:** `AVURLAssetHTTPHeaderFieldsKey` is an
-  undocumented key that Apple staff on the developer forums call unsupported. The
-  file-manager spike checks it on iOS 26. Fallbacks: an
-  `AVAssetResourceLoaderDelegate` on a custom scheme, where native fetches the ranges
-  itself with the Bearer header, or the short-lived media ticket in
-  [ios-shell.md](ios-shell.md#web-content-security).
 - **`sandbox` and CORS on custom-scheme responses** are unverified on iOS 26
   ([ios-shell.md](ios-shell.md#open-risks)). The type allowlist holds without them.
 - **The memory ceiling sits near the unit's limit** once the file API and kernel socket

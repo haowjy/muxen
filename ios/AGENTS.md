@@ -25,6 +25,9 @@ web, and so are the text boxes that take the typing. Spec: [ios-shell.md](../doc
   follows redirects only through `HostRequest.redirect` (same origin, same route), so a
   host's token never follows a redirect elsewhere. Don't look up a host's URL or token
   in a new session yourself. Spec: ios-shell.md, "Where the web UI comes from".
+- **AVFoundation never holds a token.** The video player loads through `Media/MediaLoader.swift`, which builds each
+  fetch with `request(on:path:)`, serves only the file asked to play, and forbids reference URLs
+  (`AVURLAssetReferenceRestrictionsKey` = `forbidAll`). Don't pass auth headers to an `AVURLAsset`. Spec: ios-shell.md, "Video".
 - **Every native screen over the page goes up through `MediaController.show`** (the
   image menu, pickers, the video player, Download's alert and share sheet, and any new
   one). It waits out a running transition, refuses while another screen is up or the app is locked, and lets

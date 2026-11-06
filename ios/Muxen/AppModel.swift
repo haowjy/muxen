@@ -349,6 +349,7 @@ final class MuxenAppModel: ObservableObject {
     }
 
     func sceneChanged(_ phase: ScenePhase) {
+        shell?.coverSnapshot(phase != .active)
         switch phase {
         case .active:
             visible = true

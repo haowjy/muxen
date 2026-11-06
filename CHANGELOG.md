@@ -5,6 +5,7 @@ version section on release.
 
 ## [Unreleased]
 
+- Security: the video player no longer gives your device token to the system media stack. A media file that names another URL can't make the app send the token to that host. The app switcher now shows a plain cover instead of the terminal or file.
 - A directory name containing a line feed no longer stops muxen showing its session. The pane's folder is left blank for such a path.
 - Files can edit text files: Edit is in a file's ⋯ menu. A save never replaces a change made elsewhere without asking, and unsaved text comes back after the app is closed.
 - A file that can't be shown offers Try again whatever the reason, like a folder that can't be.

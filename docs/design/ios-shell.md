@@ -146,10 +146,8 @@ the app is locked, or the host has no token. One redirect rule, `HostRequest.red
 URLSessions: follow only to the request's own origin and only within the route it was for (the
 proxy's permitted route, `/fs/upload`, `/fs/raw/`); otherwise the 3xx is the answer. A followed
 redirect carries the request's `Authorization` again: URLSession drops it even on the same origin,
-and the daemon's `401` would then revoke a good token. The video
-player can't take the rule: AVFoundation follows redirects itself, with no hook. It drops the
-`Authorization` header on a cross-origin redirect (checked on macOS), and the player only plays
-what it gets.
+and the daemon's `401` would then revoke a good token. The video player's fetches
+are URLSession requests too, so they take the rule (see "Video").
 
 For HTTP endpoints, P4b builds proxy URLs from `PlatformHost.handle`; native resolves
 them to the private `baseURL` and supplies the per-host token. The production browser
@@ -184,10 +182,32 @@ files from repos and agent output. Untrusted content must never run as script in
 
 **Video** doesn't go through the scheme handler: custom-scheme media loading has a
 history of dropping `Range` (WebKit bug 203302, fixed 2021, unverified on iOS 26). The
-web asks native to play a video, and native opens `AVPlayerViewController` on the
-daemon's `/fs/raw` URL with the Authorization header (`AVURLAssetHTTPHeaderFieldsKey`).
-The file-manager spike checks it; if the header option fails, add a short-lived
-single-path media ticket to auth, not before.
+web asks native to play a video, and native opens `AVPlayerViewController` on an
+`AVURLAsset` whose URL is `muxen-media://file/fs/raw/…`, loaded by an
+`AVAssetResourceLoaderDelegate` (`Media/MediaLoader.swift`). AVFoundation never holds
+the token: the delegate fetches each range itself with `MuxenAppModel.request`, so the
+rule above covers it, and gives AVFoundation the bytes and the type and length from the
+daemon's answer. Three limits hold the file to being only itself:
+
+- The asset is made with `AVURLAssetReferenceRestrictionsKey` = `forbidAll` (the raw
+  value as an `NSNumber`; the Swift option set crashes AVFoundation).
+- The delegate serves one URL, the file asked to play. Any other URL AVFoundation asks
+  for (a reference movie's target, a relative reference, a playlist's segment) is refused.
+- A redirect from the daemon is followed only by `HostRequest.redirect`, within the file's own path.
+
+This replaces `AVURLAssetHTTPHeaderFieldsKey`, which is not public API and is not the
+header's only exposure: AVFoundation applied it to the URLs a hostile file names, so a
+reference movie in a file under any repo sent the device token to an arbitrary HTTPS
+host, and AVFoundation follows a redirect with the header too (checked on iOS 26.5 and
+27.0). A fetch asks only for the range AVFoundation wants; when it wants "to the end"
+the delegate asks for 1 MiB and AVFoundation asks again, so the bytes on the network stay
+about the same as with the header option. Stopping the player, a lock, or AVFoundation's
+cancel ends the fetches, and a locked app refuses new ones.
+
+`.m3u8` must stay out of the daemon's MIME table ([fs.md](fs.md)): unlisted, it goes out
+as `application/octet-stream` and AVFoundation doesn't read it as a playlist. With the HLS type it
+would, and a playlist makes AVFoundation fetch its segments by URL; the loader refuses them, but
+the type isn't worth adding for a feature this player can't use.
 
 **Development:** the Debug app uses bundled assets and enables Web Inspector. The
 Debug dev-server asset-source switch and HMR route are not implemented in P4a. Desktop
@@ -522,6 +542,7 @@ which the page owns, and the keyboard stays down until the user taps.
 | Launch | Load the bundled UI; `ready` returns the bridge `Boot`; the web restores `workspace` and starts host connections. If a token item exists or saved hosts indicate a missing item needs recovery, native covers the UI and attempts one Face ID read ([auth.md](auth.md#swift-side-keychain-item-and-app-lock)); a fresh app with no tokens opens without a prompt. |
 | Background (`scenePhase == background`) | Native starts a short background task and publishes `lifecycle { visible:false, online, locked, covered }`, then ends the task after the web callback or expiration. The web closes sockets. Native keeps tokens in memory until a lock. |
 | A native screen covers the terminal (server list, Add host, or lock screen) | Native blurs any WebKit text field and covers the terminal. A server sheet sets `Lifecycle.covered`; the lock screen uses `Lifecycle.locked`. The web's single watch predicate unwatches the hidden active tab. On sheet dismissal native republishes the whole lifecycle snapshot. |
+| Leaving active (`scenePhase == inactive` or `background`) | Native puts an opaque cover (the system background) over the whole window, native screens included, until the scene is active again, so the app-switcher snapshot (kept on disk) shows no terminal or file. The cover goes up at `inactive`, before iOS takes the snapshot, so a Face ID prompt, Control Center or a notification pulled down also flashes it. The lock screen is opaque already, so no cover goes over it. |
 | Foreground (`scenePhase == active`) | If the selected 5 min or 1 hour interval was exceeded, native drops its token map and attempts one Keychain read to unlock; At launch never relocks merely on foreground. Otherwise restore focus without a prompt. The web recomputes admission and reconnects as needed. |
 | Network change (`NWPathMonitor`) | Native updates `Lifecycle.online`; the web resets backoff/reconnects closed or stale sockets when `online` changes. Unsatisfied shows every host as "This iPhone is offline." at once, and the web fails their waiting GETs ([plan.md](plan.md#reachability), "No network"). |
 | Web content process killed (`webViewWebContentProcessDidTerminate`) | Native reloads the page; `boot` restores tabs from the native copy, which survives this; focus is restored |
@@ -717,6 +738,8 @@ and fix this spec from them. The current Simulator cannot show the software keyb
 | Appearance | System follows device changes; explicit Light and Dark survive them and agree in native chrome (lock screen, the server sheet, the keyboard) and web content, including after a relaunch and with the app locked at launch |
 | Text size | Each size resizes the shown tmux window once (`tmux display -p '#{window_width}'` changes with each size) and survives a relaunch |
 | Face ID relock | For each of 5 min, 1 hour and At launch: a background trip shorter than the interval returns with no prompt; one longer asks for Face ID first thing on foreground. At launch never asks on foreground, however long the trip, and asks once after a process restart. Changing the setting takes effect at the next background trip. Choosing a longer interval or At launch asks for Face ID first, and cancelling leaves the old choice selected |
+| Video | A real `.mov`, `.mp4`, `.m4a` and `.mp3` from a repo play and seek on the phone, over Tailscale; closing the player stops the fetches. A hostile reference movie (`dref` pointing at a host you run) sends that host nothing, whether or not it also names the daemon's own origin; the player just fails |
+| App switcher | Open a terminal and a file, swipe up to the switcher: the card shows a plain cover, not the screen. Also with the video player, the server sheet and the lock screen up. Control Center pulled down flashes the cover and it goes when closed |
 | Download | A text file, a 100 MB file (the alert counts up; Cancel stops it) and a file the daemon refuses: Save to Files keeps the name, AirDrop and Open in work, the error reads in words, and `tmp/Downloads/` is empty after each sheet closes. Lock during a download, and during the sheet's opening animation: the alert or sheet goes. Lock with the video player or the image menu up: it goes. Background the app during a 100 MB download until iOS suspends it, then return: the notice says why, and `tmp/Downloads/` is empty |
 | Paste | The mark menu's Paste with text and with an image, with "Allow Paste" set to Ask and Allow; the line box's paste of one line and of several lines, and of an image (it goes to the terminal) |
 | Keychain unlock ([auth.md](auth.md#recovery)) | One item holds the token map; one read prompts once and subsequent requests use memory only. Check each relock setting on either side of its threshold and At launch across foreground and process restart. Reset tokens deletes the item and leaves every saved host not enrolled; after adding an alternate Face ID appearance, record the read's exact `OSStatus` |
@@ -750,6 +773,5 @@ and fix this spec from them. The current Simulator cannot show the software keyb
   between `muxen-app://ui` and `muxen-app://h-{host}` as expected, and honours
   `sandbox` on custom-scheme responses, is unverified on iOS 26. The file-manager
   spike checks both; navigation and the bridge's origin check hold without them.
-- **Video through the native player with an auth header**: the file-manager spike.
 - **Debug web-source switch and Vite HMR from the custom scheme** are deferred; P4a
   uses bundled assets with Web Inspector.

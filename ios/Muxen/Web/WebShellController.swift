@@ -9,6 +9,8 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
     private let schemeHandler: AppSchemeHandler
     private let haptics = Haptics()
     private lazy var media = MediaController(model: model, presenter: self) { [weak self] event in self?.send(event) }
+    /// Covers the window while the app is not active (`coverSnapshot`).
+    private var snapshotCover: UIView?
     private var webView: MuxenWebView!
     private var webViewConstraints: [NSLayoutConstraint] = []
     /// How much of the web view's bottom a docked keyboard covers, and how long it takes to get there.
@@ -115,6 +117,23 @@ final class WebShellController: UIViewController, WKNavigationDelegate, WKUIDele
         view.endEditing(true)
         // The lock screen is a SwiftUI overlay, under any modal: nothing may stay up over it.
         if model.isLocked { media.lock() }
+    }
+
+    /// An opaque view over the whole window, native screens included, while the app isn't active: iOS takes the
+    /// app-switcher snapshot, and keeps it on disk, from what is on screen as the app leaves `.active`. The lock screen
+    /// is opaque already, and a cover over it would hide the Face ID prompt's button.
+    func coverSnapshot(_ covered: Bool) {
+        guard covered, !model.isLocked, let window = view.window else {
+            snapshotCover?.removeFromSuperview()
+            snapshotCover = nil
+            return
+        }
+        guard snapshotCover == nil else { return }
+        let cover = UIView(frame: window.bounds)
+        cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        cover.backgroundColor = .systemBackground
+        window.addSubview(cover)
+        snapshotCover = cover
     }
 
     func send(_ event: NativeEvent) {

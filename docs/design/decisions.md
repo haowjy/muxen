@@ -5665,3 +5665,20 @@ the check starts at the third timeout rather than the second, the limit is 15 s 
   reply deadline to end it, and a desync would go unnoticed.
 - **Rejected:** `#{s/[[:cntrl:]]/…/}`, which prints empty for every path on both versions;
   dropping a forged `%begin` with a log.
+
+### Video loads through a resource loader, not a header option
+
+- **Decided:** 2026-11-06, security audit.
+- **What:** the player's asset is `muxen-media://file/fs/raw/…`. An
+  `AVAssetResourceLoaderDelegate` fetches each range through `MuxenAppModel.request`, serves
+  one URL, and follows redirects only through `HostRequest.redirect`. The asset forbids all
+  references. The app covers its window whenever the scene isn't `.active`, except over the
+  lock screen.
+- **Why:** `AVURLAssetHTTPHeaderFieldsKey` isn't public API, and AVFoundation applied the header
+  to URLs named inside a file and to redirects: a reference movie sent the device token to an
+  arbitrary HTTPS host (run on iOS 26.5 and 27.0 Simulators). The snapshot iOS keeps on disk
+  showed the page.
+- **Rejected:** a media ticket in auth (more daemon surface, and a URL AVFoundation still
+  holds); `forbidAll` while keeping the header (another port on the same host still got the
+  token); download then play (16 MB against about 4 MB for 5 s of a test file, against "every
+  byte costs the user"); a SwiftUI cover (it sits under native screens).
