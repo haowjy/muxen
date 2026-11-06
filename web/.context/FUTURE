@@ -3,6 +3,10 @@ Nice-to-have, by area:
 - Files: open at the active tab's directory (needs the terminal lane to publish `cwd`); name each
   running upload row (`UploadEvent` has no file name); keep a parent folder's scroll when going up;
   Vite still emits one 44 to 60 byte re-export stub per grammar (14 files of the shell's 48).
+  `FileBrowser.listing()` (via `browser.load`) awaits `Folders.settled()` and then calls `first()` directly, so a
+  `Folders.load()` of the same folder started in that tick lists it twice (seen with Show hidden files' relist racing
+  the outline's reveal, now sequenced in `tabOutline.ts`). Routing `listing()` through the in-flight entry would end
+  the class.
 - Terminal: an end-to-end test of copy.
 - Phone dock (deferred 2026-10-24, decisions.md "The key row's keys, and arrows by long-press"):
   smart keys, a key row that follows the pane's program (shell vs vim), needing a daemon watch of
