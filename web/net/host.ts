@@ -201,10 +201,12 @@ export class Host {
 
   /** Sends for `tab`, remembering which tab owns the watch it names. */
   send(tab: TabPort, msg: ClientMsg): void {
-    if (msg.type === "watch") this.watchRoutes.set(msg.data.watch, tab);
+    if (msg.type === "watch") {
+      this.watchRoutes.set(msg.data.watch, tab);
+      this.asked();
+    }
     else if (msg.type === "unwatch") this.watchRoutes.delete(msg.data.watch);
     else if (msg.type === "paste") this.pastes.set(msg.data.req, tab);
-    if (msg.type === "watch") this.asked();
     this.link?.send(msg);
   }
 
@@ -285,8 +287,8 @@ export class Host {
   }
 
   /**
-   * An attempt to reach the daemon ended (the socket's own, or the browser's admission check). With
-   * the open socket's quiet timer, the only place reachability changes.
+   * An attempt to reach the daemon ended (the socket's own, or the browser's admission check).
+   * Reachability changes here and on the rows of plan.md's table that a socket's own close or quiet spell decides.
    */
   attemptEnded(answered: boolean, startedAt: number): void {
     const now = this.now();
@@ -374,7 +376,6 @@ export class Host {
   /** Opens a socket. One still held is closed first; its late handlers do nothing, so nothing is reported for it. */
   private connect(): void {
     clearTimeout(this.retryTimer);
-    this.endQuiet();
     const old = this.link;
     this.link = null;
     old?.close();
@@ -394,9 +395,6 @@ export class Host {
   /** Closes the socket without telling anyone it was lost. The link's close never reaches `onClose`: `link` is null by then. */
   private stop(status: "idle" | "background"): void {
     clearTimeout(this.retryTimer);
-    // Nobody is trying any more and nothing was proven about the server: quiet is undone.
-    if (this.quiet) this.setReach("reachable");
-    this.endQuiet();
     const link = this.link;
     this.link = null;
     if (this.status === "open") this.noteLastMessage(link);
@@ -405,6 +403,10 @@ export class Host {
     this.attempt = 0;
     this.stuckCount = 0;
     this.watchRoutes.clear();
+    // Nobody is trying any more and nothing was proven about the server: quiet is undone.
+    const quiet = this.quiet;
+    this.endQuiet();
+    if (quiet) this.setReach("reachable");
     this.setRefusing(null); // nothing is trying, so nothing is refused
     link?.close();
   }

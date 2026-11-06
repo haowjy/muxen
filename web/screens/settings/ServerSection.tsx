@@ -105,7 +105,7 @@ export function ServerSection({ host, name }: { host: HostClient; name: string }
       <Section title={name}>
         <div class={styles.unreachable}>
           <p class={styles.detail}>Can't reach {name}</p>
-          <Button variant="secondary" onClick={() => { if (host.shown === "reachable") client.read(); else app.retryHost(host.entry.handle); }}>Try again</Button>
+          <Button variant="secondary" onClick={() => { app.retryHost(host.entry.handle); client.read(); }}>Try again</Button>
         </div>
       </Section>
     );
