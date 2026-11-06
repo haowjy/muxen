@@ -5584,8 +5584,9 @@ the check starts at the third timeout rather than the second, the limit is 15 s 
 
 - **Decided:** 2026-11-06, design lead, with Jimmy's calls on Edit in the ⋯ menu, the phone keeping
   the key row, and unsaved text surviving a relaunch.
-- **What:** `Edits`, one store per host's `FilesSession`, holds each open edit (ETag, line ending,
-  CodeMirror state). `FileView` renders the editor whenever its file has an edit, so a tab switch, Back
+- **What:** `Edits`, one store per host's `FilesSession`, owns each open edit from Edit to Done (ETag,
+  line ending, CodeMirror state, save, reload, a rename, the remembered copy); a view holds none of it,
+  so an answer landing after the view left finds the edit by path. `FileView` renders the editor whenever its file has an edit, so a tab switch, Back
   and a relaunch need no route of their own. The latest changed edit per host goes to view memory only
   from `persist.onFlush`. The upload flush interval drops from 2 MiB to 1 MiB so the save's 1 MiB
   buffer leaves the memory ceiling where it was. A file that would not survive byte for byte (mixed

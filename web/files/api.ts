@@ -29,16 +29,19 @@ export interface Listing {
   entries: Entry[];
 }
 
+/** The code and Markdown viewers read at most this much, with Range, and an editor no more (fs.md "Text previews"). */
+export const TEXT_LIMIT = 1024 * 1024;
+
+export type LineEnding = "\n" | "\r\n";
+
 /** A file's first bytes as text, for the code and Markdown viewers. */
 export interface TextPreview {
   text: string;
   /** The whole file's size, when the response says. */
   size: number | null;
   truncated: boolean;
-  /** Of the file read; a save names it, so it can't replace a change made elsewhere. */
-  etag: string | null;
-  /** The file's one line ending, which a save keeps; null when an edit couldn't keep the file as it is (part of it read, not UTF-8, a BOM, mixed endings). */
-  ending: "\n" | "\r\n" | null;
+  /** What a save needs: the ETag that stops it replacing a change made elsewhere, and the one line ending it keeps. Null when an edit couldn't keep the file as it is (part of it read, not UTF-8, a BOM, mixed endings). */
+  editable: { etag: string; ending: LineEnding } | null;
 }
 
 /** What a one-byte read says about a path: its type and size, or that it is a directory. */
@@ -86,7 +89,7 @@ function totalOf(contentRange: string | null): number | null {
 }
 
 /** A file's bytes as text, and the one line ending that lets an editor keep every other byte as it is, if it has one. */
-function decodeText(bytes: Uint8Array): { text: string; ending: TextPreview["ending"] } {
+function decodeText(bytes: Uint8Array): { text: string; ending: LineEnding | null } {
   let text: string;
   try {
     text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
@@ -142,7 +145,7 @@ export function httpFsApi(origin: string, fetchFn?: typeof fetch): FsApi {
       const truncated = size !== null ? size > bytes.length : bytes.length >= limit;
       const { text, ending } = decodeText(bytes);
       const etag = res.headers.get("ETag");
-      return { text, size, truncated, etag, ending: truncated || etag === null ? null : ending };
+      return { text, size, truncated, editable: truncated || etag === null || ending === null ? null : { etag, ending } };
     },
 
     search: (path, q, hidden, signal) => json<Search>(url("search", path, `?q=${encodeURIComponent(q)}&hidden=${hidden ? "1" : "0"}`), { signal }),
@@ -151,7 +154,8 @@ export function httpFsApi(origin: string, fetchFn?: typeof fetch): FsApi {
 
     save: async (path, text, etag) => {
       const res = await send(url("file", path), { method: "PUT", headers: { "If-Match": etag, "Content-Type": "text/plain; charset=utf-8" }, body: text }, fetchFn);
-      return res.headers.get("ETag") ?? etag;
+      // Empty if a proxy dropped it: the next save is refused, where a remembered `*` would overwrite.
+      return res.headers.get("ETag") ?? "";
     },
 
     create: async (dir, name, kind) => {

@@ -7,7 +7,7 @@ import { FIELD_SETTINGS } from "./fieldSettings";
 export interface EditorStart {
   text: string;
   /** The file's own line ending: what it read with, it saves with. */
-  ending: "\n" | "\r\n";
+  ending: string;
 }
 
 export type EditorKey = { name: string } | { text: string };
@@ -25,6 +25,8 @@ export function startState({ text, ending }: EditorStart, wrap: boolean): Editor
     doc: text,
     extensions: [
       EditorState.lineSeparator.of(ending),
+      // A separator set here splits on it alone, so pasted lines would keep their own ending and mix the file's.
+      EditorView.clipboardInputFilter.of((pasted) => pasted.replace(/\r\n?|\n/g, ending)),
       lineNumbers(),
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
@@ -38,10 +40,13 @@ export function startState({ text, ending }: EditorStart, wrap: boolean): Editor
 
 const COMMANDS: Record<string, (view: EditorView) => boolean> = { Left: cursorCharLeft, Right: cursorCharRight, Up: cursorLineUp, Down: cursorLineDown, Tab: insertTab, BTab: indentLess };
 
+/** Whether the key means something here. */
+export const pressable = (key: EditorKey): boolean => "text" in key || key.name in COMMANDS;
+
 /** A key from the key row. Nothing while an IME composes: it would land in the candidate. */
 export function pressKey(view: EditorView, key: EditorKey): void {
   if (view.composing) return;
-  if ("text" in key) view.dispatch(view.state.replaceSelection(key.text));
+  if ("text" in key) view.dispatch(view.state.replaceSelection(key.text), { scrollIntoView: true, userEvent: "input.type" });
   else COMMANDS[key.name]?.(view);
 }
 

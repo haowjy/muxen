@@ -2,16 +2,14 @@ import { useRef, useState } from "preact/hooks";
 import { useApp, useAppView } from "../../app/context";
 import type { FileRef } from "../../files/browser";
 import type { TextPreview } from "../../files/api";
-import type { Edit } from "../../files/edits";
-import { HttpRefusal } from "../../net/http";
 import { useRequest } from "../../app/useRequest";
 import { cx } from "../../ui/cx";
 import { Button } from "../../ui/primitives/Button";
-import { CodeEditor, type EditorHandle } from "../../ui/primitives/CodeEditor";
+import { CodeEditor } from "../../ui/primitives/CodeEditor";
 import { ConfirmDialog } from "../../ui/primitives/ConfirmDialog";
 import { describeError } from "./failure";
+import type { Edit } from "./edits";
 import type { FilesSession } from "./session";
-import { TEXT_LIMIT } from "./TextViewers";
 import bar from "./FileView.module.css";
 import styles from "./EditView.module.css";
 
@@ -21,8 +19,6 @@ const SAVE_WORDS: Partial<Record<string, string>> = {
   denied: "Can't save over this file: it's read-only, another user's, or has another hard link.",
   not_found: "This file is gone. Copy your text before you leave.",
 };
-
-const bytes = (text: string): number => new TextEncoder().encode(text).length;
 
 interface Props {
   session: FilesSession;
@@ -36,54 +32,42 @@ interface Props {
 export function EditView({ session, file, edit, onSaved }: Props) {
   const app = useApp();
   const phone = useAppView((v) => v.viewport.layout === "phone");
-  const editor = useRef<EditorHandle | null>(null);
-  const [conflict, setConflict] = useState(false);
+  const { edits } = session;
+  const { path } = file;
   const [discarding, setDiscarding] = useState(false);
   const { busy, error, clear, run } = useRequest((refused) => SAVE_WORDS[refused.code] ?? describeError(refused, session.hostName));
-  const start = useRef({ from: edit.state ?? { text: edit.text, ending: edit.ending }, fresh: edit.state === null && !edit.changed }).current;
+  const takeKeyboard = useRef(edit.state === null && !edit.changed).current;
 
   const save = (overwrite = false): void => {
-    const open = editor.current;
-    if (!open || busy) return;
-    const text = open.text();
-    const sent = open.state().doc;
-    setConflict(false);
+    if (busy) return;
     void run(async () => {
-      try {
-        const etag = await session.save(file.path, text, overwrite);
-        onSaved({ text, size: bytes(text), truncated: false, etag, ending: edit.ending });
-        session.edits.keep(file.path, { changed: !open.state().doc.eq(sent) });
-        app.notify(`Saved ${file.name}`);
-      } catch (refused) {
-        if (refused instanceof HttpRefusal && refused.code === "changed") setConflict(true);
-        else throw refused;
-      }
+      const saved = await edits.save(path, overwrite);
+      if (!saved) return;
+      onSaved(saved);
+      app.notify(`Saved ${file.name}`);
     }, `Couldn't save ${file.name}`);
   };
 
   const reload = (): void => {
     void run(async () => {
-      const fresh = await session.browser.api.text(file.path, TEXT_LIMIT);
-      if (fresh.ending !== edit.ending || fresh.etag === null) return "This file can't be edited here any more.";
-      editor.current?.replace(fresh.text);
-      session.edits.keep(file.path, { etag: fresh.etag, changed: false });
+      const fresh = await edits.reload(path);
+      if (!fresh) return "This file can't be edited here any more.";
       onSaved(fresh);
-      setConflict(false);
       return null;
     }, `Couldn't reload ${file.name}`);
   };
 
-  const finish = (): void => { session.finishEdit(file.path); };
+  const finish = (): void => { edits.end(path); };
 
   return (
     <div class={cx(bar.view, styles.editing)}>
       <header class={bar.bar}>
         <Button variant="quiet" onClick={() => { if (edit.changed) setDiscarding(true); else finish(); }}>{edit.changed ? "Cancel" : "Done"}</Button>
-        <h1 class={bar.name} title={file.path}><span class={bar.text}><span class={bar.base}>{file.name}</span></span></h1>
+        <h1 class={bar.name} title={path}><span class={bar.text}><span class={bar.base}>{file.name}</span></span></h1>
         <Button variant="primary" busy={busy} disabled={!edit.changed} onClick={() => { save(); }}>{busy ? "Saving…" : "Save"}</Button>
       </header>
       {error && <p class={styles.problem} role="alert">{error}</p>}
-      {conflict && (
+      {edit.conflict && (
         <div class={styles.problem} role="alert">
           <p>{file.name} changed on {session.hostName} since you opened it.</p>
           <div class={styles.actions}>
@@ -93,22 +77,16 @@ export function EditView({ session, file, edit, onSaved }: Props) {
         </div>
       )}
       <CodeEditor
-        start={start.from}
+        start={() => { const now = edits.snapshot.open.get(path) ?? edit; return now.state ?? { text: now.text, ending: now.ending }; }}
         wrap={phone}
-        takeKeyboard={start.fresh}
+        takeKeyboard={takeKeyboard}
         onChange={() => {
           clear();
-          if (!session.edits.snapshot.open.get(file.path)?.changed) session.edits.keep(file.path, { changed: true });
+          edits.typed(path);
         }}
         onSave={() => { if (edit.changed) save(); }}
-        onReady={(handle) => {
-          editor.current = handle;
-          session.edits.attach({ path: file.path, editor: handle });
-        }}
-        onLeave={(state) => {
-          session.edits.attach(null);
-          session.edits.keep(file.path, { state });
-        }}
+        onReady={(handle) => { edits.attach(path, handle); }}
+        onLeave={(handle, state) => { edits.detach(handle, state); }}
       />
       {discarding && (
         <ConfirmDialog title="Discard your changes?" confirm="Discard" confirming="Discarding…" error={null} busy={false} onConfirm={finish} onClose={() => { setDiscarding(false); }}>

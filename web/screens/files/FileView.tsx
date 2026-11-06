@@ -1,6 +1,7 @@
 import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
 import { useApp, useAppView } from "../../app/context";
+import { TEXT_LIMIT } from "../../files/api";
 import type { FileRef } from "../../files/browser";
 import { formatSize, formatTime, shorten } from "../../files/format";
 import { viewerFor } from "../../files/kinds";
@@ -17,7 +18,7 @@ import { fileIcon } from "./fileIcon";
 import { copyText } from "./copy";
 import { useFilesKey, type Chord } from "./keymap";
 import { Preview } from "./Preview";
-import { TEXT_LIMIT, TextFacts, useText } from "./TextViewers";
+import { TextFacts, useText } from "./TextViewers";
 import type { FilesSession } from "./session";
 import viewers from "./Viewers.module.css";
 import styles from "./FileView.module.css";
@@ -63,11 +64,12 @@ export function FileView({ session, file, back, onExpand, onLink, children }: Pr
   const within = onExpand ? shown.slice(0, shown.length - file.name.length) : "";
   const url = session.browser.api.rawUrl(file.path);
   const edit = useStore(session.edits, (s) => s.open.get(file.path));
-  // The Preview panel shows the file: its editor is full width, and an edit waits there.
-  const editing = edit && !onExpand && !children ? edit : null;
+  // The Preview panel shows the file: its editor is full width, and an edit waits there. A file that can't be shown still
+  // has its unsaved text, which only the editor can reach.
+  const editing = edit && !onExpand && (!children || edit.changed) ? edit : null;
   const readable = kind === "code" || kind === "markdown";
   const [text, setText] = useText(session, file.path, !children && !editing && readable);
-  const editable = readable && text.kind === "done" && text.value.ending !== null && text.value.etag !== null ? { ...text.value, ending: text.value.ending, etag: text.value.etag } : null;
+  const editable = readable && text.kind === "done" ? text.value.editable : null;
   // Copy text copies what was read: a file past the first MiB copies only that much, and says so.
   const loaded = kind === "code" && text.kind === "done" ? text.value : null;
   const copyNote = loaded?.truncated ? `Copied the first ${formatSize(TEXT_LIMIT)} of ${file.name}` : null;
@@ -80,7 +82,7 @@ export function FileView({ session, file, back, onExpand, onLink, children }: Pr
   const leave = back && handOver(back.onBack);
   useFilesKey(LEAVE, () => { leave?.(); }, !phone && leave !== undefined && !editing);
 
-  if (editing) return <EditView session={session} file={file} edit={editing} onSaved={setText} />;
+  if (editing) return <EditView key={file.path} session={session} file={file} edit={editing} onSaved={setText} />;
 
   return (
     <div class={styles.view}>
@@ -134,7 +136,7 @@ export function FileView({ session, file, back, onExpand, onLink, children }: Pr
                 items: [{
                   label: "Edit",
                   onSelect: () => {
-                    session.edits.begin({ path: file.path, etag: editable.etag, ending: editable.ending, text: editable.text }, false);
+                    if (text.kind === "done") session.edits.begin({ path: file.path, ...editable, text: text.value.text }, false);
                     expand?.();
                   },
                 }],

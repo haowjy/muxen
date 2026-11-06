@@ -9,7 +9,7 @@ import { FileBrowser, type FileRef } from "../../files/browser";
 import { baseName, join, moved, parentOf, within } from "../../files/paths";
 import { Recent } from "../../files/recent";
 import { FileSearch, type Found } from "../../files/search";
-import { Edits } from "../../files/edits";
+import { Edits } from "./edits";
 import { UploadTracker } from "../../files/uploads";
 import type { HostClient } from "../../net/hosts";
 import { HttpRefusal } from "../../net/http";
@@ -57,10 +57,6 @@ export interface FilesSession {
   remove: (path: string) => Promise<void>;
   /** The files being edited on this host: they stay while the editor's view is away. */
   edits: Edits;
-  /** Writes `text` to what is at `path`, in an edit, and answers its new ETag. `overwrite`: whatever is there now. A refusal rejects (`changed`: it moved). */
-  save: (path: string, text: string, overwrite: boolean) => Promise<string>;
-  /** Editing `path` is over: saved, or discarded. */
-  finishEdit: (path: string) => void;
   /** The tab's Search below `root`: the one it left there, so Back to its results finds them as they were, unless `fresh`. */
   search: (tab: string, root: string, fresh?: boolean) => FileSearch;
 }
@@ -114,20 +110,17 @@ export function filesSession(app: AppController, host: KnownHost): FilesSession 
     void browser.recovered();
     for (const search of searches.values()) search.recovered();
   });
-  const edits = new Edits();
+  const edits = new Edits({
+    api: browser.api,
+    remember: (edit) => {
+      const others = Object.fromEntries(Object.entries(app.view.get("unsaved")).filter(([id]) => id !== hostId));
+      app.view.set("unsaved", edit ? { ...others, [hostId]: edit } : others);
+    },
+    saved: (path) => { void browser.folders.changed(parentOf(path)); },
+  });
   const unsaved = app.view.get("unsaved")[hostId];
   if (unsaved) edits.begin(unsaved, true);
-  const forgetUnsaved = (path: string): void => {
-    const { [hostId]: mine, ...others } = app.view.get("unsaved");
-    if (mine?.path === path) app.view.set("unsaved", others);
-  };
-  // Only as the page goes away: a MiB of text is no per-keystroke write.
-  const unflush = app.persist.onFlush(() => {
-    const latest = [...edits.snapshot.open.values()].findLast((edit) => edit.changed);
-    if (!latest) return;
-    const { path, etag, ending } = latest;
-    app.view.set("unsaved", { ...app.view.get("unsaved"), [hostId]: { path, etag, ending, text: edits.textOf(latest) } });
-  });
+  const unflush = app.persist.onFlush(() => { edits.flush(); });
   const forget = (): void => { unclear(); unrecover(); unflush(); };
   /** `ask`, a change in `dir`. A refusal rejects, and what is really there shows once the folder is listed again: the name was taken, or gone, or (`partly`, a delete that stopped) part of it was. */
   const changing = async (dir: string, partly: string | null, ask: () => Promise<void>): Promise<void> => {
@@ -138,8 +131,9 @@ export function filesSession(app: AppController, host: KnownHost): FilesSession 
       throw refused;
     }
   };
-  /** What was at `path` left it, for `to` or for good: the previews and recents go with it. */
+  /** What was at `path` left it, for `to` or for good: the previews, recents and edits go with it. */
   const left = (path: string, to: string | null): void => {
+    edits.left(path, to);
     session.previews.revise((file) => {
       if (!within(file.path, path)) return file;
       if (to === null) return null;
@@ -164,18 +158,6 @@ export function filesSession(app: AppController, host: KnownHost): FilesSession 
     previews: new Recent(SCROLLS_KEPT),
     handed: null,
     edits,
-    save: async (path, text, overwrite) => {
-      const edit = edits.snapshot.open.get(path);
-      const etag = await browser.api.save(path, text, overwrite || !edit ? "*" : edit.etag);
-      edits.keep(path, { etag });
-      forgetUnsaved(path);
-      void browser.folders.changed(parentOf(path));
-      return etag;
-    },
-    finishEdit: (path) => {
-      edits.end(path);
-      forgetUnsaved(path);
-    },
     opened: (file) => {
       const all = app.view.get("opened");
       const before = (all[hostId] ?? []).filter((f) => f.path !== file.path);

@@ -99,7 +99,7 @@ export class FakeFs implements FsApi {
 
   text(path: string): Promise<TextPreview> {
     if (this.tree.files[path] === undefined) return Promise.reject(new HttpRefusal(404, "not_found"));
-    return Promise.resolve({ text: "", size: 0, truncated: false, etag: `"${String(this.saves)}"`, ending: "\n" as const });
+    return Promise.resolve({ text: "", size: 0, truncated: false, editable: { etag: `"${String(this.saves)}"`, ending: "\n" } });
   }
 
   search(path: string, q: string, hidden: boolean, signal?: AbortSignal): Promise<Search> {
@@ -299,9 +299,9 @@ export function serveFs(fs: FakeFs, daemon: FakeDaemon): NonNullable<FakeDaemon[
       if (probed.kind === "dir") throw new HttpRefusal(400, "not_a_file");
       const preview = await fs.text(target);
       const { text } = preview;
-      if (text === "") return new Response("", { status: 200, headers: { ...(preview.etag && { ETag: preview.etag }) } });
+      if (text === "") return new Response("", { status: 200, headers: { ...(preview.editable && { ETag: preview.editable.etag }) } });
       const bytes = new TextEncoder().encode(text).length;
-      return new Response(text, { status: 206, headers: { "Content-Type": probed.mime ?? "application/octet-stream", "Content-Range": `bytes 0-${String(bytes - 1)}/${String(bytes)}`, ...(preview.etag && { ETag: preview.etag }) } });
+      return new Response(text, { status: 206, headers: { "Content-Type": probed.mime ?? "application/octet-stream", "Content-Range": `bytes 0-${String(bytes - 1)}/${String(bytes)}`, ...(preview.editable && { ETag: preview.editable.etag }) } });
     }
     return json(404, { error: "not_found" });
   };

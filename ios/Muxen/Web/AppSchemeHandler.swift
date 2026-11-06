@@ -162,7 +162,9 @@ final class AppSchemeHandler: NSObject, WKURLSchemeHandler, URLSessionDataDelega
             }
         }
         upstream.httpMethod = request.httpMethod
+        // WebKit may hand a body over as a stream: dropped, a save would replace the file with nothing.
         upstream.httpBody = request.httpBody
+        if request.httpBody == nil { upstream.httpBodyStream = request.httpBodyStream }
         for name in ["Range", "If-Match", "Content-Type"] {
             if let value = request.value(forHTTPHeaderField: name) { upstream.setValue(value, forHTTPHeaderField: name) }
         }

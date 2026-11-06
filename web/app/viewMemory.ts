@@ -1,6 +1,7 @@
 // What the page remembers of how it looks on this device: one small typed owner over `PlatformStorage.view`,
 // beside `persist.ts` (which owns the workspace and drafts). Not `Preferences`, which crosses the iOS bridge for
 // settings native acts on. A value that is missing or unreadable (another build wrote it) is the default.
+import type { LineEnding } from "../files/api";
 import type { ViewStore } from "../platform/types";
 
 /** A file this device opened in Files, for Search's recents. */
@@ -15,7 +16,7 @@ export interface OpenedFile {
 export interface UnsavedEdit {
   path: string;
   etag: string;
-  ending: "\n" | "\r\n";
+  ending: LineEnding;
   text: string;
 }
 

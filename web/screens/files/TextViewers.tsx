@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
-import type { TextPreview } from "../../files/api";
+import { TEXT_LIMIT, type TextPreview } from "../../files/api";
 import type { FilesSession } from "./session";
 import type { FileRef } from "../../files/browser";
 import { HIGHLIGHT_MAX, highlightedLines, plainLines } from "../../files/render/code";
@@ -13,9 +13,6 @@ import { asRefusal, type HttpRefusal } from "../../net/http";
 import { cx } from "../../ui/cx";
 import { Loading, Refused, useFailure } from "./failure";
 import styles from "./Viewers.module.css";
-
-/** The code and Markdown viewers read at most this much, with Range (fs.md "Text previews"). */
-export const TEXT_LIMIT = 1024 * 1024;
 
 /** `retry` reads the file again; the failure is shown until then. */
 export type Loaded = { kind: "loading" } | { kind: "done"; value: TextPreview } | { kind: "error"; error: HttpRefusal; retry: () => void };

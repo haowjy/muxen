@@ -198,7 +198,7 @@ export class FilesFs extends FakeFs {
 
   override text(path: string): Promise<TextPreview> {
     const text = this.saved.get(path) ?? CONTENT[path] ?? `${path.split("/").pop() ?? path}\n`;
-    return Promise.resolve({ text, size: text.length, truncated: false, etag: `"${String(this.saves)}"`, ending: "\n" });
+    return Promise.resolve({ text, size: text.length, truncated: false, editable: { etag: `"${String(this.saves)}"`, ending: "\n" } });
   }
 }
 
