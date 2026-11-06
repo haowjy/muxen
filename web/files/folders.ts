@@ -2,6 +2,7 @@ import { HttpRefusal } from "../net/http";
 import { Store } from "../ui/store";
 import type { FsApi, Listing } from "./api";
 import { fold } from "./outline";
+import { within } from "./paths";
 
 /** Typing pauses this long before a folder is asked for. */
 export const SETTLE_MS = 250;
@@ -203,6 +204,13 @@ export class Folders extends Store<FoldersView> {
     }
     this.update({ held });
     await Promise.all(shown.map(({ folder, hidden }) => this.relist(folder, hidden)));
+  }
+
+  /** `path` is no more: its pages go, and those of every folder under it. */
+  forget(path: string): void {
+    const held = new Map(this.snapshot.held);
+    for (const key of held.keys()) if (within(key.slice(1), path)) held.delete(key);
+    this.update({ held });
   }
 
   /** Runs `ask` once fewer than `LISTINGS_AT_ONCE` pages are under way; a finished one hands its turn on. */

@@ -1,11 +1,10 @@
-import type { CreateKind } from "../proto/generated/messages";
 import { HttpRefusal } from "../net/http";
 import { refusalWords } from "../net/refusalWords";
 import type { FsApi, Listing } from "./api";
 import { samePlace, type FilesPlace } from "../platform/types";
 import { hostProblem, type HostProblem } from "../ui/hostProblem";
 import { Store } from "../ui/store";
-import { baseName, parentOf } from "./paths";
+import { baseName, parentOf, within } from "./paths";
 import { Folders } from "./folders";
 import { Recent } from "./recent";
 
@@ -171,13 +170,19 @@ export class FileBrowser extends Store<FilesView> {
 
   /**
    * `path` landed (an upload, a paste, a create): its folder is listed again wherever it shows, and held nowhere stale.
-   * `made`, a create: a dot name was asked for by name, so it shows, and a desktop opens a new folder in place.
+   * `named`, a create or a rename: a dot name was asked for by name, so it shows, and with `opens` a desktop opens the folder in place.
    */
-  async added(path: string, made?: CreateKind): Promise<void> {
+  async added(path: string, named?: { opens: boolean }): Promise<void> {
     this.probed.delete(path);
     await this.folders.drop(parentOf(path));
-    if (made && baseName(path).startsWith(".") && !this.snapshot.hidden) await this.toggleHidden();
-    this.update({ fresh: { path, opens: made === "dir" } });
+    if (named && baseName(path).startsWith(".") && !this.snapshot.hidden) await this.toggleHidden();
+    this.update({ fresh: { path, opens: named?.opens === true } });
+  }
+
+  /** `path` is no more (deleted, or the old name of a rename): nothing at or under it stays held. */
+  forget(path: string): void {
+    this.probed.revise((file) => (within(file.path, path) ? null : file));
+    this.folders.forget(path);
   }
 
   /** The desktop selected what landed: `fresh` is an event there, and a return to the list must not repeat it. */

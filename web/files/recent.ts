@@ -26,6 +26,15 @@ export class Recent<V> {
     this.items.delete(key);
   }
 
+  /** Each value as `change` has it, in place; null deletes it. */
+  revise(change: (value: V) => V | null): void {
+    for (const [key, value] of this.items) {
+      const now = change(value);
+      if (now === null) this.items.delete(key);
+      else this.items.set(key, now);
+    }
+  }
+
   clear(): void {
     this.items.clear();
   }

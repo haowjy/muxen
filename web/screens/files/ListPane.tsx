@@ -1,10 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { useApp, useAppView } from "../../app/context";
-import type { Listing } from "../../files/api";
+import type { Entry, Listing } from "../../files/api";
 import type { FileSearch } from "../../files/search";
 import { describeError, type FilesView } from "../../files/browser";
 import { shorten } from "../../files/format";
-import { baseName, parentOf } from "../../files/paths";
+import { baseName, join, parentOf } from "../../files/paths";
 import type { FilesPlace } from "../../platform/types";
 import { cx } from "../../ui/cx";
 import { Button } from "../../ui/primitives/Button";
@@ -12,7 +12,8 @@ import { EmptyState } from "../../ui/primitives/EmptyState";
 import { Spinner } from "../../ui/primitives/Spinner";
 import { readPaste } from "../terminal/paste";
 import { DirList, MissingFolder, type RowMenuAsk } from "./FolderList";
-import { NewEntry, type Creating } from "./NewEntry";
+import { DeleteEntry } from "./DeleteEntry";
+import { NameEntry, type Asked } from "./NameEntry";
 import { foldersBetween, UP } from "../../files/outline";
 import type { CreateKind } from "../../proto/generated/messages";
 import { FolderActions } from "./FolderActions";
@@ -60,7 +61,8 @@ export function ListPane({ session, tab, view, pages, tree, up, search, onOpen }
   const scroller = useRef<HTMLDivElement>(null);
   const [rowMenu, setRowMenu] = useState<RowMenuAsk | null>(null);
   const [finding, setFinding] = useState(false);
-  const [creating, setCreating] = useState<Creating | null>(null);
+  const [asked, setAsked] = useState<Asked | null>(null);
+  const [deleting, setDeleting] = useState<{ path: string; entry: Entry } | null>(null);
   const { place, home, loading, error, hidden } = view;
   const outline = useOutlineListings(session, tree, hidden, !phone);
   const mode: Mode = search ? "search" : finding ? "finding" : place.kind === "dir" && error?.code === "not_found" ? "missing" : "list";
@@ -99,24 +101,27 @@ export function ListPane({ session, tab, view, pages, tree, up, search, onOpen }
   useEffect(() => { setRowMenu(null); }, [folder]);
 
   // A new entry is named under its folder, which opens to show the field; the field goes with the folder or the list.
-  const create = (dir: string, kind: CreateKind): void => {
+  const ask = (dir: string, kind: CreateKind, name?: string): void => {
     if (folder === null) return;
-    if (!phone && dir !== folder) tree.toggle(dir, true);
-    if (creating?.dir === dir && creating.kind === kind) app.focus.focusTarget("name", true);
+    if (!phone && dir !== folder && name === undefined) tree.toggle(dir, true);
+    if (asked?.dir === dir && asked.kind === kind && asked.name === name) app.focus.focusTarget("name", true);
     else app.focus.keepKeyboardOn("name"); // the desktop's field; the phone's takes it as its dialog opens, marked `typing`
-    setCreating({ dir, kind, root: folder });
+    setAsked({ dir, kind, root: folder, ...(name !== undefined && { name }) });
   };
-  const named = creating?.root === folder && showing ? creating : null;
+  const named = asked?.root === folder && showing ? asked : null;
   const naming = named && (phone || named.dir === folder || [...foldersBetween(folder ?? "", named.dir), named.dir].every((f) => tree.expanded.has(f))) ? named : null;
-  useEffect(() => { if (creating && !naming) setCreating(null); }, [creating, naming]);
+  useEffect(() => { if (asked && !naming) setAsked(null); }, [asked, naming]);
+  const renamed = naming?.name === undefined ? null : join(naming.dir, naming.name);
   const form = naming && (
-    <NewEntry
-      key={`${naming.dir}\0${naming.kind}`}
+    <NameEntry
+      key={`${naming.dir}\0${naming.kind}\0${naming.name ?? ""}`}
       session={session}
       dir={naming.dir}
       kind={naming.kind}
+      {...(naming.name !== undefined && { name: naming.name })}
+      opens={renamed !== null && tree.expanded.has(renamed)}
       onClose={(hadFocus) => {
-        setCreating(null);
+        setAsked(null);
         if (hadFocus) listTakesKeys(); // a frame on: a dialog closing still holds the page until then
       }}
     />
@@ -156,7 +161,7 @@ export function ListPane({ session, tab, view, pages, tree, up, search, onOpen }
           here={place.path}
           onEditing={setFinding}
           onOpen={onOpen}
-          actions={<FolderActions session={session} path={pages?.path ?? place.path} pasteable={folderShown !== null} loading={loading} {...(folderShown !== null && { onCreate: (kind: CreateKind) => { create(folderShown, kind); } })} onSearch={folderShown !== null ? openSearch : undefined} />}
+          actions={<FolderActions session={session} path={pages?.path ?? place.path} pasteable={folderShown !== null} loading={loading} {...(folderShown !== null && { onCreate: (kind: CreateKind) => { ask(folderShown, kind); } })} onSearch={folderShown !== null ? openSearch : undefined} />}
         />
       )}
       {mode !== "finding" && mode !== "search" && <UploadPanel session={session} onPreview={(path) => { onOpen({ kind: "file", path }); }} />}
@@ -172,7 +177,7 @@ export function ListPane({ session, tab, view, pages, tree, up, search, onOpen }
             pages={pages}
             hidden={hidden}
             loading={loading}
-            naming={!phone && naming ? { after: naming.dir === folder ? (up ? UP : null) : naming.dir, field: form } : null}
+            naming={!phone && naming ? (renamed !== null ? { over: renamed, field: form } : { after: naming.dir === folder ? (up ? UP : null) : naming.dir, field: form }) : null}
             fresh={phone && view.fresh !== null && parentOf(view.fresh.path) === pages.path ? baseName(view.fresh.path) : null}
             onOpen={onOpen}
             outline={outline}
@@ -188,7 +193,15 @@ export function ListPane({ session, tab, view, pages, tree, up, search, onOpen }
       )}
       {phone && showing && <PullToRefresh key={`pull:${pages.path}`} scroller={scroller} onRefresh={() => browser.reload()} />}
       {body && <div class={styles.scroll}>{body}</div>}
-      {rowMenu && showing && <RowMenu session={session} {...rowMenu} onCreate={create} onClose={() => { setRowMenu(null); }} />}
+      {rowMenu && showing && <RowMenu
+        session={session}
+        {...rowMenu}
+        onCreate={ask}
+        onRename={() => { if (rowMenu.row.place && rowMenu.row.entry) ask(parentOf(rowMenu.row.place.path), rowMenu.row.entry.kind === "dir" ? "dir" : "file", rowMenu.row.entry.name); }}
+        onDelete={() => { if (rowMenu.row.place && rowMenu.row.entry) setDeleting({ path: rowMenu.row.place.path, entry: rowMenu.row.entry }); }}
+        onClose={() => { setRowMenu(null); }}
+      />}
+      {deleting && <DeleteEntry session={session} {...deleting} onClose={(hadFocus) => { setDeleting(null); if (hadFocus) listTakesKeys(); }} />}
       {phone && form}
     </div>
   );

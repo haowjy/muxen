@@ -1,8 +1,8 @@
 import {
   Check, ChevronDown, ChevronLeft, ChevronRight, CircleX, ClipboardCopy, Copy, Download, Ellipsis, Equal, ExternalLink, Eye, File,
   FileBraces, FileCode, FileCog, FileDigit, FileImage, FileLock, FileMusic, FilePlus, FileTerminal, FileText, FileVideoCamera, Film, Folder, FolderPlus,
-  House, Image, Info, Keyboard, ClipboardPaste, KeyboardOff, List, Maximize2, PanelRight, Plus, RotateCw, Search, Server, Settings, SquarePlus, Terminal,
-  TriangleAlert, Upload, WrapText, X, type LucideIcon,
+  House, Image, Info, Keyboard, ClipboardPaste, KeyboardOff, List, Maximize2, PanelRight, Plus, Pencil, RotateCw, Search, Server, Settings, SquarePlus, Terminal,
+  Trash2, TriangleAlert, Upload, WrapText, X, type LucideIcon,
 } from "lucide-preact";
 
 /** muxen's icon names, each a Lucide icon. */
@@ -12,6 +12,8 @@ const ICONS = {
   sessions: Server,
   newFile: FilePlus,
   newFolder: FolderPlus,
+  rename: Pencil,
+  trash: Trash2,
   folder: Folder,
   /** The Files Preview panel's toggle. */
   panel: PanelRight,

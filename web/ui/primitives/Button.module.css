@@ -21,6 +21,11 @@
   color: var(--color-on-accent);
 }
 .primary:hover { filter: brightness(1.08); }
+.danger {
+  background: var(--color-status-error);
+  color: var(--color-bg);
+}
+.danger:hover { filter: brightness(1.08); }
 .secondary {
   background: var(--color-bg-raised);
   border-color: var(--color-border);

@@ -2,7 +2,7 @@
 // for TypeScript like the WebSocket messages; keep them in step with fs.md "Routes".
 
 import { BUSY_RETRIES, HttpRefusal, send } from "../net/http";
-import type { Created, CreateKind, CreateRequest, Search } from "../proto/generated/messages";
+import type { Created, CreateKind, CreateRequest, DeleteRequest, RenameRequest, Search } from "../proto/generated/messages";
 
 export interface Entry {
   name: string;
@@ -50,6 +50,10 @@ export interface FsApi {
   rawUrl(path: string): string;
   /** An empty file or a new folder; `exists` if the name is taken (fs.md "POST /fs/create"). */
   create(dir: string, name: string, kind: CreateKind): Promise<Created>;
+  /** A new name in the same folder; `exists` if it is taken (fs.md "POST /fs/rename"). */
+  rename(dir: string, name: string, to: string): Promise<void>;
+  /** Gone for good, a folder with all it holds (fs.md "POST /fs/delete"). */
+  delete(dir: string, name: string): Promise<void>;
 }
 
 /** `/a/b c` → `/a/b%20c`: each segment percent-encoded, joined with `/` (fs.md "Routes"). */
@@ -82,6 +86,7 @@ function totalOf(contentRange: string | null): number | null {
 export function httpFsApi(origin: string, fetchFn?: typeof fetch): FsApi {
   // An absolute path's own `/` is the route's; `~` and `~/…` ride bare after one (fs.md "Routes").
   const url = (route: string, path: string, query = ""): string => `${origin}/fs/${route}${path.startsWith("~") ? "/" : ""}${encodePath(path)}${query}`;
+  const post = (request: unknown): RequestInit => ({ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) });
   const json = async <T>(target: string, init?: RequestInit): Promise<T> => (await (await send(target, init, BUSY_RETRIES, fetchFn)).json()) as T;
   const page = (offset: number, hidden: boolean): string => `?offset=${String(offset)}&hidden=${hidden ? "1" : "0"}`;
 
@@ -126,7 +131,17 @@ export function httpFsApi(origin: string, fetchFn?: typeof fetch): FsApi {
 
     create: (dir, name, kind) => {
       const request: CreateRequest = { dir, name, kind };
-      return json<Created>(`${origin}/fs/create`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) });
+      return json<Created>(`${origin}/fs/create`, post(request));
+    },
+
+    rename: async (dir, name, to) => {
+      const request: RenameRequest = { dir, name, to };
+      await send(`${origin}/fs/rename`, post(request), BUSY_RETRIES, fetchFn);
+    },
+
+    delete: async (dir, name) => {
+      const request: DeleteRequest = { dir, name };
+      await send(`${origin}/fs/delete`, post(request), BUSY_RETRIES, fetchFn);
     },
   };
 }

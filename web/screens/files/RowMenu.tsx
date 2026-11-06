@@ -1,5 +1,6 @@
 import { useApp, useAppView } from "../../app/context";
 import { formatSize } from "../../files/format";
+import { within } from "../../files/paths";
 import { Menu, type MenuSection } from "../../ui/primitives/Menu";
 import type { CreateKind } from "../../proto/generated/messages";
 import { routeWorkspace } from "../../workspace/state";
@@ -13,14 +14,16 @@ interface Props extends RowMenuAsk {
   session: FilesSession;
   /** New file or New folder in a folder row. */
   onCreate: (dir: string, kind: CreateKind) => void;
+  onRename: () => void;
+  onDelete: () => void;
   onClose: () => void;
 }
 
 /**
- * A row's menu (right click, a held touch, Shift+F10): Open, Open in new tab, Copy path, Download (files) and the
- * terminal tabs to insert the path into. A menu's copy has no button left to confirm it, so a notice does.
+ * A row's menu (right click, a held touch, Shift+F10): Open, Open in new tab, Copy path, Download (files), the
+ * terminal tabs to insert the path into, then Rename and Delete. A menu's copy has no button left to confirm it, so a notice does.
  */
-export function RowMenu({ session, row, at, list, onCreate, onClose }: Props) {
+export function RowMenu({ session, row, at, list, onCreate, onRename, onDelete, onClose }: Props) {
   const app = useApp();
   const touch = useAppView((v) => v.viewport.density === "touch");
   const phone = useAppView((v) => v.viewport.layout === "phone");
@@ -29,6 +32,9 @@ export function RowMenu({ session, row, at, list, onCreate, onClose }: Props) {
   const { choices, insert } = useInsert(place?.path ?? "", null);
   if (!place || !entry) return null;
   const dir = place.kind === "dir";
+  // Home, and the folders it lies in: muxen's own state is in there, and no mis-tap should reach it.
+  const { home } = session.browser.snapshot;
+  const holdsHome = home !== null && within(home, place.path);
   const sections: MenuSection[] = [
     {
       items: [
@@ -52,6 +58,10 @@ export function RowMenu({ session, row, at, list, onCreate, onClose }: Props) {
       ],
     },
     insertSection(choices, insert, null),
+    ...(!holdsHome ? [{ items: [
+      { label: "Rename", icon: "rename" as const, onSelect: onRename },
+      { label: "Delete", icon: "trash" as const, danger: true, onSelect: onDelete },
+    ] }] : []),
   ];
   return <Menu anchor={list} at={at} label={entry.name} sections={sections} focusFirst={!touch} onClose={onClose} />;
 }

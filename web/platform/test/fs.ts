@@ -1,8 +1,9 @@
 // A file API over an in-memory tree, following fs.md's rules closely enough for the
 // browser model's tests: any listed directory opens, dirs sort first, pages of `page` entries. Paths are already canonical.
+import { join, moved, within } from "../../files/paths";
 import { HttpRefusal } from "../../net/http";
 import type { Entry, FsApi, Listing } from "../../files/api";
-import type { Created, CreateKind, CreateRequest, Match, Search } from "../../proto/generated/messages";
+import type { Created, CreateKind, CreateRequest, DeleteRequest, Match, RenameRequest, Search } from "../../proto/generated/messages";
 import type { FakeDaemon } from ".";
 import { defaultSettings, searchSkipOf } from "./settings";
 
@@ -51,6 +52,31 @@ export class FakeFs implements FsApi {
       else this.tree.files[path] = "text/plain; charset=utf-8";
       return { path };
     });
+  }
+
+  rename(dir: string, name: string, to: string): Promise<void> {
+    return this.answer(`rename ${dir} ${name} ${to}`, () => {
+      const from = join(dir, name);
+      const path = join(dir, to);
+      if (to.includes("/")) throw new HttpRefusal(400, "bad_request");
+      if (!this.exists(from)) throw new HttpRefusal(404, "not_found");
+      if (this.exists(path)) throw new HttpRefusal(409, "exists");
+      this.tree.dirs = this.tree.dirs.map((d) => (within(d, from) ? moved(d, from, path) : d));
+      this.tree.files = Object.fromEntries(Object.entries(this.tree.files).map(([file, mime]) => [within(file, from) ? moved(file, from, path) : file, mime]));
+    });
+  }
+
+  delete(dir: string, name: string): Promise<void> {
+    return this.answer(`delete ${dir} ${name}`, () => {
+      const path = join(dir, name);
+      if (!this.exists(path)) throw new HttpRefusal(404, "not_found");
+      this.tree.dirs = this.tree.dirs.filter((d) => !within(d, path));
+      this.tree.files = Object.fromEntries(Object.entries(this.tree.files).filter(([file]) => !within(file, path)));
+    });
+  }
+
+  private exists(path: string): boolean {
+    return this.tree.dirs.includes(path) || this.tree.files[path] !== undefined;
   }
 
   probe(path: string): Promise<{ kind: "dir" } | { kind: "file"; mime: string | null; size: number | null }> {
@@ -240,6 +266,16 @@ export function serveFs(fs: FakeFs, daemon: FakeDaemon): NonNullable<FakeDaemon[
     if (method === "POST" && path === "/fs/create") {
       const { dir, name, kind } = JSON.parse(String(body)) as CreateRequest;
       return json(201, await fs.create(dir, name, kind));
+    }
+    if (method === "POST" && path === "/fs/rename") {
+      const { dir, name, to } = JSON.parse(String(body)) as RenameRequest;
+      await fs.rename(dir, name, to);
+      return new Response(null, { status: 204 });
+    }
+    if (method === "POST" && path === "/fs/delete") {
+      const { dir, name } = JSON.parse(String(body)) as DeleteRequest;
+      await fs.delete(dir, name);
+      return new Response(null, { status: 204 });
     }
     if (method === "GET" && path.startsWith("/fs/list/")) return json(200, await fs.list(at("/fs/list"), ...page(query)));
     if (method === "GET" && path.startsWith("/fs/search/")) return json(200, await fs.search(at("/fs/search"), query.get("q") ?? "", query.get("hidden") === "1", signal ?? undefined));

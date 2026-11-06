@@ -25,10 +25,12 @@ export function whyNot(entry: Entry): string | null {
   return null;
 }
 
-/** A new file's or folder's name field, drawn among the rows and no row of theirs: the keys never reach it. */
+/** A name field, drawn among the rows and no row of theirs: the keys never reach it. */
 export interface Naming {
-  /** The folder row it goes under; null for the first thing in the list. */
-  after: string | null;
+  /** A new entry: the folder row it goes under, or null for the first thing in the list. */
+  after?: string | null;
+  /** A rename: the row it stands in for. */
+  over?: string;
   field: ComponentChildren;
 }
 
@@ -190,7 +192,8 @@ export function RowList({ rows, selected, optionId, fresh, tree = false, notes, 
       {naming?.after === null && <div class={styles.naming} style={{ "--depth": 0 }}>{naming.field}</div>}
       {rows.map((row) => (
         <Fragment key={row.key}>
-          <FileRow row={row} id={optionId(row.key)} selected={row.key === selected} fresh={row.entry !== null && row.entry.name === fresh} tree={tree} note={notes?.get(row.key) ?? null} upName={upName} now={now} act={act} />
+          {naming?.over === row.key && <div class={styles.naming} style={{ "--depth": row.depth }}>{naming.field}</div>}
+          {naming?.over !== row.key && <FileRow row={row} id={optionId(row.key)} selected={row.key === selected} fresh={row.entry !== null && row.entry.name === fresh} tree={tree} note={notes?.get(row.key) ?? null} upName={upName} now={now} act={act} />}
           {naming?.after === row.key && <div class={styles.naming} style={{ "--depth": row.kind === "up" ? 0 : row.depth + 1 }}>{naming.field}</div>}
         </Fragment>
       ))}

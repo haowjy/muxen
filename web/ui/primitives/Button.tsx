@@ -6,7 +6,7 @@ import { Icon, type IconName } from "./Icon";
 import styles from "./Button.module.css";
 
 export interface ButtonProps extends Omit<ButtonHTMLAttributes, "icon"> {
-  variant?: "primary" | "secondary" | "quiet";
+  variant?: "primary" | "secondary" | "quiet" | "danger";
   icon?: IconName;
   /** Why the button can't be used now. Disabled controls say why: the button stays focusable and does nothing, and the reason is shown beside it, where a touch user sees it, and is its description. */
   disabledReason?: string | undefined;

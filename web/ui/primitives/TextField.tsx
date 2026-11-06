@@ -18,6 +18,8 @@ interface FieldProps {
   placeholder?: string;
   name?: string;
   disabled?: boolean;
+  /** The text from its start to here starts selected: a name's stem, so typing replaces it and keeps the extension. */
+  selectTo?: number;
   /** Stays focused while a request runs, as a disabled field wouldn't. */
   readOnly?: boolean;
   hint?: string | undefined;
@@ -33,13 +35,14 @@ interface FieldProps {
 }
 
 /** A labelled single-line field. With SearchField, the only place an `<input>` lives for screens (lint rule 1). */
-export function TextField({ label, hideLabel = false, value, onInput, onCommit, hint, error, focusTarget, action, class: className, ...rest }: FieldProps) {
+export function TextField({ label, hideLabel = false, value, onInput, onCommit, hint, error, focusTarget, action, selectTo, class: className, ...rest }: FieldProps) {
   const id = useId();
   const focusRef = useFocusRef(focusTarget);
   const attach = useCallback((el: HTMLInputElement | null) => {
     applyFieldSettings(el);
+    if (selectTo) el?.setSelectionRange(0, selectTo);
     focusRef(el);
-  }, [focusRef]);
+  }, [focusRef, selectTo]);
   const note = error ?? hint;
   return (
     <div class={cx(styles.field, className)}>

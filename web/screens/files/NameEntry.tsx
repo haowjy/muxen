@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { TargetedSubmitEvent } from "preact";
 import { useApp, useAppView } from "../../app/context";
 import { describeError } from "../../files/browser";
+import { join } from "../../files/paths";
 import { HttpRefusal } from "../../net/http";
 import type { CreateKind } from "../../proto/generated/messages";
 import { Button } from "../../ui/primitives/Button";
@@ -10,34 +11,36 @@ import { TitleBar } from "../../ui/primitives/DialogBars";
 import { Spinner } from "../../ui/primitives/Spinner";
 import { TextField } from "../../ui/primitives/TextField";
 import type { FilesSession } from "./session";
-import styles from "./NewEntry.module.css";
+import styles from "./NameEntry.module.css";
 
-/** A New file or New folder asked for: where, which, and the list it was asked in. */
-export interface Creating {
+/** A name asked for: where, what is named, the list it was asked in, and with `name` the entry to rename. */
+export interface Asked {
   dir: string;
   kind: CreateKind;
   root: string;
+  name?: string;
 }
 
-interface Props {
+interface Props extends Omit<Asked, "root"> {
   session: FilesSession;
-  dir: string;
-  kind: CreateKind;
+  /** A rename only: the folder is open now, and stays open under its new name. */
+  opens: boolean;
   /** Done with the form. `hadFocus`: the field held it, so the list takes it back; otherwise it has gone where the user sent it. */
   onClose: (hadFocus: boolean) => void;
 }
 
 /**
- * Names a new file or folder: in a form, so Return is the form's and Cancel can't commit it, one request at a time, a
+ * Names a new file or folder, or renames one: in a form, so Return is the form's and Cancel can't commit it, one request at a time, a
  * refusal keeping the form open with the name in it. A success closes it at once; the landing is the session's. A row
  * among the outline's on a desktop, a dialog on the phone.
  */
-export function NewEntry({ session, dir, kind, onClose }: Props) {
+export function NameEntry({ session, dir, kind, name: was = "", opens, onClose }: Props) {
   const app = useApp();
   const phone = useAppView((v) => v.viewport.layout === "phone");
   const touch = useAppView((v) => v.viewport.density === "touch");
-  const label = kind === "file" ? "New file" : "New folder";
-  const [name, setName] = useState("");
+  const renaming = was !== "";
+  const label = renaming ? `Rename ${was}` : kind === "file" ? "New file" : "New folder";
+  const [name, setName] = useState(was);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const form = useRef<HTMLFormElement>(null);
@@ -63,16 +66,20 @@ export function NewEntry({ session, dir, kind, onClose }: Props) {
   const submit = async (e: TargetedSubmitEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
     if (busy || name === "") return;
+    if (name === was) {
+      close();
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      await session.create(dir, name, kind);
+      await (renaming ? session.rename(join(dir, was), name, opens) : session.create(dir, name, kind));
       if (mounted.current) close();
     } catch (refused) {
       if (!(refused instanceof HttpRefusal)) throw refused;
       const words = refused.code === "bad_request" ? "That name can't be used." : describeError(refused, session.hostName);
       if (!mounted.current) {
-        app.notify(`Couldn't create ${name}: ${words}`);
+        app.notify(`Couldn't ${renaming ? "rename" : "create"} ${name}: ${words}`);
         return;
       }
       setError(words);
@@ -94,17 +101,17 @@ export function NewEntry({ session, dir, kind, onClose }: Props) {
         const to = e.relatedTarget;
         // Another window took the focus when the field is still the document's active element: it stays to come back to.
         const staying = holdsFocus() || (to instanceof Node && form.current?.contains(to));
-        if (phone || name !== "" || staying) return;
+        if (phone || (name !== "" && name !== was) || staying) return;
         if (pressing.current) window.addEventListener("click", () => { onClose(false); }, { once: true });
         else onClose(false);
       }}
     >
-      <TextField label={label} hideLabel placeholder={kind === "file" ? "File name" : "Folder name"} value={name} onInput={(v) => { setName(v); setError(null); }} readOnly={busy} error={error} focusTarget="name" data-initial-focus="typing" />
-      {busy && !phone && <Spinner label="Creating" />}
+      <TextField label={label} hideLabel placeholder={kind === "file" ? "File name" : "Folder name"} value={name} selectTo={kind === "file" && was.lastIndexOf(".") > 0 ? was.lastIndexOf(".") : was.length} onInput={(v) => { setName(v); setError(null); }} readOnly={busy} error={error} focusTarget="name" data-initial-focus="typing" />
+      {busy && !phone && <Spinner label={renaming ? "Renaming" : "Creating"} />}
       {(phone || touch) && (
         <div class={styles.actions}>
           <Button variant="quiet" onClick={close}>Cancel</Button>
-          <Button variant="primary" busy={busy} onClick={() => { form.current?.requestSubmit(); }}>Create</Button>
+          <Button variant="primary" busy={busy} onClick={() => { form.current?.requestSubmit(); }}>{renaming ? "Rename" : "Create"}</Button>
         </div>
       )}
     </form>
