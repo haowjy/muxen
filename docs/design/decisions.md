@@ -5099,6 +5099,50 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
 - **What:** Rename and Delete are the last rows of a row's menu. Rename stands in a name field for the row (a dialog on the phone), with the stem selected, and never replaces anything. Delete asks first, and a folder goes with all it holds. `POST /fs/rename` and `POST /fs/delete` work from the folder's descriptor. A delete never follows a link, stops at a mount unlike `rm -r` (a bind mount too, through `openat2`, the open search uses), stops 64 levels down, and runs under its own slot. The daemon refuses home, its state folder and every folder above them, by device and inode: a menu check alone missed a path through a link. A failed delete leaves what it removed gone, so Cancel becomes Hide while it runs and the client says some may be gone.
 - **Rejected:** moving to the system trash for now (`~/.local/share/Trash`, `~/.Trash`): it needs a copy across disks, a trash that fills, and per-OS layouts. It remains the likely next step. Only empty folders (the common wish is `node_modules`, and the terminal is one tap away, but a file manager that refuses most folders reads as broken). Asking the daemon for a count before the confirm (a walk per dialog, on a slow link, for a number nobody checks). Rewriting other tabs' places on a rename: they show the "gone" state and offer the way up, as for anything renamed in the terminal.
 
+### The editor's edit lives on the Files session; the save buffer comes from upload's
+
+- **Decided:** 2026-11-06, design lead. Jimmy's calls: Edit is an item in the ⋯ menu ("sure"); the
+  phone keeps the key row ("sure, just keep it i guess"); unsaved text survives a relaunch ("i think
+  it hsould survive? but if its too much work no need"), and a relaunch reopens the editor rather than
+  the viewer: of a test build that restored the text only after Edit, "it doesn't save the state that
+  I was in the edit".
+- **What:** `Edits`, one store per host's `FilesSession`, owns each open edit from Edit to Done (ETag,
+  line ending, CodeMirror state, save, reload, a rename, the remembered copy); a view holds none of it,
+  so a save's or reload's answer that lands after the view has gone finds the edit by path. `FileView` renders the editor whenever its file has an edit, so a tab switch, Back
+  and a relaunch need no route of their own. The latest changed edit per host goes to view memory only
+  from `persist.onFlush`. The upload flush interval drops from 2 MiB to 1 MiB so the save's 1 MiB
+  buffer leaves the memory ceiling where it was. A file that would not survive byte for byte (mixed
+  endings, a BOM, invalid UTF-8, read in part) offers no Edit.
+- **Why:** the keyboard belongs to whichever text box has it, so the focus controller needs a target,
+  not a new owner. Writing up to a MiB per keystroke would cost more than the rare loss it prevents.
+  The ceiling rule is that each tier fits its lowest budget, and an upload flushing twice as often
+  costs less than moving a tier.
+- **Rejected:** a focus `Owner` for the editor; a persisted draft per file (one per host covers a kill
+  and stays bounded); a dialog for a conflict (it would drop the keyboard); normalizing line endings
+  on save; moving a memory tier boundary; reusing an upload's part file for the save.
+
+### The editor keeps autocorrect off, for now
+
+- **Decided:** 2026-11-06. Jimmy, after trying it on the iPhone: "is actually debeatable in this case,
+  but for now, okay". The current rule is off, as a trial with no end date.
+- **What:** the editor carries the same keyboard settings as every other text box
+  ([Every text box has autocorrect off](#every-text-box-has-autocorrect-off-2026-10-31)).
+- **Open:** autocorrect on for `.md` files is in `web/.context/FUTURE`.
+
+### Dialogs and Settings say what the user can't see, and no more
+
+- **Decided:** 2026-11-06, Jimmy, of the editor's discard dialog: "\"discard your changes\" is enough"
+  and "u don't need to explain everything". He applied it to the other dialogs and Settings ("yes
+  change them"), and of "Everything in this folder goes with it": "\"goes\" is not clear at all, goes
+  where?".
+- **What:** a dialog's title carries it when it can: "Discard your changes?" and a file's "Delete
+  notes.txt?" have no body. Body text stays for a consequence the title leaves out: a folder's
+  "Everything in this folder is deleted as well.", a link's "Only the link is deleted, not what it
+  points to.", and unsaved changes a delete takes. Settings' Terminal text size has no detail line. A
+  verb says what happens: "is deleted", never "goes".
+- **Rejected:** "goes with it", which doesn't say where anything goes; dialog text that explains how a
+  control works.
+
 ### The folder cache asks for two first pages at a time, the outline's last
 
 - **Decided:** 2026-11-05, from the phase 2 review (p546): Show hidden re-listed every open folder at
@@ -5579,25 +5623,6 @@ the check starts at the third timeout rather than the second, the limit is 15 s 
   banner on every screen but Home.
 - **Rejected:** every host's banner on every screen; the folder body carrying its own "Can't reach"
   and Retry beside the banner.
-
-### The editor's edit lives on the Files session; the save buffer comes from upload's
-
-- **Decided:** 2026-11-06, design lead, with Jimmy's calls on Edit in the ⋯ menu, the phone keeping
-  the key row, and unsaved text surviving a relaunch.
-- **What:** `Edits`, one store per host's `FilesSession`, owns each open edit from Edit to Done (ETag,
-  line ending, CodeMirror state, save, reload, a rename, the remembered copy); a view holds none of it,
-  so an answer landing after the view left finds the edit by path. `FileView` renders the editor whenever its file has an edit, so a tab switch, Back
-  and a relaunch need no route of their own. The latest changed edit per host goes to view memory only
-  from `persist.onFlush`. The upload flush interval drops from 2 MiB to 1 MiB so the save's 1 MiB
-  buffer leaves the memory ceiling where it was. A file that would not survive byte for byte (mixed
-  endings, a BOM, invalid UTF-8, read in part) offers no Edit.
-- **Why:** the keyboard belongs to whichever text box has it, so the focus controller needs a target,
-  not a new owner. Writing up to a MiB per keystroke would cost more than the rare loss it prevents.
-  The ceiling rule is that each tier fits its lowest budget, and an upload flushing twice as often
-  costs less than moving a tier.
-- **Rejected:** a focus `Owner` for the editor; a persisted draft per file (one per host covers a kill
-  and stays bounded); a dialog for a conflict (it would drop the keyboard); normalizing line endings
-  on save; moving a memory tier boundary; reusing an upload's part file for the save.
 
 ### Every view reads one derived server state
 

@@ -522,8 +522,8 @@ lower it (Jimmy, 2026-10-30). Desktop click-to-focus is unchanged. The page's me
 - The terminal target never gets autocorrect, auto-capitalization, smart punctuation or
   predictions: keystrokes go as typed, so there is no text for iOS to correct after
   it's sent. Every text box carries the same keyboard settings (autocomplete, autocorrect,
-  spellcheck and capitalization off), applied by `applyFieldSettings`; Safari may still show its
-  system prediction strip. The app hides the form bar and inline predictions.
+  spellcheck and capitalization off), applied by `applyFieldSettings`; the file editor takes the same
+  settings, for now. Safari may still show its system prediction strip. The app hides the form bar and inline predictions.
 - The line target is an ordinary textarea. Return reads "return" and sends the line using
   the existing paste-and-Enter path, while a paste with line breaks goes to the terminal
   as one paste without Enter.
@@ -742,7 +742,7 @@ files when empty): the daemon walks per settled query under hard caps and sends 
 [fs.md](fs.md). The web reaches them through its host's scheme-handler origin,
 `muxen-app://h-{host}/fs/…` ([ios-shell.md](ios-shell.md#where-the-web-ui-comes-from));
 video goes to the native player instead. MVP: list, search, raw (Range), upload (into `uploads_dir`, or a folder the request names) and create. v2: save
-an edit, rename.
+an edit, rename, delete.
 
 **Editing.** Edit, in a text file's ⋯ menu, opens CodeMirror 6, loaded on demand, in place
 of the viewer: Cancel (Done once nothing is unsaved), the name, Save. On a phone it wraps,
