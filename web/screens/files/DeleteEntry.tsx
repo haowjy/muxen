@@ -1,12 +1,10 @@
-import { useLayoutEffect, useRef, useState } from "preact/hooks";
-import { useApp } from "../../app/context";
 import type { Entry } from "../../files/api";
 import { describeError } from "../../files/browser";
-import { HttpRefusal } from "../../net/http";
 import { Button } from "../../ui/primitives/Button";
 import { Dialog } from "../../ui/primitives/Dialog";
 import { TitleBar } from "../../ui/primitives/DialogBars";
 import type { FilesSession } from "./session";
+import { useRequest } from "./useRequest";
 import styles from "./NameEntry.module.css";
 
 interface Props {
@@ -19,30 +17,12 @@ interface Props {
 
 /** Asks before a delete, which has no undo. Once it runs it can't be stopped, so Cancel becomes Hide: the request is the session's. */
 export function DeleteEntry({ session, path, entry, onClose }: Props) {
-  const app = useApp();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const mounted = useRef(true);
-  useLayoutEffect(() => () => { mounted.current = false; }, []);
   const title = `Delete ${entry.name}?`;
   const folder = entry.kind === "dir" && !entry.link;
   const close = (): void => { onClose(true); };
+  const { busy, error, run } = useRequest((refused) => `${describeError(refused, session.hostName)}${folder ? " Some of it may be gone." : ""}`);
   const confirm = async (): Promise<void> => {
-    setBusy(true);
-    setError(null);
-    try {
-      await session.remove(path);
-      if (mounted.current) close();
-    } catch (refused) {
-      if (!(refused instanceof HttpRefusal)) throw refused;
-      const words = `${describeError(refused, session.hostName)}${folder ? " Some of it may be gone." : ""}`;
-      if (!mounted.current) {
-        app.notify(`Couldn't delete ${entry.name}: ${words}`);
-        return;
-      }
-      setError(words);
-      setBusy(false);
-    }
+    if (await run(() => session.remove(path), `Couldn't delete ${entry.name}`)) close();
   };
   return (
     <Dialog open title={title} header={<TitleBar title={title} onClose={close} />} onClose={close}>

@@ -348,15 +348,6 @@ dir: string,
 name: string, kind: CreateKind, };
 
 /**
- * `201` from `POST /fs/create`.
- */
-export type Created = {
-/**
- * Absolute and canonical.
- */
-path: string, };
-
-/**
  * `POST /fs/rename`, within one folder.
  */
 export type RenameRequest = {

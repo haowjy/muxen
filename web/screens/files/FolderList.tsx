@@ -27,10 +27,9 @@ export function whyNot(entry: Entry): string | null {
 
 /** A name field, drawn among the rows and no row of theirs: the keys never reach it. */
 export interface Naming {
-  /** A new entry: the folder row it goes under, or null for the first thing in the list. */
-  after?: string | null;
-  /** A rename: the row it stands in for. */
-  over?: string;
+  /** The row it goes after, or stands in for; null for the first thing in the list. */
+  row: string | null;
+  place: "after" | "over";
   field: ComponentChildren;
 }
 
@@ -189,21 +188,23 @@ export function RowList({ rows, selected, optionId, fresh, tree = false, notes, 
   const upName = baseName(rows[0]?.kind === "up" ? (rows[0].place?.path ?? "") : "") || "/";
   return (
     <>
-      {naming?.after === null && <div class={styles.naming} style={{ "--depth": 0 }}>{naming.field}</div>}
+      {naming?.row === null && <div class={styles.naming} style={{ "--depth": 0 }}>{naming.field}</div>}
       {rows.map((row) => (
         <Fragment key={row.key}>
-          {naming?.over === row.key && <div class={styles.naming} style={{ "--depth": row.depth }}>{naming.field}</div>}
-          {naming?.over !== row.key && <FileRow row={row} id={optionId(row.key)} selected={row.key === selected} fresh={row.entry !== null && row.entry.name === fresh} tree={tree} note={notes?.get(row.key) ?? null} upName={upName} now={now} act={act} />}
-          {naming?.after === row.key && <div class={styles.naming} style={{ "--depth": row.kind === "up" ? 0 : row.depth + 1 }}>{naming.field}</div>}
+          {naming?.place === "over" && naming.row === row.key ? <div class={styles.naming} style={{ "--depth": row.depth }}>{naming.field}</div> : <FileRow row={row} id={optionId(row.key)} selected={row.key === selected} fresh={row.entry !== null && row.entry.name === fresh} tree={tree} note={notes?.get(row.key) ?? null} upName={upName} now={now} act={act} />}
+          {naming?.place === "after" && naming.row === row.key && <div class={styles.naming} style={{ "--depth": row.kind === "up" ? 0 : row.depth + 1 }}>{naming.field}</div>}
         </Fragment>
       ))}
     </>
   );
 }
 
+/** A row with an entry whose name the client can send: the only rows with a menu. */
+export type EntryRow = OutlineRow & { entry: Entry };
+
 /** A row's menu, asked for at a point; `list` is the listbox, where focus goes back when the menu closes. */
 export interface RowMenuAsk {
-  row: OutlineRow;
+  row: EntryRow;
   at: { x: number; y: number };
   list: HTMLElement;
 }
@@ -237,14 +238,14 @@ interface TreeProps {
 function FolderListbox({ rows, selected, fresh, naming, tree, onSelect, onOpen, onKeyNavigate, onUp, onRowMenu }: FolderListboxProps) {
   const ref = useFocusRef("list");
   /** The row a menu is for: one that opens something, never `..`. */
-  const menuRow = (el: Element | null): OutlineRow | null => {
+  const menuRow = (el: Element | null): EntryRow | null => {
     const id = el?.closest("[role=option], [role=treeitem]")?.id;
     const row = id === undefined ? undefined : rows.find((r) => box.optionId(r.key) === id);
     // A broken link has nowhere to open, and still a name to rename or delete. A name that isn't UTF-8 has none the client can send.
-    return row?.entry && row.entry.utf8 !== false ? row : null;
+    return row?.entry && row.entry.utf8 !== false ? { ...row, entry: row.entry } : null;
   };
   /** A pointer or a key selects the row the menu is for; a held touch leaves the phone's list unselected, as a tap does. */
-  const ask = (row: OutlineRow, at: RowMenuAsk["at"], list: HTMLElement, select = true): void => {
+  const ask = (row: EntryRow, at: RowMenuAsk["at"], list: HTMLElement, select = true): void => {
     if (select) onSelect(row.key);
     onRowMenu?.({ row, at, list });
   };
@@ -301,9 +302,10 @@ function FolderListbox({ rows, selected, fresh, naming, tree, onSelect, onOpen, 
       class={cx(styles.list, tree && styles.tree)}
       onKeyDown={(e) => {
         if (onRowMenu && (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10"))) {
-          const row = rows.find((r) => r.key === selected);
-          const el = row ? document.getElementById(box.optionId(row.key)) : null;
-          if (row && el && menuRow(el)) {
+          const at = rows.find((r) => r.key === selected);
+          const el = at ? document.getElementById(box.optionId(at.key)) : null;
+          const row = menuRow(el);
+          if (row && el) {
             e.preventDefault();
             const rect = el.getBoundingClientRect();
             ask(row, { x: rect.left + 40, y: rect.bottom }, e.currentTarget);

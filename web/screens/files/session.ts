@@ -102,9 +102,17 @@ export function filesSession(app: AppController, host: KnownHost): FilesSession 
   const searches = new Recent<FileSearch>(SEARCHES_KEPT);
   // Clear local data forgets the recents: a kept Search would still show the ones it began with.
   const forget = app.persist.onClear(() => { searches.clear(); });
-  /** What was at `path` left it, for `to` or for good: no folder held has it, and the previews and recents go with it. */
+  /** `ask`, a change in `dir`. A refusal rejects, and what is really there shows once the folder is listed again: the name was taken, or gone, or (`partly`, a delete that stopped) part of it was. */
+  const changing = async (dir: string, partly: string | null, ask: () => Promise<void>): Promise<void> => {
+    try {
+      await ask();
+    } catch (refused) {
+      void browser.folders.changed(dir, partly);
+      throw refused;
+    }
+  };
+  /** What was at `path` left it, for `to` or for good: the previews and recents go with it. */
   const left = (path: string, to: string | null): void => {
-    browser.forget(path);
     session.previews.revise((file) => {
       if (!within(file.path, path)) return file;
       if (to === null) return null;
@@ -135,44 +143,26 @@ export function filesSession(app: AppController, host: KnownHost): FilesSession 
       app.view.set("opened", { ...all, [hostId]: [now, ...before].slice(0, OPENED_KEPT) });
     },
     create: async (dir, name, kind) => {
-      try {
-        await browser.api.create(dir, name, kind);
-      } catch (refused) {
-        // Taken, perhaps by this name's own lost answer: its row shows once the folder is listed again.
-        if (refused instanceof HttpRefusal && refused.code === "exists") void browser.folders.drop(dir);
-        throw refused;
-      }
+      await changing(dir, null, () => browser.api.create(dir, name, kind));
       app.notify(`Created ${name}`);
       void browser.added(join(dir, name), { opens: kind === "dir" });
     },
     rename: async (path, to, opens) => {
       const dir = parentOf(path);
-      try {
-        await browser.api.rename(dir, baseName(path), to);
-      } catch (refused) {
-        // Taken, or gone from under its row: what is really there shows once the folder is listed again.
-        void browser.folders.drop(dir);
-        throw refused;
-      }
+      await changing(dir, null, () => browser.api.rename(dir, baseName(path), to));
       app.notify(`Renamed to ${to}`);
       left(path, join(dir, to));
-      void browser.added(join(dir, to), { opens });
+      void browser.added(join(dir, to), { opens, was: path });
     },
     remove: async (path) => {
       const dir = parentOf(path);
-      try {
-        await browser.api.delete(dir, baseName(path));
-      } catch (refused) {
+      await changing(dir, path, () => browser.api.delete(dir, baseName(path)).catch((refused: unknown) => {
         // Already gone is done: this delete's own lost answer, or the terminal's.
-        if (!(refused instanceof HttpRefusal) || refused.code !== "not_found") {
-          void browser.folders.dropBelow(path);
-          void browser.folders.drop(dir);
-          throw refused;
-        }
-      }
+        if (!(refused instanceof HttpRefusal) || refused.code !== "not_found") throw refused;
+      }));
       app.notify(`Deleted ${baseName(path)}`);
       left(path, null);
-      void browser.folders.drop(dir);
+      void browser.removed(path);
     },
     search: (tab, root, fresh = false) => {
       const kept = searches.get(scrollKey(tab, root));

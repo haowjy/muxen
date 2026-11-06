@@ -12,8 +12,8 @@ use ts_rs::{Config, TS, TypeVisitor};
 
 use super::complete::{Chip, ChipSource, CompleteRequest, Completion};
 use super::fs::{
-    CreateKind, CreateRequest, Created, DeleteRequest, Entry, EntryKind, Listing, Match,
-    RenameRequest, Search, Stopped, Uploaded,
+    CreateKind, CreateRequest, DeleteRequest, Entry, EntryKind, Listing, Match, RenameRequest,
+    Search, Stopped, Uploaded,
 };
 use super::settings::{ServerSettings, SettingsChange, SettingsDefaults};
 use super::*;
@@ -60,7 +60,6 @@ fn declarations(config: &Config) -> Vec<(TypeId, String)> {
         declare::<Uploaded>(config),
         declare::<CreateKind>(config),
         declare::<CreateRequest>(config),
-        declare::<Created>(config),
         declare::<RenameRequest>(config),
         declare::<DeleteRequest>(config),
         declare::<ServerSettings>(config),

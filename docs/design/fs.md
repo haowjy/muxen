@@ -367,7 +367,7 @@ file charges nothing). `name` is one plain name: not empty, not `.` or `..`, no 
 past 4,096 bytes, which no route could then open. Then, relative to the descriptor, `openat` with
 `O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC`, mode 0666, or `mkdirat`, mode 0777, both under the umask, with no fsync: an empty
 file lost in a crash costs nothing. `EEXIST` is `409 exists`, whatever holds the name, a dangling link included. A folder deleted
-under its descriptor is `404 not_found`. `201 { path }`, the canonical path, through any link in `dir`.
+under its descriptor is `404 not_found`. `204`.
 
 ### `POST /fs/rename`
 
@@ -382,12 +382,17 @@ a filesystem without it, as for an upload: `500 internal`. A link is renamed, no
 
 `POST /fs/delete`, JSON `{ "dir": "<folder>", "name": "<name>" }`, at most 16 KiB: `name` deleted for good, with no trash. `dir` and
 `name` follow the same rules. A link is removed and never followed; a folder goes with all it holds, removing up from the
-bottom through descriptors (`statat` with `AT_SYMLINK_NOFOLLOW`, `openat` with `O_DIRECTORY | O_NOFOLLOW`, `unlinkat`), so a
+bottom through descriptors (`statat` with `AT_SYMLINK_NOFOLLOW`, then the same open as search, `fs::Beneath`: `openat2` with
+`RESOLVE_BENEATH | NO_SYMLINKS | NO_XDEV` on Linux, `O_NOFOLLOW_ANY` and a device check on macOS and old kernels; `unlinkat`), so a
 component swapped for a link mid-delete is refused, not followed. Names are read 256 at a time and the folder read again from its
 start after each batch: memory stays bounded, and macOS can skip names in a folder changing under `readdir`. Unlike `rm -r` it stops
-at a mount: a folder on another filesystem is `403 denied`, and so is one past 64 levels. Any failure stops the delete and what was
-removed stays gone; the client lists the folder again and says some of it may be gone. It runs under the delete slot and to its
-end even if the request goes away. A name that isn't there is `404 not_found`, which the client takes as done. `204`.
+at a mount, a bind mount included where `openat2` exists: `403 denied`, and so is a folder past 64 levels. Any failure stops the
+delete and what was removed stays gone; the client lists the folder again and says some of it may be gone. A name below the one
+asked for that vanishes meanwhile is no failure. It runs under the delete slot and to its end even if the request goes away, and
+is logged there. Only the name asked for being absent is `404 not_found`, which the client takes as done. `204`.
+
+Neither a rename nor a delete touches home, muxen's state directory or a folder above either: `403 denied`. The check compares
+device and inode, so a path through a link meets it too.
 
 ### `POST /fs/upload`
 

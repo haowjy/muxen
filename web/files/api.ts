@@ -2,7 +2,7 @@
 // for TypeScript like the WebSocket messages; keep them in step with fs.md "Routes".
 
 import { BUSY_RETRIES, HttpRefusal, send } from "../net/http";
-import type { Created, CreateKind, CreateRequest, DeleteRequest, RenameRequest, Search } from "../proto/generated/messages";
+import type { CreateKind, CreateRequest, DeleteRequest, RenameRequest, Search } from "../proto/generated/messages";
 
 export interface Entry {
   name: string;
@@ -49,7 +49,7 @@ export interface FsApi {
   /** The URL an `<img>` loads a file from. */
   rawUrl(path: string): string;
   /** An empty file or a new folder; `exists` if the name is taken (fs.md "POST /fs/create"). */
-  create(dir: string, name: string, kind: CreateKind): Promise<Created>;
+  create(dir: string, name: string, kind: CreateKind): Promise<void>;
   /** A new name in the same folder; `exists` if it is taken (fs.md "POST /fs/rename"). */
   rename(dir: string, name: string, to: string): Promise<void>;
   /** Gone for good, a folder with all it holds (fs.md "POST /fs/delete"). */
@@ -129,9 +129,9 @@ export function httpFsApi(origin: string, fetchFn?: typeof fetch): FsApi {
 
     rawUrl: (path) => url("raw", path),
 
-    create: (dir, name, kind) => {
+    create: async (dir, name, kind) => {
       const request: CreateRequest = { dir, name, kind };
-      return json<Created>(`${origin}/fs/create`, post(request));
+      await send(`${origin}/fs/create`, post(request), BUSY_RETRIES, fetchFn);
     },
 
     rename: async (dir, name, to) => {

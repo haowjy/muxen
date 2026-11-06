@@ -2,7 +2,7 @@ import { HttpRefusal } from "../net/http";
 import { Store } from "../ui/store";
 import type { FsApi, Listing } from "./api";
 import { fold } from "./outline";
-import { baseName, parentOf, within } from "./paths";
+import { baseName, within } from "./paths";
 
 /** Typing pauses this long before a folder is asked for. */
 export const SETTLE_MS = 250;
@@ -21,6 +21,7 @@ export const MAX_ENTRIES = 10_000;
 export const LISTINGS_AT_ONCE = 2;
 /** The cache key of one listing; `hidden` listings are kept apart (`hidden=1` is a different scan). */
 export const folderKey = (path: string, hidden: boolean): string => `${hidden ? "1" : "0"}${path}`;
+const folderOf = (key: string): string => key.slice(1);
 
 /** What is known of one folder: every page loaded so far, and what is being asked of it now. */
 export interface Held {
@@ -199,41 +200,48 @@ export class Folders extends Store<FoldersView> {
     for (const folder of [path, ...(this.links.get(path) ?? [])]) {
       for (const hidden of [false, true]) {
         const key = folderKey(folder, hidden);
-        if (this.pinned(key)) {
-          shown.push({ folder, hidden });
-          continue;
-        }
-        held.delete(key);
-        // An answer under way is from before the change: it must not bring the record back.
-        this.latest.delete(key);
-        this.inflight.delete(key);
+        if (this.pinned(key)) shown.push({ folder, hidden });
+        else this.evict(held, key);
       }
     }
     this.update({ held });
     await Promise.all(shown.map(({ folder, hidden }) => this.relist(folder, hidden)));
   }
 
-  /** `path` and what is under it changed: every folder held there goes, as `drop` does. */
-  async dropBelow(path: string): Promise<void> {
-    const folders = new Set([path, ...[...this.snapshot.held.keys()].map((key) => key.slice(1)).filter((folder) => within(folder, path))]);
-    await Promise.all([...folders].map((folder) => this.drop(folder)));
-  }
-
-  /** `path` is no more: its row leaves the pages at once, so nothing goes on showing it, and nothing under it stays held. */
-  forget(path: string): void {
+  /**
+   * `dir`'s entries changed: its listing goes first, alone. With `gone`, what was at that path left it: the row leaves
+   * the pages at once, and every folder held at or under it goes. One still on screen once the new listing has landed
+   * is listed again, which finds it missing; the outline has let go of the rest, so they cost no request.
+   */
+  async changed(dir: string, gone: string | null = null): Promise<void> {
     const held = new Map(this.snapshot.held);
-    const dir = parentOf(path);
-    for (const folder of [dir, ...(this.links.get(dir) ?? [])]) {
-      for (const hidden of [false, true]) {
-        const record = held.get(folderKey(folder, hidden));
-        if (!record?.listing) continue;
-        const entries = record.listing.entries.filter((entry) => entry.name !== baseName(path));
-        const total = record.listing.total - (record.listing.entries.length - entries.length);
-        held.set(folderKey(folder, hidden), { ...record, listing: { ...record.listing, entries, total } });
+    const under = gone === null ? [] : [...held.keys()].filter((key) => within(folderOf(key), gone));
+    if (gone !== null) {
+      for (const key of under) if (!this.pinned(key)) this.evict(held, key);
+      for (const folder of [dir, ...(this.links.get(dir) ?? [])]) {
+        for (const hidden of [false, true]) {
+          const record = held.get(folderKey(folder, hidden));
+          if (!record?.listing) continue;
+          const entries = record.listing.entries.filter((entry) => entry.name !== baseName(gone));
+          const total = record.listing.total - (record.listing.entries.length - entries.length);
+          held.set(folderKey(folder, hidden), { ...record, listing: { ...record.listing, entries, total } });
+        }
       }
     }
     this.update({ held });
-    void this.dropBelow(path);
+    await this.drop(dir);
+    const after = new Map(this.snapshot.held);
+    const still = under.filter((key) => after.has(key));
+    for (const key of still) if (!this.pinned(key)) this.evict(after, key);
+    this.update({ held: after });
+    await Promise.all(still.filter((key) => this.pinned(key)).map((key) => this.relist(folderOf(key), key.startsWith("1"))));
+  }
+
+  /** The record goes, and an answer under way is from before the change, so it can't bring it back. */
+  private evict(held: Map<string, Held>, key: string): void {
+    held.delete(key);
+    this.latest.delete(key);
+    this.inflight.delete(key);
   }
 
   /** Runs `ask` once fewer than `LISTINGS_AT_ONCE` pages are under way; a finished one hands its turn on. */

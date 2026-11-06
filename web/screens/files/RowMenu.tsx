@@ -7,15 +7,15 @@ import { routeWorkspace } from "../../workspace/state";
 import { insertSection, useInsert } from "./insert";
 import { copyPath } from "./copy";
 import { download } from "./FileActions";
-import type { RowMenuAsk } from "./FolderList";
+import type { EntryRow, RowMenuAsk } from "./FolderList";
 import type { FilesSession } from "./session";
 
 interface Props extends RowMenuAsk {
   session: FilesSession;
   /** New file or New folder in a folder row. */
   onCreate: (dir: string, kind: CreateKind) => void;
-  onRename: () => void;
-  onDelete: () => void;
+  onRename: (row: EntryRow) => void;
+  onDelete: (row: EntryRow) => void;
   onClose: () => void;
 }
 
@@ -30,7 +30,6 @@ export function RowMenu({ session, row, at, list, onCreate, onRename, onDelete, 
   const workspace = useAppView((v) => routeWorkspace(v.workspace));
   const { place, entry } = row;
   const { choices, insert } = useInsert(place?.path ?? "", null);
-  if (!entry) return null;
   const dir = place?.kind === "dir";
   // Home, and the folders it lies in: the daemon refuses these too, by what they are, and this spares the question.
   const { home } = session.browser.snapshot;
@@ -59,8 +58,8 @@ export function RowMenu({ session, row, at, list, onCreate, onRename, onDelete, 
     },
     ...(place ? [insertSection(choices, insert, null)] : []),
     ...(!holdsHome ? [{ items: [
-      { label: "Rename", icon: "rename" as const, onSelect: onRename },
-      { label: "Delete", icon: "trash" as const, danger: true, onSelect: onDelete },
+      { label: "Rename", icon: "rename" as const, onSelect: () => { onRename(row); } },
+      { label: "Delete", icon: "trash" as const, danger: true, onSelect: () => { onDelete(row); } },
     ] }] : []),
   ];
   return <Menu anchor={list} at={at} label={entry.name} sections={sections} focusFirst={!touch} onClose={onClose} />;

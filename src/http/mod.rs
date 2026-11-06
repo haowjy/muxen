@@ -46,6 +46,8 @@ pub struct App {
     pub paste_dir: PathBuf,
     /// Where an upload records its in-flight part file (`fs::upload::reap`).
     pub upload_record: PathBuf,
+    /// Never renamed or deleted, nor is what holds it.
+    pub state_dir: PathBuf,
     /// The running config (`config.toml` as last loaded or saved).
     pub config: Arc<LiveConfig>,
     pub home: PathBuf,

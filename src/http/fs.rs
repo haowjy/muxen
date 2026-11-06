@@ -268,7 +268,7 @@ async fn upload(
     }
 }
 
-/// `201 { path }`: an empty file or a new folder. It never replaces anything: a taken name is `exists`.
+/// `204`: an empty file or a new folder. It never replaces anything: a taken name is `exists`.
 async fn created(
     State(ctx): State<Arc<Ctx>>,
     body: Result<Json<CreateRequest>, JsonRejection>,
@@ -278,20 +278,14 @@ async fn created(
     };
     let dir = request.dir.clone();
     let home = ctx.app.home.clone();
-    let made = async {
+    let done = async {
         ctx.fs
             .lane
             .run(move || entry::create(&request, &home))
             .await?
     }
     .await;
-    match made {
-        Ok(created) => {
-            info!(path = %created.path, "created");
-            (StatusCode::CREATED, Json(created)).into_response()
-        }
-        Err(refused) => respond(&dir, Err(refused)),
-    }
+    respond(&dir, done.map(|()| StatusCode::NO_CONTENT.into_response()))
 }
 
 /// `204`: renamed in its folder. It never replaces anything: a taken name is `exists`.
@@ -303,24 +297,18 @@ async fn renamed(
         return respond("", Err(FsError::BadRequest));
     };
     let dir = request.dir.clone();
-    let home = ctx.app.home.clone();
+    let (home, state) = (ctx.app.home.clone(), ctx.app.state_dir.clone());
     let done = async {
         ctx.fs
             .lane
-            .run(move || {
-                entry::rename(&request, &home)?;
-                let RenameRequest { dir, name, to } = request;
-                info!(dir, name, to, "renamed");
-                Ok(())
-            })
+            .run(move || entry::rename(&request, &home, &state))
             .await?
     }
     .await;
     respond(&dir, done.map(|()| StatusCode::NO_CONTENT.into_response()))
 }
 
-/// `204`: deleted for good, a folder with all it holds. Logged in the work: a big delete outlives a
-/// request that goes away.
+/// `204`: deleted for good, a folder with all it holds.
 async fn deleted(
     State(ctx): State<Arc<Ctx>>,
     body: Result<Json<DeleteRequest>, JsonRejection>,
@@ -329,15 +317,10 @@ async fn deleted(
         return respond("", Err(FsError::BadRequest));
     };
     let dir = request.dir.clone();
-    let home = ctx.app.home.clone();
+    let (home, state) = (ctx.app.home.clone(), ctx.app.state_dir.clone());
     let done = async {
         ctx.fs
-            .delete(move || {
-                entry::delete(&request, &home)?;
-                let DeleteRequest { dir, name } = request;
-                info!(dir, name, "deleted");
-                Ok(())
-            })
+            .delete(move || entry::delete(&request, &home, &state))
             .await?
     }
     .await;

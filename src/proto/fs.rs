@@ -82,13 +82,6 @@ pub struct CreateRequest {
     pub kind: CreateKind,
 }
 
-/// `201` from `POST /fs/create`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-pub struct Created {
-    /// Absolute and canonical.
-    pub path: String,
-}
-
 /// `POST /fs/rename`, within one folder.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct RenameRequest {

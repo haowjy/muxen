@@ -1,22 +1,36 @@
 //! `POST /fs/create`, `/fs/rename` and `/fs/delete` (fs.md): one name in a folder, relative to the
 //! folder's descriptor.
 
-use std::ffi::{CStr, CString};
 use std::os::fd::{AsFd, BorrowedFd};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use rustix::fs::{AtFlags, Dir, FileType, Mode, OFlags, RenameFlags};
 use rustix::io::Errno;
+use rustix::path::Arg;
+use tracing::info;
 
 use super::{Beneath, FsError, MAX_PATH, Opened, Want, open};
-use crate::config;
-use crate::proto::fs::{CreateKind, CreateRequest, Created, DeleteRequest, RenameRequest};
+use crate::proto::fs::{CreateKind, CreateRequest, DeleteRequest, RenameRequest};
 
-/// A folder deeper than this under the one deleted is refused. Each level holds two descriptors.
+/// A folder deeper than this under the one deleted is refused.
 const DELETE_DEPTH: usize = 64;
+/// `remove`'s own "too deep": an errno nothing it calls returns for a folder.
+const TOO_DEEP: Errno = Errno::MLINK;
 /// Names read from a folder before they are removed. A folder is read again from its start after
 /// each batch: macOS can skip names when a folder changes under `readdir`.
 const DELETE_BATCH: usize = 256;
+
+/// The refusal for what the kernel said.
+fn refused(errno: Errno) -> FsError {
+    match errno {
+        // Whatever holds the name, a dangling link included.
+        Errno::EXIST => FsError::Exists,
+        Errno::NAMETOOLONG => FsError::BadRequest,
+        // A mount below, or `TOO_DEEP`.
+        Errno::XDEV | TOO_DEEP => FsError::Denied,
+        errno => FsError::write(errno.into()),
+    }
+}
 
 /// One name in a folder, as a client typed it. The kernel takes it relative to the descriptor, so
 /// a name with a `/` or a `..` would reach another folder.
@@ -32,100 +46,91 @@ fn folder(dir: &str, name: &str, home: &Path) -> Result<Opened, FsError> {
     open(dir, home, Want::Dir)
 }
 
-/// `name`'s path in `dir`. A longer one could be made, and then no route could open it.
-fn path_of(dir: &Opened, name: &str) -> Result<String, FsError> {
-    let path = format!("{}/{name}", dir.path.trim_end_matches('/'));
-    if path.len() > MAX_PATH {
+/// `name` would have a path no route could open: a longer one could be made, but not reached.
+fn too_long(dir: &Opened, name: &str) -> Result<(), FsError> {
+    if dir.path.len() + 1 + name.len() > MAX_PATH {
         return Err(FsError::BadRequest);
     }
-    Ok(path)
+    Ok(())
+}
+
+/// Home and muxen's state directory, and every folder above them, can't be renamed or deleted: the
+/// daemon's own files are in there, and a client can reach them by a path no menu recognises
+/// (through a link). Compared by identity, so no spelling of the path gets past it.
+fn refuse_holders(dir: &Opened, name: &str, kept: [&Path; 2]) -> Result<(), FsError> {
+    let Ok(target) = rustix::fs::statat(&dir.file, name, AtFlags::SYMLINK_NOFOLLOW) else {
+        return Ok(()); // what comes next reports it
+    };
+    let holds = kept
+        .into_iter()
+        .flat_map(Path::ancestors)
+        .filter_map(|held| rustix::fs::stat(held).ok())
+        .any(|held| held.st_dev == target.st_dev && held.st_ino == target.st_ino);
+    if holds {
+        return Err(FsError::Denied);
+    }
+    Ok(())
 }
 
 /// Blocks: run it on the fs lane. Modes are the umask's, as in a shell: no file here is special.
-pub fn create(request: &CreateRequest, home: &Path) -> Result<Created, FsError> {
+pub fn create(request: &CreateRequest, home: &Path) -> Result<(), FsError> {
     let CreateRequest { dir, name, kind } = request;
     let dir = folder(dir, name, home)?;
-    let path = path_of(&dir, name)?;
-    let made = match kind {
+    too_long(&dir, name)?;
+    match kind {
         CreateKind::File => {
             let flags =
                 OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL | OFlags::NOFOLLOW | OFlags::CLOEXEC;
             rustix::fs::openat(&dir.file, name.as_str(), flags, Mode::from(0o666)).map(drop)
         }
         CreateKind::Dir => rustix::fs::mkdirat(&dir.file, name.as_str(), Mode::from(0o777)),
-    };
-    match made {
-        Ok(()) => Ok(Created { path }),
-        // Whatever holds the name, a dangling link included.
-        Err(Errno::EXIST) => Err(FsError::Exists),
-        Err(Errno::NAMETOOLONG) => Err(FsError::BadRequest),
-        Err(errno) => Err(FsError::write(errno.into())),
     }
+    .map_err(refused)?;
+    info!(dir = dir.path, name, "created");
+    Ok(())
 }
 
 /// Blocks: run it on the fs lane. A link is renamed, not what it points to. It never replaces
 /// anything, and there is no fallback where the filesystem can't promise that.
-pub fn rename(request: &RenameRequest, home: &Path) -> Result<(), FsError> {
+pub fn rename(request: &RenameRequest, home: &Path, state: &Path) -> Result<(), FsError> {
     let RenameRequest { dir, name, to } = request;
     if !plain(to) {
         return Err(FsError::BadRequest);
     }
     let dir = folder(dir, name, home)?;
-    path_of(&dir, to)?;
-    refuse_holders(&dir, name, home)?;
-    let renamed = rustix::fs::renameat_with(
+    too_long(&dir, to)?;
+    refuse_holders(&dir, name, [home, state])?;
+    rustix::fs::renameat_with(
         &dir.file,
         name.as_str(),
         &dir.file,
         to.as_str(),
         RenameFlags::NOREPLACE,
-    );
-    match renamed {
-        Ok(()) => Ok(()),
-        Err(Errno::EXIST) => Err(FsError::Exists),
-        Err(Errno::NAMETOOLONG) => Err(FsError::BadRequest),
-        Err(errno) => Err(FsError::write(errno.into())),
-    }
-}
-
-/// Home and muxen's state directory, and every folder above them, can't be renamed or deleted: the
-/// daemon's own files are in there, and a client can reach them by a path no menu recognises
-/// (through a link). Compared by identity, so no spelling of the path gets past it.
-fn refuse_holders(dir: &Opened, name: &str, home: &Path) -> Result<(), FsError> {
-    let Ok(target) = rustix::fs::statat(&dir.file, name, AtFlags::SYMLINK_NOFOLLOW) else {
-        return Ok(()); // what comes next reports it
-    };
-    let state = config::state_dir().unwrap_or_else(|_| PathBuf::new());
-    let holds = [home, state.as_path()]
-        .into_iter()
-        .flat_map(Path::ancestors)
-        .filter_map(|held| rustix::fs::stat(held).ok())
-        .any(|held| held.st_dev == target.st_dev && held.st_ino == target.st_ino);
-    if holds { Err(FsError::Denied) } else { Ok(()) }
+    )
+    .map_err(refused)?;
+    info!(dir = dir.path, name, to, "renamed");
+    Ok(())
 }
 
 /// Blocks: run it on the fs lane, under the delete slot, since a folder may be big. Permanent, and
 /// a failure leaves what was already removed gone. A link is removed, never followed, and
-/// a mount below, or a folder past `DELETE_DEPTH`, stops the delete.
-pub fn delete(request: &DeleteRequest, home: &Path) -> Result<(), FsError> {
+/// a mount below, or a folder past `DELETE_DEPTH`, stops the delete. Logged here: a big delete
+/// outlives a request that goes away.
+pub fn delete(request: &DeleteRequest, home: &Path, state: &Path) -> Result<(), FsError> {
     let DeleteRequest { dir, name } = request;
     let dir = folder(dir, name, home)?;
-    refuse_holders(&dir, name, home)?;
-    let name = CString::new(name.as_str()).map_err(|_| FsError::BadRequest)?;
+    refuse_holders(&dir, name, [home, state])?;
     let beneath = Beneath::new(&dir.file).map_err(FsError::write)?;
-    match remove(&beneath, dir.file.as_fd(), &name, 0) {
-        Ok(()) => Ok(()),
-        Err(Errno::NAMETOOLONG) => Err(FsError::BadRequest),
-        Err(Errno::XDEV | Errno::MLINK) => Err(FsError::Denied),
-        Err(errno) => Err(FsError::write(errno.into())),
-    }
+    remove(&beneath, dir.file.as_fd(), name.as_str(), 0).map_err(refused)?;
+    info!(dir = dir.path, name, "deleted");
+    Ok(())
 }
 
 /// Removes `name` from `parent`, a folder with all it holds.
 fn remove(
     beneath: &Beneath,
     parent: BorrowedFd<'_>,
-    name: &CStr,
+    name: impl Arg + Copy,
     depth: usize,
 ) -> rustix::io::Result<()> {
     let stat = rustix::fs::statat(parent, name, AtFlags::SYMLINK_NOFOLLOW)?;
@@ -133,11 +138,10 @@ fn remove(
         return rustix::fs::unlinkat(parent, name, AtFlags::empty());
     }
     if depth == DELETE_DEPTH {
-        return Err(Errno::MLINK);
+        return Err(TOO_DEEP);
     }
     // `rm -r` would go on into a mount.
-    let folder = beneath.open(parent, name)?;
-    let mut names = Dir::read_from(&folder)?;
+    let mut names = Dir::new(beneath.open(parent, name)?)?;
     loop {
         names.rewind();
         let batch = names
@@ -151,7 +155,7 @@ fn remove(
         }
         for entry in &batch {
             // Something else got there first. Only the name the client gave may answer `not_found`.
-            match remove(beneath, folder.as_fd(), entry, depth + 1) {
+            match remove(beneath, names.fd()?, entry.as_c_str(), depth + 1) {
                 Ok(()) | Err(Errno::NOENT) => {}
                 Err(errno) => return Err(errno),
             }

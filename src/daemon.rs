@@ -78,7 +78,8 @@ pub(crate) async fn open(
     let serve = assemble_serve_front(parts.serve).map_err(OpenError::Other)?;
     let state_dir = config::state_dir().map_err(|error| OpenError::Other(Box::new(error)))?;
     let upload_record = state_dir.join("upload-part");
-    let store = Store::open(state_dir).map_err(|error| OpenError::Other(Box::new(error)))?;
+    let store =
+        Store::open(state_dir.clone()).map_err(|error| OpenError::Other(Box::new(error)))?;
     let home = config::home().map_err(|error| OpenError::Other(Box::new(error)))?;
     let host_id = store
         .host_id()
@@ -108,6 +109,7 @@ pub(crate) async fn open(
         local_path: parts.local_path,
         paste_dir: parts.paste_dir,
         upload_record,
+        state_dir,
         serve,
         auth,
         host_id,
@@ -125,6 +127,7 @@ pub(crate) struct Opened {
     local_path: PathBuf,
     paste_dir: PathBuf,
     upload_record: PathBuf,
+    state_dir: PathBuf,
     serve: ServeAssembly,
     auth: Auth,
     host_id: String,
@@ -153,6 +156,7 @@ impl Opened {
             local_path,
             paste_dir,
             upload_record,
+            state_dir,
             serve,
             auth,
             host_id,
@@ -202,6 +206,7 @@ impl Opened {
             host: HostInfo { id: host_id, name },
             paste_dir,
             upload_record,
+            state_dir,
             config: live.clone(),
             complete: complete::Settings::new(&config.complete, Environment::current(&home)),
             caps: tier.caps,

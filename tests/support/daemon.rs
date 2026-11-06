@@ -266,6 +266,7 @@ pub async fn start_loopback(name: &str) -> Daemon {
         },
         paste_dir,
         upload_record: dir.join("upload-part"),
+        state_dir: std::env::temp_dir().join("muxen-no-state"),
         config: live,
         complete: complete::Settings::new(
             &Default::default(),
@@ -422,6 +423,7 @@ async fn start_as_with_allowlist(
         },
         paste_dir,
         upload_record: dir.join("upload-part"),
+        state_dir: std::env::temp_dir().join("muxen-no-state"),
         config: live,
         // No history, no PATH, no carapace: only paths complete.
         complete: complete::Settings::new(

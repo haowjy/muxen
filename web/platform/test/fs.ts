@@ -3,7 +3,7 @@
 import { join, moved, within } from "../../files/paths";
 import { HttpRefusal } from "../../net/http";
 import type { Entry, FsApi, Listing } from "../../files/api";
-import type { Created, CreateKind, CreateRequest, DeleteRequest, Match, RenameRequest, Search } from "../../proto/generated/messages";
+import type { CreateKind, CreateRequest, DeleteRequest, Match, RenameRequest, Search } from "../../proto/generated/messages";
 import type { FakeDaemon } from ".";
 import { defaultSettings, searchSkipOf } from "./settings";
 
@@ -43,14 +43,13 @@ export class FakeFs implements FsApi {
     return this.answer(`list ${path} ${String(offset)}`, () => this.listing(path === "~" ? this.tree.home : path, offset, hidden));
   }
 
-  create(dir: string, name: string, kind: CreateKind): Promise<Created> {
+  create(dir: string, name: string, kind: CreateKind): Promise<void> {
     return this.answer(`create ${dir} ${name}`, () => {
       const path = `${dir === "/" ? "" : dir}/${name}`;
       if (name.includes("/")) throw new HttpRefusal(400, "bad_request");
       if (this.tree.dirs.includes(path) || this.tree.files[path] !== undefined) throw new HttpRefusal(409, "exists");
       if (kind === "dir") this.tree.dirs.push(path);
       else this.tree.files[path] = "text/plain; charset=utf-8";
-      return { path };
     });
   }
 
@@ -265,7 +264,8 @@ export function serveFs(fs: FakeFs, daemon: FakeDaemon): NonNullable<FakeDaemon[
     };
     if (method === "POST" && path === "/fs/create") {
       const { dir, name, kind } = JSON.parse(String(body)) as CreateRequest;
-      return json(201, await fs.create(dir, name, kind));
+      await fs.create(dir, name, kind);
+      return new Response(null, { status: 204 });
     }
     if (method === "POST" && path === "/fs/rename") {
       const { dir, name, to } = JSON.parse(String(body)) as RenameRequest;

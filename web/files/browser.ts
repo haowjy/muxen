@@ -170,19 +170,25 @@ export class FileBrowser extends Store<FilesView> {
 
   /**
    * `path` landed (an upload, a paste, a create): its folder is listed again wherever it shows, and held nowhere stale.
-   * `named`, a create or a rename: a dot name was asked for by name, so it shows, and with `opens` a desktop opens the folder in place.
+   * `named`, a create or a rename: a dot name was asked for by name, so it shows, and with `opens` a desktop opens the
+   * folder in place. `was`: what a rename left.
    */
-  async added(path: string, named?: { opens: boolean }): Promise<void> {
+  async added(path: string, named?: { opens: boolean; was?: string }): Promise<void> {
     this.probed.delete(path);
-    await this.folders.drop(parentOf(path));
+    if (named?.was !== undefined) this.unprobe(named.was);
+    await this.folders.changed(parentOf(path), named?.was ?? null);
     if (named && baseName(path).startsWith(".") && !this.snapshot.hidden) await this.toggleHidden();
     this.update({ fresh: { path, opens: named?.opens === true } });
   }
 
-  /** `path` is no more (deleted, or the old name of a rename): nothing at or under it stays held. */
-  forget(path: string): void {
+  /** `path` is no more: nothing at or under it stays held. */
+  async removed(path: string): Promise<void> {
+    this.unprobe(path);
+    await this.folders.changed(parentOf(path), path);
+  }
+
+  private unprobe(path: string): void {
     this.probed.revise((file) => (within(file.path, path) ? null : file));
-    this.folders.forget(path);
   }
 
   /** The desktop selected what landed: `fresh` is an event there, and a return to the list must not repeat it. */
