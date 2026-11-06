@@ -7,7 +7,7 @@ import { linkTarget, renderMarkdown, type LinkTarget } from "../../files/render/
 import { mountDiagrams } from "../../files/render/diagrams";
 import { lazyImages } from "../../files/images";
 import { useAppView } from "../../app/context";
-import { formatAge, formatSize } from "../../files/format";
+import { formatSize } from "../../files/format";
 import { languageFor, type Language } from "../../files/kinds";
 import { HttpRefusal } from "../../net/http";
 import { EmptyState } from "../../ui/primitives/EmptyState";
@@ -62,23 +62,22 @@ function Truncated({ preview }: { preview: TextPreview }) {
 }
 
 /** Source and text, coloured by Shiki when the extension is on the allowlist and the file is small. */
-/** What the phone shows above the code: the language, the lines, the size and the age. */
+/** The facts Info adds for a file read as text. */
 const LANGUAGE_NAMES: Record<Language, string> = {
   bash: "Shell", c: "C", diff: "Diff", go: "Go", javascript: "JavaScript", json: "JSON", markdown: "Markdown", python: "Python",
   rust: "Rust", swift: "Swift", toml: "TOML", tsx: "TypeScript JSX", typescript: "TypeScript", yaml: "YAML",
 };
 
-function Facts({ file, source, plain }: { file: FileRef; source: string; plain: boolean }) {
-  const lang = plain ? null : languageFor(file.name);
-  // Counted once per text, not on each redraw (a Wrap lines toggle): a file can be a MiB.
+/** Mounted only while Info is open, so a MiB of text is counted when someone asks. A file read in part has at least this many lines. */
+export function TextFacts({ name, preview, plain }: { name: string; preview: TextPreview; plain: boolean }) {
+  const lang = plain ? null : languageFor(name);
+  const source = preview.text;
   const lines = useMemo(() => (source === "" ? 0 : source.split("\n").length - (source.endsWith("\n") ? 1 : 0)), [source]);
   return (
-    <p class={styles.facts}>
-      <span>{lang ? LANGUAGE_NAMES[lang] : "Text"}</span>
-      <span>{lines === 1 ? "1 line" : `${lines.toLocaleString()} lines`}</span>
-      {file.size !== null && <span>{formatSize(file.size)}</span>}
-      {file.mtime !== null && <span>{formatAge(file.mtime, Date.now())} ago</span>}
-    </p>
+    <>
+      <dt>Type</dt><dd>{lang ? LANGUAGE_NAMES[lang] : "Text"}</dd>
+      <dt>Lines</dt><dd>{lines.toLocaleString()}{preview.truncated ? "+" : ""}</dd>
+    </>
   );
 }
 
@@ -103,7 +102,6 @@ export function CodeViewer({ text, file, wrap, plain, describe }: { text: Loaded
   if (text.kind === "error") return <Failed error={text.error} describe={describe} />;
   return (
     <div class={cx(styles.text, styles.sunken)}>
-      <Facts file={file} source={text.value.text} plain={plain} />
       <Truncated preview={text.value} />
       {text.value.text === "" && <p class={styles.note}>This file is empty.</p>}
       <pre class={cx(styles.code, wrap && styles.wrap)} tabIndex={0} aria-label={`Contents of ${file.name}`}><span ref={gutter} class={styles.gutter} aria-hidden="true" /><code ref={ref} /></pre>

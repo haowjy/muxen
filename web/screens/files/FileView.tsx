@@ -16,7 +16,7 @@ import { fileIcon } from "./fileIcon";
 import { copyText } from "./copy";
 import { useFilesKey, type Chord } from "./keymap";
 import { Preview } from "./Preview";
-import { TEXT_LIMIT, useText } from "./TextViewers";
+import { TEXT_LIMIT, TextFacts, useText } from "./TextViewers";
 import type { FilesSession } from "./session";
 import viewers from "./Viewers.module.css";
 import styles from "./FileView.module.css";
@@ -129,6 +129,7 @@ export function FileView({ session, file, back, onExpand, onLink, children }: Pr
         {info && (
           <Popover anchor={info} role="dialog" label={`Info: ${file.name}`} focus={fine} class={styles.info} onClose={() => { setInfo(null); }}>
             <dl class={viewers.meta}>
+              {loaded && <TextFacts name={file.name} preview={loaded} plain={asText} />}
               {size !== null && <><dt>Size</dt><dd>{size}</dd></>}
               {file.mtime !== null && <><dt>Modified</dt><dd>{formatTime(file.mtime)}</dd></>}
               <dt>Path</dt><dd class={viewers.mono}>{shown}</dd>

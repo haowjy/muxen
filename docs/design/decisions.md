@@ -5047,6 +5047,12 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
   a pending kind of `OutlineRow` (a case in the row model, the key handling and the selection for a thing that is none
   of those); `Want::Parent`.
 
+### A file's language and line count live in Info
+
+- **Why:** Jimmy, of the phone's strip above the code: "why tf do we need it... add that to like "..." -> (info)". Four facts took a line from the file on the smallest screen, and nobody reads them on the way to the code.
+- **What:** Info shows Type and Lines for a file read as text, on both layouts, above Size, Modified and Path. The strip is gone. Lines are counted when Info opens, and a file read only in part shows "+" after the count. **Supersedes** the phone's facts line in "The code frame".
+- **Rejected:** keeping the strip behind a setting (a setting to hide something nobody needs); a desktop-only Info difference (the same four facts on both layouts is one rule).
+
 ### The folder cache asks for two first pages at a time, the outline's last
 
 - **Decided:** 2026-11-05, from the phase 2 review (p546): Show hidden re-listed every open folder at
