@@ -401,6 +401,12 @@ inherits its nice level 10.
 - **Asks only when it can read the line:** an input-start mark (OSC 133 B) or the
   prompt-regex fallback ([plan.md](plan.md#suggestion-strip)), not on the alternate
   screen, and only when the text changed.
+- **Asks only while Jimmy is typing:** a keystroke the client sent since the current
+  prompt's B mark (or since the regex-matched prompt). Terminal output can forge the
+  mark and a line that looks like input, so a mark alone never starts a request: a
+  `cat` of a hostile file must not make the client ask for `make -f evil`. Output that
+  moves the cursor or rewrites the line without a keystroke from the client asks for
+  nothing.
 - **Computes `before` and `after`** from its own buffer: `before` from the input start
   to the cursor, `after` from the cursor to the end of the input's last row, wrapped
   rows joined and trailing spaces dropped.
@@ -408,10 +414,11 @@ inherits its nice level 10.
   supersedes with an `AbortController`; the scheme handler cancels the upstream
   request on `webView(_:stop:)` ([ios-shell.md](ios-shell.md#where-the-web-ui-comes-from)).
   A response for a `before` other than the current one is dropped.
-- **Sends `cwd`** as the path of the OSC 7 that followed the current prompt's OSC 133
-  A mark, else the tab's cwd from `watching`
-  ([daemon-core.md §3.7](daemon-core.md#37-window-subscription)), which lags a `cd` by
-  up to a second. The host part of the OSC 7 URL is ignored.
+- **Sends `cwd`** as the tab's cwd from `watching`
+  ([daemon-core.md §3.7](daemon-core.md#37-window-subscription)), which is tmux's
+  `pane_current_path` read by the daemon and lags a `cd` by up to a second. It never
+  takes `cwd` from an OSC 7: any output can write one, and `cwd` picks the directory
+  carapace runs in. Until `watching` has a value the client sends `null`.
 - **On a tap,** sends `insert` as typed text; the changed line triggers the next
   request.
 - **On `503 busy` or a network error,** shows no chips and waits for the next change.
@@ -518,8 +525,15 @@ name, which fails if `~` or `=` rejoin the unescaped set.
   Jimmy uses neither today.
 - **carapace runs project code with no Tab pressed.** Typing `make ` runs `make -qp`,
   which evaluates the Makefile; git honours `core.fsmonitor`; `kubectl` and `gh`
-  reach the network. It is the exposure of pressing Tab in that directory, reached
-  sooner.
+  reach the network. This is more than the exposure of pressing Tab in that
+  directory, reached sooner: terminal output can forge OSC 133 B and OSC 7, and
+  tmux passes both through, so a file Jimmy `cat`s could make a client that trusts
+  them ask for `make -f evil` in a directory the output names, with Jimmy typing
+  nothing. Two rules close it ([What the client does](#what-the-client-does)): the
+  client asks only after a keystroke it sent, and `cwd` comes from the daemon's
+  `pane_current_path`, never OSC 7. What remains is the plain exposure: Jimmy types
+  `make ` in a directory whose Makefile he doesn't trust. A denylist of commands that
+  evaluate project code (`make`, `rake`, …) would remove that too; it is not built.
 - **Insert safety assumes emacs or insert mode.** In vi command mode, printable bytes
   are commands. Jimmy uses emacs mode.
 - **The escaping is run-tested against bash only.** The read-back test needs `bash`;
@@ -534,6 +548,6 @@ name, which fails if `~` or `=` rejoin the unescaped set.
   133) can emit duplicate marks; the client takes the latest B before the cursor.
   Async zsh themes (powerlevel10k, pure) that redraw the prompt are untested.
 - **Inside `ssh`**, path chips list the dev box's directories: tmux's cwd is the
-  local `ssh` process's, and a remote shell's OSC 7 names a remote path.
+  local `ssh` process's, not the remote shell's.
 - **zsh was tested with zsh 5.8 from a scratch build**, since the dev box has none;
   the zsh file needs a check in Jimmy's real zsh setup.

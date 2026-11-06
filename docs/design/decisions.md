@@ -5695,3 +5695,17 @@ the check starts at the third timeout rather than the second, the limit is 15 s 
 - **Rejected:** telling replies from keys in `onData` (private xterm internals); stripping `\`
   from a whole stylesheet (deletes Mermaid's own styling); letting a document pick `theme` (it
   overrides the app's dark mode and can't be separated from `themeVariables`).
+
+### Service hardening, SHA-pinned actions, completion ignores forged marks
+
+- **Decided:** 2026-11-06, security audit.
+- **What:** the unit sets four sandbox flags. Third-party actions are pinned to full commit SHAs,
+  and `ci.yml` defaults to `contents: read`. Completion (not built) asks only after a keystroke sent
+  since the B mark, and takes `cwd` from `pane_current_path`, never OSC 7. This replaces the
+  preference for OSC 7 in "The snippet: OSC 133 from prompt hooks" above.
+- **Why:** the flags limit a compromised daemon or helper, and pane shells come from the tmux
+  server, so they are unaffected. A mutable tag lets an upstream compromise reach release builds.
+  Terminal output can forge OSC 133 and OSC 7, so a `cat` could otherwise make carapace evaluate a
+  hostile Makefile with nothing typed.
+- **Rejected:** `ProtectSystem`, `ProtectHome` and `PrivateTmp` (the file manager reaches any path,
+  tmux's socket is in `/tmp`); trusting OSC marks alone. A carapace denylist stays optional.

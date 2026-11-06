@@ -53,5 +53,15 @@ TasksMax=32
 # The kernel kills muxen before tmux or the agents in it.
 OOMScoreAdjust=500
 
+# Hardening that costs nothing muxen uses. The pane shells come from the tmux server,
+# which muxen never starts, so none of these reach them; they limit the daemon and the
+# carapace helpers it runs. ProtectSystem, ProtectHome and PrivateTmp are left out on
+# purpose: the file manager reads and writes any path Jimmy can, and tmux's socket is
+# in /tmp (or $TMUX_TMPDIR), which PrivateTmp would hide.
+NoNewPrivileges=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+
 [Install]
 WantedBy=default.target

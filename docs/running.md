@@ -441,6 +441,12 @@ may not be up yet at boot. The backoff (`RestartSteps`, `RestartMaxDelaySec`) ne
 systemd 254 or later (`systemctl --version`); an older systemd logs "Unknown key" for
 both and restarts every 2 s instead, which still works.
 
+It also sets `NoNewPrivileges`, `LockPersonality`, `RestrictRealtime` and
+`RestrictSUIDSGID`, which limit the daemon and the completion helpers it starts. Nothing
+muxen runs needs `sudo` or a setuid binary. The unit leaves out `ProtectSystem`,
+`ProtectHome` and `PrivateTmp`: the file manager reaches any path you can, and tmux's
+socket is in `/tmp`.
+
 The daemon creates `$XDG_RUNTIME_DIR/muxen/` with mode `0700`, requiring it to be a
 real directory owned by the daemon user. It refuses a missing Linux `XDG_RUNTIME_DIR`,
 a symlink, the wrong owner or any mode other than `0700` with exit 78. It holds an

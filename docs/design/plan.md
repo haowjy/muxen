@@ -561,9 +561,10 @@ after Tab, ↑ or readline edits.
   prompt, so the strip hides.
 - The client asks for chips with `POST /complete {before, after, cwd}`
   ([complete.md](complete.md#request-and-response)) through its host's scheme-handler
-  origin. `cwd` is the snippet's OSC 7 path when the prompt sent one, else the tab's
-  current directory from `watching`
-  ([daemon-core.md §3.7](daemon-core.md#37-window-subscription)), which needs no snippet.
+  origin, only while Jimmy is typing (a keystroke sent since the input-start mark).
+  `cwd` is the tab's current directory from `watching`
+  ([daemon-core.md §3.7](daemon-core.md#37-window-subscription)), never an OSC 7:
+  terminal output can forge both marks.
   `/complete` is plain HTTP in `src/complete/` and never touches tmux.
 
 ### The key row
