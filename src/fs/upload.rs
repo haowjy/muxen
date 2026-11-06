@@ -97,7 +97,7 @@ pub enum Naming<'a> {
 
 impl Naming<'_> {
     /// The names to try in turn: a clash moves to the next.
-    fn candidates(self, now: SystemTime) -> Vec<io::Result<String>> {
+    fn candidates(self, now: SystemTime) -> io::Result<Vec<String>> {
         match self {
             Self::Upload(client_name) => {
                 let extension = extension(client_name);
@@ -109,7 +109,7 @@ impl Naming<'_> {
                 let stem = format!("pasted-{}", utc_stamp(now));
                 let first = format!("{stem}.txt");
                 let rest = (2..=RENAME_TRIES).map(|n| format!("{stem}-{n}.txt"));
-                std::iter::once(first).chain(rest).map(Ok).collect()
+                Ok(std::iter::once(first).chain(rest).collect())
             }
         }
     }
@@ -136,8 +136,8 @@ where
     let create_path = dir_path.clone();
     let (dir, part_lane, record) = (Dir::from(dir.file), lane.clone(), record.to_owned());
     let part = lane
-        .run(move || Part::create(&dir, &create_path, part_lane, record, slot))
-        .await??;
+        .try_run(move || Part::create(&dir, &create_path, part_lane, record, slot))
+        .await?;
     let file = part.file.clone();
     match copy(lane, file, limit, body).await {
         Ok(size) => {
@@ -225,6 +225,37 @@ async fn write(
     .await?
 }
 
+/// A part file with what its end must clear: the record that names it and the upload
+/// slot. Every end runs on the fs lane and releases the slot last.
+struct Held {
+    temp: Temp,
+    /// Names the part file while it exists.
+    record: PathBuf,
+    /// Released when this drops, after the cleanup.
+    _slot: OwnedSemaphorePermit,
+}
+
+impl Held {
+    /// Renames the part file to the first free name; a failure deletes it. Blocks.
+    fn land(self, names: io::Result<Vec<String>>) -> io::Result<String> {
+        let landed = match names {
+            Ok(names) => self.temp.land(names),
+            Err(error) => {
+                self.temp.discard();
+                Err(error)
+            }
+        };
+        forget(&self.record);
+        landed
+    }
+
+    /// Deletes the part file. Blocks.
+    fn discard(self) {
+        self.temp.discard();
+        forget(&self.record);
+    }
+}
+
 /// `.muxen-upload-<random>.part` in the destination folder, deleted unless it landed. The
 /// delete runs on the fs lane, since the folder may sit on the slow disk; one that gets
 /// no thread in time is left to the next `create`'s `reap`.
@@ -233,13 +264,9 @@ async fn write(
 /// lane, so a slot holder never races a cleanup still in flight.
 struct Part {
     /// `None` once it landed or was deleted.
-    temp: Option<Temp>,
+    held: Option<Held>,
     file: Arc<File>,
     lane: Lane,
-    /// Names this part file while it exists; cleared when it landed or was deleted.
-    record: PathBuf,
-    /// `None` once its cleanup took it.
-    slot: Option<OwnedSemaphorePermit>,
 }
 
 impl Part {
@@ -267,39 +294,28 @@ impl Part {
         })?;
         Ok(Self {
             file: temp.file().clone(),
-            temp: Some(temp),
+            held: Some(Held {
+                temp,
+                record,
+                _slot: slot,
+            }),
             lane,
-            record,
-            slot: Some(slot),
         })
     }
 
     /// Renames the part file to a free final name. A failure deletes it.
-    async fn land(mut self, names: Vec<io::Result<String>>) -> Result<String, FsError> {
-        let temp = self.temp.take();
-        let (record, slot) = (self.record.clone(), self.slot.take());
-        let landed = self.lane.run(move || {
-            let gone = || io::Error::from(io::ErrorKind::NotFound);
-            let landed = temp.ok_or_else(gone)?.land(names);
-            forget(&record);
-            drop(slot);
-            landed
-        });
-        landed.await?.map_err(FsError::Internal)
+    async fn land(mut self, names: io::Result<Vec<String>>) -> Result<String, FsError> {
+        let held = self.held.take().expect("a part file lands once");
+        let landed = self
+            .lane
+            .try_run(move || held.land(names).map_err(FsError::Internal));
+        landed.await
     }
 
     /// Deletes the part file before the response goes out.
     async fn remove(mut self) {
-        if let Some(temp) = self.temp.take() {
-            let (record, slot) = (self.record.clone(), self.slot.take());
-            let _ = self
-                .lane
-                .run(move || {
-                    temp.discard();
-                    forget(&record);
-                    drop(slot);
-                })
-                .await;
+        if let Some(held) = self.held.take() {
+            let _ = self.lane.run(move || held.discard()).await;
         }
     }
 }
@@ -309,13 +325,8 @@ impl Drop for Part {
     /// clears the record, then frees the slot. A lane too busy to run it leaves both to
     /// the next `reap`; the slot is freed with the dropped closure.
     fn drop(&mut self) {
-        if let Some(temp) = self.temp.take() {
-            let (record, slot) = (self.record.clone(), self.slot.take());
-            self.lane.spawn(move || {
-                temp.discard();
-                forget(&record);
-                drop(slot);
-            });
+        if let Some(held) = self.held.take() {
+            self.lane.spawn(move || held.discard());
         }
     }
 }
@@ -529,11 +540,7 @@ mod tests {
     #[test]
     fn pasted_text_names_take_a_numeric_suffix_on_a_clash() {
         let at = UNIX_EPOCH + Duration::from_secs(1_792_651_205);
-        let names: Vec<String> = Naming::PastedText
-            .candidates(at)
-            .into_iter()
-            .map(|name| name.expect("a name"))
-            .collect();
+        let names: Vec<String> = Naming::PastedText.candidates(at).expect("names");
         assert_eq!(names[0], "pasted-20261022-064005Z.txt");
         assert_eq!(names[1], "pasted-20261022-064005Z-2.txt");
         assert_eq!(names.len(), RENAME_TRIES);

@@ -237,12 +237,8 @@ impl Temp {
 
     /// Renames to the first of `names` that doesn't exist yet, never replacing a file.
     /// No `fsync`: an upload lost to a power cut is sent again (fs.md "Uploads").
-    pub fn land(self, names: impl IntoIterator<Item = io::Result<String>>) -> io::Result<String> {
+    pub fn land(self, names: impl IntoIterator<Item = String>) -> io::Result<String> {
         for name in names {
-            let name = match name {
-                Ok(name) => name,
-                Err(error) => return Err(self.failed(error)),
-            };
             let dir = &*self.dir.0;
             match rustix::fs::renameat_with(dir, &*self.name, dir, &name, RenameFlags::NOREPLACE) {
                 Ok(()) => return Ok(name),
@@ -279,7 +275,7 @@ mod tests {
         let dir = Dir::open(tree.root()).expect("the folder");
         let temp = Temp::create(&dir, "a.part".as_ref(), 0o600).expect("a temp file");
         temp.file().write_all_at(b"new", 0).expect("written");
-        let tries = ["taken.jpg", "free.jpg"].map(|name| Ok(name.to_owned()));
+        let tries = ["taken.jpg", "free.jpg"].map(str::to_owned);
         assert_eq!(temp.land(tries).expect("renamed"), "free.jpg");
         let read = |name| std::fs::read(tree.path(name)).expect("read");
         assert_eq!(
