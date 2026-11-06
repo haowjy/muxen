@@ -37,3 +37,5 @@
 .check { color: var(--color-accent); }
 .disabled { color: var(--color-text-muted); cursor: default; }
 .disabled:hover { background: none; }
+/* Info: a small list of facts in the popover's frame. */
+.facts { padding: var(--space-3) var(--space-4); }

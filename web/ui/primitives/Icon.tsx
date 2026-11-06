@@ -1,7 +1,7 @@
 import {
   Check, ChevronDown, ChevronLeft, ChevronRight, CircleX, ClipboardCopy, Copy, Download, Ellipsis, Equal, ExternalLink, Eye, File,
   FileBraces, FileCode, FileCog, FileDigit, FileImage, FileLock, FileMusic, FileTerminal, FileText, FileVideoCamera, Film, Folder, FolderOpen,
-  House, Image, Keyboard, ClipboardPaste, KeyboardOff, List, Maximize2, PanelRight, Plus, RotateCw, Search, Server, Settings, SquarePlus, Terminal,
+  House, Image, Info, Keyboard, ClipboardPaste, KeyboardOff, List, Maximize2, PanelRight, Plus, RotateCw, Search, Server, Settings, SquarePlus, Terminal,
   TriangleAlert, Upload, WrapText, X, type LucideIcon,
 } from "lucide-preact";
 
@@ -47,6 +47,8 @@ const ICONS = {
   download: Download,
   /** More actions: ⋯. */
   more: Ellipsis,
+  /** A file's size, time and path. */
+  info: Info,
   wrap: WrapText,
   open: Eye,
   newTab: SquarePlus,

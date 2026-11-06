@@ -25,9 +25,11 @@
 }
 :root[data-layout="phone"] .name { font-size: var(--text-body); padding-left: 0; }
 .kind { flex: none; color: var(--color-text-muted); }
-.text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The folder gives way first: the file's name is what the line is for. */
+.text { display: flex; min-width: 0; white-space: nowrap; }
+.base { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .facts { flex: none; font-size: var(--text-meta); font-weight: 400; font-variant-numeric: tabular-nums; color: var(--color-text-muted); }
 /* A toggle shows its state: the accent while on. */
 .toggle[aria-pressed="true"] { color: var(--color-accent); background: var(--color-bg-pressed); }
-/* In the Preview panel: the file's folder under the list's root, quiet before its name. */
-.within { font-weight: 400; color: var(--color-text-muted); }
+/* In the Preview panel: the file's folder, quiet before its name. */
+.within { flex: 0 100 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 400; color: var(--color-text-muted); }

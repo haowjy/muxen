@@ -3,8 +3,6 @@
 .tool svg { color: var(--color-text-muted); }
 .tool:hover svg { color: var(--color-text); }
 .caret { width: 14px; height: 14px; margin-right: -4px; color: var(--color-text-muted); }
-/* Where the line runs short, the labels go and the icons stay. */
-@container files-bar (max-width: 720px) { .label { display: none; } .tool { padding: 0 6px; } .tool .caret { display: none; } }
 /* Copied: the button that copied says so, in place. */
 .copied, .copied svg, .copied:hover svg { color: var(--color-status-live); }
 .status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

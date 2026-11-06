@@ -71,7 +71,7 @@
 :root[data-layout="phone"] .wrap :global(.line)::before { width: 4.5ch; margin: 0 2ch 0 -6.5ch; }
 /* Code runs edge to edge on the sunken surface, under the header's one rule. */
 .sunken { flex: 1; background: var(--color-bg-sunken); }
-/* The phone's facts above the code; a desktop's header has the size. */
+/* The phone's facts above the code. */
 .facts { display: none; }
 :root[data-layout="phone"] .facts { display: flex; gap: var(--space-3); padding: var(--space-3) var(--space-4) var(--space-2); font-size: var(--text-small); font-variant-numeric: tabular-nums; color: var(--color-text-muted); }
 

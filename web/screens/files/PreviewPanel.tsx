@@ -70,17 +70,12 @@ export function PreviewPanel({ session, root, from, selection, known, hidden, he
     }, PANEL_SETTLE_MS);
     return () => { clearTimeout(timer); };
   }, [selection, root.path, from, settled.key, moved]);
-  const within = (path: string): string => {
-    const dir = parentOf(path);
-    return dir === root.path ? "" : `${dir.slice(root.path === "/" ? 1 : root.path.length + 1)}/`;
-  };
   return (
     <section class={styles.panel} aria-label="Preview">
       {shown.kind === "file" ? (
         <FileView
           session={session}
           file={shown.file}
-          folder={within(shown.file.path)}
           onExpand={() => { onOpen({ kind: "file", path: shown.file.path }); }}
           onLink={onLink}
         />

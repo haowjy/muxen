@@ -28,7 +28,7 @@ interface Props {
   entry: Entry | null;
   /** What is held of it; null until asked. */
   record: Held | null;
-  /** The folder the list starts at: no "Go into" for it, and others are named relative to it. */
+  /** The folder the list starts at: no "Go into" for it. */
   root: string;
   onOpen: (place: FilesPlace) => void;
   onLink: (target: LinkTarget) => void;
@@ -52,8 +52,9 @@ export function FolderSummary({ session, path, entry, record, root, onOpen, onLi
   const home = useStore(browser, (s) => s.home);
   const hidden = useStore(browser, (s) => s.hidden);
   const listing = record?.listing ?? null;
-  const name = baseName(path) || "/";
-  const within = path !== root && path.startsWith(`${root === "/" ? "" : root}/`) ? path.slice(root.length + (root === "/" ? 0 : 1), path.length - name.length) : "";
+  const shown = shorten(path, home);
+  const name = baseName(shown);
+  const within = shown.slice(0, shown.length - name.length);
   const readme = listing?.entries.find((e) => e.kind === "file" && README.test(e.name)) ?? null;
   const readmeRef: FileRef | null = readme && { path: join(path, readme.name), name: readme.name, size: readme.size ?? null, mtime: readme.mtime ?? null, mime: readme.mime ?? null };
   const text = useText(session, readmeRef?.path ?? "", readmeRef !== null);
@@ -88,7 +89,7 @@ export function FolderSummary({ session, path, entry, record, root, onOpen, onLi
           <dl class={viewers.meta}>
             <dt>Contains</dt><dd>{contents(listing)}</dd>
             {entry?.mtime !== undefined && <><dt>Modified</dt><dd>{formatTime(entry.mtime)}</dd></>}
-            <dt>Path</dt><dd class={viewers.mono}>{shorten(path, home)}{path === "/" ? "" : "/"}</dd>
+            <dt>Path</dt><dd class={viewers.mono}>{shown}{path === "/" ? "" : "/"}</dd>
           </dl>
           {path !== root && (
             <div class={viewers.cardActions}>
@@ -103,13 +104,13 @@ export function FolderSummary({ session, path, entry, record, root, onOpen, onLi
   return (
     <div class={bar.view}>
       <header class={bar.bar}>
-        <h2 class={bar.name} title={path}>
+        <h2 class={bar.name} title={shown}>
           <Icon name="folder" size={16} class={styles.folder} />
-          <span class={bar.text}>{within && <span class={bar.within}>{within}</span>}{name}</span>
+          <span class={bar.text}>{within && <span class={bar.within}>{within}</span>}<span class={bar.base}>{name}</span></span>
           {readmeRef && listing && <span class={bar.facts}>{contents(listing)}</span>}
         </h2>
-        <CopyButton value={path} label="Copy path" icon="copy" />
-        <InsertButton path={path} />
+        <CopyButton value={shown} label="Copy path" icon="copy" />
+        <InsertButton path={path} compact />
       </header>
       {body}
     </div>

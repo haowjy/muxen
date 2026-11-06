@@ -5125,3 +5125,22 @@ refresh, on both layouts. The desktop tree and Preview panel are phase 2; Search
     fault, and the next screen would repeat it.
   - Queueing a refused screen until the one up closes: a share sheet popping up after a video, minutes
     later, is a surprise; the notice says what happened and Download is one tap again.
+
+### One path form: `~/…` under home, absolute elsewhere, icon-only header actions, size in Info
+
+- **Decided:** 2026-11-05, Jimmy, from a desktop screenshot of the Preview panel.
+- **What:** a path reads `~/…` under the host's `$HOME` and absolute elsewhere, as the path field does,
+  in a file's and folder's header, Info, the can't-preview card, the "Copied <path>" notice and what Copy
+  path puts on the clipboard. Insert into terminal still sends the absolute path. The Preview panel's
+  header shows that full path (folder quiet, name bold) instead of the folder below the list's root.
+  Copy path, Download and Insert ▾ in the file and folder headers are icon buttons on the desktop too,
+  with tooltips; the size leaves the header line, and ⋯ (File options) on the desktop, as on the phone,
+  holds Info: size, modified time and path.
+- **Why:** the header read `.meridian/git/…/QUEUE.md`, the tree was rooted at `~/` and Copy path copied
+  `/home/jimyao/…`: three forms of one path. Jimmy: "BE CONSISTENT". The labels beside the icons said
+  what the icon and its tooltip already say, and the size is a fact to look up, not to read on every
+  file.
+- **Rejected:**
+  - absolute paths everywhere (the tree and the path field are already `~/`);
+  - `~/` shown but absolute copied (the same file read two ways, which is what Jimmy objected to);
+  - `~/` on Insert too (a quoted `~/my file` does not expand in a shell).

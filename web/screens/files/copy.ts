@@ -1,4 +1,4 @@
-// Copying from Files: a path (absolute, as a shell takes it) or a file's text. A copy chosen from a menu has no
+// Copying from Files: a path (in the form the screen shows: `~/…` under home) or a file's text. A copy chosen from a menu has no
 // button left on screen to confirm it, so a notice names what was copied.
 import type { AppController } from "../../app/controller";
 import { shorten } from "../../files/format";
@@ -13,7 +13,8 @@ export async function copyText(app: AppController, text: string, notice: string 
   return true;
 }
 
-/** Copies the absolute `path`, and says so (`home` shortens what the notice shows). */
+/** Copies `path` as the screen shows it (`~/…` under `home`, else absolute), and says so. */
 export async function copyPath(app: AppController, path: string, home: string | null): Promise<void> {
-  await copyText(app, path, `Copied ${shorten(path, home)}`);
+  const shown = shorten(path, home);
+  await copyText(app, shown, `Copied ${shown}`);
 }

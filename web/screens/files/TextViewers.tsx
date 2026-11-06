@@ -62,7 +62,7 @@ function Truncated({ preview }: { preview: TextPreview }) {
 }
 
 /** Source and text, coloured by Shiki when the extension is on the allowlist and the file is small. */
-/** What the phone shows above the code: the language, the lines, the size and the age. A desktop's header has the size. */
+/** What the phone shows above the code: the language, the lines, the size and the age. */
 const LANGUAGE_NAMES: Record<Language, string> = {
   bash: "Shell", c: "C", diff: "Diff", go: "Go", javascript: "JavaScript", json: "JSON", markdown: "Markdown", python: "Python",
   rust: "Rust", swift: "Swift", toml: "TOML", tsx: "TypeScript JSX", typescript: "TypeScript", yaml: "YAML",

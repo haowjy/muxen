@@ -1,8 +1,7 @@
-// A file's actions, wherever the file is offered: Copy path, Download and Insert ▾. One Insert control everywhere
+// A file's actions, wherever the file is offered: Copy path, Download and Insert ▾ (icons in headers). One Insert control everywhere
 // (a file's header, an upload's offer, a row's menu), listing this host's terminal tabs, the default first.
 import { useEffect, useState } from "preact/hooks";
 import { useApp, useAppView } from "../../app/context";
-import { cx } from "../../ui/cx";
 import { Button } from "../../ui/primitives/Button";
 import { Icon } from "../../ui/primitives/Icon";
 import { IconButton } from "../../ui/primitives/IconButton";
@@ -20,7 +19,7 @@ const INSERT: Chord = { key: "i", mod: true };
 const COPIED_MS = 1_600;
 
 /**
- * Insert ▾: opens the list of terminal tabs. `compact` is the phone's icon form. With `shortcut`, Cmd/Ctrl+I sends the
+ * Insert ▾: opens the list of terminal tabs. `compact` is the icon form; the upload offer keeps its label. With `shortcut`, Cmd/Ctrl+I sends the
  * path to the first tab.
  */
 export function InsertButton({ path, first = null, compact, shortcut, onInserted }: { path: string; first?: string | null; compact?: boolean; shortcut?: boolean; onInserted?: () => void }) {
@@ -57,7 +56,7 @@ export function InsertButton({ path, first = null, compact, shortcut, onInserted
  * A copy button: copies `value` and confirms in place with a check for 1.6 s ("Copied", where there is room), so
  * nothing else on screen moves. `note`, when set, is said as well: what was copied isn't all there is.
  */
-export function CopyButton({ value, label, icon, compact, note }: { value: string; label: string; icon: "copy" | "copyText"; compact?: boolean; note?: string | null }) {
+export function CopyButton({ value, label, icon, note }: { value: string; label: string; icon: "copy" | "copyText"; note?: string | null }) {
   const app = useApp();
   const [copied, setCopied] = useState(false);
   useEffect(() => {
@@ -70,9 +69,7 @@ export function CopyButton({ value, label, icon, compact, note }: { value: strin
   };
   return (
     <>
-      {compact
-        ? <IconButton icon={copied ? "check" : icon} label={copied ? "Copied" : label} class={copied ? styles.copied : undefined} onClick={copy} />
-        : <Button variant="quiet" class={cx(styles.tool, copied && styles.copied)} icon={copied ? "check" : icon} onClick={copy}><span class={styles.label}>{copied ? "Copied" : label}</span></Button>}
+      <IconButton icon={copied ? "check" : icon} label={copied ? "Copied" : label} class={copied ? styles.copied : undefined} onClick={copy} />
       <span class={styles.status} role="status">{copied && !note ? "Copied" : ""}</span>
     </>
   );
@@ -85,11 +82,9 @@ export async function download(app: AppController, url: string, name: string): P
 }
 
 /** Download: the platform's save of `/fs/raw` (the browser's download, the app's share sheet). `big` is the one a file muxen can't show offers, with its size. */
-export function DownloadButton({ url, name, size, compact, big }: { url: string; name: string; size: string | null; compact?: boolean; big?: boolean }) {
+export function DownloadButton({ url, name, size, big }: { url: string; name: string; size: string | null; big?: boolean }) {
   const app = useApp();
   const save = (): void => { void download(app, url, name); };
   if (big) return <Button variant="primary" class={styles.big} icon="download" onClick={save}>{size === null ? "Download" : `Download ${size}`}</Button>;
-  return compact
-    ? <IconButton icon="download" label="Download" onClick={save} />
-    : <Button variant="quiet" class={styles.tool} icon="download" {...(size !== null && { title: `Download ${size}` })} onClick={save}><span class={styles.label}>Download</span></Button>;
+  return <IconButton icon="download" label="Download" onClick={save} />;
 }

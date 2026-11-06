@@ -1,3 +1,4 @@
+import type { ComponentChildren } from "preact";
 import { useLayoutEffect, useEffect, useRef } from "preact/hooks";
 import { createPortal } from "preact/compat";
 import { cx } from "../cx";
@@ -34,6 +35,8 @@ interface MenuProps {
   at?: { x: number; y: number } | undefined;
   label: string;
   sections: MenuSection[];
+  /** Facts shown in the same popover instead of rows (a file's Info): it reads as a dialog, and no row takes the arrow keys. */
+  facts?: ComponentChildren;
   onClose: () => void;
   /** A fine pointer or a keyboard opened it: the first row takes focus. Touch never focuses, so a raised keyboard stays up. */
   focusFirst: boolean;
@@ -67,7 +70,7 @@ const GAP_PX = 8;
  * `<dialog>`: a modal would take focus and lower the keyboard. Every row cancels its pointerdown,
  * like a dock control. A press outside, Escape (focus returns to the anchor), or a chosen row closes it.
  */
-export function Menu({ anchor, at, label, sections, onClose, focusFirst }: MenuProps) {
+export function Menu({ anchor, at, label, sections, facts, onClose, focusFirst }: MenuProps) {
   const ref = useRef<HTMLDivElement>(null);
   const focus = useFocus();
 
@@ -134,7 +137,8 @@ export function Menu({ anchor, at, label, sections, onClose, focusFirst }: MenuP
   }, [anchor, pointed, onClose]);
 
   return createPortal(
-    <div ref={ref} class={styles.menu} role="menu" aria-label={label}>
+    <div ref={ref} class={cx(styles.menu, facts !== undefined && styles.facts)} role={facts === undefined ? "menu" : "dialog"} aria-label={label}>
+      {facts}
       {sections.map((section, i) => (
         <div key={i} class={styles.section} role="group" aria-label={section.title}>
           {section.title && <p class={styles.title}>{section.title}</p>}

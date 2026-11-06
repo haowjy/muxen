@@ -16,10 +16,11 @@ import type { TextPreview } from "../../files/api";
 import { CodeViewer, MarkdownViewer, type Loaded } from "./TextViewers";
 import styles from "./Viewers.module.css";
 
-function Meta({ file }: { file: FileRef }) {
+function Meta({ session, file }: { session: FilesSession; file: FileRef }) {
+  const home = useStore(session.browser, (s) => s.home);
   return (
     <dl class={styles.meta}>
-      <dt>Path</dt><dd class={styles.mono}>{file.path}</dd>
+      <dt>Path</dt><dd class={styles.mono}>{shorten(file.path, home)}</dd>
       {file.size !== null && <><dt>Size</dt><dd>{formatSize(file.size)}</dd></>}
       {file.mtime !== null && <><dt>Modified</dt><dd>{formatTime(file.mtime)}</dd></>}
       {file.mime && <><dt>Type</dt><dd class={styles.mono}>{file.mime}</dd></>}
@@ -47,7 +48,7 @@ function MediaViewer({ session, file }: { session: FilesSession; file: FileRef }
   }
   return (
     <div class={styles.panel}>
-      <Meta file={file} />
+      <Meta session={session} file={file} />
       <Button variant="primary" onClick={() => { app.platform.playVideo(session.handle, file.path); }}>Play {file.name}</Button>
     </div>
   );
