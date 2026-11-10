@@ -1,8 +1,8 @@
 # Connection roadmap and server settings
 
-Status: product direction recorded on 2026-10-22. Tailscale is the first delivery
-scope; public HTTPS is the intended next phase, subject to security design. Neither
-this roadmap nor the browser research enables public access to the current daemon.
+Tailscale is the first delivery scope; public HTTPS is the intended next phase
+("probably", per Jimmy), subject to security design. Neither this roadmap nor the browser
+research enables public access to the current daemon.
 
 ## Delivery order
 
@@ -77,4 +77,4 @@ speculative transport/plugin infrastructure before the first browser adapter wor
 Read [browser setup](browser-setup.md) for the PWA behavior and delivery contract,
 [interaction behavior](browser-behaviors.md) for client UX, and
 [auth.md](../auth.md) for current security invariants. Future public work must update
-those subsystem specs and the decision log before changing production behavior.
+those subsystem specs before changing production behavior.
