@@ -87,8 +87,8 @@ report what the keyboard covers.
 ## Where the web UI comes from
 
 The native app's web UI is **bundled in the app** and served by a
-`WKURLSchemeHandler`. P4a always uses bundled assets; the Debug-build dev-server source
-switch remains deferred to `ios/.context/FUTURE`. Separately, the daemon embeds and serves the production browser build
+`WKURLSchemeHandler`. The app always uses bundled assets; a Debug-build dev-server source
+switch is deferred to `ios/.context/FUTURE`. Separately, the daemon embeds and serves the production browser build
 at its canonical tailnet origin ([auth.md](auth.md#canonical-origin)); the iOS app
 does not load that copy or register its service worker.
 
@@ -148,7 +148,7 @@ redirect carries the request's `Authorization` again: URLSession drops it even o
 and the daemon's `401` would then revoke a good token. The video player's fetches
 are URLSession requests too, so they take the rule (see "Video").
 
-For HTTP endpoints, P4b builds proxy URLs from `PlatformHost.handle`; native resolves
+For HTTP endpoints, the page builds proxy URLs from `PlatformHost.handle`; native resolves
 them to the private `baseURL` and supplies the per-host token. The production browser
 adapter uses `location.origin` and carries no credential; the daemon judges it as an
 enrolled tailnet node. Native requests use the same endpoints and send no `Origin`
@@ -173,7 +173,7 @@ files from repos and agent output. Untrusted content must never run as script in
   `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src
   'self' muxen-app: blob: data:; media-src 'self' blob:; connect-src 'self'
   muxen-app: wss:; frame-src 'none'; object-src 'none'; base-uri 'none'` (`wss:`
-  because each host's socket is on its own `*.ts.net` name). P4a has no dev-server mode
+  because each host's socket is on its own `*.ts.net` name). There is no dev-server mode
   or relaxed CSP path.
 - **Every proxied response** also gets `Content-Security-Policy: sandbox` and
   `X-Content-Type-Options: nosniff`.
@@ -482,10 +482,10 @@ token to native solely for comparison and revocation, never into storage or logs
 
 There are no separate `network`, `lock` or `lifecycle.covered` messages in v2. A
 connectivity, lock, foreground or native-screen change publishes the whole `lifecycle`
-object. P4b handles `{ locked: true }` by suspending socket requests until a lifecycle
+object. The web handles `{ locked: true }` by suspending socket requests until a lifecycle
 event reports unlocked; `{ notEnrolled: true }` is a token refusal for that host, not a
 browser enrolment flow. User-initiated `copy` is not the server OSC 52 path and is never
-gated here. The exact per-message rules and lane gaps are in the P4b handoff artifact.
+gated here.
 
 ### Preferences
 
@@ -721,7 +721,7 @@ fixture. If the socket ever moves native, the WebSocket messages get the same tr
 
 ## Device checklist
 
-Run after P4b on Jimmy's iPhone, against a real daemon and scratch tmux server
+Run on Jimmy's iPhone, against a real daemon and scratch tmux server
 (`tmux -L`), never personal sessions. First check custom-scheme
 asset/proxy behavior and bridge events in Simulator; then do the keyboard and auth
 checks on device. Each row is a pass condition; record answers in [research/](research/)

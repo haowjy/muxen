@@ -1629,7 +1629,7 @@ It starts from reconcile when it is due and the slot is free, after views' Locat
   fails is answered with its error as today and counts the same.
 
 **Cost.** While nothing rings: no network bytes, one tmux process per 5 s per connected
-host, and the same process as a user's session list. Measured (p362: tmux 3.8, 20
+host, and the same process as a user's session list. Measured (tmux 3.8, 20
 sessions with 60 windows, 300 warm runs): the listing with the bell fields 5.2 ms wall,
 1.0 ms of server CPU and 2351 bytes against 5.1 ms, 0.7 ms and 1811 bytes for the
 current listing, so the bell fields add 0.6 ms of server CPU per poll, about 0.01% of a
@@ -2326,11 +2326,10 @@ with the replay tests and the recorder in `tests/support/`):
    laptop plus one control client on 3.4 and 3.7b; `aggressive-resize on` is untested.
    Yielding depends on the window subscription's client loop (§3.7): a tmux that
    renames `L:`, `window_active_clients_list` or `client_activity` leaves claims
-   unyielded, so the laptop can't take a shown window back (the cost before
-   2026-10-24). Taking rests on `server_client_set_session` setting `latest` on a
+   unyielded, so the laptop can't take a shown window back. Taking rests on `server_client_set_session` setting `latest` on a
    same-session `switch-client`, and on 3.4 on the vote after it recalculating; a tmux
    that skips a switch to the session already attached, or stops setting `latest`
-   there, leaves muxen's size a cap again (the cost before 2026-10-25). The real-tmux
+   there, leaves muxen's size a cap again. The real-tmux
    sizing test, with a watch larger than the pty, catches both.
 3. **Unicode width drift** between tmux and xterm.js can misplace cells; `resync`
    repaints.

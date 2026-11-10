@@ -400,7 +400,8 @@ and the note on `TMUX_TMPDIR` under systemd, are in [running.md](../running.md).
 | `[tmux] program` | `tmux` | the tmux executable; an absolute path if the unit's `PATH` doesn't find it |
 | `[tmux] socket_name` | none | `tmux -L <name>` |
 | `[tmux] socket_path` | none | `tmux -S <path>`; not together with `socket_name` |
-| `uploads_dir` | `~/.muxen-uploads` | the uploads folder; read on every upload request ([fs.md](fs.md#the-uploads-folder)) |
+| `uploads_dir` | `~/.muxen-uploads` | the uploads folder; applied at startup and on a reload, and editable in Settings ([fs.md](fs.md#the-uploads-folder)) |
+| `search_skip` | `["node_modules"]` | folders Search lists but doesn't enter; editable in Settings ([fs.md](fs.md#get-fssearchpath)) |
 | `[complete] history` | the most recently modified of `~/.zsh_history`, `~/.bash_history`, fish's history | the one history file the suggestion strip reads; set it when the shell's `$HISTFILE` is elsewhere ([complete.md](complete.md#history)) |
 | `[complete] path` | the daemon's own `PATH` | the `PATH` the command index scans and carapace runs with; set it to the interactive shell's `PATH`, since the systemd user manager's lacks what rc files add ([complete.md](complete.md#commands-on-path)) |
 | `[complete] carapace` | `carapace` on that `PATH` | the carapace binary; absent or failing means no flag chips ([complete.md](complete.md#carapace)) |
@@ -448,7 +449,7 @@ there is no cgroup or hard memory/CPU cap.
   Limits: [complete.md](complete.md#constants).
 - **Memory-backed uploads are refused:** tmpfs/ramfs pages would remain charged to the
   daemon after the request, outside its budget rows. Disk-backed uploads flush every
-  2 MiB.
+  1 MiB.
 - **No heavy server work:** HEIC conversion happens on the phone; videos stream as-is
   over HTTP Range; no thumbnails, no transcoding, no file watcher.
 - **Crash safety:** tmux is the source of truth. If muxen restarts, clients reconnect
@@ -462,6 +463,12 @@ there is no cgroup or hard memory/CPU cap.
 `IOWeight=10`, `IOSchedulingClass=idle`, `TasksMax=32`, `OOMScoreAdjust=500` (the
 kernel kills muxen before tmux or the agents), and
 `Environment=GLIBC_TUNABLES=glibc.malloc.mmap_threshold=131072`.
+It also sets `NoNewPrivileges`, `LockPersonality`, `RestrictRealtime` and `RestrictSUIDSGID`, which
+limit a compromised daemon or helper; tmux and the pane shells come from the tmux server, so
+they are unaffected. `ProtectSystem`, `ProtectHome` and `PrivateTmp` are not set: the file
+manager reaches any path, and tmux's socket is in `/tmp`. Third-party GitHub Actions are
+pinned to full commit SHAs, because a mutable tag lets an upstream compromise reach release
+builds, and `ci.yml` defaults to `contents: read`.
 
 - `KillMode=mixed` sends SIGTERM to muxen alone, so it closes sockets with 4004 and its
   control clients itself. Under the default kill mode, systemd also signals the

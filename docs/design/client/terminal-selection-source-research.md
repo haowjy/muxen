@@ -2,14 +2,9 @@
 
 Lane: read-only source study for muxen UX design. No project edits. No other artifacts. No tmux live probe (separate lane). No port 8444.
 
-**Answer first:** xterm.js 6.0.0 serializes copy from the *cell buffer* (not the DOM): it joins rows only when `IBufferLine.isWrapped` is true, trims *empty cells* (not written spaces), and treats wide/combining characters as one string cell with width 2/0. It has **no iOS/touch selection path**. Public APIs that can drive a mobile overlay without private fields are `buffer.getLine` / `isWrapped` / `translateToString` / `getCell`, plus `select` / `getSelection` / `getSelectionPosition` / `onSelectionChange`, plus public `.xterm-screen` metrics. At the time of this research, muxen's restore painted **one CUP per visual row with wrap off**, so `isWrapped` was false and copy inserted a newline at every wrap. L3 now reconstructs mapped active-grid wraps in daemon restore bytes; history chunks carry a separate map for the DOM history view. A DOM overlay still must join logical rows or serialize from that buffer API; one `<div>` per visual row (xterm's own accessibility tree) will put hard breaks on wraps. Native xterm mouse selection and `Terminal.paste()` are unusable in muxen as configured (`disableStdin`, inert textarea, WebGL, `user-select: none`). Paste already bypasses xterm (`paste-buffer -p`).
+**Answer first:** xterm.js 6.0.0 serializes copy from the *cell buffer* (not the DOM): it joins rows only when `IBufferLine.isWrapped` is true, trims *empty cells* (not written spaces), and treats wide/combining characters as one string cell with width 2/0. It has **no iOS/touch selection path**. Public APIs that can drive a mobile overlay without private fields are `buffer.getLine` / `isWrapped` / `translateToString` / `getCell`, plus `select` / `getSelection` / `getSelectionPosition` / `onSelectionChange`, plus public `.xterm-screen` metrics. The daemon reconstructs mapped active-grid wraps in its restore bytes, so `isWrapped` is true for a soft wrap; history chunks carry a separate wrap map. A DOM overlay still must join logical rows or serialize from that buffer API; one `<div>` per visual row (xterm's own accessibility tree) will put hard breaks on wraps. Native xterm mouse selection and `Terminal.paste()` are unusable in muxen as configured (`disableStdin`, inert textarea, WebGL, `user-select: none`). Paste already bypasses xterm (`paste-buffer -p`).
 
-**Implementation update (2026-10-23):** the snapshot-wrap change keeps the map inside the
-daemon, rebuilds xterm's public `isWrapped` state through ordinary restore bytes, and
-does not change the frame or terminal pipeline. The history view joins rows from the
-chunk bitmap. The historical blockers and alternatives below remain useful as the
-reasoning record; blocker 1 is resolved. Headless verification does not replace the
-pending iPhone Safari/WKWebView checks.
+**Status:** the daemon keeps the wrap map and rebuilds xterm's public `isWrapped` state through ordinary restore bytes, so the frame and terminal pipeline are unchanged; blocker 1 below is resolved. Rows now come from muxen's row list, so this study's "history view" is the list's older rows. Headless verification does not replace the pending iPhone Safari/WKWebView checks.
 
 ---
 
