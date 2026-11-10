@@ -8,7 +8,7 @@ Nice-to-have, by area:
   the outline's reveal, now sequenced in `tabOutline.ts`). Routing `listing()` through the in-flight entry would end
   the class.
 - Terminal: an end-to-end test of copy.
-- Phone dock (deferred 2026-10-24, decisions.md "The key row's keys, and arrows by long-press"):
+- Phone dock (deferred):
   smart keys, a key row that follows the pane's program (shell vs vim), needing a daemon watch of
   `pane_current_command` plus protocol; swiping the tab row for the previous or next tab; a
   line-field command history, worth revisiting only if ↑ and ^R prove not enough for recall;

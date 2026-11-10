@@ -3,17 +3,16 @@
 muxen is a phone-first client for the tmux sessions on Jimmy's dev servers, reached
 only over his tailnet. This document is the product and UX spec and the index of the
 design: what muxen does and how it looks and behaves on the phone. Each subsystem
-has its own spec, and every decision, with the alternatives rejected, is logged in
-[decisions.md](decisions.md).
+has its own spec, and each spec carries the reasons for its larger choices.
 
-Build each subsystem to its settled spec, run its gating spikes ([Spikes](#spikes)),
-and record decisions in decisions.md.
+Build each subsystem to its settled spec. When a choice changes, change the spec that
+states it and its reasons in the same commit.
 
 ## The design documents
 
 | Document | Covers |
 |---|---|
-| plan.md (this) | Goal, invariants, product rules, layout, keyboard, touch, file manager, security overview, code structure, phases, spikes |
+| plan.md (this) | Goal, invariants, product rules, layout, keyboard, touch, file manager, security overview, code structure, what is not built yet |
 | [daemon-core.md](daemon-core.md) | `src/tmux/`, `src/hub/`, `src/proto/`: control mode, snapshots, pane streams, the WebSocket protocol, and every daemon limit |
 | [client/](client/README.md) | The client on every surface: the interaction contract ([browser-behaviors.md](client/browser-behaviors.md)), where typing goes ([terminal-interaction-design.md](client/terminal-interaction-design.md)), browser setup |
 | [ios-shell.md](ios-shell.md) | The native iOS app: keyboard, focus, bridge, scheme handler, lifecycle, media |
@@ -21,8 +20,6 @@ and record decisions in decisions.md.
 | [fs.md](fs.md) | `src/fs/`: path resolution, the `/fs/*` routes, uploads, their limits |
 | [setup.md](setup.md) | `src/setup/`: foreground and background `muxen setup`, `muxen teardown`, publishing on the tailnet, and setup checks |
 | [complete.md](complete.md) | `src/complete/`: `POST /complete`, the history, PATH, carapace and path sources, the shell snippet, how they stay inside the budget |
-| [decisions.md](decisions.md) | The decision log: what, why, alternatives rejected, who, when |
-| [plan-review.md](plan-review.md) | The first review of this plan, kept as a record |
 | [research/](research/) | Evidence: probes on the dev box, iOS and WebKit facts, libraries, prior art |
 
 ## Goal
@@ -49,12 +46,12 @@ Why muxen is worth building, and which projects to study, is in [research/prior-
 ## Invariants
 
 Four rules hold whatever the design. A change that breaks one makes a different
-product; it is not a decision to log.
+product, so stop and ask Jimmy first.
 
 - **tmux is the source of truth.** muxen is a window onto Jimmy's tmux, never its
   owner. It never starts the tmux server, and tmux keeps running whether muxen runs or
   not. Closing a tab only detaches. muxen never kills tmux on its own, or without a
-  confirmation that names what ends (Jimmy, 2026-10-30).
+  confirmation that names what ends (Jimmy: "change the invariant").
 - **Every byte on the network costs the user.** The phone is often on a weak link.
   Nothing polls over the network: the daemon sends changes, and a reconnect costs one
   fresh snapshot.
@@ -64,21 +61,24 @@ product; it is not a decision to log.
   are sanitized (DOMPurify, Mermaid's strict mode), and proxied files are served
   sandboxed ([Security](#security)).
 
-Everything else in these documents is a decision, and changes through
-[decisions.md](decisions.md):
+Everything else in these documents is a current choice: change it, and update the doc
+that states it, when a better way turns up. The kinds:
 
 - **Product rules** (next section): Jimmy's standing decisions about devices, tabs,
-  hosts, files and access. Only Jimmy changes them.
+  hosts, files and access. Only Jimmy changes them; an agent that finds a better way
+  asks him.
 - **Engineering standards** ([Code structure and standards](#code-structure-and-standards)):
   how the code is built.
 - **The interaction design** ([client/browser-behaviors.md](client/browser-behaviors.md)
   and the subsystem specs): what each screen does and how input flows.
 - **Test coverage:** which tmux versions and devices are verified. Today that is tmux
-  3.4, the oldest supported, and 3.8, the newest; and Jimmy's iPhone.
+  3.4, the oldest supported, and 3.8, the newest; and Jimmy's iPhone. Jimmy: "tailnet is
+  a product rule, supported tmux versions should not be an invariant... its just what we
+  tested, process is not an invariant".
 
 ## Product rules
 
-Jimmy's decisions, as they stand ([log](decisions.md#jimmys-decisions)):
+Jimmy's decisions, as they stand:
 
 - **Device:** iPhone 17 Pro, iOS 26. The layout stays responsive, so rotation and a
   future iPad work.
@@ -123,6 +123,19 @@ Jimmy's decisions, as they stand ([log](decisions.md#jimmys-decisions)):
   and builds the iOS app.
   On macOS there is no cgroup or hard memory cap; the budget only sizes the counts.
 - **Scratch shell:** kept, landing after the core MVP.
+
+### Why these rules
+
+- **tmux settings.** `window-size latest` and the default prefix, with the laptop sometimes attached, because opening or closing the keyboard must not resize tmux: a SIGWINCH per toggle reflows the app and the laptop. OSC 133, 7 and 52 reach control mode without `allow-passthrough`, so muxen doesn't recommend it ([probe-tmux.md §1](research/probe-tmux.md)).
+- **Rust, one WebSocket per host.** Rust idles at a few MB with no garbage collector and has bounded channels ([rust-vs-go.md](research/rust-vs-go.md)); WebTransport has uneven WebKit support and no help while the app is suspended, and mosh-style UDP isn't available to a web UI. xterm.js is the only emulator: a server-side one can disagree with tmux and xterm.js and costs memory per pane.
+- **A native shell hosting the web UI.** iOS shows the keyboard only from a user gesture in a web page, a system accessory bar can't be hidden, and a drawn-in-HTML keyboard has no haptics ([ios-web.md §1](research/ios-web.md)); the app also holds the Keychain token behind Face ID.
+- **The app connects to each host directly** because a hub daemon would be a single point of failure on a box that already crashes, plus an extra hop and daemon-to-daemon auth. Several servers are a product rule because Jimmy runs muxen on more than one machine (pop-os and his Mac).
+- **Auth** is a device token behind Face ID because a passkey needs associated domains that Apple's CDN verifies, and the CDN can't reach a tailnet-only host ([auth.md](auth.md#why-these-choices)). A Mac can host, behind a path secret and under a weaker local boundary, because Jimmy wants to host on it.
+- **Closing a tab only detaches; killing asks.** Jimmy overrode "closing a tab never kills tmux" for the long-press menu ("yeah I think so... just they have to confirm it"), which is why the first invariant says muxen never kills tmux on its own or without a confirmation that names what ends.
+- **Files have no scope** (a device token already runs any command in tmux), and edit, create and delete exist because Jimmy asked for them after using Files on the phone; moving a file stays in the terminal.
+- **A scratch shell uses a private tmux server**, not a raw pty: a raw pty has no snapshot to repaint after a reconnect without a server-side emulator, and its tab couldn't use the protocol.
+- **No agent dashboards.** Jimmy's agent harness already decides when to notify; muxen owns the last step, getting him to the right tab. Anything can notify the app about a tmux pane; muxen runs no notification service and doesn't decide on its own when something deserves one.
+- **The name** `muxen` (the plural of mux, as ox is to oxen) because the app reaches the tmux on several servers; "tether" was hard to type for a command used all day, and a made-up word is findable in the App Store and on crates.io.
 
 ## Architecture
 
@@ -340,6 +353,18 @@ again. A connect under 5 s old is kept; an older one is replaced, since a tap sh
 is under way, which then ends as any other; while the socket is open, stopped or has nothing joined
 it changes nothing.
 
+> [!FLAG] **Needs human review**: the reachability rules above were designed by agents and
+> are built as written, but Jimmy has not confirmed several of them. He was asked and
+> answered "just handoff to tech-lead", so the following are agent choices, not his
+> rulings: 10 s (not 5 s) before a server reads unreachable; a card keeping its last word
+> until an attempt fails, then showing checking; a server with no tabs not being
+> refreshed while a tab of another server is on screen (the alternative is polling); one
+> "Can't reach" message for a machine that's off and for muxen that's down; a tab showing
+> only its own server's banner; recreating the web view from the third connect timeout
+> only if `/auth/info` answers; the 15 s limit once a server is unreachable; and last
+> reached riding on the workspace save. He did say "sure" to the 3 s unanswered-ask rule.
+> The code and these rules agree; the question is whether he wants them. Flagged 2026-11-10.
+
 ### Stack
 
 Versions verified 2026-10-21 ([libraries.md](research/libraries.md),
@@ -513,7 +538,7 @@ and reconnects do not toggle it.
 
 The keyboard is sticky: only the keyboard control lowers it. Switching tabs, the + and
 long-press menus and reconnects leave it up; the tab overview and Home, which have no input,
-lower it (Jimmy, 2026-10-30). Desktop click-to-focus is unchanged. The page's mechanics are in
+lower it (Jimmy). Desktop click-to-focus is unchanged. The page's mechanics are in
 [ios-shell.md](ios-shell.md#keyboard), touch rules in
 [terminal interaction](client/terminal-interaction-design.md).
 
@@ -571,10 +596,10 @@ after Tab, ↑ or readline edits.
 
 Shown directly above the keyboard (above Safari's form bar) and below the compose box
 while the keyboard is up, the same in the browser, PWA and app. The text-only row scrolls
-horizontally, in this order: esc, tab, ⇧tab, ctrl, alt, ←, ↑, ↓, →, `|`, `~`, `/`, `-`,
-^C, ^R, ^S, ^Q, ^Z and ⏎. A keyboard's left edge first, then the keys a
-command needs, then the control chords; ^Q follows ^S because ^S stops a shell's output
-until it. While the line has focus, unmodified ← and → move its caret, esc returns focus to
+horizontally, in this order: esc, tab, ←, ↑, ↓, →, ctrl, alt, `|`, `~`, `/`, `-`, ⇧tab, ⏎,
+^R, ^Z and ^C. A keyboard's left edge first, then the keys a command needs, then the
+control chords, with ^C last; ^S and ^Q are not offered, because ^S stops a shell's
+output. While the line has focus, unmodified ← and → move its caret, esc returns focus to
 tmux, and ↑, ↓, ^R, ^C, tab and other terminal controls go to tmux. Visually distinguish destinations.
 In terminal mode the controls go to tmux; character keys go where typing goes. ctrl and
 alt arm the next key. Arrows repeat while held. Command recall is the shell's own (↑,
@@ -603,7 +628,7 @@ muxen sends input with `send-keys`; only Shift+Enter is hand-encoded. Checked on
 | Esc Esc | two `send-keys Escape`, ~50 ms apart | two `ESC` |
 
 `send-keys S-Enter` types the literal text `S-Enter` on 3.4. Whether apps accept the
-CSI-u bytes unrequested is checked in spike 3; Ctrl+J stays the default newline. Arrow
+CSI-u bytes unrequested is still to check on a device; Ctrl+J stays the default newline. Arrow
 and function keys go by tmux key name, so tmux encodes them for the pane's cursor-key
 mode.
 
@@ -617,8 +642,6 @@ agreed to add them for the laptop:
 - `set -g set-clipboard on`: optional; muxen sees OSC 52 either way.
 
 ## Touch
-
-Core MVP. Spikes 5–8 prototype these before feature work.
 
 ### Scroll
 
@@ -696,9 +719,9 @@ width.
   (`set-hook -g`; it counts the ringing session's bells in a muxen user option with
   `set-option -F`); it removes only that entry when it stops, and never edits
   `.tmux.conf` or changes `monitor-bell` or `bell-action`; behavior verified on tmux 3.4,
-  3.7b and 3.8 (decisions.md, "Bell attention"). The daemon does not scan pane output for
+  3.7b and 3.8 ([daemon-core.md §4.8](daemon-core.md#48-bell-attention)). The daemon does not scan pane output for
   BEL: the tab on screen counts as seen on its device, so a bell in it needs no dot
-  (Jimmy, 2026-10-27, "Hook only"). "Seen" is muxen's own per-device state; tmux's shared
+  (Jimmy: "Hook only"). "Seen" is muxen's own per-device state; tmux's shared
   bell flags are never cleared for the phone. While at least one device is connected, the
   daemon reads each session's count with the session listing it already has, every 5
   seconds, and tells the devices only when a count changed: no network bytes while nothing
@@ -714,10 +737,9 @@ width.
   bells until it next reinstalls, at its next connected device's listing. Agents must ring
   BEL: Claude Code does so
   only with `"preferredNotifChannel": "terminal_bell"` in its settings, and Codex inside tmux
-  sends OSC 9 unless `[tui] notification_method = "bel"` is set; [running.md](../running.md) gains a section saying so when this ships.
-  Jimmy approved the hook (2026-10-27); it goes onto his live tmux server only after his
-  planned tmux restart. A general new-output activity dot remains v2.
-- **Typing latency on cellular:** spike 3 measures echo latency; at 200 ms or more,
+  sends OSC 9 unless `[tui] notification_method = "bel"` is set; [running.md](../running.md) says so.
+  Jimmy approved the hook; it reaches his live tmux server only after a tmux restart. A general new-output activity dot remains v2.
+- **Typing latency on cellular:** echo latency is still to measure; at 200 ms or more,
   predictive local echo moves to v2.
 
 ## File manager
@@ -890,47 +912,24 @@ src/runtime.rs private runtime directory, single-instance lock, serve/local Unix
 src/fs/        the only place paths are resolved and opened
 src/complete/  /complete: history, PATH index, carapace runner (bounded, cached; complete.md)
 src/setup/     muxen setup and teardown: checks, foreground run, service install and publication (setup.md)
-web/           one Preact app embedded by the daemon and bundled into the iOS app:
-  main.tsx, index.html pick the Platform, boot it and render App
-  platform/
-    types.ts      Platform interface and every type it names; no implementation
-    browser/      index.ts assembles and boots the Platform; transport.ts, viewport.ts,
-                  lifecycle.ts, storage.ts, uploads.ts, clipboard.ts, links.ts,
-                  restart.ts, pwa.ts (updates and install)
-    native/       the bridge (`BRIDGE_VERSION`) and adapter for the Swift shell
-    test/         in-memory Platform for vitest and the harness
-  proto/          generated wire types, binary frames, HostLink and session identity
-  net/            host.ts, http.ts, hosts.ts (registry), admission.ts (pure)
-  tabs/           connection.ts, driver.ts, input.ts, keymap.ts, status.ts
-  term/           model.ts (TerminalModel: frames), decode.ts, pipeline.ts, size.ts, prompt.ts,
-                  xterm.ts (the xterm view over the model), xterm-input.ts
-  touch/          phone-owned input, gesture recognizer and selection
-  workspace/      pure tab state, active tab, restore, pruning and labels
-  sessions/       per-host listing cache, search, expansion and creation requests
-  drafts/         per-tab line-field drafts, Return send state and eviction
-  files/          /fs client and FileBrowser; render/ holds markdown and code viewers
-  app/            App context, controller (owns the sessions cache), router.ts, focus.ts,
-                  listing.ts, persist.ts
-  screens/
-    shell/        destination frame, top navigation and host banner
-    home/         the workspace list and settings entry
-    sessions/     the tab overview, Open session and the tab row's menus
-    terminal/     tab row, terminal surface, status band and the phone dock; terminals.ts
-                  holds the terminal model and view and every tab's driver outside Preact
-    files/        folder list, preview, upload and path insertion
-    enrol/        enrolment and admission-problem screens
-    settings/     Remove this device, Clear local data, Add to Home Screen
-  ui/
-    tokens/       primitives.css, semantic.css, components.css, fonts.css
-    primitives/   Button, IconButton, Tooltip, TextField, SearchField, Dialog (sheet,
-                  popover and menu variants), Disclosure, Row, OptionRow, TabStrip, Banner, Toast,
-                  StatusBand, EmptyState, Spinner, Icon, LineInput
-    store.ts, theme.ts, hostProblem.ts
-  sw/             service worker and the Vite plugin that builds it, after the main bundle
-  public/         manifest template and web app icons (render-icons regenerates the PNGs)
-  harness/        test-mode entry, imports per-lane fixtures; never in production builds
-  e2e/            opt-in end-to-end scripts (`*.real.ts`): a real daemon on a private tmux
-                  through shared/stack.ts
+web/           one Preact app embedded by the daemon and bundled into the iOS app
+  platform/    the Platform interface (types.ts) and its browser, native and test implementations
+  proto/       generated wire types, binary frames, HostLink and session identity
+  net/         per-host socket and HTTP (host.ts, http.ts), the host registry, admission
+  tabs/        per-tab connection, driver, input, keymap and status
+  term/        TerminalModel (frames), decode, pipeline, size, prompt, the xterm view
+  touch/       phone-owned input, gesture recognizer, key routing and selection
+  workspace/   pure tab state, active tab, restore, pruning and labels
+  sessions/    per-host listing cache, search and creation requests
+  drafts/      per-tab line-field drafts, Return send state and eviction
+  files/       /fs client, FileBrowser, folder cache, outline, search; render/ holds the viewers
+  app/         App context, controller, router, address, focus, persist
+  screens/     enrol, files, home, overview, sessions, settings, shell, terminal
+  ui/          design tokens and the primitives (Button, Dialog, Menu, Row, ...)
+  sw/          service worker and the Vite plugin that builds it, after the main bundle
+  public/      manifest template and web app icons
+  harness/     test-mode entry with a fixture per state; never in production builds
+  e2e/         opt-in end-to-end scripts (`*.real.ts`) against a real daemon on a private tmux
 ios/           Swift app (XcodeGen) and the MuxenKit package (ios-shell.md)
 ```
 
@@ -987,8 +986,9 @@ slice they need and storage coalesces writes within a microtask.
      may use `WebSocket`; `files/render/` may use the DOM.
 - **Tests:** recorded tmux fixtures (3.4 and 3.7b today; 3.8 to record), pure hub state-machine tests, and
   a manual real-phone checklist. The web client has unit tests (vitest) and no UI tests:
-  structure makes a state impossible rather than a test checking for it
-  ([decision](decisions.md#harness-ui-tests-removed-real-daemon-e2e-kept-as-scripts)).
+  structure makes a state impossible rather than a test checking for it (Jimmy: "we
+  shouldn't have any ui tesets, u should just make the code strong enough that it
+  shouldn't happen").
   Every state has a fixture in `web/harness/` for looking at it, and `web/scripts/checks.mjs`
   enforces source rules and shell budgets. Vite's production build plugin rejects
   test/harness modules in the module graph; a manifest-only check cannot detect those
@@ -997,126 +997,31 @@ slice they need and storage coalesces writes within a microtask.
   and 3.8 and exercise full behaviour end to end; they are where performance recording will
   live. They need the tmux builds under `~/.cache/muxen-tmux` and are never part of preflight.
 
-## Phases
+## Not built yet
 
-The spikes come first. The native app's keyboard checks are in
-[ios-shell.md's device checklist](ios-shell.md#device-checklist).
-
-### MVP
-
-- **Daemon:** the control-mode bridge with snapshots and pane pausing; never starts
-  tmux; the resource budget met and measured; foreground mode and systemd unit with
-  limits and `sd-notify`; the protocol version handshake.
-- **iOS app:** WKWebView shell with the bundled web UI (the Debug dev-server switch is
-  deferred: `ios/.context/FUTURE`);
-  the native terminal input and keyboard geometry under the web dock; focus
-  controller; haptics; lifecycle signals; Xcode install.
-- **Auth:** `tailscale serve` only, with the Funnel check; the login allowlist from
-  LocalAPI; a device token per phone behind Face ID; one middleware on every route;
-  strict CSP.
-- **Tabs and layout:** 1 terminal tab = 1 session, following its current window; workspaces,
-  the tab overview and tab row, the long-press tmux commands; collapsed and keyboard states;
-  safe areas; Files tabs and Open session; pinch font size
-  per tab; landscape.
-- **Reconnect:** indefinite "reconnecting" with backoff and instant retry; the connect
-  timeout with web view recreation; a snapshot on every (re)watch; prompt release of
-  server state; WebGL context loss handled by recreating the renderer, with DOM
-  fallback.
-- **Keyboard:** the phone dock in every touch client: one keyboard toggle, the line
-  field (Return sends the line and Enter), the key row with one-shot ctrl and alt;
-  native focus ownership. Modifier locking is deferred. Verify dictation/IME and
-  hardware keyboards.
-- **Touch:** native scroll over a row list with lazy history, wheel translation, jump-to-bottom,
-  trackpad and tap-to-position, DOM selection with copy, paste through tmux.
-- **Display:** xterm.js 6 WebGL, Nerd Font, `unicode11`, tappable URLs.
-- **Suggestion strip (deferred client UI):** backend completion capabilities do not
-  require suggestion controls in the minimal client.
-- **Files:** browse any folder in tabs from an address-bar path field; view code, markdown with lazy strict Mermaid and
-  images; stream video in the native player; photo pick or paste → uploads folder → path insert.
-- **After the core MVP:** the scratch shell.
-
-### v2
-
-- File editing with a conflict check. Resumable multi-upload. Diff
-  viewer. PDFs. repo-viewer parity.
-- OSC 52 ↔ iOS clipboard and tmux-buffer sync. Snippets.
-- Multi-host.
-- An explicit App ID: TestFlight, App Groups, the share extension.
-- New-output activity dots, scrollback search, tappable file paths, per-tab pan mode.
-  Bell-dot coverage beyond the global-hook limits above.
-- Predictive local echo, if spike 3 shows 200 ms+ echo on travel links.
-
-### Later
-
-- WebTransport or QUIC.
-- "Open via dev box" for `localhost` links.
-- `muxen notify`, a hook Jimmy's harness can call to badge a tab.
-- A server-side terminal model (`vt100`), if a feature needs screen contents on the
-  server.
-- A ghostty-web renderer, if Unicode width problems persist.
-- A raw-pty "raw view" (`tmux attach` in a pty), only if control mode fails on some
-  workload.
-
-## Spikes
-
-### Order
-
-Prototype in this order before feature work. Spike 2 runs on the server, in parallel
-with the phone spikes.
-
-1. **Keyboard ownership** has no spike: input is the web dock, and its open native
-   questions are in [ios-shell.md's device checklist](ios-shell.md#device-checklist),
-   run during P4.
-2. **Daemon core against real tmux** (server only), as muxen's own integration tests
-   ([daemon-core.md §8](daemon-core.md#8-testing)): the snapshot boundary on 3.4 here
-   and 3.7b on the Mac, recording the fixtures; `send-keys` bypassing `escape-time`
-   and the prefix; and the memory ceiling measured, with completion active (carapace itself runs in its
-   own scope, so the unit's `memory.peak` includes only its launch).
-3. **Reconnect**, in the app against a real daemon: WKWebView WebSocket recovery after
-   10+ minutes locked (including stuck CONNECTING); the snapshot repaint on tab switch
-   (does it flash?); WebGL context loss after backgrounding; echo latency on cellular;
-   whether agents accept CSI-u Shift+Enter.
-4. **Auth end to end:** enrolment from the app against the real `*.ts.net` host, the
-   token surviving a daemon restart, `muxen device remove` closing a live socket.
-5. **Selection overlay:** native handles over xterm.js, alignment at different font
-   sizes.
-6. **Momentum scroll** with lazy history (the DOM view above the live terminal), plus
-   wheel translation inside Claude Code.
-7. **Tap-to-position and trackpad mode** with OSC 133 marks parsed by xterm.js.
-8. **Clipboard and files:** WebKit's Copy menu on the overlay, the native paste
-   control with text and images, `paste-buffer -p`, OSC 52; cross-origin fetches to the
-   host origin, `sandbox` on proxied responses, and video with an auth header.
-
-### Running the phone spikes
-
-Spikes are throwaway code, kept out of `src/`, `web/` and `ios/Muxen/`, and deleted
-once they've answered.
-
-- **Spikes 3–8** run their web pages inside the app, through the Debug build's
-  dev-server switch ([ios-shell.md](ios-shell.md#where-the-web-ui-comes-from)). That
-  switch is deferred (`ios/.context/FUTURE`), so these steps need it built first:
-  1. Run the page from Vite behind a private Unix socket using `MUXEN_SOCKET`.
-     Its proxy presents a native token to `local.sock`. A spike that needs a live terminal attaches to a tmux server on
-     its own socket (`tmux -L muxen-spike`), which Jimmy starts from a shell; spike
-     code never starts it.
-  2. Publish it on the tailnet with root: `sudo tailscale serve --bg --https=8443
-     unix:<the Vite socket>`. Never `tailscale funnel`; `tailscale serve status` should
-     show the handler as tailnet-only. For Vite, allow the `ts.net` host
-     (`server.allowedHosts`) and point HMR at the public port.
-  3. In the app's Debug settings, set the web UI source to
-     `https://<machine>.<tailnet>.ts.net:8443`.
-  4. Safari's Web Inspector on the Mac attaches to the app's web view. The spike page
-     also shows an on-screen log.
-  5. Tear down: `sudo tailscale serve --https=8443 off`, then stop the local process.
-
-Spike 2 needs none of this: it is a test harness against tmux on the box (and the
-Mac), on its own `-L` socket.
+- **v2:** resumable multi-upload, a diff viewer, PDFs, repo-viewer parity (Mermaid is
+  built; the folder image gallery and `.gitignore` handling are not; repo-viewer is
+  archived only after parity), OSC 52 and iOS clipboard sync, snippets, multi-host in the
+  browser, an explicit App ID (TestFlight, App Groups, the share extension), new-output
+  activity dots, scrollback search, tappable file paths, per-tab pan mode, and
+  predictive local echo if echo on travel links measures 200 ms or more.
+- **After the core:** the scratch shell (a private tmux server in its own transient scope).
+- **Later:** WebTransport or QUIC, "open via dev box" for `localhost` links,
+  `muxen notify` (a command Jimmy's harness can call to badge a tab), a server-side
+  terminal model if a feature needs screen contents on the server, a ghostty-web
+  renderer if Unicode width problems persist, and a raw-pty view only if control mode
+  fails on some workload.
+- **The suggestion strip** backend exists ([complete.md](complete.md)); the client UI is
+  deferred.
 
 ## Still open
 
-- **Spike outcomes:** the boundary on 3.7b and the measured memory ceiling (spike 2), and the repaint on
-  tab switch (spike 3).
-- **Touch, copy and phone dock gates:** see [the client research](client/terminal-interaction-design.md).
+- **Device and probe gates:** the snapshot boundary on tmux 3.8, the measured memory
+  ceiling on the dev box under load, the repaint on tab switch (does it flash?), WKWebView
+  WebSocket recovery after 10+ minutes locked, WebGL context loss after backgrounding, echo
+  latency on cellular, whether agents accept CSI-u Shift+Enter, and the
+  [device checklist](ios-shell.md#device-checklist). Touch, copy and phone dock gates are in
+  [the client research](client/terminal-interaction-design.md).
 - **Kill, rename and new-window commands:** the daemon side is open
   ([daemon-core.md](daemon-core.md#the-tabs-tmux-commands-open)); the long-press menu waits on it.
 - Open risks per subsystem: [daemon-core.md](daemon-core.md#9-open-risks),

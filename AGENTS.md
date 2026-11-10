@@ -3,7 +3,7 @@
 Phone-first client for tmux on a dev server, over Tailscale. A Rust daemon bridges
 tmux control mode to a native iOS app that hosts a web UI. The design is in
 `docs/design/`: `plan.md` is the product and UX spec and the index of the subsystem
-specs; `decisions.md` logs every decision. Read them before adding a subsystem.
+specs, each with the reasons for its larger choices. Read them before adding a subsystem.
 
 ## How work lands (initial build)
 
@@ -12,8 +12,8 @@ checkout. No PRs, no feature branches, no worktrees. Dropping PRs drops only the
 review ceremony; the rigor stays:
 
 - **Design before code.** Settle each subsystem's spec in `docs/design/` before
-  building it, starting from `plan.md`. Specs state the current rule only; log each
-  decision, with the alternatives rejected, in `docs/design/decisions.md`.
+  building it, starting from `plan.md`. Specs state the current rule and why, as
+  current truth: no decision register, no history of the doc; git history is the archive.
 - **Coding standards.** Follow "Code structure and standards" in `plan.md`
   (sans-IO cores for the tmux protocol and the hub, thin I/O tasks, bounded queues,
   one native focus controller). Get a review of each subsystem's design and code
@@ -68,8 +68,8 @@ different product:
 - **Content from disk or tmux never runs as the app.** Rendered Markdown and Mermaid
   are sanitized; proxied files are served sandboxed.
 
-Product rules are Jimmy's standing decisions and change only through
-`docs/design/decisions.md`. Among them: muxen is reachable only from Jimmy's tailnet;
+Product rules are Jimmy's standing decisions (`docs/design/plan.md`, "Product rules")
+and change only when he says so. Among them: muxen is reachable only from Jimmy's tailnet;
 it serves several servers; hosts are POSIX (Linux, macOS), since tmux doesn't run on
 Windows.
 

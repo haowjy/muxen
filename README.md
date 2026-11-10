@@ -5,8 +5,7 @@ Tailscale tailnet. A small Rust daemon on the server talks to tmux through contr
 mode; the phone runs an installable web app with session tabs, a terminal keyboard
 built for coding agents, cheap reconnects on bad connections, and a file manager.
 
-Status: scaffold only. The design is in [docs/design/plan.md](docs/design/plan.md),
-with a review in [docs/design/plan-review.md](docs/design/plan-review.md).
+The design is in [docs/design/plan.md](docs/design/plan.md).
 
 ## Install
 
