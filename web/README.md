@@ -1,11 +1,10 @@
 # muxen web client
 
 One Preact app for the desktop browser, the phone browser or installed PWA, and the native
-iPhone app's web view. The design is
-client-architecture.md (haowjy/docs `muxen/work/tether-mvp/design/`); behaviour
-comes from the [interaction contract](../docs/design/client/browser-behaviors.md) and the
-[mockup](../docs/design/client/mockups/index.html). [AGENTS.md](AGENTS.md) has what a lane
-needs to know before editing.
+iPhone app's web view. Behaviour comes from the
+[interaction contract](../docs/design/client/browser-behaviors.md);
+[docs/design/client/README.md](../docs/design/client/README.md) says which design doc wins.
+[AGENTS.md](AGENTS.md) has what to know before editing.
 
 ```bash
 pnpm --dir web install --frozen-lockfile
