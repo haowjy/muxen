@@ -1,6 +1,6 @@
 # Touch, clipboard, and the line field: evidence-led direction
 
-Status: current interaction contract; device-specific touch and clipboard gates remain. The 2026-10-26 app keyboard rule is in [one-keyboard.md](../research/one-keyboard.md). This supplements browser-behaviors.md and supersedes any inference that a mockup proves real touch/clipboard behavior. Evidence: terminal-interaction-sources.md, terminal-interaction-probe.md, and the pinned-source study terminal-selection-source-research.md (completed pinned xterm 6.0.0 source study and isolated headless probe).
+Current interaction contract for touch, clipboard and the line field; device-specific touch and clipboard gates remain. This supplements [browser-behaviors.md](browser-behaviors.md); a mockup or desktop probe does not prove real touch or clipboard behavior. Evidence: [terminal-interaction-sources.md](terminal-interaction-sources.md), [terminal-interaction-probe.md](terminal-interaction-probe.md), and the pinned-source study [terminal-selection-source-research.md](terminal-selection-source-research.md).
 
 ## Decisions supported now
 
@@ -79,7 +79,7 @@ The toggle, the box tap, the terminal tap and esc move DOM focus between the two
 - Reconstruct wrap by row length: confuses full-width hard breaks with soft wraps; fails with Unicode/padding.
 - Call clipboard.readText on every tap: conflicts with platform activation/permission model and user intent.
 - Route line-field input events straight to the terminal while composing: breaks IME replacement, and the line field exists to edit before sending.
-- A multiline draft editor with an Insert button that sends without Enter: replaced by the line field (Jimmy, 2026-10-24).
+- A multiline draft editor with an Insert button that sends without Enter: replaced by the line field (Jimmy: "edit should be a single line editor").
 - Resize tmux on every keyboard frame: violates existing no-resize-on-keyboard contract, causes redraws and copy instability.
 
 ## Probe gates before implementation choice is final
@@ -94,3 +94,16 @@ The toggle, the box tap, the terminal tap and esc move DOM focus between the two
 | Clipboard permissions | Real Copy/Paste menu, keyboard shortcuts and paste-control gesture; denied permission; image clipboard; copy after selection data fetch. |
 
 Linux probes and desktop source reading cannot close the iPhone gates. Research is useful now because it narrows the architecture and identifies the wrap-data prerequisite before frontend code is built.
+
+## Why these choices
+
+- **The terminal's rows are muxen's, not xterm's.** The row list draws the model's frames with its own run-based rows, so rows stay put under scrolling and a selection. A native scroller over xterm's DOM renderer ends any selection, because that renderer redraws rows in place. JS momentum over xterm's buffer needed a second scroll position and a patch per seam. tmux copy-mode was ruled out because every scroll would change the pane's state, and tmux's own state is what muxen must not disturb. Desktop moves to the same list, so there is one implementation everywhere; until then desktop is drawn by xterm and finger scrolling is gone there (the wheel and trackpad work).
+- **A selection survives scrolling and autoscrolls at the list's edges**, which needs a scroller the selection lives in. Typing while scrolled up jumps to the latest row so the typed text shows. After output overflows, the list keeps its rows under an "output skipped" row and fetches nothing more until the next snapshot. A tap on a URL on touch does nothing: copy and paste are the way ([issue 4](https://github.com/haowjy/muxen/issues/4) holds opening links as an experiment).
+- **The selection follows text that moved.** Measured on real Claude Code 2.1.316 and OpenCode 2.2.5 traffic, fullscreen apps repaint completed paragraphs one to three rows up or down in place. Closing the selection on any rewrite closed all 12 sampled selections 1.7 to 2.7 s after they were made; following the moved block kept 17 of 18 for 10 s, against 6 of 18. Following characters rather than rows was ruled out because it needs partial-row matching. muxen does not honor synchronized output (`CSI ? 2026`), so a repaint that reaches the model as two frames (erase, then text) closes the selection.
+- **The long press selects at once, and there is no arrow pad.** The pad drew nothing, so a press meant to select looked dead once the finger moved past 16 px. ← and → are keys that repeat while held. A tap on the cursor's row or the row above or below raises the keyboard, so typing where the cursor is needs no trip to the toggle.
+- **In the app the hold is muxen's mark in both keyboard states.** iOS's own long-press selection with the keyboard down felt slow, and two selections would have two looks and two lifetimes. The mark draws boxes in the scroller's content coordinates; the rows are `user-select: none` where the platform has an edit menu, because WebKit paints no CSS Custom Highlight on such text and would take the touch. A browser has no edit menu and keeps WebKit's selection. One `Selection` interface is picked once at construction, so every rule about the selection is written once.
+- **The edit menu is native's**, presented over the page's mark. A menu the web draws moves the selection or the keyboard when touched and doesn't match the system's. Native owns whether it is up, because iOS can dismiss it itself and a page that tracked it went stale.
+- **The touch shell counts the fingers the platform lists, not the ends it was sent.** On the iPhone a touch that began on a row xterm then replaced was dispatched to a detached node, so no end reached the surface, and the leaked finger made every later swipe a two-finger one that the recognizer ignores. A timeout on a counted finger was ruled out: a held finger is long and legitimate.
+- **No Paste button in the dock.** The resting row has room for the tab button, the field and the toggle only, and the edit menu is where iOS users look for Paste on content that isn't a text field.
+- **The keyboard pan keeps the terminal's last row visible** unless that would hide the cursor. Full-screen harnesses park the cursor above their input and status rows, so cursor-only anchoring hides those rows; bottom-only anchoring can push a cursor near the top off screen. Resizing tmux to the visible rows with the keyboard up was ruled out: each toggle would redraw every TUI over a spotty link and resize the laptop's view.
+- **The app has no native text input.** The page's own boxes hold the keyboard, as in Safari. The earlier hidden native field mirrored into the web dock made a late `lineSet` reply overwrite the box mid-typing and needed a second tap to open the keyboard.

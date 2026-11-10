@@ -4,8 +4,8 @@ The spec for `src/tmux/`, `src/hub/` and `src/proto/`. Settled ground: tmux is t
 source of truth and muxen never starts Jimmy's tmux server; xterm.js on the phone is
 the only terminal emulator; 1 tab = 1 tmux session, showing its current window's active
 pane and following it as `tmux attach` does; the
-[resource budget](plan.md#resource-budget) comes first. Reasons and rejected
-alternatives are in [decisions.md](decisions.md).
+[resource budget](plan.md#resource-budget) comes first. The reasons for the larger
+choices are in [Why these choices](#10-why-these-choices).
 
 **The design in one paragraph.** A *pump* task per `tmux -C` process moves bytes
 between its pipes and one *hub* task. The hub keeps all state in one pure value,
@@ -1397,8 +1397,9 @@ channel, in the outbox, and in the frame being written all count until then.
 - **Reserved credit is a counter, checked in debug builds.** What a connection has
   reserved is one number (`Conn.reserved`), moved by `reserve` and `unreserve` on every
   path above, because the output path reads it for every chunk and deriving it there
-  means scanning the clients' pending work
-  ([decisions.md](decisions.md#reserved-credit-stays-a-counter-with-a-debug-check)).
+  means scanning the clients' pending work (measured: deriving it costs +77 ns per
+  chunk with 3 connections of 2 watches, +325 ns with 20 inputs in flight, against a
+  ~298 ns counter path).
   Its invariant: it equals one capture reservation per watch a snapshot in flight
   reserved for and per history capture in flight, plus the listing reservation while a
   listing runs. Debug builds derive that sum and `debug_assert` it equals the counter
@@ -1655,11 +1656,6 @@ connected. A faster poll costs linearly (2 s is 0.4%).
 | session-level hook, `monitor-bell off`, `bell-action` not `any`, foreign entry at 9100 | `covered: false` for that session, never a silence that reads as no bells |
 | poll failed or timed out | one `bell` with `available: false` for the server; sessions keep their marks and `covered` |
 
-**Rejected here** (decisions.md, "Bell attention in the daemon and protocol"): scanning the
-stream for BEL; polling tmux's `window_bell_flag` or `session_alerts`; `set-hook -ga`;
-polling over a control client; a hook-run callback into the daemon; one mark per window;
-a timestamp mark; a separate marker one-shot.
-
 ## 5. `src/proto/`: the wire protocol
 
 ### 5.1 Transport
@@ -1701,8 +1697,7 @@ credential and retries with the usual backoff
 ([auth.md](auth.md#carrying-the-token)).
 
 - **The client speaks one version; the daemon holds a range,**
-  `MIN_PROTOCOL..=PROTOCOL_VERSION` (both 2 now: version 2 made a watch name a session,
-  [decisions.md](decisions.md#tabs-follow-a-session), and a version-1 peer would send
+  `MIN_PROTOCOL..=PROTOCOL_VERSION` (both 2 now: version 2 made a watch name a session, and a version-1 peer would send
   window watches the daemon can't read). `hello { protocol, client: { kind:
   "ios" | "web", build } }`. In range: `welcome { protocol, daemon: { version }, host:
   { id, name } }`; `daemon.completion` says whether this tier offers suggestions. Out
@@ -2361,7 +2356,7 @@ with the replay tests and the recorder in `tests/support/`):
    Track the combined baseline/backport decision in GitHub issue #2; do not deploy on
    the affected baseline or change the installed host binary without Jimmy's decision.
 5. **Every tab switch repaints from a snapshot.** Whether reset-and-write flashes in
-   xterm.js 6 on iOS is measured in spike 3.
+   xterm.js 6 on iOS is still to measure on a device.
 6. **User hooks:** a waiting hook makes snapshots torn (retried, then `Torn`);
    `destroy-unattached on` destroys a session when muxen's lingering client closes, as
    the option says.
@@ -2403,6 +2398,85 @@ replies and refusals are not specified yet, and they must settle these before th
 - **Rename.** `rename-session` on the session's `$id`; a refused name returns tmux's reason, and the
   tab follows the rename through `sessionsChanged`.
 - **Hub serialization**, like the other one-shots: an overlapping request gets `busy`.
+
+## 10. Why these choices
+
+Reasons the sections above don't carry, each with the fact that ruled out the alternative.
+
+**Shape**
+
+- **Rust**: idle memory of a few MB with no garbage collector, predictable under bursts, bounded channels for explicit backpressure, one static binary ([rust-vs-go.md](research/rust-vs-go.md)). Go is faster to write but idles higher and its GC behaviour under load is a risk on an overloaded box.
+- **WebSocket**, not WebTransport (uneven WebKit support, a QUIC server, and no help while the app is suspended) or mosh-style UDP (raw UDP isn't available to the web UI, and libmosh is GPL). Snapshots borrow mosh's "sync state, not bytes".
+- **No server-side terminal emulator**: a second emulator can disagree with tmux and xterm.js, costs memory per pane, and still needs the snapshot boundary. It returns only if a feature needs screen contents on the server.
+- **Sans-IO cores, one hub task that owns every `Session`**: the subtlest rules (wanted and paused panes, gaps, torn snapshots) sat in the I/O file, testable only against real tmux. One pure value holds all state, so capacity, ownership and wanted panes are read in one place and a hub test feeds recorded tmux bytes end to end. The runtime is single-threaded, so parsing on the hub task costs nothing extra. A `Session` inside the control-client task would force the hub to mirror its in-flight count to know capacity.
+- **The daemon is single-host on the wire**: one socket per host already routes by host, and every `host` field would be a `badRequest` path only a bug could hit. `welcome.host.id` and `/auth/info.hostId` bind tokens to hosts.
+- **The client speaks one protocol version and the daemon a range**: client-side ranges would make the web UI carry old message shapes, and a reload on mismatch fetches nothing new because the UI is bundled. Unknown message types are reported by `decode` as `Unknown { kind }` and ignored, because serde's `#[serde(other)]` matches only a message without `data`; a known type with bad data is a protocol violation (4003).
+- **ts-rs generates the TypeScript, Swift is hand-written**: Swift needs three auth bodies, and the larger bridge is hand-written on both sides against shared fixtures. typeshare, specta and JSON Schema plus quicktype each add a tool for one producer. The Rust test checks the committed output instead of writing files on every run.
+- **The daemon composes the restore bytes**, so the web and Swift clients carry no restore logic and only the daemon can test it against tmux with a `vt100` oracle; `Session` runs `compose` so the hub never needs tmux's state format.
+
+**Snapshots**
+
+- **A snapshot is the only catch-up.** Resume replay was a second path beside snapshots and the only reason for generations, sequence numbers, rings and stream linger. The cost is a reset and repaint on each tab switch and the loss of xterm.js's local scrollback on each snapshot; the network round trip is the same.
+- **One atomic command list**: pause, capture, marker, continue was ruled out because pausing discards output (a probe measured a gap). A released snapshot answers `Released` in stream order and is never retried, since each snapshot begins with `continue` and a retry would resume an unwanted pane.
+- **Torn means `%output` for the snapshot's own pane between its replies, or a changed `<STATE>`**: a hook that doesn't wait puts a flag-0 block between the replies but lets no output in, so any flag-0 block would fail every snapshot for a user with such a hook; re-reading only the size accepts a hook's `send-keys -R`.
+- **Restore bytes**: `?1003h` comes from `mouse_all_flag`, because `mouse_any_flag` means some mouse mode is on and would switch on any-motion tracking for every mouse app. Each tab stop is a CUP and `ESC H` (a bare run of `ESC H` sets one stop). Tmux 3.4 reports `cursor_x == cols` at a pending wrap and xterm.js clamps it, so restore clamps and loses the wrap. Composer tests check the bytes against `vt100` and, by hand, `@xterm/headless` 6.0.0, because `vt100` has no autowrap, insert mode or tab stops.
+- **Snapshots apply after earlier writes drain** (`reset(); resize(); write(restore)` runs after every earlier write's callback): bytes still queued inside xterm.js parse after `reset()` and can switch on insert mode that restore never switches off. Replacing the terminal per snapshot churns the renderer and WebGL context.
+- **An oversized history capture is retried with half the rows**: the group cap is 1 MiB raw but the reservation holds base64, a third larger, so a capture can succeed and be cut. Over 1 MiB (200 heavily styled 500-column rows) the group fails, and without a retry every request for that range fails the same way. The hub can't know row sizes before capturing, and the client can't learn what fits from an error.
+- **History labels** come from bracketing the capture with `#{history_size} #{pane_height}` and replaying tmux's clamp, since tmux clamps out-of-range requests and a range above history would otherwise repeat the top row forever. Paired `-N -T` and `-J` captures avoid `-F`, which the minimum tmux lacks.
+- **A zoomed pane uses the visible layout**, so it reports its full window size; the window layout is the unzoomed one.
+
+**Control clients and tmux**
+
+- **One control client per session, fixed for life**: switching one client between sessions saves 5.3 MB only during the linger overlap, but invalidates every stream, fires `client-session-changed` hooks and makes the client `latest` in each session it visits. Spawning takes about 2 ms. `%session-changed` naming another session closes the client.
+- **Unviewed panes pause on their first output**: client-wide `no-output` silences the viewed pane too, `'%P:off'` crashes tmux 3.4 with output queued, and listing panes on every layout event costs more commands for the same result.
+- **`tmux -N -u` on every invocation.** `-N` makes any command fail instead of starting a server. `-u` is needed because tmux 3.4 replaces non-ASCII characters and line breaks in format output with `_` when the locale isn't UTF-8, and a systemd unit's may not be: a window named `中w` came back as `__w`. Both no-server messages (`no server running on …` for a stale socket, `error connecting to … (No such file or directory)` for a missing one) map to `NoServer`.
+- **One-shots are argv, not command lines**: tmux takes each argument literally, so quoting a control-client line would put quote marks into names. `#` is doubled because it is format-expanded in `-n` and `-c`, and a trailing `;` is sent as `\;` because `-n 'x;'` produced `unknown command: -c`.
+- **Never send `respawn-pane` over control mode**: with a control client attached and the pane flooding, `respawn-pane -k` killed the whole tmux server in 4 of 4 runs. The one-shot form, `kill-pane` and `kill-window` did not crash.
+- **A path with a control character is withheld from the window subscription**: tmux prints subscription values unescaped into one line, so a directory named with a line feed forged `%exit` or `%begin` and ended or looped the control client (run on 3.4 and 3.8). No cwd is safer than a sanitized one. `#{s/[[:cntrl:]]/…/}` prints empty for every path on both versions. A `%begin` with no command pending stays fatal to that control client.
+- **The `L:` subscription checks `client_height` before expanding `client_name`**: on tmux 3.4 a socket is visible to `L:` before IDENTIFY finishes and before `client_name` exists, and the format callback calls `xstrdup(NULL)`. Evidence and the repro are in [tmux-subscription-format-crash.md](research/tmux-subscription-format-crash.md).
+- **A control-mode `%exit` closes the client at once.** Before `Ready` it is a startup crash under the one-respawn rule; a view whose first owner is still starting is `Locating { owner }`, so that owner's startup failure orphans the view and the crash rule applies (before, the view re-ran its own Locate and spawned a client with no crash history, forever). The daemon reads `tmux.program -V` once, warns once per server instance on a version mismatch, and names both versions when repeated startup failures end watches. A mismatched `tmux -C` stayed silent on pop-os while stdin stayed open, so startup still uses the ordinary 10 s reply timeout. Auto-selecting the server's binary was ruled out: a package upgrade can delete it.
+- **No automatic reattach after a detach**: it fights `attach -d`, and reattaching makes muxen `latest`, shrinking the laptop's window right after the user took it.
+- **The reply timeout is a progress deadline**: a control client with groups in flight that completes none for 10 s is killed. The deadline belongs to the client so it covers `Session`'s own groups (startup line, pauses), which the hub never tags. The session check runs on every exit the hub didn't cause, so `serverExited` and `sessionClosed` go out even when no tab was watched.
+- **The window subscription reports its first value** and the session's current-window subscription (`c::#{window_id}`) catches `swap-window`, which changes a session's current window without `%session-window-changed`. Putting `#{window_active}` in each `w<W>` value was ruled out: a window linked twice sends a 0 line from its other place on every value change.
+- **`NewWindow` carries the server instance and tmux checks it**: session ids restart at `$0` on every tmux server, and the hub's cached instance is unknown after a daemon restart and stale after a server restart, so a cached check let `newWindow` create a window in the wrong server's session. The check is in the same command list as `new-window`, so there is no gap.
+
+**Sizing and acting last**
+
+- **A window takes the size of the client that acted last** (Jimmy: "just whoever has the last focus gets the focus and the size of the screen"). Keeping a cap meant the laptop could never take back a window the phone had on screen; `window-size smallest` would make the laptop phone-sized whenever the phone watched, and `largest` the opposite of "whoever I'm using".
+- **"Acts" is input or bringing the tab on screen, not looking.** Coming on screen is the phone's attach, which tmux itself counts as making a client `latest`; making Jimmy type a key to read the screen would put junk in the shell. History scrolling and `resync` claim nothing (scrolling back would shrink the laptop's layout), and a re-watch the client makes by itself sends `claim: false` (on a spotty link each blip would shrink the laptop's window mid-command).
+- **The other client's act is seen through the window subscription** (`L:` lists each non-control client on the window with its activity time): it catches every act that makes a client `latest` at no cost while nobody else types. A `client-active` hook changes Jimmy's tmux config; polling `list-clients` needs a daemon timer; a session-wide subscription can't say which window a client is on and changes whenever anyone types anywhere. Yielding lags by up to a second. A focus-out updates client activity without making that client `latest`, so the flags prevent a false yield.
+- **A take is a same-session `switch-client`.** Under `window-size latest` a vote only caps, so the phone could never be larger than the laptop's terminal (a probe held a 274×53 browser at the laptop's 80×23). `server_client_set_session` sets `latest` on every `switch-client`, the same session included, and on 3.4 does so after its own recalculation, so the vote after the switch recalculates. `resize-window` sets `window-size manual`, which a crash would leave behind; `send-keys -K` runs keys through tmux's key tables (on 3.4 ASCII and Enter didn't reach the pane); a take with every keystroke runs the `client-session-changed` hook each time. The take is never inside the input's own group, because tmux skips a group's remaining commands after an error and a failed take would drop keys.
+- **The "sized for another terminal" band** appears only after the sizes differ for longer than a second or the last ping round trip plus half a second, so a claim in flight doesn't flash it. The pane is drawn at tmux's size, clipped, with xterm's DOM renderer for a larger pane: a 250×70 canvas at 3× is roughly 17 million device pixels, past WebKit's canvas limit. Scaling the font or CSS-scaling were ruled out (unreadable on a phone; blur and wrong cell mapping), and horizontal panning is reserved for the system back gesture.
+- **Input, paste and inserted paths name the window the tab showed** (`-t @W`): on a slow link the laptop can switch windows between a keystroke and its arrival, and targeting the session sends a line typed for one window into another. A watch names a session; its id is client-chosen and never reused, because a stale frame could reach a new watch (a reused id gets `error { badRequest }` and leaves the active watch unchanged).
+- **The daemon follows the window; the client never re-watches**: the view's owner reports `%session-window-changed` for its own session and its own Locate orders its answer with its notifications. Another client's answer could miss an earlier change and bind a stale pane. Using `display-message` failure to detect a missing target doesn't work: tmux 3.4 succeeds with empty fields. Grouped sessions would make muxen create sessions in Jimmy's tmux.
+- **`historyChunk` carries its pane**; a window change made elsewhere swaps the pane under a tab mid-scroll, and without it one window's rows could sit above another's.
+
+**Flow control and limits**
+
+- **Byte credit per connection (2 MiB), debited by the hub**: count-bounded queues carrying variable-size payloads escaped the byte budget (a legal 200-row history capture at 500 columns is 134 KB, so 256 queued in one JSON FIFO were 34 MB). One number in the hub bounds production, transit, outbox residence and the frame being written, and keeps the no-shared-state rule. End-to-end permits would share state across tasks; per-message caps still multiply by the queue count. The connection's own replies (`welcome`, `pong`, paste refusals) are a queue of 16 outside credit, because credit is the hub's copy of bytes it sent and these never pass through the hub; while 16 wait the connection stops reading its socket.
+- **Maintenance is desired state**: a maintenance request refused as `busy` had no one to retry it, so a stream stayed resyncing forever. Capacity is 32 groups in flight per control client with user requests only below 24, and 2 capture slots daemon-wide, so user traffic can't starve maintenance and reply memory is bounded.
+- **`reconcile` is skipped for pump bytes that complete no group, produce only `Output` and starve no watch**: measured, a plain output chunk costs ~230 ns without `reconcile` and 590–910 ns with it. Time reaches `State` with the next input at or past `next_deadline()` (a biased timer-first select in `run.rs` would put the rule outside the pure core): the runtime's select may take a ready pump input over its timer, so steady output kept a starved watch's snapshot-spacing wakeup from ever running. Cost about 30 ns per chunk.
+- **`State` owns every lifecycle**: `DropConn` and `CloseClient` go out on every exit. A normal `Closed` and a natural client exit once emitted no effect, and over 10,000 connect and close cycles the daemon's RSS went from 2.8 to 24.8 MB (3.1 MB with the fix). A periodic sweep would be polling, and an idle daemon must have no timer.
+- **One reporter per endpoint coalesces session-change hints**: tmux sends notifications to every control client, so broadcasting each copy would duplicate the hint, and the hub holds only watched views, so without a hint an unwatched window's close was invisible to listings.
+- **"Nothing is lost" holds only for stalls shorter than `pause-after` (3 s)**: when a control client falls behind, blocks already queued keep ageing and are paused at 3 s. That explains the 1-in-3 Gap observed with control clients only.
+- **Paste**: at most 4 paste files exist at once (`$XDG_RUNTIME_DIR` is tmpfs charged to muxen's cgroup; about 150 queued pastes would be close to 38 MiB), written on receipt and deleted on the group's reply (a probe showed tmux has read the file by then; 256 queued payloads of 256 KiB would be the whole memory limit). The group is `load-buffer ; paste-buffer -p -d` on a buffer `muxen-<tag>` and a failed group is followed by a separate `delete-buffer` whose error is ignored, because `paste-buffer -d` deletes only on success and tmux skips the rest of a failed list. Buffer names are server-wide, so tags are unique across control clients. The daemon holds its runtime lock and binds its sockets before emptying `paste/`: a mistakenly started second daemon once emptied it before its bind failed.
+- **An oversized reply fails its group, not the control client** (`TooLarge`): killing the client would respawn and fail again, and only `Session` knows groups.
+- **Logs carry framing metadata only**: serde error messages can quote carapace output, which can echo what Jimmy typed, and the control-client stream holds screens.
+- **Batched pipe reads**: tmux writes one short `%output` line per write, and a pump that woke per write cost 44.8% of a core on a numbered-line flood; reading at most 4 turns per 2 ms while output is sustained costs 2.0%, with idle echo unchanged (p50 0.17 ms) and echo during a flood up to ~3 ms later. A gate that stays registered with epoll cost 35%; a blocking reader thread costs three more threads against `TasksMax`; `AsyncFd`'s safe constructors are deprecated as unsound in tokio 1.54.
+- **Blocking lanes**: a hung filesystem mount must not consume the threads authentication uses. Auth waiters are uncapped because device checks arrive in bursts such as a thumbnail grid; directory checks share one lane because user-supplied paths may name hung mounts. Tokio's `fs` feature is disabled rather than listing forbidden APIs.
+- **Shared file primitives never unlink from `Drop`**: a lane may refuse work and drop its closure on the runtime thread, and the unlink can block on a hung mount.
+- **Shutdown stops the hub explicitly**: axum's graceful shutdown never force-closes a connection, so a raw response whose reader paused kept a `HubHandle` past the 2 s wait (a SIGTERM took 4 s and exited 1; with `stop`, 2.0 s and exit 0).
+- **HTTP**: every route refusal shares one `ErrorBody` and one status table (`Retry-After: 1` on `busy`, `Content-Range` on `bad_range`); a browser WebSocket can't see a refused upgrade's status, so a bad token closes 4401. Accepted sockets use 64 KiB `SO_SNDBUF` and `SO_RCVBUF`, because Linux cgroup accounting includes kernel socket buffers and a stalled loopback reader let 4 MiB queue in one default sender buffer.
+- **The unit** (`contrib/muxen.service`): `KillMode=mixed`, restart backoff and `RestartPreventExitStatus=78` are explained in [plan.md](plan.md#resource-budget). There is no sd-notify watchdog (it needs a periodic timer, which breaks the zero-wakeup idle: 0 context switches over 60 s, measured) and no tracing-journald (stderr already reaches the journal).
+- **One memory budget** (`memory_budget_mib`, default 72, minimum 42) sizes the caps at startup, lower of it and the cgroup `memory.max`, so a lower unit limit is safe after a restart and the config and unit cannot drift into an OOM kill. Tiers keep each configuration measurable; the default preserves three sessions because the unit bounds muxen, not tmux. `MemoryHigh` below the unreclaimable ceiling stalls allocations instead of making the budget safe. Uploads to tmpfs or ramfs are refused as `409 memory_backed`, because memory-backed pages would stay charged after the request. The CPU cap is `CPUQuota=50%` with a 10 ms period: a throttled keystroke waits at most one period, within one 60 Hz frame, where the default 100 ms period could not.
+
+**Bell attention**
+
+- **The bell hook sits at the fixed index 9100**, not `set-hook -ga`: `-a` takes the first free index, so muxen would search `show-hooks` for its own entry and could not tell it from a user's. A fixed index makes install idempotent and a crashed daemon's entry is overwritten. Install is `set-option -goq 'alert-bell[9100]'`, empty-only, at the head of every `List`: `if-shell -F` formats against the most recent session, so a session-level `alert-bell` hook hides the global array and the first guard overwrote a foreign global entry (probed on 3.4 and 3.8).
+- **The mark is a per-session counter** (`set-option -F @muxen-bell`): exact for bells within one second, survives the daemon not running, needs no clock. A timestamp makes two bells in a second look like one; a boolean needs the daemon to clear it.
+- **Hook only, no BEL scan of pane output** (Jimmy: "Hook only"): the tab on screen counts as seen on its device, so a stream bell could never raise a dot for the viewing device. tmux's `window_bell_flag` is shared with every client, is cleared when any client looks, and is not set for a current window while a client is attached, so "since this device last showed it" can't be kept from it. `refresh-client -B` subscriptions are scoped to the control client's own session.
+- **The bell poll is the existing `List` one-shot**, 5 s after the previous finished and only while a device is connected: 5.2 ms wall, 1.0 ms server CPU, 2,351 bytes at 60 windows, about 0.15% of one core. Window names pass through `#{s/<LF>/\\n/:…}` and `@muxen-bell` through `#{e|+:…,0}`, so every line is one window record; length framing with `#{n:window_name}` loses sync because 3.4 escapes control characters only on output. Coverage (`monitor-bell` on, `bell-action any`, the global entry resolves) is asked per window, and an uncovered session shows as "not tracked", never as quiet.
+- **On the device, one baseline rule** for a listing and a `bell`: a session with no seen mark takes the first mark it learns as its baseline unless the page has already listed that host, whose counter then started at 0. "Seen" is saved with the workspace (`bellSeen`), because in-memory only, a reload re-learned the current marks as the baseline and a bell rung while the phone was away never showed.
 
 ## Sources
 

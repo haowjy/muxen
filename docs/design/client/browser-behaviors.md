@@ -234,7 +234,7 @@ Escape or Back closes it.
 - **Windows**: on the tab on screen, for a session with more than one window, its windows in index
   order, “index: name”, the shown one filled; a tap runs tmux's `select-window` on the session, so every
   attached client moves with it (it rides the tab's watch, which only the shown tab has). Then **New window** (`new-window`), for any session.
-- **Rename session** (`rename-session`), edited in place, with the daemon's reason on refusal.
+- **Rename session** (`rename-session`), edited in place, with the daemon's reason on refusal. Not built: the menu has no Rename or Kill entries until the daemon commands exist ([daemon-core.md](../daemon-core.md#the-tabs-tmux-commands-open)).
 - **Move to start**, **Move to end**.
 - **Close tab**: detaches only (`unwatch`); tmux keeps the session.
 - **Kill window** (only when the session has more than one window) and **Kill session**: last,
@@ -604,3 +604,46 @@ Terminal context uses a bold primary session name, regular window name, and smal
 ## Touch and clipboard research gate
 
 The interaction contract is [terminal-interaction-design.md](terminal-interaction-design.md). On the phone, selection is iOS's own on the terminal's rows, drawn as page text: a long press selects a word with iOS's handles and menu, muxen draws nothing of it, and Copy joins soft wraps into logical lines; a tap elsewhere or a redraw of the selected rows closes it, and a scroll does not (a drag of a handle to the list's edge autoscrolls). In the app, keyboard up or down, the keyboard never drops for a selection: a hold of about 380 ms marks the word under the finger with muxen's highlight, the finger and two handles extend it, and iOS's edit menu shows Copy and Paste over it; a tap elsewhere or output redrawing the marked rows clears it (output never pauses); a scroll hides the menu until a tap inside the mark, and the mark autoscrolls near the list's top and bottom edges. In a browser the hold with the keyboard up does nothing. Elsewhere, Paste on the phone is the line box's. A touch sends no mouse event, in mouse-mode apps too (Jimmy). Vertical swipes in alternate-screen apps still send ↑/↓ or wheel events. Copy must preserve logical newlines, not visual wraps. Real iPhone Safari and app selection, keyboard and clipboard checks remain required.
+
+## Why these choices
+
+Reasons that the rules above don't carry. Jimmy's words are quoted where they are the reason.
+
+**Workspaces and tabs**
+
+- Home lists workspaces only and the tab overview lists tabs as rows, because a half-height picker with a tab chip that blended into the key row opened two pickers for one job and made finding a file take four steps. The overview shows no terminal previews: they would stream every tab's screen. Rows reorder by a drag handle because the pills scroll sideways.
+- Open session is new-or-attach as the client's rule over the listing, not tmux's `new-session -A`, which fails from the daemon on an existing name ("open terminal failed: not a terminal", tmux 3.8). A new session starts in `~`.
+- Close only detaches, from the ×, a swipe and Close tab alike. Kill window and Kill session sit in the long-press menu behind a confirmation that names what ends: Jimmy wanted to detach or kill from a tab, "just they have to confirm it".
+- The tab row's ‹, pills, + and keyboard control are filled and the key row's keys are plain text, so the tab selector "clearly reads as a control". The keyboard control stays the tab row's last control in both keyboard states so it never moves.
+- A launch opens where the user left off, and the address names the tab and the Files folder or file. It names no server because a browser page talks to one host, its own origin. The cost is that file paths and session names enter browser history, which iCloud and Google sync.
+- Back is at the top on pages (Settings, Open session, the tab list) and the dock's ‹ on tabs: at the top on a tab it would cost a terminal row and be a reach on a large phone. Every page shares one header row, so the screens stop drifting apart.
+
+**Keyboard and input**
+
+- The keyboard is sticky because typing like Termius is the benchmark: only the keyboard control lowers it, so tab switches, menus and reconnects leave it up. A tap on the terminal raises it inside the tap's own `touchend`, because iOS shows the keyboard only for a focus made in a user gesture.
+- The compose box is one logical line, and Return sends the text and Enter. The phone's box is for saying one thing to a shell or an agent; a separate Insert and a second Enter cost a tap each time. Return is a single `paste` with `enter: true` so the Enter cannot run without its paste, and a refused or unanswered paste puts the line back in the draft instead of being resent (a resend could run it twice).
+- Every text box has autocorrect, autocapitalization and spellcheck off, set as attributes: Preact assigns a JSX prop to the element's property, and WebKit's `autocorrect` property is a boolean, so `"off"` became true. The file editor follows the same rule "for now"; Jimmy found it debatable there.
+- The key row opens esc, tab ("the first row should guarantee esc | tab"); ^C is last because it is "kinda dangerous" in the first slots. ^S is not offered: it is XOFF, which stops all output until ^Q (measured on tmux 3.4), and inside a raw-mode TUI it is an ordinary key, so the same key would behave two ways.
+- Ctrl+Shift+F leaves a focused terminal on desktop: a terminal cannot tell Ctrl+Shift+letter from Ctrl+letter, so shells lose nothing, and none of Chrome, Firefox or Safari defines it. Ctrl+Shift+L (Edge's paste and go), U and E (GTK's Unicode and emoji input), Y (Firefox downloads) and Escape (shells and vim need it) were ruled out.
+- Closed tabs keep their unsent draft (at most 32, oldest first): closing a tab is often a tidy-up, and losing a half-written prompt costs more than a bounded record.
+- The app's Face ID relock is selectable (5 minutes, 1 hour, at launch) because frequent prompts annoyed; "At launch" is one unlock per process launch, not removal of the Keychain item's Face ID protection. A change that loosens the interval needs a fresh Face ID evaluation, since the page alone should not weaken a security control.
+- Appearance is System, Light or Dark, with a true-black dark terminal, so the app and web agree on one effective scheme.
+- Dialogs and Settings say only what the user can't see: "Discard your changes?" and "Delete notes.txt?" need no body. A verb says what happens ("is deleted", never "goes").
+
+**Files**
+
+- Files has no scope: a device token already runs any command in tmux, so a boundary would guard against nothing but Jimmy ("u already have terminal access... why tf are we restricting this?"). It cost a folders-only view, a "not added" state and an "Add this folder" flow. There are no favorites; the path field is the way in, and a Files tab always starts at `~/`.
+- The path line is one plain string whose last folder is selected on a click, so deleting it goes to the parent and Cancel restores it. Clickable path segments were a fat-finger trap on a phone. Typing narrows the folder's held rows (folders and files) and loads another folder once, after a 250 ms settle, never one request per keystroke.
+- Every path reads `~/…` under home and absolute elsewhere (Jimmy: "BE CONSISTENT"), Copy path included. Insert into terminal still sends the absolute path: a quoted `~/my file` does not expand in a shell.
+- A desktop's list is an outline with disclosure triangles and a Preview panel; the phone keeps one folder per screen. A click on a folder row opens it in place and never replaces the Preview panel (Jimmy: "the folder replacing the preview thing? that shouldn't happen in the first place"); a double-click goes in. At most 32 folders stay open per tab, because each pins a listing of up to 200 entries against the folder cache's 10,000-entry bound. The panel's toggle stays on the same pixels whether the panel is on or off, so a user can tap to open and tap to close without moving the pointer.
+- The folder cache runs at most two first-page requests at a time, outline folders last: Show hidden re-listed up to 32 folders at once against a daemon that admits one scan and eight waiters and refuses the rest as `busy`.
+- Search walks per settled query and the daemon sends the best 50 ([fs.md](../fs.md#get-fssearchpath)). On a desktop a click on a result selects it and the panel follows; Enter or a double-click closes Search and reveals the row. A file counts as opened for the recents only when the user opens it, never when the app selects a row. Revealing a file under a hidden name turns Show hidden files on, since the listing would otherwise stop at the root.
+- Delete is permanent, behind a confirmation ("permanent with confirm could be fine for now"); moving to the system trash needs a copy across disks, a trash that fills and per-OS layouts, and remains the likely next step. Only-empty-folders was ruled out because the common wish is `node_modules`. Moving a file to another folder is done in the terminal.
+- An edit stays on the path it opened, and unsaved text gets no special defence ("unsaved data lost is... kinda par for the course"); only the file on disk is protected. Keeping an unsaved edit's state on the Files session lets a save's answer that lands after the view has gone find its edit by path. The latest changed edit per host is written to view memory only on a flush, since writing up to 1 MiB per keystroke would cost more than the rare loss it prevents.
+- Download in the app is a bridge request: native fetches the URL with the token into a temporary file and shows the share sheet, which offers Save to Files, AirDrop and open-in-app. The page's own `<a download>` does nothing in the app's web view. The alert with progress and Cancel appears only after 0.5 s so a small file doesn't flash it.
+- Mermaid ships in the daemon's shell but outside the service worker's precache and the shell budget: precaching about 1 MB on every install would serve a feature most documents don't use. Diagrams therefore need the network; the worker reports a 404 for an `/assets/` file it has no copy of, and the app raises "Update required" with Reload. A diagram that fails to parse stays as its source with the reason under it.
+
+**Connections and notices**
+
+- One banner per screen, for that screen's server: another server's outage over this server's terminal changes nothing the user can do there, and two Retry buttons for one fault make the user pick one. A refusal outranks offline on the card, because its fix (re-enrol, update) is what the user must do whether or not the server is on, and a refused token stops the socket, so a reachability shown beside it would be stale.
+- One "Can't reach pop-os" covers a machine that's off and muxen that's down: a WebSocket gives the same 1006 either way. The checking state reads "connecting" ("the word 'checking' doesn't make any sense").

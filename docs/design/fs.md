@@ -10,8 +10,8 @@ the path it was really opened at. No route opens a client's path any other way.
 The product side (what the file manager shows, viewers, photo → terminal) is in
 [plan.md](plan.md#file-manager); the scheme handler and native player that carry these
 routes to the web are in [ios-shell.md](ios-shell.md#where-the-web-ui-comes-from);
-auth is [auth.md](auth.md). Decisions and the alternatives rejected are in
-[decisions.md](decisions.md#file-api).
+auth is [auth.md](auth.md). The reasons for the larger choices are in
+[Why these choices](#why-these-choices).
 
 ## Constants
 
@@ -52,8 +52,7 @@ favorites. `uploads_dir` is edited by hand or from Settings, through the one rou
 
 An upload may instead name a folder ([`dir`](#post-fsupload)): Files' Paste writes into the
 folder it shows. Those folders are any path the daemon's user can write, which adds writes
-to the reads that already had no scope; the single-device-token argument above covers it
-([decisions.md](decisions.md#paste-into-an-open-folder-2026-11-02)). `uploads_dir` is only
+to the reads that already had no scope; the single-device-token argument above covers it. `uploads_dir` is only
 the default, for the terminal's pasted images and Files' Upload.
 
 **`config.toml` is read once, at startup, and again only on a reload**, as nginx and sshd do. The
@@ -533,8 +532,7 @@ SettingsChange = { searchSkip?: [string] | null, uploadsDir?: string | null }
   made only of `*` (which would skip every folder); duplicates are dropped, order kept. `uploadsDir`
   absolute, `~` or starting with `~/`, at most 4,096 bytes (`check_shape`'s limits, as on load). Anything else is `400 bad_request` and nothing is
   written. A pattern starting with `.` only matters while Show hidden files is on; it is allowed.
-- **Writing** follows the earlier writer's rules
-  ([decisions.md](decisions.md#config-writes-toml_edit-auths-lock-temp-file-and-rename-re-stat-before-rename)),
+- **Writing** follows the rules in [Why these choices](#why-these-choices),
   on the fs lane with a permit of its own, and one at a time under the running config's lock, which a
   reload takes too (the daemon is `config.toml`'s only writer; the runtime lock keeps a second daemon
   out): canonicalize the config path so a symlinked
@@ -676,10 +674,26 @@ the error codes are shared by `raw` and the save.
   buffers are counted ([daemon-core.md §6](daemon-core.md#6-limits-and-the-memory-ceiling)).
   The budget run must read the unit's `memory.peak`, which counts kernel buffers and
   page cache, not the daemon's RSS.
-- **Unit-tested only on macOS.** The fs tests pass on the Mac (APFS, 2026-11-05): the
+- **Unit-tested only on macOS.** The fs tests pass on the Mac (APFS): the
   `F_GETPATH` descriptor-path lookup, the `RENAME_EXCL` no-replace rename and search's
   `O_NOFOLLOW_ANY` walk. None has served a phone from a Mac LaunchAgent yet, and CI builds
   macOS only at release, so rerun the fs tests on the Mac after changing them. On a platform
   that is neither Linux nor Apple the descriptor-path lookup fails closed.
 - **How many concurrent ranges AVFoundation opens** per video decides whether 2 raw
-  slots are enough; the spike records it.
+  slots are enough; the device check records it.
+
+## Why these choices
+
+- **One resolution function that returns a checked descriptor.** `fs::open` canonicalizes with `realpath`, opens with `O_NOFOLLOW | O_NONBLOCK`, then reads the descriptor's real path (`/proc/self/fd`, `F_GETPATH`) and checks it again, so the check-then-open race closes for one syscall and a later route is not tempted to reopen by path. `O_NONBLOCK` keeps a FIFO in a repo from pinning a blocking thread. `openat2(RESOLVE_BENEATH)` is Linux only and refuses absolute symlinks that stay inside the root; `RESOLVE_IN_ROOT` resolves an absolute link to the wrong file.
+- **No scope** (Jimmy: "u already have terminal access... why tf are we restricting this?"): a device token already runs any command in tmux. `dir` on `newWindow` and `newSession` is checked for shape only (absolute, at most 4,096 bytes, no NUL, `stat`s as a directory) and passed to tmux as given, so a symlinked `~/code` keeps showing as `~/code`.
+- **`config.toml` is read at startup and on a reload** (SIGHUP, `systemctl --user reload muxen`, or Settings' Reload button), and a reload that doesn't parse changes nothing and says why. Re-reading per request would either hide an error behind a last-good fallback or fail closed on a typo and stop uploads. `auth.toml` keeps its per-check read because enrolment on another device must apply at once. SIGHUP reloads only when the daemon's stdin was not a terminal at start: a foreground `muxen serve` keeps SIGHUP's default, because a reload would leave a closed terminal's daemon orphaned holding the runtime lock. Restart-only keys that a loaded or written file changed stay with the running config, and every Settings answer carries `restartNeeded`. They stay hand edits because a wrong tmux socket set from the phone would cut off the screen that fixes it.
+- **Config writes** use `toml_edit` so Jimmy's comments and keys a newer daemon wrote survive (serializing with serde drops them, breaking "an older daemon reads a newer config"), follow a symlink so a dotfiles link stays intact, re-stat before the rename to catch most editor saves, and refuse a dangling link (`409 config_read_only`) rather than create files wherever it points. The daemon is `config.toml`'s only writer, so the save runs under the running config's own lock, not the state directory's.
+- **Paths ride in the URL path** (`/fs/list/{*path}`, `/fs/raw/{*path}`): AVFoundation sees the file's extension in the URL, and a relative image in Markdown resolves against the document's own raw URL by plain URL resolution. Non-UTF-8 names are listed with U+FFFD and `utf8: false` but not openable: they don't occur in Jimmy's trees, and byte-exact names would cost every client.
+- **Listings** re-read the directory for each page and keep nothing, because sorting needs the whole directory and holding it between pages is state for a viewer nobody may return to. Only symlinks and `DT_UNKNOWN` entries are `stat`ed, since a symlinked directory must sort as a directory and a `stat` per scanned entry would be 5,000 syscalls on an overloaded disk. Hidden names are filtered on the server so pages stay full.
+- **Search walks per settled query and sends the best 50.** Measured on pop-os (warm): `~` is 4.4 million entries, 4.7 s to walk and 59 MB gzipped as a path list; a large repo (67,000 entries) is 70 ms and 400 KB gzipped. A client-side index costs hundreds of KB to MB per folder on a spotty link and can't cover `~`; a daemon-side index holds memory on a busy host and needs a staleness rule; a per-query walk costs a bounded burst (about 150 ms of a core) and a few KiB on the wire. Breadth first means a capped walk has covered everything down to some depth. It skips names starting with `.` (unless Show hidden files is on), directories tagged with a valid `CACHEDIR.TAG` (cargo writes one in `target/`; pop-os has 192 under `~`), and directories matching `search_skip` (default `["node_modules"]`, which writes no tag). A folder merely named `target` stays searchable. Honouring `.gitignore` would add the `ignore` crate for what two defaults and a tag cover.
+- **Content types are an extension allowlist** that never sends HTML, JavaScript, CSS or XML as anything but `text/plain`. The native player bypasses the scheme handler, so the daemon sets `nosniff` and `sandbox` itself, and with `nosniff` the declared type is the only type. `mime_guess`'s table includes `text/html`, and sniffing reads every file's first bytes on a busy disk.
+- **Raw** honours single ranges only (the viewers and AVFoundation send nothing else), with an ETag from `stat` and no `304`, because WebKit doesn't cache custom-scheme responses. A send that waits 30 s aborts the response; without it a paused player holds its slot, and the daemon's shutdown, forever, because hyper stops polling a body whose socket is full. Pages are dropped with `posix_fadvise(DONTNEED)` from the response start for files over 8 MiB: on Linux with `MemoryHigh=48M`, dropping each 64 KiB chunk kept large readahead folios resident (a 1 GiB download left 44.6 MB cached), while dropping from the response start kept the cache at or below 260 KB.
+- **Uploads** stream a raw body (no multipart parser, no base64's +33%) to a 0600 part file and rename it without replacing, so an agent never sees a half-written photo at the final name. Only the extension comes from the client, which keeps paths and shell metacharacters out of the folder and out of the path typed into the terminal. The name uses UTC because local time needs a time-zone crate. A flush every 2 MiB bounds the dirty pages charged to the unit (an 8 MiB interval held up to 8.2 MB dirty in a measured 120 MiB upload). One upload runs at a time because each costs a hyper read buffer. The daemon records the live part file's path in `upload-part` before creating it and removes the record when the part lands, so a crash leaves at most one part file and cleanup needs no folder scan: sweeping the upload's own folder left stale files in folders never uploaded to again and could fail an upload on an entry it couldn't unlink.
+- **A save replaces the file by temp file and rename**: the rename is atomic, so a reader sees the old file or the new one, and the stamp check at the rename closes the race with a writer that got in after the open. Writing in place keeps the inode but a crash or full disk mid-write leaves a torn file. Refusing a file with another hard link, another owner or no write permission avoids a swap that leaves the other link with old text or changes the owner. One fixed `.muxen-save` temp name per folder means a leftover is removed by the next save there, where `{name}.tmp` would delete a user's `notes.txt.tmp`. The save has its own one-permit slot, taken before the body is read, so a minutes-long upload never makes a save `busy`.
+- **Delete is permanent** after a confirmation and a folder goes with all it holds. It never follows a link, stops at a mount (a bind mount too, through `openat2`), stops 64 levels down, and refuses home, the daemon's state folder and every folder above them, by device and inode, because a check in the menu alone missed a path through a link. Moving to the system trash needs a copy across disks and per-OS layouts.
+- **Create takes `{ dir, name }`**, so there is no path to split and the planned `Want::Parent` mode was never built.

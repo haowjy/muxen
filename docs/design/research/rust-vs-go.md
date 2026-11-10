@@ -1,8 +1,7 @@
 # Rust or Go for the daemon
 
-The language comparison behind the daemon's stack, written 2026-10-21. The decision
-(Rust) is logged in [decisions.md](../decisions.md#rust-for-the-daemon); the library picks are in
-[plan.md](../plan.md#stack).
+The language comparison behind the daemon's stack. The choice is
+Rust; the library picks are in [plan.md](../plan.md#stack).
 
 - Rust: idle memory about 2–5 MB with no garbage collector, versus roughly 10–20 MB for
   Go, and memory use stays predictable under bursts. That matters on an already

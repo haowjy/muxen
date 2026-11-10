@@ -483,3 +483,13 @@ one, the fake-LocalAPI tests cover its messages.
 - **Other install locations.** Setup accepts only `~/.cargo/bin/muxen`. A release
   binary installed elsewhere would need an `ExecStart=` drop-in on Linux and a third
   plist placeholder on a Mac.
+
+## Why these choices
+
+- **Plain `muxen setup` runs in the foreground** (Jimmy chose it to stay attached to the terminal), and `--background` installs the service. Withdrawing Serve on Ctrl-C was ruled out: a crash would leave the entry anyway and reruns would churn the config. A foreground run on a Mac would use an unsecreted loopback port, the Mac front's known hole, so it refuses.
+- **Linux setup publishes as the Tailscale operator and the daemon never writes Serve.** Reruns and teardown need no root command once the operator grant exists, and LocalAPI's compare-and-swap preserves concurrent changes from other apps. The daemon may start at boot before the grant exists, and two publication owners would race. The Mac daemon publishes because the Mac has no operator step.
+- **Every background run restarts the service**, even when its file is identical: rerunning is how Jimmy applies a config change, upgrade or fix. systemd is the only automatic Linux service manager because no target host uses another.
+- **Setup probes the daemon's runtime flock before changing host state**, so setup and serving share one instance rule. `daemon::open` owns the budget, runtime directory, flock, binds, state store and auth before setup grants the operator, which keeps filesystem refusals on the no-mutation side. Signals are registered only in `Opened::run`, so a signal during a grant or setup write keeps its default exit. Foreground setup requires `config::runtime_dir()` to equal `/run/user/<uid>/muxen`, so the published Unix target and teardown's matcher agree.
+- **Setup prints each privileged command before running it** and copies the link with OSC 52 when stdout is a terminal, since `pbcopy`, `wl-copy` and `xclip` over SSH copy on the server rather than the client.
+- **The report prints only what Jimmy acts on** ("really verbose" on the first Linux run): each dropped line repeated another or explained something a second run doesn't need. An unenrolled node logs at `debug` on every route, because every phone is unenrolled until it enters its code.
+- **A `401` from the Serve write names Tailscale's full-name check**: tailscaled 1.98.9+ runs `sudo --other-user=<full name> --list tailscale` (tailscale/tailscale#21204), and Go's user lookup, which it tries first, cuts the name at the first comma. pop-os's account had a sudo rule and still got the `401`. `sudo chfn -f $USER $USER` changes only the full name; `usermod -c` would replace the whole GECOS field.

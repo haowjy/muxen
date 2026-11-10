@@ -1,9 +1,8 @@
 # iOS shell: the native app
 
-> **Client UX update (2026-10-22):** Start with [client design and Mac handoff](client/README.md).
-> Its approved browser/mobile navigation and minimal layout supersede conflicting
-> UI rules below. Subsystem invariants remain in force; touch, clipboard and the phone
-> dock retain explicit device gates.
+> Start with the [client design](client/README.md): its navigation and layout rules
+> win over any conflicting UI rule below. Subsystem invariants remain in force; touch,
+> clipboard and the phone dock retain explicit device gates.
 
 The native shell and web adapter implement bridge v11; the device-only checks below still
 need Jimmy's iPhone.
@@ -17,8 +16,8 @@ has no text field.
 
 Auth is in [auth.md](auth.md), the wire protocol in
 [daemon-core.md §5](daemon-core.md#5-srcproto-the-wire-protocol), and the checks this
-design still needs on the phone in the [device checklist](#device-checklist). Reasons
-and rejected alternatives are in [decisions.md](decisions.md).
+design still needs on the phone in the [device checklist](#device-checklist). The
+reasons for the larger choices are in [Why these choices](#why-these-choices).
 
 ```mermaid
 flowchart LR
@@ -240,7 +239,7 @@ no token, is an unanswered attempt ([plan.md](plan.md#reachability)).
 
 Rejected: `baseURL` on `PlatformHost` (exposes host routing in page state);
 `WebSocket` over `muxen-app://` (a scheme handler cannot carry it); native
-`URLSessionWebSocketTask` (the fallback below, only if spike 3 shows stuck sockets).
+`URLSessionWebSocketTask` (the fallback below, only if a device check shows stuck sockets).
 
 *Fallback, behind the same `HostLink` interface:* a native `URLSessionWebSocketTask`
 per host, with output forwarded to JS over the bridge as base64. Keystroke to echo
@@ -750,8 +749,8 @@ and fix this spec from them. The current Simulator cannot show the software keyb
 | Keychain update | With an existing token item and a successful unlock, add or remove a host; `SecItemUpdate` reuses the unlock's `LAContext`, raises no second Face ID prompt and leaves the UI responsive |
 
 | Server off | With the server powered off or its port blocked: launched with it already off, Home reads offline at about 10 s; cut off under an open app, within about 35 s; both with "Last reached". A folder not yet loaded reads "Waiting for <server>", a terminal strip "Can't reach <server>", and the page never reloads. With the server back, the card, the folder and the tab recover with no tap within about 35 s; repeat for Retry and for a foreground, which recover at once |
-| No network | Airplane mode: every card, banner and strip reads "This iPhone is offline." at once, with no Retry, and a folder opened meanwhile loads when the network returns. Walk out of Wi-Fi range with a folder loading, with a log line on each `NWPathMonitor` update. This one is a measurement: record whether the path goes unsatisfied during the handoff. If it does, cards flash offline and Jimmy decides whether no network needs a grace period ([decisions.md](decisions.md), "The 10 s rule") |
-| Resume (spike 3) | With the server on, background the app for 10 minutes or more, then foreground it with Safari's Web Inspector attached: does a new socket stay in CONNECTING past 5 s, and does `/auth/info` answer meanwhile? Does the page reload and clear it? The answers decide the [Transport](#transport) fallback and whether the [connect-timeout rule](plan.md#reconnect)'s reload stays |
+| No network | Airplane mode: every card, banner and strip reads "This iPhone is offline." at once, with no Retry, and a folder opened meanwhile loads when the network returns. Walk out of Wi-Fi range with a folder loading, with a log line on each `NWPathMonitor` update. This one is a measurement: record whether the path goes unsatisfied during the handoff. If it does, cards flash offline and Jimmy decides whether no network needs a grace period ([plan.md](plan.md#reachability)) |
+| Resume | With the server on, background the app for 10 minutes or more, then foreground it with Safari's Web Inspector attached: does a new socket stay in CONNECTING past 5 s, and does `/auth/info` answer meanwhile? Does the page reload and clear it? The answers decide the [Transport](#transport) fallback and whether the [connect-timeout rule](plan.md#reconnect)'s reload stays |
 
 ## Open risks
 
@@ -770,12 +769,32 @@ and fix this spec from them. The current Simulator cannot show the software keyb
   Simulator takes no touch or key input from here): the keyboard toggle, `keyboardInset`,
   rotation and callout. Device
   checklist.
-- **WebSocket after resume in WKWebView** (WebKit 308073, seen in Safari): spike 3. A
+- **WebSocket after resume in WKWebView** (WebKit 308073, seen in Safari): a device check. A
   Tailscale issue (#20882) reports serve WebSocket failures over HTTP/2; WKWebView's
   WebSockets are expected to use HTTP/1.1, unverified.
 - **Cross-origin fetches and CSP on custom schemes**: whether WebKit applies CORS
   between `muxen-app://ui` and `muxen-app://h-{host}` as expected, and honours
   `sandbox` on custom-scheme responses, is unverified on iOS 26. The file-manager
-  spike checks both; navigation and the bridge's origin check hold without them.
-- **Debug web-source switch and Vite HMR from the custom scheme** are deferred; P4a
+  device check covers both; navigation and the bridge's origin check hold without them.
+- **Debug web-source switch and Vite HMR from the custom scheme** are deferred; the app
   uses bundled assets with Web Inspector.
+
+## Why these choices
+
+- **A bundled UI on its own origin.** The native app bundles its web UI (served from `muxen-app://ui/`) so a single UI can connect to several daemons, checks compatibility per host and launches offline; loading it from whichever daemon it connects to would make one host serve the UI for all, give each origin its own storage and auth, and leave a cached copy of unknown age. Proxied host content comes from `muxen-app://h-{host}/…`, never under the UI's origin, so the UI's `script-src 'self'` never covers a daemon response and a proxied script can't run as the app. Native asks `/auth/info` itself on a host's first proxied request, because native otherwise calls it only at enrolment and the compatibility gate stayed shut for the token lane.
+- **The WebSocket lives in the web UI**: output reaches xterm.js without crossing the bridge, and a keystroke's echo crosses it once either way. A native `URLSessionWebSocketTask` behind the same interface is the fallback if WKWebView's socket proves unreliable after resume. Only the web sees a socket stuck in CONNECTING, so only the web can ask native to recreate the web view; native's content-process hook never fires for it. The web asks the native `HostLink` for `{url, token}` per socket; the URL and token stay inside that link and are never copied into page state.
+- **The app connects to each host directly.** A hub daemon proxying the other hosts would add a single point of failure on a box that already crashes, an extra hop and daemon-to-daemon auth. It was the answer only while the client was a web app, where each `*.ts.net` origin needed its own install and cookies.
+- **Native persists the web-owned workspace** (as opaque JSON), because survival of WKWebView `localStorage` on the custom scheme after a content-process kill was unverified. A crashed content process makes a new web view instead of reloading: a reload left the dead document's entry in the back list (`back=1` after the kill), and clearing the list isn't public API.
+- **The web prunes its tabs against `sessions` listings** and never watches hidden tabs: unseen windows would vote and resize, and a hidden tab's session closing can't depend on a watch event.
+- **The tmux size sits inside every safe-area inset** and the keyboard never enters it: a web view that ends above the keyboard reports a zero bottom inset of its own, which on rotation would compute rows without the home-indicator band. The 4 px minimum edge keeps text off the bezel and costs one column on a 393 pt portrait view.
+- **The keyboard covers the web view and the dock rides it.** Native reports `keyboardInset` and `keyboardDuration`, and the dock, Files' tab row, full-screen sheets and the terminal's pan move by the inset on a curve fitted to the keyboard's measured motion (`cubic-bezier(0.25, 0.6, 0.1, 1)`, within 7 pt over its travel in the iOS 26.5 Simulator). WebKit lays a resized web view out at its final size at once, so with a shrinking view the dock jumped to its keyboard-up height before the keyboard moved. A keyboard rising for WebKit is held 60 ms before the page hears of it: handing first responder from the native field to WebKit with no keyboard wanted posted a full-height frame and a zero one 20 to 50 ms later, and the page lurched up and back.
+- **Preferences are native's** (`UserDefaults`, bridge `preferences` in `Boot` and `setPreference`), so appearance and relock apply before or without the web. The window's appearance has one owner, SwiftUI's `.preferredColorScheme` on the root view. Relock is measured on `ContinuousClock` and a negative elapsed time locks; a stored value that doesn't decode falls back to 5 minutes, the strictest.
+- **Swipe back is WebKit's own gesture** (`allowsBackForwardNavigationGestures`), off on a terminal tab with nothing over it, so every Back is a history entry and no back logic is added. The web sends `backSwipe { enabled }` when the value changes; a native edge-pan calling `history.back()` is the fallback if WebKit's snapshot shows a stale terminal frame.
+- **Native presents its screens one way.** Every screen (image menu, pickers, the player, Download's alert and sheet) goes up through `MediaController.show`, which waits for a running transition, refuses while another screen is up or the app is locked, and a lock takes any of them down. Queueing a refused screen would pop a share sheet up after a video, minutes later. Every native request to a daemon (the proxy, the uploader, the player, Download) builds through `MuxenAppModel.request` and follows one redirect rule, the same origin within the request's route, because four copies had drifted to one.
+- **Video loads through an `AVAssetResourceLoaderDelegate`** (`muxen-media://file/fs/raw/…`) that fetches each range through `MuxenAppModel.request`: `AVURLAssetHTTPHeaderFieldsKey` isn't public API and AVFoundation applied the header to URLs named inside a file and to redirects, so a reference movie sent the device token to an arbitrary HTTPS host (run on iOS 26.5 and 27.0 Simulators). The app covers its window whenever the scene isn't active, since the snapshot iOS keeps on disk showed the page.
+- **Copy writes to the pasteboard always**: gating user-initiated Copy on the server-write OSC 52 policy made the terminal's Copy fail silently. OSC 52 from the server stays a separate, disabled web policy.
+- **The scheme handler forwards `GET`, `POST` and `PUT` with bodies and answers CORS preflights itself** (the Settings routes are JSON `POST`s from `muxen-app://ui` to `muxen-app://h-{host}`, and the daemon answers none, which keeps a CORS path shut for browsers on the tailnet). It sends `Access-Control-Expose-Headers: Content-Range, ETag`, which a cross-origin page needs to read a `206`'s size; the gap can't show in dev mode, where the Vite proxy makes everything same-origin.
+- **The WebKit form accessory bar is suppressed** through the private `WKContentView` input-accessory path, left in place if the class path is absent. Writing Tools are off in the app: Apple Intelligence's button sat over muxen's Copy and Paste on a selection, and muxen's text is a terminal and short fields.
+- **XcodeGen** for the project: a committed `.xcodeproj` has unreviewable diffs and agent edits break it; a bare Swift package can't build an app with entitlements and extensions. A Debug dev-server asset source is deferred (`ios/.context/FUTURE`) because it needs its own trusted-origin, certificate and CSP check; the bundled CSP is not relaxed for it.
+- **Enrolment links open the app first.** A page that arrives with `#code=` fires `muxen://add?host=<origin>&code=<code>` as soon as it knows the origin (never inside the native shell); the app spends the code on the phone's node and mints its own token with an empty code, so Safari never enrols (Jimmy: "so we don't login via safari"). Universal Links can't work because Apple's CDN can't fetch an association file from a tailnet-only host. The link prefills the form and waits: it sends nothing until Jimmy taps Next and Add. The app needs its own token because its WebSocket origin `muxen-app://ui` is refused by the node lane.
+- **Download** is a bridge request: native fetches the page's own `muxen-app://h-{host}/fs/raw/…` URL with the Bearer token into one temporary file (`URLSessionDownloadTask`, 30 s between bytes), shows an alert with progress and Cancel only after 0.5 s, and presents the share sheet, which also offers AirDrop and open-in-app. Native holds no copy of the web's path encoding, and a whole-file `Data` fetch or a `blob:` would grow memory with the file.
