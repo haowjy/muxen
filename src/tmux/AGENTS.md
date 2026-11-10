@@ -1,30 +1,21 @@
 # tmux core
 
-Pure: no process, filesystem, clock or shared state, except the two I/O files,
-`pump.rs` (one task per `tmux -C` process) and `oneshot.rs`. `Endpoint::command` in
-`mod.rs` builds, never runs, the one `tmux -u -N` invocation both use. `Session` is the
-control client as a state machine and owns reply matching, wanted panes, pauses in
-flight and the in-flight cap; `command.rs` is the only place tmux command text is built,
-control-client lines and one-shot arguments alike; the formats it asks tmux to print
-live in `reply.rs` beside their parsers. Unknown protocol lines are
-non-fatal. Never log raw pane output or reply bodies.
+Pure: no process, filesystem, clock or shared state, except `pump.rs` (one task per
+`tmux -C` process) and `oneshot.rs`. `Endpoint::command` builds, never runs, the one
+`tmux -u -N` invocation both use. `command.rs` is the only place tmux command text is
+built; the formats it asks tmux to print live in `reply.rs` beside their parsers.
+Unknown protocol lines are non-fatal. Never log raw pane output or reply bodies.
 
-`tests/support/fake_tmux.rs` fakes a tmux server for the hub's tests: it reads the
-command text `command.rs` writes, so change the two together.
+`tests/support/fake_tmux.rs` reads the command text `command.rs` writes: change the two
+together.
 
-Tests replay recorded tmux streams and require `Session` to write exactly the recorded
-lines (`.in`); the same replays check that events do not depend on chunking, while
-targeted tests assert the important event behavior. Re-record with
-`cargo run --example record-tmux-fixtures -- --out tests/fixtures/tmux/3.4` when
-command output changes; record 3.7b with `--tmux <path> --out tests/fixtures/tmux/3.7b`.
-The checked-in fixture sets include tmux 3.4 and 3.7b;
-targeted session tests default to 3.4 and accept `MUXEN_TMUX_FIXTURE_VERSION=3.7b`
-to read the other version's fixtures.
-The `snapshot-*` fixtures also feed the `vt100` restore tests in `snapshot.rs`, so
-re-recording them re-checks `compose` too.
+Tests replay recorded streams and require `Session` to write exactly the recorded lines
+(`.in`). Re-record when command output changes:
+`cargo run --example record-tmux-fixtures -- --out tests/fixtures/tmux/3.4` (for 3.7b:
+`--tmux <path> --out tests/fixtures/tmux/3.7b`). Session tests default to the 3.4
+fixtures; `MUXEN_TMUX_FIXTURE_VERSION=3.7b` selects the other. The `snapshot-*` fixtures
+also feed the `vt100` restore tests in `snapshot.rs`.
 
-`tests/tmux_real.rs` runs `Session` over the real pump, and the one-shots, against
-private tmux servers: the snapshot boundary under floods, torn snapshots, Gaps, and
-every way a control client ends. It is skipped unless `MUXEN_TMUX_TESTS=1`
-(`MUXEN_TMUX` picks the binary; the Gap test needs `script`); run it, under
-`nice -n 10`, after any change here.
+`tests/tmux_real.rs` runs `Session` and the one-shots against private tmux servers. It is
+skipped unless `MUXEN_TMUX_TESTS=1` (`MUXEN_TMUX` picks the binary; the Gap test needs
+`script`); run it, under `nice -n 10`, after any change here.
