@@ -376,7 +376,7 @@ Versions verified 2026-10-21 ([libraries.md](research/libraries.md),
 | Runtime | tokio, current-thread runtime, 8 blocking threads split into bounded-wait lanes | see [Resource budget](#resource-budget) |
 | HTTP | axum 0.8, tower-http 0.7 | `/fs/raw` stays custom, so descriptor opens and range limits are muxen's own |
 | Web assets | built by Vite and embedded in the daemon | the same web UI is bundled in the iOS app; the daemon serves browser/PWA shell paths |
-| Auth | sha2, subtle, getrandom | [auth.md](auth.md#crates) |
+| Auth | sha2, subtle, getrandom | [Cargo.toml](../../Cargo.toml) |
 | Tailscale LocalAPI | bounded keep-alive client over tailscaled's Unix socket: status, Serve config and per-request whois | |
 | systemd and logs | sd-notify (`READY=1`, `STOPPING=1`; no watchdog), tracing + tracing-subscriber writing to stderr, which the journal captures | no watchdog because it needs a periodic timer, which breaks the zero-wakeup idle; no tracing-journald because stderr already reaches the journal |
 | Protocol types | ts-rs (TypeScript); Swift hand-written for the auth DTOs | [daemon-core.md](daemon-core.md#wire-protocol-srcproto) |
