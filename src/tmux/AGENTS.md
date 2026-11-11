@@ -19,3 +19,5 @@ also feed the `vt100` restore tests in `snapshot.rs`.
 `tests/tmux_real.rs` runs `Session` and the one-shots against private tmux servers. It is
 skipped unless `MUXEN_TMUX_TESTS=1` (`MUXEN_TMUX` picks the binary; the Gap test needs
 `script`); run it, under `nice -n 10`, after any change here.
+
+The model behind these rules, and mechanism the code doesn't show, is in `.context/CONTEXT.md`.

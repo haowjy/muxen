@@ -52,3 +52,5 @@ Rules the code relies on, which are easy to break:
 `tests/hub_state.rs` drives `State` against a fake tmux (`tests/support/fake_tmux.rs`);
 `tests/hub_real.rs` runs the hub with real pumps on a private tmux server
 (`MUXEN_TMUX_TESTS=1`, under `nice -n 10`).
+
+The model behind these rules, and mechanism the code doesn't show, is in `.context/CONTEXT.md`.

@@ -47,3 +47,5 @@ Rules the code relies on, which are easy to break:
   Blocking work under a slot runs through `Slot::run`, which moves the permit into the
   lane work. `PUT /fs/file` takes the permit before the body and moves it in itself
   (`src/fs/AGENTS.md`).
+
+The model behind these rules, and mechanism the code doesn't show, is in `.context/CONTEXT.md`.

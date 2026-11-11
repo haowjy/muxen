@@ -47,3 +47,5 @@ haptics, lifecycle and media. Spec: [ios-shell.md](../docs/design/ios-shell.md).
   report a change to any of them as Simulator-built and device-unverified.
 
 Deferred work: [.context/FUTURE](.context/FUTURE).
+
+The model behind these rules, and mechanism the code doesn't show, is in `.context/CONTEXT.md`.

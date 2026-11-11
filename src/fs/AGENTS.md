@@ -57,3 +57,5 @@ Rules the code relies on, which are easy to break:
 - Logs carry paths, sizes and codes, never file contents, upload bytes, the client's
   upload name, or `config.toml`'s text: a parse error is logged by line and column, never
   by the parser's message, which quotes the text.
+
+The model behind these rules, and mechanism the code doesn't show, is in `.context/CONTEXT.md`.
