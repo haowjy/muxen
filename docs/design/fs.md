@@ -1,146 +1,85 @@
 # File API: listing, search, raw reads, uploads, saves
 
-`src/fs/` serves the phone's file manager: directory listings, file bytes with Range
-for the viewers and the native video player, uploads, and the text editor's save. It reads and, for an upload that names a folder, writes any path the daemon's user can: there is no scope.
-A device token already runs any command in tmux as Jimmy, so a boundary here would
-guard against nothing but Jimmy. Every path the file API touches passes through one
-function, `fs::open`, which canonicalizes the path and returns an open descriptor with
-the path it was really opened at. No route opens a client's path any other way.
+`src/fs/` serves the phone's file manager: directory listings, file bytes with Range for the viewers and
+the native video player, uploads, and the text editor's save. It reads and, for an upload that names a
+folder, writes any path the daemon's user can: there is no scope. A device token already runs any
+command in tmux as Jimmy, so a boundary here would guard against nothing but Jimmy. Every path the file
+API touches passes through one function, `fs::open`, which canonicalizes the path and returns an open
+descriptor with the path it was really opened at; no route opens a client's path any other way.
 
-The product side (what the file manager shows, viewers, photo → terminal) is in
-[plan.md](plan.md#file-manager); the scheme handler and native player that carry these
-routes to the web are in [ios-shell.md](ios-shell.md#where-the-web-ui-comes-from);
-auth is [auth.md](auth.md). The reasons for the larger choices are in
-[Why these choices](#why-these-choices).
+The product side is [plan.md](plan.md#file-manager) and
+[browser-behaviors.md](client/browser-behaviors.md#files); the scheme handler and native player that carry
+these routes are [ios-shell.md](ios-shell.md#where-the-web-ui-comes-from); auth is [auth.md](auth.md).
+Mechanism (the search walk and matcher, raw streaming, upload and save steps, config writes) is in
+[src/fs/.context/CONTEXT.md](../../src/fs/.context/CONTEXT.md); the constants are in `src/fs/` and
+`src/http/fs.rs`.
 
 ## Constants
+
+The ones a client or the user can see:
 
 | Constant | Value | When hit |
 |---|---|---|
 | listing page | 200 entries | the client asks for the next `offset` |
-| directory scan | 5,000 entries read or 1 MiB of names, whichever first; every entry read counts, hidden ones included | `truncated: true`; the rest isn't listed |
-| scans at once | 1 | wait |
-| search walk | 100,000 entries read or 500 ms, whichever first; every entry read counts | `stopped` says which; the matches so far are answered |
-| search queue | 1 MiB of relative paths still to read, offsets counted | stops queueing; `stopped: "queue"` |
-| searches at once | 1, its own slot | wait |
-| deletes at once | 1, its own slot, held to the end of the delete | wait |
-| folder depth under a delete | 64 levels (two descriptors each) | stops with `403 denied`; what was removed stays gone |
-| search matches | 50 | the best 50 by score |
-| search query | 256 bytes | `400 bad_request` |
-| raw responses at once | 2 | wait |
-| uploads at once | 1 | `503 busy` at once |
-| saves at once | 1, its own slot, taken before the body is read | waits like any slot, then `503 busy` |
-| save size | 1 MiB | `413 too_large` |
-| fs lane | 4 of the runtime's 8 blocking threads; includes scan, search and raw-response slot waits | wait up to 10 s |
-| fs lane waiters | 8 across all fs slots and blocking calls | `503 busy` at once; timed-out requests get `Retry-After: 1` |
-| raw read and upload write chunk | 64 KiB | |
-| raw stall deadline | 30 s for the socket to take the next chunk | the response is aborted, its slot freed |
+| directory scan | 5,000 entries read or 1 MiB of names, every entry read counted | `truncated: true`; the rest isn't listed |
+| search walk | 100,000 entries read or 500 ms; queue 1 MiB of relative paths | `stopped` says which (`entries`, `time`, `queue`); the matches so far are answered |
+| search matches, query | best 50; query 1 to 256 bytes | `400 bad_request` for a bad query |
+| slots | scan 1, search 1, delete 1, raw 2, upload 1, save 1 | `503 busy` (the fs lane queues up to 8 waiters, then `busy` at once; `Retry-After: 1`) |
 | upload size | 128 MiB | `413 too_large`; the partial file is deleted |
-| upload and save idle timeout | 30 s waiting for a body byte | aborted with `400 bad_request`; an upload's partial file is deleted |
-| upload flush | every 1 MiB: `fdatasync`, then drop the written pages | the dirty pages in between are charged to the unit, and the [ceiling](#limits-and-the-memory-ceiling) counts them |
-| page drop during a raw read | files over 8 MiB: after each chunk, everything from the response's first byte to the current position | |
-| socket buffers, every accepted socket | `SO_SNDBUF` and `SO_RCVBUF` 64 KiB (Linux doubles them); Serve reaches the daemon over a local Unix-socket hop, not another network round trip | the writer waits |
+| save size | 1 MiB | `413 too_large` |
+| body idle timeout, raw stall | 30 s | an upload or save aborts with `400`; a raw response is aborted and its slot freed |
 | path in a request | 4,096 bytes, UTF-8, absolute or `~`-prefixed, no NUL | `400 bad_request` |
 
 ## The uploads folder
 
-An upload that names no folder goes to `uploads_dir` in `config.toml` (default `~/.muxen-uploads`), absolute, `~` (uploads land in
-the home folder) or starting with `~/`. A missing path is created by the next upload; one that is
-none of those makes every upload answer `409 not_a_directory`. There are no
-favorites. `uploads_dir` is edited by hand or from Settings, through the one route that writes
-`config.toml` ([Server settings](#server-settings)).
+An upload that names no folder goes to `uploads_dir` in `config.toml` (default `~/.muxen-uploads`):
+absolute, `~`, or starting with `~/`. A missing path is created by the next upload; one that is none of
+those makes every upload answer `409 not_a_directory`. An upload may instead name a folder (`dir`): Files'
+Paste writes into the folder it shows. Those folders are any path the daemon's user can write, which adds
+writes to the reads that already had no scope; the single-device-token argument covers it. `uploads_dir` is
+edited by hand or from Settings ([Server settings](#server-settings)).
 
-An upload may instead name a folder ([`dir`](#post-fsupload)): Files' Paste writes into the
-folder it shows. Those folders are any path the daemon's user can write, which adds writes
-to the reads that already had no scope; the single-device-token argument above covers it. `uploads_dir` is only
-the default, for the terminal's pasted images and Files' Upload.
-
-**`config.toml` is read once, at startup, and again only on a reload**, as nginx and sshd do. The
-daemon holds the live keys (`uploads_dir`, `search_skip`) in memory; uploads and search read that copy,
-never the file. A **reload** is SIGHUP (`systemctl --user reload muxen`, the unit's `ExecReload`) or
-Settings' **Reload config.toml** (`POST /settings/reload`). SIGHUP reloads only when the daemon's stdin
-was not a terminal at start; a foreground run in a terminal keeps SIGHUP's default and ends when the
-terminal closes, rather than living on orphaned with the runtime lock. Settings' reload works either way. It reads and parses the whole file first:
-if it doesn't parse, nothing changes, the running config stays, and the error is logged at `warn` and
-answered (`503 config_unavailable` with the parser's line and column in `detail`). If it parses, the
-live keys take the new values at once, and a restart-only key that differs from the running value
-(`name`, `memory_budget_mib`, `[tmux]`, `[complete]`) is reported, not applied: logged, and listed in
-`restartNeeded` on every Settings answer until the daemon restarts. A Settings save writes the file and then updates the copy in memory, so
-its change needs no reload. A hand edit does nothing until a reload; the file and the running config
-can differ until then, and Settings shows the running values with "config.toml has changed since it
-was loaded" and the Reload button when the file's `files::Stamp` differs from the one last loaded or
-written. Listing and raw reads don't use the config.
+**`config.toml` is read once, at startup, and again only on a reload**, as nginx and sshd do. The daemon
+holds the live keys (`uploads_dir`, `search_skip`) in memory; uploads and search read that copy, never the
+file. A **reload** is SIGHUP (`systemctl --user reload muxen`, the unit's `ExecReload`) or Settings' **Reload
+config.toml** (`POST /settings/reload`). SIGHUP reloads only when the daemon's stdin was not a terminal at
+start: a foreground run in a terminal keeps SIGHUP's default, because a reload would leave a closed
+terminal's daemon orphaned holding the runtime lock. A reload reads and parses the whole file first: if it
+doesn't parse, nothing changes, the error is logged at `warn` and answered (`503 config_unavailable` with
+line and column in `detail`). If it parses, the live keys take the new values at once, and a restart-only
+key that differs (`name`, `memory_budget_mib`, `[tmux]`, `[complete]`) is logged and listed in
+`restartNeeded` on every Settings answer until the daemon restarts. A Settings save writes the file and
+updates the copy in memory, so it needs no reload; a hand edit does nothing until a reload, and Settings
+shows "config.toml has changed since it was loaded" with the Reload button when the file differs from the
+one last loaded or written. Listing and raw reads don't use the config.
 
 ## Path resolution: `fs::open`
 
-```text
-fs::open(path: &str, home: &Path, want: Want) -> Result<Opened, FsError>
-Want   = Dir | File
-Opened = { file: File, path: String /* canonical */, meta: Metadata }
-```
-
-`open` runs on the fs lane (the dir lane for completion
-listings), and does, in order:
-
-1. **Shape.** `path` must be absolute, or `~` or start with `~/`, which is the daemon user's
-   `$HOME` (`fs::expand`, as `uploads_dir` and completion use; `open` is the one open path); at most 4,096 bytes and free of NUL; otherwise
-   `bad_request`. The client learns the canonical home from a listing of `~`, whose `path` is
-   canonical: Open files lists `~` anyway, so knowing home costs no request of its own. Paths on the wire are UTF-8 strings, so a non-UTF-8 name can't be
-   requested ([listing](#get-fslistpath)).
-2. **Canonicalize** with `realpath`: every symlink and every `..` is resolved against
-   the real tree, so `..` needs no lexical rule and a symlink is followed like any
-   path (the terminal follows it too). A missing path is `not_found`. A canonical path
-   that isn't UTF-8 (a link to a non-UTF-8 name) is `bad_request`.
-3. **Open** the canonical path, after an `lstat` of it refuses any kind but a regular
-   file or directory (`not_a_file` / `not_a_directory`) so no device is opened, with `O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC |
-   O_NOCTTY`, plus `O_DIRECTORY` for `Dir`. `O_NONBLOCK` keeps a FIFO from blocking
-   the thread. `fstat` then refuses anything but a regular file for `File`
-   (`not_a_file`) or a directory for `Dir` (`not_a_directory`). `ELOOP` here means
-   the last component became a symlink after step 2: `not_found`.
-4. **Read the descriptor's real path** (`readlink /proc/self/fd/N` on Linux,
-   `rustix::fs::getpath` on macOS). `Opened.path` is that path, so a component swapped
-   for a symlink between steps 2 and 3 is reported where the file actually is, and the
-   listing's `path` and `parent` are the real ones.
-
-Callers get the descriptor, never a path to open again: listings read the directory
-through it, raw reads `pread` it, uploads create files relative to it.
-
-**`newWindow` and `newSession` `dir` use `fs::check_dir`**, not `open`: tmux runs as
-Jimmy, and the web's start-directory prompt offers the tab's cwd or any typed path.
-The connection calls it on the dir lane, with a 300 ms wait: step 1's shape rules, then `stat` (following links) must find a directory. It passes `dir` to tmux as given, so
-the shell shows the path Jimmy chose. A refusal is `error { req, code: badRequest,
-message }`, the message naming the cause ("not an absolute path", "no such
-directory"). It reads no config, so a broken `config.toml` never blocks a new window.
+`open(path, home, want: Dir | File)` returns the descriptor, the canonical path and its metadata. It
+checks the shape (absolute, `~` or `~/…`, at most 4,096 bytes, no NUL), resolves with `realpath` (every
+symlink and `..` against the real tree, as the terminal follows them), refuses any kind but a regular file
+or directory without opening a device (`not_a_file` / `not_a_directory`), opens with `O_NOFOLLOW |
+O_NONBLOCK`, and reads the descriptor's real path back, so a component swapped for a symlink in between is
+reported where the file actually is. Callers get the descriptor and never reopen by path. The client learns
+the canonical home from a listing of `~`. `newWindow` and `newSession` `dir` use the lighter `fs::check_dir`
+(shape plus `stat` finds a directory) and pass the path to tmux as given; a refusal is `error { req, code:
+badRequest, message }`.
 
 ## Routes
 
-Every route sits in the `devices` router in `src/http/`, behind both auth layers
-([auth.md](auth.md#endpoints)). A path rides in the URL path, not the query:
-`/fs/raw/home/jimmy/repo/clip.mov`. The client percent-encodes each segment and joins
-them with `/`; the daemon decodes and prepends `/`. `~` and `~/…` ride bare after the route's own `/`
-(`/fs/list/~`) and keep no leading `/`. `{*path}` doesn't match an empty path, so `/fs/list/` is registered as its own route,
-listing `/`. The
-native player then sees the file's extension in the URL, and the Markdown viewer
-resolves a relative `![](img.png)` against the document's own raw URL. A path that
-doesn't decode, or a bad query value (a flag such as `hidden` or `text` is `0` or `1`), is answered as `400 bad_request` in the JSON
-error shape (handlers take `Result<Path<…>, PathRejection>`, as `enroll.rs` does for
-`Json`). Queries need axum's `query` feature.
+Every route sits behind both auth layers ([auth.md](auth.md#endpoints)). A path rides in the URL path, not
+the query (`/fs/raw/home/jimmy/repo/clip.mov`): the client percent-encodes each segment and the daemon
+prepends `/`; `~` and `~/…` ride bare (`/fs/list/~`); `/fs/list/` lists `/`. So the native player sees the
+file's extension and the Markdown viewer resolves a relative `![](img.png)` against the document's own raw
+URL. A path that doesn't decode, or a bad query value (a flag such as `hidden` or `text` is `0` or `1`), is
+`400 bad_request`.
 
 ### `GET /fs/list/{*path}`
 
-Query: `offset` (default 0), `hidden=0|1` (default 0). `fs::open(…, Dir)` on any
-directory, `/` included, then one
-scan of the directory through its descriptor, holding the scan slot:
-
-- Read names and `d_type` up to the scan cap, dropping `.` and `..` and, unless
-  `hidden=1`, every name starting with `.`. The cap counts every entry read, the
-  dropped ones too, so a directory full of dotfiles is cut off as a full one is and one
-  page's cost stays bounded. `fstatat` (following links) only the
-  entries whose `d_type` is `DT_LNK` or `DT_UNKNOWN`, so a symlinked directory sorts as
-  a directory. Past the cap the scan stops and the response says `truncated`: the
-  directory is too big for the phone, and the terminal is the tool for it.
-- Sort: directories first, then by name with ASCII case folded, ties by bytes.
-- Take `[offset, offset + 200)` and `fstatat` those entries for size and time.
+Query: `offset` (default 0), `hidden=0|1` (default 0). Lists any directory, `/` included: directories
+first, then by name with ASCII case folded, ties by bytes; dotfiles left out unless `hidden=1` (a hidden
+directory opened by path lists normally). Past the scan cap the response says `truncated`: the directory
+is too big for the phone and the terminal is the tool for it.
 
 ```text
 Listing = { path: string,            // canonical
@@ -150,120 +89,37 @@ Listing = { path: string,            // canonical
 Entry   = { name: string,
             kind: "dir" | "file" | "other" | "broken",  // after following a link
             link: bool,              // the entry itself is a symlink
-            size?: u64,              // files
-            mtime?: i64,             // unix seconds; absent for "broken"
+            size?: u64, mtime?: i64, // unix seconds; mtime absent for "broken"
             mime?: string,           // files: the type /fs/raw would send
             utf8?: false }           // present only for a non-UTF-8 name
 ```
 
-- **Paging** is by offset over a fresh scan: the daemon keeps no cursor or listing
-  between requests. If the directory changes between pages an entry can repeat or be
-  skipped; pull-to-refresh starts over (no file watcher).
-- **Symlinks** show their target's kind, size and mtime and are marked `link`. Opening
-  one follows it like any path.
-- **Non-UTF-8 names** are listed with U+FFFD in place of bad bytes and `utf8: false`;
-  the web shows them greyed and not openable, since their path can't be sent back.
-- **Hidden files:** dotfiles are left out unless `hidden=1`, which the file manager's
-  toggle sets. A hidden directory opened by path lists normally. `.gitignore` rules
-  are v2 (repo-viewer parity, [plan.md](plan.md#file-manager)).
+Paging is by offset over a fresh scan; the daemon keeps no cursor, so a changing directory can repeat or
+skip an entry, and pull-to-refresh starts over. Symlinks show their target's kind, size and mtime and are
+marked `link`. Non-UTF-8 names list with U+FFFD and `utf8: false`; the web shows them greyed and not
+openable, since their path can't be sent back.
 
 ### `GET /fs/search/{*path}`
 
-Query: `q` (required, 1 to 256 bytes, not only spaces), `hidden=0|1` (default 0); `/fs/search/`
-searches `/`. Files' Search: the files and
-folders below a folder whose path, relative to it, matches `q`. `fs::open(…, Dir)` on the root, then
-one **walk** that streams every entry it reads through the matcher and keeps only the best 50.
-Nothing is kept between requests. The client sends the query once typing pauses 250 ms and aborts a
-request it no longer needs ([browser-behaviors.md](client/browser-behaviors.md#files)).
+Query: `q` (required, 1 to 256 bytes, not only spaces), `hidden=0|1`. The files and folders below a
+folder whose path, relative to it, matches `q`: one **breadth-first walk** streams every entry through the
+matcher and keeps the best 50; nothing is kept between requests. The client sends the query once typing
+pauses 250 ms and aborts a request it no longer needs.
 
-**The walk** is breadth first, with one directory open at a time:
-
-- A queue holds the directories still to read, as paths relative to the root. The walk opens the
-  next one relative to the root's descriptor (read with `Dir::new` on that descriptor, never a copy
-  of it), streams its names and `d_type` through the matcher,
-  queueing its subdirectories as it goes, and closes it. At most two descriptors are open (the root and the one being read; three for a cache-tag probe), whatever
-  the depth, and a capped walk has covered everything down to some depth, so a short path under the
-  root is never missed for a deep one.
-- **Opening** refuses symlinks in every component and never leaves the root's filesystem: on Linux
-  `openat2(root, rel, O_DIRECTORY | O_CLOEXEC, RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS |
-  RESOLVE_NO_XDEV)`, which refuses a same-device bind mount too (where `openat2` answers `ENOSYS`,
-  before Linux 5.6, the walk falls back to `openat` with `O_NOFOLLOW` and the device check below); on macOS `openat(root, rel, O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW_ANY)` and an
-  `fstat` whose device must equal the root's. A symlinked directory is matched but never entered, so
-  there are no cycles, and no walk wanders into `/proc`, a network mount or another disk. An
-  entry whose relative path would pass 4,096 bytes with the root's is neither matched nor queued:
-  no route could open it.
-- **Kinds:** names and `d_type` only; `fstatat` (not following, relative to the folder being read) is
-  called only for a `DT_UNKNOWN` entry, as listings do, so a filesystem without `d_type` is still walked.
-- **Skipped:** every name starting with `.` unless `hidden=1` (so `.git`, `.cache` and `.venv` too);
-  any directory whose name matches one of the server's **search skip patterns**
-  ([Server settings](#server-settings); default `node_modules`); and any directory below the root tagged as a cache
-  under the [Cache Directory Tagging spec](https://bford.info/cachedir/): it holds a regular file
-  `CACHEDIR.TAG` whose first 43 bytes are `Signature: 8a477f597d28d172789f06886806bc55` (cargo's `target/`,
-  pip's and ccache's caches, the convention `tar --exclude-caches` and backup tools follow). Before
-  reading a directory below the root, the walk tries `openat(dir, "CACHEDIR.TAG", O_RDONLY | O_NOFOLLOW |
-  O_NONBLOCK | O_CLOEXEC | O_NOCTTY)` on its descriptor (a third descriptor, for that moment). `ENOENT`,
-  the usual answer, costs one lookup (0.9 µs warm on macOS). Any other error means no tag. On success
-  `fstat` must find a regular file, and the read loops until 43 bytes or end of file; only an exact
-  signature is a tag, and the directory then isn't read. **A skipped directory is listed, not entered**,
-  by either rule: its own entry, read in its parent, is matched like any other, so Search can find
-  `node_modules` or `target` and a tap goes into it (where, as the root, nothing is skipped). The probe
-  leaves a negative dentry per directory, kernel memory charged to the unit but reclaimable, like page
-  cache. A pattern is a folder name or a glob with `*` and `?` over the name alone,
-  compared exactly (no case folding); `[` and every other character are literal. The root itself is never skipped, whatever its name. Non-UTF-8 names are
-  neither matched nor entered (their path can't be sent back).
-- **Errors below the root** (`EACCES`, `ENOENT` from a folder deleted mid-walk, `ELOOP`, `ENOTDIR`,
-  `EXDEV`, an `EIO` from `getdents`) skip that directory. Only an error on the root fails the request.
-- **Caps:** 100,000 entries read or 500 ms of wall time, whichever comes first; every entry read
-  counts, skipped ones too. The walk then answers what it matched and `stopped` names the cap. The
-  queue is one byte buffer of relative paths with their offsets, capped at 1 MiB with the offsets
-  counted; when it is full the walk stops queueing, keeps reading what is queued, and answers
-  `stopped: "queue"`. The deadline and the cancel flag are checked every 1,024 entries and
-  between directories; one stalled filesystem call can't be interrupted.
-- **Host cost:** measured on pop-os, warm, through the route, with these skip rules: a 67,000-entry
-  repo (`hidden=1`) walks in 60 to 73 ms, and 100,000 entries of `~` or `~/gitrepos` take 75 to 140 ms
-  of one core unconstrained, 180 to 330 ms under the unit's `CPUQuota=50%`. The cache-tag probe is
-  about 1 µs a directory there: 6 to 8 ms of the repo's walk (6,400 directories), 5 to 25 ms of a
-  100,000-entry one, most where `hidden=1` opens more folders. A cold walk wasn't measured (dropping
-  the caches needs root). That is the
-  bound per settled query, shared with the rest of muxen inside the unit's quota. The walk doesn't
-  change its thread's priority: an unprivileged thread can't lower its nice again (`RLIMIT_NICE` is
-  0), so a lane thread would stay deprioritised for every later listing.
-- **The slot** is the search slot, its own, so a listing never waits behind a walk. Its permit moves
-  into the lane closure with the walk, as the raw producer's does: it is freed when the walk ends, not
-  when the request does, so aborted searches never overlap.
-- **Cancel:** the handler holds a guard that sets a flag when the response future is dropped (the
-  client aborted or went away); the walk sees it at its next check and stops.
-
-**Matching** works on the relative path's Unicode scalar values (`/`-separated, the root's own name
-not included). Case is folded for ASCII letters only, and only while `q` has no ASCII uppercase
-letter (smart case); other scalars match exactly. Names are not Unicode-normalised, so an NFD name
-doesn't match an NFC query.
-
-- **`q` containing `*` or `?` is a glob** (Jimmy chose "glob when `*`/`?` typed"). `*` matches any
-  run within one segment, `?` one scalar within a segment,
-  `**` matches any run of whole segments, zero included (`src/**/main.rs` matches `src/main.rs`); a
-  `**` not bounded by `/` or the pattern's ends is a `*`. `[` and every other character are literal;
-  there is no escape. A pattern with no `/` is matched, anchored at both ends, against the
-  last segment; one with `/`, anchored, against the whole relative path. The matcher is the
-  iterative one with two backtrack points (one for `*`, one for `**`), linear-time in practice and
-  never recursive. A glob match's `hits` are the runs its literal characters matched. Glob matches
-  rank by depth, then the last segment with ASCII case folded, then bytes.
-- **Anything else is fuzzy.** `q` is split on spaces into terms (a trailing space is ignored); every
-  term must appear in the path as a subsequence. Each term is aligned first within the last segment
-  and only then across the whole path. The alignment is fzf's v1: the leftmost forward subsequence
-  match, then a backward pass from its end that tightens it to the shortest window. The score adds,
-  per matched scalar, a bonus at a segment or word start (after `/`, `_`, `-`, `.` or a space, or a
-  lowercase-to-uppercase change), a bonus for following the previous matched scalar, a bonus for
-  matching in the last segment, and subtracts the gaps between matched scalars.
-  Terms are matched independently and in any order, and may share scalars; the path's score is the
-  sum of its terms' scores less a fixed amount per folder level, counted once, so nearer files rank
-  first; the terms' hit runs are merged. Score only depends on `q` and the
-  path; ties go to the shorter path, then bytes. Positions are computed again for the final 50 only,
-  so the walk keeps scores, not hits. The cost is linear
-  in the path per entry, and only paths that pass the subsequence check are scored.
-- The best 50 are kept in order as the walk goes (a sorted list of at most 50: an entry that can't
-  beat the 50th costs one comparison), then `fstatat` (following links) is called on
-  those 50 only, so a result means what a listing entry means.
+- **What it never enters:** symlinked directories (matched, never entered, so no cycles), anything off the
+  root's filesystem (no `/proc`, network mounts or other disks), names starting with `.` unless `hidden=1`,
+  directories matching a `search_skip` pattern (default `node_modules`), and directories tagged as caches
+  under the [Cache Directory Tagging spec](https://bford.info/cachedir/) (cargo's `target/`, pip's and
+  ccache's caches). A skipped directory is listed, not entered: Search can still find `node_modules` or
+  `target`, and a tap goes into it, where, as the root, nothing is skipped. Errors below the root skip that
+  directory; only a root error fails the request.
+- **Caps:** 100,000 entries or 500 ms, whichever first, and a 1 MiB queue; the answer carries what matched
+  and `stopped` names the cap. Breadth first means a capped walk has covered everything down to some depth.
+- **Matching:** `q` containing `*` or `?` is a glob (Jimmy: "glob when `*`/`?` typed"): `*` within a segment,
+  `?` one scalar, `**` across segments, anchored, a pattern without `/` against the last segment; globs rank
+  by depth. Anything else is fuzzy: space-separated terms, each a subsequence of the path, scored fzf-style
+  (bonuses at segment and word starts, adjacency and the last segment; nearer files rank first). Smart case:
+  ASCII letters fold only while `q` has no uppercase. Names aren't Unicode-normalised.
 
 ```text
 Search  = { path: string,                    // canonical root
@@ -274,244 +130,96 @@ Match   = Entry & { path: string,            // relative to the root, "/"-separa
                     hits: [[u16, u16]] }     // [start, end) runs of matched text, in UTF-16 code units
 ```
 
-`Match` carries a listing's [`Entry`](#get-fslistpath) fields (`name`, `kind` after following,
-`link`, `size`, `mtime`, `mime`), so the client opens a result as it opens a row. Its absolute path is
-the root's path, `/` (unless the root is `/`), and `path`. The client draws `hits` and never matches
-again, so the matcher lives in one place; `hits` are UTF-16 runs because that is how a JS string is
-indexed. An answer is at most 50 entries, a few KiB: a search costs the host's walk, not the network.
+`Match` carries a listing's `Entry` fields so the client opens a result as it opens a row. The client draws
+`hits` and never matches again, so the matcher lives in one place. An answer is a few KiB: a search costs
+the host's walk (60 to 140 ms of one core for 67,000 to 100,000 entries, warm), not the network.
 
 ### `GET /fs/raw/{*path}`
 
-`fs::open(…, File)` on any file, then the bytes, holding a raw-response slot. A directory, FIFO,
-socket or device is `409 not_a_file`; the file manager's web code expects that answer
-when a link leads to a folder. A producer task
-`pread`s 64 KiB chunks from the descriptor (each on the fs lane)
-into a channel of capacity 1 that feeds the response body. If a send waits past the
-stall deadline (a paused player, a sleeping phone), the producer drops the channel
-with an error, which aborts the response and frees the slot. For a file over 8 MiB,
-after each chunk the producer calls `posix_fadvise(DONTNEED)` on **everything from the
-response's first byte to the current position**, not on the chunk alone, so streaming
-a video doesn't fill the unit's page cache; smaller files keep theirs, which other
-processes (a build reading the same source) may be using. The range must reach back
-to the start because the kernel reads ahead in large folios, and a folio that extends
-past a 64 KiB range survives a drop of that range (a per-chunk drop left a whole
-1 GiB download cached on Linux 7.1, ext4). It stops at the current position, not the
-end of the file: dropping ahead would evict the readahead and read it twice. The drop
-is Linux-only and a no-op elsewhere. Use std file calls through the fs lane, never
-`tokio::fs::File`, whose buffer grows to 2 MiB. All blocking work goes through `src/blocking.rs`; Tokio's `fs` feature is
-disabled.
+The file's bytes, any file (a directory, FIFO, socket or device is `409 not_a_file`), with a raw slot. Headers:
+`Content-Type` from the extension allowlist below, a strong `ETag` (`"<ino>-<size>-<mtime_ns>"` hex),
+`Accept-Ranges: bytes`, `Cache-Control: no-store`, `Cross-Origin-Resource-Policy: same-origin`,
+`X-Content-Type-Options: nosniff`, `Content-Security-Policy: sandbox`. The daemon sets these itself because
+the native player fetches without the scheme handler; `sandbox` and non-executable types keep repository
+content from running as muxen or registering as its service worker; the daemon sends no CORS headers (the web
+reads `Content-Range` and `ETag` directly because the shell and raw responses share one origin).
 
-| Header | Value |
-|---|---|
-| `Content-Type` | from the extension table below |
-| `ETag` | strong: `"<ino>-<size>-<mtime_ns>"` in hex, from `files::Stamp` of the `fstat` at open |
-| `Accept-Ranges` | `bytes` |
-| `Cache-Control` | `no-store` |
-| `Cross-Origin-Resource-Policy` | `same-origin` |
-| `X-Content-Type-Options` | `nosniff` |
-| `Content-Security-Policy` | `sandbox` |
-
-The daemon sets `nosniff`, `sandbox`, `no-store` and same-origin CORP itself, because
-the native player fetches without the scheme handler. The browser shell and raw
-responses share one origin, so the web reads `Content-Range` and `ETag` directly; the
-daemon sends no CORS headers. CORP prevents another origin from embedding a raw
-response, while `no-store` prevents private file bytes being retained by an HTTP
-cache. `sandbox` and non-executable MIME types keep repository content from running
-as muxen or registering as its service worker.
-
-- **Range:** one range only, `bytes=a-b`, `bytes=a-` or `bytes=-n` → `206` with
-  `Content-Range`. A range list, or a header that doesn't parse, is ignored → `200`
-  with the whole file (RFC 9110 allows it). A range starting at or past the end →
-  `416 bad_range` with `Content-Range: bytes */<size>`. An end past the end is
-  clamped. The 416 carries no `ETag`: a client that needs one from an empty file asks again
-  without `Range`.
-- **`If-Range`** not equal to the ETag → the Range is ignored (`200`). There is no
-  `304`: nothing on the phone caches these responses.
-- **A file that changes while it is sent:** `Content-Length` comes from the `fstat` at
-  open and the body sends exactly that many bytes. If the file shrinks under the
-  stream, the response is aborted rather than cut short.
-- **Two slots are enough for the web:** it loads images (the image viewer, a
-  Markdown document's images) through a queue of 2, so a document with many images
-  never meets `busy`; `<img>` doesn't retry.
-- **Text previews:** the code and Markdown viewers read at most the first 1 MiB with
-  Range and say the file is truncated; the binary viewer offers "open as text" the
-  same way for `application/octet-stream`.
-
-**Content types.** One table in `src/fs/mime.rs`, by lowercased extension, plus a few
-whole names (`Makefile`, `Dockerfile`, `LICENSE`, `README`). It is an allowlist of the
-types the viewers need, and **it sends nothing a browser runs**.
-
-| Kind | Types |
-|---|---|
-| images | `image/png`, `jpeg`, `gif`, `webp`, `heic`, `heif`, `avif`, `bmp`, `x-icon`, `svg+xml` |
-| video, audio | `video/mp4` (`mp4`, `m4v`), `video/quicktime` (`mov`), `audio/mpeg`, `audio/mp4`, `audio/wav` |
-| Markdown | `text/markdown; charset=utf-8` |
-| code and text | `text/plain; charset=utf-8` for every source, config, data and markup extension, **`html`, `htm`, `xhtml`, `js`, `mjs`, `css` and `xml` included** |
-| PDF | `application/pdf` (viewer in v2) |
-| anything else | `application/octet-stream` |
-
-The web picks a code viewer's language by extension, not by type. SVG goes out as
-`image/svg+xml` for `<img>`, which runs no script.
-
-**Video** plays in `AVPlayerViewController`, not the web view
-([ios-shell.md](ios-shell.md#where-the-web-ui-comes-from)): the web sends `playVideo { host,
-path }`, native builds `{baseURL}/fs/raw/{encoded path}` with the same segment
-encoding and loads it through a resource loader that adds `Authorization: Bearer`
-(ios-shell.md, "Video"). AVFoundation probes with `Range:
-bytes=0-1`, then reads ranges; it needs the `206`s, an exact `Content-Type` (`nosniff`
-stops it guessing), and an ETag that stays put while the file does.
+- **Range:** one range only (`bytes=a-b`, `a-`, `-n`) → `206` with `Content-Range`; a list or unparsable header
+  → `200` whole; a start at or past the end → `416 bad_range` with `Content-Range: bytes */<size>`; an end past
+  the end is clamped. `If-Range` that isn't the ETag ignores the range. No `304`: nothing on the phone caches
+  these. A file that shrinks under the stream aborts the response rather than cutting it short.
+- **Previews:** the code and Markdown viewers read at most the first 1 MiB with Range and say the file is
+  truncated; the binary viewer offers "open as text" the same way. The web loads images through a queue of 2,
+  so a document with many images never meets `busy`.
+- **Content types** are one allowlist (`src/fs/mime.rs`) by lowercased extension, plus a few whole names
+  (`Makefile`, `Dockerfile`, `LICENSE`, `README`), and **it sends nothing a browser runs**: images (`png`,
+  `jpeg`, `gif`, `webp`, `heic`, `heif`, `avif`, `bmp`, `x-icon`, `svg+xml` for `<img>`, which runs no script),
+  `video/mp4`, `video/quicktime`, audio, `text/markdown`, `application/pdf`, and `text/plain` for every source,
+  config, data and markup extension, **`html`, `htm`, `xhtml`, `js`, `mjs`, `css` and `xml` included**;
+  anything else is `application/octet-stream`. The web picks a code viewer's language by extension, not type.
+  `.m3u8` stays out ([ios-shell.md](ios-shell.md#where-the-web-ui-comes-from)).
+- **Video** plays in `AVPlayerViewController` via a resource loader that adds the Bearer token; AVFoundation
+  probes with `Range: bytes=0-1`, then reads ranges, and needs the `206`s, an exact type and a stable ETag.
 
 ### `POST /fs/create`
 
-`POST /fs/create`, JSON `{ "dir": "<folder>", "name": "<name>", "kind": "file" | "dir" }`, at most 16 KiB: an empty file or a
-new folder. It never replaces anything. `dir` opens through `fs::open(…, Dir)` (`~` and `~/…` too; no tmpfs check, since an empty
-file charges nothing). `name` is one plain name: not empty, not `.` or `..`, no `/` or NUL, or `400 bad_request`; so is a result
-past 4,096 bytes, which no route could then open. Then, relative to the descriptor, `openat` with
-`O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC`, mode 0666, or `mkdirat`, mode 0777, both under the umask, with no fsync: an empty
-file lost in a crash costs nothing. `EEXIST` is `409 exists`, whatever holds the name, a dangling link included. A folder deleted
-under its descriptor is `404 not_found`. `204`.
+JSON `{ "dir", "name", "kind": "file" | "dir" }`, at most 16 KiB: an empty file or a new folder, never
+replacing anything. `dir` opens through `fs::open(…, Dir)` (no tmpfs check, since an empty file charges
+nothing); `name` is one plain name (not empty, not `.` or `..`, no `/` or NUL, and the result at most 4,096
+bytes) or `400 bad_request`. `EEXIST` is `409 exists`, whatever holds the name, a dangling link included; a
+folder deleted under its descriptor is `404 not_found`. `204`.
 
 ### `POST /fs/rename`
 
-`POST /fs/rename`, JSON `{ "dir": "<folder>", "name": "<name>", "to": "<new name>" }`, at most 16 KiB: a new name in the same
-folder; moving to another folder is the terminal's. `dir` opens as for `POST /fs/create`, and `name` and `to` are plain names under
-the same rules, with the same 4,096-byte limit on the result. Then `renameat` with `RENAME_NOREPLACE` (`renamex_np RENAME_EXCL` on
-macOS) relative to the descriptor, so it never replaces anything: `409 exists`, whatever holds the name. There is no fallback on
-a filesystem without it, as for an upload: `500 internal`. A link is renamed, not what it points to. A name that isn't there is
-`404 not_found`. `204`.
+JSON `{ "dir", "name", "to" }`, at most 16 KiB: a new name in the same folder (moving to another folder is the
+terminal's). Never replaces anything (`409 exists`); there is no fallback on a filesystem without a no-replace
+rename (`500 internal`). A link is renamed, not what it points to. A missing `name` is `404 not_found`. `204`.
 
 ### `POST /fs/delete`
 
-`POST /fs/delete`, JSON `{ "dir": "<folder>", "name": "<name>" }`, at most 16 KiB: `name` deleted for good, with no trash. `dir` and
-`name` follow the same rules. A link is removed and never followed; a folder goes with all it holds, removing up from the
-bottom through descriptors (`statat` with `AT_SYMLINK_NOFOLLOW`, then the same open as search, `fs::Beneath`: `openat2` with
-`RESOLVE_BENEATH | NO_SYMLINKS | NO_XDEV` on Linux, `O_NOFOLLOW_ANY` and a device check on macOS and old kernels; `unlinkat`), so a
-component swapped for a link mid-delete is refused, not followed. Names are read 256 at a time and the folder read again from its
-start after each batch: memory stays bounded, and macOS can skip names in a folder changing under `readdir`. Unlike `rm -r` it stops
-at a mount, a bind mount included where `openat2` exists: `403 denied`, and so is a folder past 64 levels. Any failure stops the
-delete and what was removed stays gone; the client lists the folder again and says some of it may be gone. A name below the one
-asked for that vanishes meanwhile is no failure. It runs under the delete slot and to its end even if the request goes away, and
-is logged there. Only the name asked for being absent is `404 not_found`, which the client takes as done. `204`.
-
-Neither a rename nor a delete touches home, muxen's state directory or a folder above either: `403 denied`. The check compares
-device and inode, so a path through a link meets it too.
+JSON `{ "dir", "name" }`, at most 16 KiB: `name` deleted for good, with no trash. A link is removed, never
+followed; a folder goes with all it holds, never crossing a mount (a bind mount included where `openat2`
+exists: `403 denied`) and stopping 64 levels down (`403 denied`). Any failure stops the delete and what was
+removed stays gone; the client lists the folder again and says some of it may be gone. It runs to its end even
+if the request goes away. Only the name asked for being absent is `404 not_found`, which the client takes as
+done. Neither delete nor rename touches home, muxen's state directory or a folder above either: `403 denied`,
+compared by device and inode so a path through a link meets it too. `204`.
 
 ### `POST /fs/upload`
 
-`POST /fs/upload?name=<the client's file name>[&dir=<folder>][&text=1]`; the body is the
-file's bytes, not multipart or JSON. `dir` is `~`, `~/…` or an absolute path to an
-existing folder, resolved by `fs::open(…, Dir)` (a missing one is `404 not_found`, a file
-`409 not_a_directory`, a relative path `400 bad_request`); absent, the folder is
-`uploads_dir`, as step 2 says. `text=1` says the body is pasted text: the file is named
-`pasted-YYYYMMDD-HHMMSSZ.txt`, then `…-2.txt`, `…-3.txt` on a clash, and `name` is ignored. axum's default body limit is off on this route; the handler checks
-the cap against `Content-Length` up front, when sent, and against the running count.
-
-1. Take the upload slot (none free: `503 busy` at once).
-2. Without `dir`: create `uploads_dir` (0700) if missing, then resolve it and `fs::open(…, Dir)`
-   it, so a directory that didn't exist when the config was read still counts. An `uploads_dir` that can't be resolved to a directory (neither absolute
-   nor `~` or `~/…`, a name too long, or not a directory) answers `409 not_a_directory`; one under a folder
-   the user can't enter is `403 denied`.
-   On Linux, `fstatfs` on the opened directory descriptor rejects tmpfs and ramfs with
-   `409 memory_backed` before a `.part` file is created (a `dir` too). A folder the user
-   can't write is `403 denied`, and nothing is created. On macOS there is no cgroup
-   memory limit, so this filesystem-type refusal is not applied.
-3. Name the file `YYYYMMDD-HHMMSSZ-xxxx.<ext>`: UTC (no time-zone crate), 4 random
-   base32 characters, and the extension of `name`, lowercased, if it is 1 to 8 ASCII
-   alphanumerics, else `bin`. Nothing else of `name` is used, so it can't carry a
-   path, a shell metacharacter or a hidden name into the folder.
-4. Clear the record of a part file a dead daemon left and delete that file (see below), record the new part file's path, then create `.muxen-upload-<random>.part` relative to the directory's descriptor with
-   `O_CREAT | O_EXCL | O_NOFOLLOW`, mode 0600 (never executable). Write each body chunk
-   on the fs lane. Every 1 MiB, `fdatasync` and
-   `posix_fadvise(DONTNEED)` what was written, so the upload's dirty pages stay small
-   on a disk the unit reaches at idle I/O priority. Dirty pages can't be reclaimed
-   until they are written, so the 1 MiB between flushes is memory the unit holds: the
-   [ceiling](#limits-and-the-memory-ceiling) counts it. The flush is the one wait without
-   a deadline: on a slow disk it slows the upload to the disk's pace, holding the
-   upload slot and one fs slot, which is the backpressure wanted. The idle timeout
-   counts only time spent waiting for the body, not time spent writing.
-5. At the end of the body, rename the part file to the final name relative to the same
-   descriptor without replacing (`renameat2 RENAME_NOREPLACE` on Linux,
-   `renamex_np RENAME_EXCL` on macOS, both `rustix::fs::renameat_with`); on a clash,
-   a new suffix and retry. A filesystem that lacks the no-replace flag has no
-   fallback: the rename fails, the part file is deleted and the answer is `500
-   internal`, since a check-then-rename could replace a file. No final `fsync`: a photo
-   lost to a power cut is re-sent.
-
-If cleanup cannot get a thread from the fs lane, or the daemon dies mid-upload, a `.part`
-file is left behind. At most one part file exists at a time, so the daemon records it:
-**`upload-part` in the state directory holds the in-flight part file's absolute path**,
-written before the part file is created. The upload slot is held exactly while a part
-file may exist: it moves into the part file and is released only after the part file is
-renamed or deleted and the record cleared, so a request that went away can't free the
-slot while its cleanup still runs. A record that can't be written fails the upload `500
-internal`.
-
-At startup, and again at step 4 of the next upload, the daemon reads the record and
-deletes it (both in the state directory, inline), then deletes the file the record named
-if that is still a regular file whose name is `.muxen-upload-*.part`. That delete runs on
-the fs lane and is not awaited: the path may be on a hung mount, and that must fill an
-fs thread, not hold up the start or an upload. The record is already gone, so the hang
-happens once. Nothing else is touched, and nothing in this cleanup fails an upload or the
-start: a missing or unreadable record, or a file it can't delete, is logged at `debug`.
-The path is logged at `info` before the delete is queued; if the fs lane is saturated
-(the hung-mount case) the delete is dropped unrun and that log line is the only trace of
-the file left behind.
-No folder is scanned.
-
-6. Answer `201 { path, size }`, `path` the absolute canonical path, which native
-   inserts, quoted, into the tab ([ios-shell.md](ios-shell.md#files-and-sharing)).
-
-On the cap, the idle timeout, a client disconnect or a write error, the part file is
-deleted. A body that stalls for the idle timeout, or that breaks because the client
-disconnected, answers `400 bad_request`: the body failed, and the client is usually
-gone to read it. Nothing else in muxen uses the `.muxen-upload-` prefix.
+`POST /fs/upload?name=<the client's file name>[&dir=<folder>][&text=1]`; the body is the file's bytes, not
+multipart or JSON. `dir` is `~`, `~/…` or an absolute path to an existing folder (a missing one is
+`404 not_found`, a file `409 not_a_directory`, a relative path `400 bad_request`); absent, the folder is
+`uploads_dir`. `text=1` says the body is pasted text: the file is `pasted-YYYYMMDD-HHMMSSZ.txt` and `name` is
+ignored. Otherwise the file is `YYYYMMDD-HHMMSSZ-xxxx.<ext>`: nothing of `name` but its extension (1 to 8 ASCII
+alphanumerics, else `bin`) is used, so it can't carry a path, shell metacharacter or hidden name into the
+folder or the path typed into the terminal. The body streams to a 0600 part file renamed into place without
+replacing, so an agent never sees a half-written photo at the final name. One upload at a time (a second gets
+`503 busy` at once). On Linux a destination on tmpfs or ramfs is `409 memory_backed` (its pages would stay
+charged to the unit); a folder the user can't write is `403 denied`, and nothing is created. Over 128 MiB is
+`413 too_large`, deleting the part file; a body that stalls 30 s or breaks answers `400 bad_request` and
+deletes it. A crash leaves at most one part file, recorded in `upload-part` and deleted at the next start or
+upload. Answer `201 { path, size }`, `path` the absolute canonical path, which the client inserts, quoted, into
+the tab ([ios-shell.md](ios-shell.md#files-and-sharing)).
 
 ### `PUT /fs/file/{*path}`
 
-The text editor's save (`src/fs/save.rs`): the body, at most 1 MiB, becomes the file's new bytes if the
-file is still the version the client read. The path is in the same URL form as `raw`.
-`If-Match` is required: the strong `ETag` from `GET /fs/raw`, or `*` to overwrite whatever is
-there. A missing header, a list, or a weak tag is `400 bad_request`. Answers `204` with the new
-`ETag`, so the client needs no re-read. axum's default body limit is off on this route; the handler
-checks `Content-Length` up front when sent and the running count as the body arrives.
-
-1. A `Content-Length` over 1 MiB is `413 too_large` at once. Take the save slot (`503 busy` when
-   none frees in time) **before** reading the body, so a slow body holds the one slot, not memory,
-   and a long upload never makes a save `busy`.
-2. Read the body (at most 1 MiB, the upload's 30 s idle timeout: `upload::next_chunk` is shared).
-   Over the cap is `413 too_large`.
-3. On the fs lane, holding the slot (it moves into the lane work): `fs::open(path, File)`. The
-   file must exist (`404 not_found`; a save never creates), a link saves to its target and stays a
-   link, and a folder, FIFO, socket or device is `409 not_a_file`, as for `raw`.
-4. Refuse with `403 denied`, writing nothing, where swapping a new file in would change something the
-   user didn't ask for. This is Jimmy's decision: a save writes a temp file and renames it over the old
-   one, so the file with two hard links would keep its other name's old text; a file owned by
-   another user would change owner; a file or folder this user can't write (`faccessat(W_OK)` on
-   the file, then the temp file's creation in the folder, `EROFS` included) would be replaced
-   anyway. Those files are edited in the terminal. The new file keeps the old one's permissions, without setuid, setgid or sticky (owner is the
-   user's; the group follows the folder; ACLs and extended attributes are not carried over).
-5. The `ETag` from step 3's `fstat` must equal `If-Match` (`*` always passes). If it doesn't, and
-   the file isn't already byte-identical to the body, answer `412 changed`. If it is identical,
-   answer `204` with the current `ETag`: a save whose answer was lost, sent again with its old
-   `ETag`, must not read as a conflict. The comparison reads at most the body's length plus one
-   byte, and only when the file's size equals the body's.
-6. Write through `files::Target`: a temp file named `.muxen-save` in the file's folder (the same
-   name in every folder, so a leftover from a crash is removed by the next save there; a file
-   with that name is never saved), `fsync`, a second stamp check against the folder entry, `renameat`
-   within the folder's descriptor, a directory `fsync`. The stamp check closes the race between
-   step 3 and the rename: a writer that gets in between makes it `412 changed`, and the temp file
-   is deleted. A `*` save re-reads the file and tries again up to 3 times before it says `changed`.
-   The answer's `ETag` is the new file's stamp.
-
-A save never uses an upload's part file or its record file: those exist for a 128 MiB streaming body,
-and `open_dir`'s tmpfs refusal would stop a save of a file in `/tmp`. A save of 1 MiB is one buffer
-and one temp file, gone or landed in one lane call.
+The text editor's save: the body (at most 1 MiB) becomes the file's new bytes if the file is still the version
+the client read. `If-Match` is required: the strong `ETag` from `GET /fs/raw`, or `*` to overwrite whatever
+is there; a missing header, a list or a weak tag is `400 bad_request`. Answers `204` with the new `ETag`, so
+the client needs no re-read. The file must exist (`404`; a save never creates); a link saves to its target and
+stays a link; a folder, FIFO, socket or device is `409 not_a_file`. **Refused with `403 denied`, writing
+nothing,** a file with another hard link, owned by another user or not writable (swapping a new file in would
+change something the user didn't ask for; those are edited in the terminal), and a file named `.muxen-save`.
+The new file keeps the old permissions without setuid, setgid or sticky. A stale `If-Match` is `412 changed`
+unless the file already equals the body (a save whose answer was lost must not read as a conflict). The save
+replaces by temp file and rename, so a reader sees the old file or the new one, and has its own slot, taken
+before the body is read, so a slow upload never makes a save `busy`.
 
 ## Server settings
 
-`GET /settings` and `POST /settings` read and write the keys of `config.toml` that apply without a
-restart, so Settings can show and change them per server. Both sit in the `devices` router behind both
-auth layers. The code is `src/config/` (the writer beside the loader), not `src/fs/`.
+`GET /settings` and `POST /settings` read and write the keys of `config.toml` that apply without a restart, so
+Settings can show and change them per server (behind both auth layers; the code is `src/config/`).
 
 ```text
 ServerSettings = { searchSkip: [string] | null,   // null: no key, the default applies
@@ -522,82 +230,54 @@ ServerSettings = { searchSkip: [string] | null,   // null: no key, the default a
 SettingsChange = { searchSkip?: [string] | null, uploadsDir?: string | null }
 ```
 
-- **Values are the running config's,** not the file's (they differ after a hand edit until a reload;
-  GET also answers `fileChanged: bool`). **Keys:** `search_skip` (top level) and `uploads_dir`. A key that is absent means the default
-  (`["node_modules"]`, `"~/.muxen-uploads"`); `defaults` carries them so the client keeps no copy.
-  `searchSkip: []` is a set key that skips nothing; `null` is no key, the default.
-- **`POST`** takes a `SettingsChange`: a field left out is unchanged, `null` removes the key, a value
-  sets it. An unknown or mistyped field is `bad_request` with axum's 422, as every JSON body axum rejects. It answers the resulting `ServerSettings`, which the
-  client draws. **Validation:** at most 64 patterns, each 1–255 bytes of UTF-8 with no `/` or NUL, not
-  made only of `*` (which would skip every folder); duplicates are dropped, order kept. `uploadsDir`
-  absolute, `~` or starting with `~/`, at most 4,096 bytes (`check_shape`'s limits, as on load). Anything else is `400 bad_request` and nothing is
-  written. A pattern starting with `.` only matters while Show hidden files is on; it is allowed.
-- **Writing** follows the rules in [Why these choices](#why-these-choices),
-  on the fs lane with a permit of its own, and one at a time under the running config's lock, which a
-  reload takes too (the daemon is `config.toml`'s only writer; the runtime lock keeps a second daemon
-  out): canonicalize the config path so a symlinked
-  `config.toml` (a dotfiles checkout) is written at its target; refuse a dangling link or an unwritable
-  target with `409 config_read_only`; edit only the two keys with `toml_edit`, keeping comments, order
-  and every other key; write `<name>.tmp` beside it with the original's mode (0600 for a new file),
-  re-stat the original and rename, retrying up to 3 times if it changed, then `503 busy`. A file that exists but doesn't
-  parse is never written: `503 config_unavailable`. A missing file is created with only the keys set,
-  its directory with mode 0700 if absent (this covers a `--config` path deleted after startup).
-- **`POST /settings/reload`** reloads as SIGHUP does and answers the resulting `ServerSettings`, or
-  `503 config_unavailable` with the parse error, the running config
-  unchanged. A save on a file that changed by hand since it was loaded first reloads it (so the save
-  never overwrites a hand edit with stale values), and fails the same way if it doesn't parse.
-  `restartNeeded` is kept with the running config, not computed per answer: the restart-only keys of
-  the file last loaded or written that differ from the ones the daemon started with. GET, a save and a
-  reload all carry it, so a save that picked up a hand edit to `[tmux]` still shows it.
-- **Concurrent saves:** the last write wins. The client sends one save at a time per server and draws
-  the answer, so its own taps can't reorder; two devices saving at the same moment can lose one change,
-  which Settings' next open shows. Accepted: one user, rare, visible.
-- **Logging:** a write at `info`, naming the keys changed, not their values.
+- **Values are the running config's**, not the file's. Keys: `search_skip` and `uploads_dir`; absent means the
+  default (`["node_modules"]`, `"~/.muxen-uploads"`), and `defaults` carries them so the client keeps no copy.
+  `searchSkip: []` is a set key that skips nothing; `null` is no key.
+- **`POST`** takes a `SettingsChange`: a field left out is unchanged, `null` removes the key, a value sets it;
+  an unknown or mistyped field is axum's 422. It answers the resulting `ServerSettings`. Validation: at most 64
+  patterns of 1–255 bytes of UTF-8 with no `/` or NUL and not only `*`; duplicates dropped, order kept;
+  `uploadsDir` absolute, `~` or `~/…`, at most 4,096 bytes; else `400 bad_request` and nothing is written.
+- **Writing** edits only those two keys with `toml_edit`, keeping comments, order and every other key (so an
+  older daemon reads a newer config), follows a symlinked `config.toml`, refuses a dangling link or unwritable
+  target (`409 config_read_only`) and never writes a file that doesn't parse (`503 config_unavailable`). A
+  save on a file changed by hand since load reloads it first, so it never overwrites a hand edit. Two devices
+  saving at once can lose one change (the last write wins; accepted: one user, rare, visible).
+- **`POST /settings/reload`** reloads as SIGHUP does and answers the resulting `ServerSettings`, or `503
+  config_unavailable` with the parse error and the running config unchanged. `restartNeeded` travels with the
+  running config, so GET, a save and a reload all carry it.
 
 ## Errors
 
-JSON `{"error": "<code>"}`, from the shared `HttpError` type ([auth.md](auth.md#endpoints)).
-The auth middleware also uses this body for `forbidden`, `auth_required`,
-`auth_unavailable`, `bad_origin`, `node_refused`, `not_enrolled` and
-`identity_unavailable`; axum JSON rejections use `bad_request` or `too_large`, on every JSON route, `/fs/create`, `rename` and `delete` included, with axum's status (400, 413, 415 or 422).
+JSON `{"error": "<code>"}`, from the shared `HttpError` type ([auth.md](auth.md#endpoints)). The auth
+middleware also uses it for `forbidden`, `auth_required`, `auth_unavailable`, `bad_origin`, `node_refused`,
+`not_enrolled` and `identity_unavailable`; axum JSON rejections use `bad_request` or `too_large` with axum's
+status (400, 413, 415, 422).
 
 | Status | `error` | Cause |
 |---|---|---|
-| 400 | `bad_request` | a save without a usable `If-Match` (missing, a list, a weak tag); a path that is relative, too long, has a NUL, doesn't decode, or canonicalizes to non-UTF-8; a bad query value; an upload's or save's body that stalled past the idle timeout or broke (the client went away) |
-| 401 | `not_enrolled` | the browser's current Tailscale node has no enrolled device row |
-| 403 | `denied` | `EACCES` or `EPERM`; an upload or a create in a folder that is read-only or not writable (`EROFS` too); a save of a file with another hard link, owned by another user or not writable, named `.muxen-save`, or in a folder holding a folder of that name |
-| 403 | `bad_origin` | Browser Origin, forwarded host or fetch metadata does not match the canonical Serve origin |
-| 403 | `node_refused` | The current Tailscale node fails a node-lane rule; includes the refusal reason |
+| 400 | `bad_request` | a save without a usable `If-Match`; a path that is relative, too long, has a NUL, doesn't decode, or canonicalizes to non-UTF-8; a bad query value; an upload's or save's body that stalled or broke |
+| 403 | `denied` | `EACCES` or `EPERM`; a read-only or unwritable folder for an upload or create; a save of a file with another hard link, another owner, no write permission or named `.muxen-save`; a delete or rename of home, the state folder or a folder above; a delete stopped at a mount or past 64 levels |
 | 404 | `not_found` | `ENOENT`, `ENOTDIR` while resolving, `ELOOP` at open |
-| 409 | `exists` | a create or a rename found the name taken |
-| 409 | `not_a_directory`, `not_a_file` | the wrong kind for the route; a FIFO, socket or device is `not_a_file`; an upload when `uploads_dir` isn't an absolute, `~` or `~/…` path, or the upload's `dir` or `uploads_dir` isn't a directory |
-| 409 | `memory_backed` | on Linux, an upload destination directory on tmpfs or ramfs; its pages would remain charged to muxen's unit while the file exists |
+| 409 | `exists` | a create or rename found the name taken |
+| 409 | `not_a_directory`, `not_a_file` | the wrong kind for the route; a FIFO, socket or device is `not_a_file`; an upload when `uploads_dir` or `dir` isn't a directory |
+| 409 | `memory_backed` | on Linux, an upload destination on tmpfs or ramfs |
 | 409 | `config_read_only` | `config.toml`, or a directory on its way, is a dangling link or can't be written |
-| 412 | `changed` | a save's `If-Match` no longer names the file (and the file isn't already the body) |
+| 412 | `changed` | a save's `If-Match` no longer names the file (and it isn't already the body) |
 | 413 | `too_large` | an upload over 128 MiB or a save over 1 MiB |
 | 416 | `bad_range` | a range starting past the end |
-| 503 | `busy` | no slot within the wait, too many waiting, or the upload slot taken (a save waits for its own slot like the others); `Retry-After: 1` |
-| 503 | `config_unavailable` | `/settings`: `config.toml` exists but can't be read or parsed; `detail` says where (`line 3, column 7`) |
-| 503 | `identity_unavailable` | LocalAPI could not establish the current Tailscale identity |
+| 503 | `busy` | no slot within the wait, too many waiting, or the upload slot taken; `Retry-After: 1` |
+| 503 | `config_unavailable` | `/settings`: `config.toml` exists but can't be read or parsed; `detail` says where |
 | 507 | `no_space` | `ENOSPC` or `EDQUOT` during an upload or a Settings save |
-| 500 | `internal` | any other I/O error, including an upload's rename on a filesystem with no no-replace support; the cause is logged, never sent |
+| 500 | `internal` | any other I/O error, including a rename on a filesystem with no no-replace support; the cause is logged, never sent |
 
 ## Limits and the memory ceiling
 
-File I/O runs on the four-thread fs lane in the 8-thread blocking pool
-([plan.md](plan.md#resource-budget)). A slow disk can stall the file manager but cannot
-consume auth's two threads. Every wait but the upload flush has a deadline; at most 8
-callers wait across fs slots and blocking work. Nothing is held between requests: no
-listing cache, no search index, no cursor, no open descriptor.
-
-**Shutdown must not wait on a stream.** `http::serve` gives its connection tasks a
-2 s grace, then calls `JoinSet::abort_all` and joins the aborted tasks before it
-returns. A stalled raw response would otherwise retain its `Ctx` and `HubHandle`;
-because another handle would remain alive, the hub could not infer that all HTTP
-clients were gone and close its control clients. `main` therefore calls
-`HubHandle::stop` explicitly after `serve` returns
-([hub context](../../src/hub/.context/CONTEXT.md)). A SIGTERM with a paused
-raw stream then ends in 2.0 s with exit 0.
+File I/O runs on the four-thread fs lane in the 8-thread blocking pool ([plan.md](plan.md#resource-budget)),
+so a slow disk can stall the file manager but can't consume auth's two threads. Nothing is held between
+requests: no listing cache, no search index, no cursor, no open descriptor. **Shutdown must not wait on a
+stream:** `http::serve` aborts connection tasks after a 2 s grace, and `main` calls `HubHandle::stop` itself
+([hub context](../../src/hub/.context/CONTEXT.md)), so a SIGTERM with a paused raw stream ends in 2.0 s with
+exit 0.
 
 | Item | Bound | MB |
 |---|---|---|
@@ -605,95 +285,87 @@ raw stream then ends in 2.0 s with exit 0.
 | search walk | 1 × (1 MiB queue + one `getdents` buffer + 50 matches × 4 KiB) | 1.3 |
 | raw responses | 2 × (64 KiB chunk + channel + 16 KiB hyper write buffer) | 1.0 |
 | upload | 1 × (16 KiB hyper read buffer + 64 KiB chunk + 1 MiB of dirty pages between flushes) | 1.2 |
-| save | 1 × (16 KiB hyper read buffer + the body, at most 1 MiB, buffered once; written from the same buffer) | 1.0 |
+| save | 1 × (16 KiB hyper read buffer + the body, at most 1 MiB) | 1.0 |
 | listing JSON | one page, 200 entries | 0.1 |
-| **file API, excluding raw responses** | scan, search, upload, save and listing page | **4.8** |
+| **file API, excluding raw responses** | | **4.8** |
 
-Raw responses and kernel socket buffers have separate rows in the daemon's ceiling in
-[daemon-core.md](daemon-core.md#limits-and-the-memory-budget). HTTP/1 buffers are
-bounded to 16 KiB each by its accept loop. Page cache is charged to the unit too. Clean
-pages are reclaimable, so they don't count toward the unreclaimable ceiling; at
-`MemoryMax` the kernel reclaims them before it kills. The unit sets no `MemoryHigh`,
-since a lower soft limit would stall allocation. The `DONTNEED` calls above keep the
-file API's share small. An upload's dirty pages can't be reclaimed until written,
-which is why they have a row and why the flush interval is 1 MiB, not larger: the save's buffer took the other MiB, so the ceiling didn't move.
+Raw responses and kernel socket buffers have separate rows in the daemon's ceiling
+([daemon-core.md](daemon-core.md#the-ceiling)). Clean page cache is reclaimable and doesn't count toward
+the unreclaimable ceiling; the unit sets no `MemoryHigh`, since a lower soft limit would stall allocation; the
+`DONTNEED` calls keep the file API's share small. An upload's dirty pages can't be reclaimed until written,
+which is why they have a row and why the flush interval is 1 MiB, not more.
 
 ## Logging
 
-- **Writes at `info`, by action and canonical path:** an upload's final path and
-  size (a `dir` upload too); a create's path; a save's path and size.
-- **Refusals** (`denied`) at `warn` with the path
-  asked for.
-- **Reads** (listings, raw ranges) at `debug` only: one video is dozens of requests. A search
-  logs its root, entries read and `stopped` at `debug`; never `q`.
-- **Never** file contents, upload bytes, the client's upload `name` beyond its
-  extension, or `config.toml`'s text (a parse error logs the line and column; auth
-  logs the line).
-
-## Module shape
-
-`src/fs/` knows nothing of axum; `src/http/fs.rs` holds thin handlers that parse the
-request, take slots, call into `fs` and build responses. The pure parts are tested
-without a disk.
-
-| File | Contents |
-|---|---|
-| `fs/mod.rs` | `FsError` with its status and code, `expand` for `~/` |
-| `fs/open.rs` | `fs::open`, `fs::check_dir`, the platform descriptor-path lookup |
-| `fs/slots.rs` | scan, search, raw-response, upload and save permits, with waits counted against the fs lane |
-| `fs/list.rs` | the scan; pure sort and page |
-| `fs/search/mod.rs` | the walk, the cache-tag probe and the best 50 |
-| `fs/search/matcher.rs` | pure: query parsing, glob and fuzzy scoring, hits, result order, the skip patterns |
-| `fs/raw.rs` | pure `parse_range` and `If-Range`; the chunk producer; ETags come from `files::Stamp` |
-| `fs/mime.rs` | the extension table |
-| `fs/entry.rs` | create, rename and delete: one plain name in a folder, through its descriptor |
-| `fs/upload.rs` | pure name generation; part file, flush, rename, the in-flight record and its cleanup; `next_chunk`, the idle-timed body read a save shares |
-| `fs/save.rs` | `PUT /fs/file`: `If-Match`, the body read, the refusals and the stamp-checked replace through `files::Target` |
-| `config/live.rs` | the running config's live keys, the reload, the save under its lock, "changed since loaded" |
-| `config/write.rs` | the save's pieces: validation, the link-following target, `toml_edit`; the replace is `files::Target` (temp name `{name}.tmp`) |
-| `http/settings.rs` | `/settings` and `/settings/reload` |
-
-Wire types go in `src/proto/fs.rs` (`src/proto/settings.rs` for `/settings`) and are generated for TypeScript like the WebSocket
-messages ([daemon-core.md](daemon-core.md#wire-protocol-srcproto)); Swift hand-writes
-only the upload response. New dependency: axum's `query` feature. Tests run `fs::open` against a temp tree with symlinks, `..`, a FIFO and a non-UTF-8
-name, and swap a component for a symlink between canonicalize and open to exercise
-step 4.
-
-## v2: what this must not preclude
-
-Edit is built as `PUT /fs/file/{*path}` above. What is left for later must not be precluded by it:
-resumable uploads extend the part file at an offset; rename of an open file in another tab is
-seen by the editor as the save's `not_found`, not by a subscription. The ETag, the URL-path form and
-the error codes are shared by `raw` and the save.
+Writes at `info` by action and canonical path (an upload's final path and size, a create's path, a save's path
+and size); refusals (`denied`) at `warn` with the path asked for; reads (listings, raw ranges, a search's root,
+entries read and `stopped`, never `q`) at `debug` only, since one video is dozens of requests. Never file
+contents, upload bytes, the client's upload `name` beyond its extension, or `config.toml`'s text (a parse error
+logs the line and column).
 
 ## Open risks
 
 - **`sandbox` and CORS on custom-scheme responses** are unverified on iOS 26
   ([ios-shell.md](ios-shell.md#open-risks)). The type allowlist holds without them.
-- **The memory ceiling sits near the unit's limit** once the file API and kernel socket
-  buffers are counted ([daemon-core.md](daemon-core.md#limits-and-the-memory-budget)).
-  The budget run must read the unit's `memory.peak`, which counts kernel buffers and
-  page cache, not the daemon's RSS.
-- **Unit-tested only on macOS.** The fs tests pass on the Mac (APFS): the
-  `F_GETPATH` descriptor-path lookup, the `RENAME_EXCL` no-replace rename and search's
-  `O_NOFOLLOW_ANY` walk. None has served a phone from a Mac LaunchAgent yet, and CI builds
-  macOS only at release, so rerun the fs tests on the Mac after changing them. On a platform
-  that is neither Linux nor Apple the descriptor-path lookup fails closed.
-- **How many concurrent ranges AVFoundation opens** per video decides whether 2 raw
-  slots are enough; the device check records it.
+- **The memory ceiling sits near the unit's limit** once the file API and kernel socket buffers are counted
+  ([daemon-core.md](daemon-core.md#limits-and-the-memory-budget)). The budget run must read the unit's
+  `memory.peak`, which counts kernel buffers and page cache, not the daemon's RSS.
+- **Unit-tested only on macOS.** The fs tests pass on the Mac (APFS): the `F_GETPATH` descriptor-path lookup,
+  the `RENAME_EXCL` no-replace rename and search's `O_NOFOLLOW_ANY` walk. None has served a phone from a Mac
+  LaunchAgent yet, and CI builds macOS only at release, so rerun the fs tests on the Mac after changing them.
+- **How many concurrent ranges AVFoundation opens** per video decides whether 2 raw slots are enough; the
+  device check records it.
 
 ## Why these choices
 
-- **One resolution function that returns a checked descriptor.** `fs::open` canonicalizes with `realpath`, opens with `O_NOFOLLOW | O_NONBLOCK`, then reads the descriptor's real path (`/proc/self/fd`, `F_GETPATH`) and checks it again, so the check-then-open race closes for one syscall and a later route is not tempted to reopen by path. `O_NONBLOCK` keeps a FIFO in a repo from pinning a blocking thread. `openat2(RESOLVE_BENEATH)` is Linux only and refuses absolute symlinks that stay inside the root; `RESOLVE_IN_ROOT` resolves an absolute link to the wrong file.
-- **No scope** (Jimmy: "u already have terminal access... why tf are we restricting this?"): a device token already runs any command in tmux. `dir` on `newWindow` and `newSession` is checked for shape only (absolute, at most 4,096 bytes, no NUL, `stat`s as a directory) and passed to tmux as given, so a symlinked `~/code` keeps showing as `~/code`.
-- **`config.toml` is read at startup and on a reload** (SIGHUP, `systemctl --user reload muxen`, or Settings' Reload button), and a reload that doesn't parse changes nothing and says why. Re-reading per request would either hide an error behind a last-good fallback or fail closed on a typo and stop uploads. `auth.toml` keeps its per-check read because enrolment on another device must apply at once. SIGHUP reloads only when the daemon's stdin was not a terminal at start: a foreground `muxen serve` keeps SIGHUP's default, because a reload would leave a closed terminal's daemon orphaned holding the runtime lock. Restart-only keys that a loaded or written file changed stay with the running config, and every Settings answer carries `restartNeeded`. They stay hand edits because a wrong tmux socket set from the phone would cut off the screen that fixes it.
-- **Config writes** use `toml_edit` so Jimmy's comments and keys a newer daemon wrote survive (serializing with serde drops them, breaking "an older daemon reads a newer config"), follow a symlink so a dotfiles link stays intact, re-stat before the rename to catch most editor saves, and refuse a dangling link (`409 config_read_only`) rather than create files wherever it points. The daemon is `config.toml`'s only writer, so the save runs under the running config's own lock, not the state directory's.
-- **Paths ride in the URL path** (`/fs/list/{*path}`, `/fs/raw/{*path}`): AVFoundation sees the file's extension in the URL, and a relative image in Markdown resolves against the document's own raw URL by plain URL resolution. Non-UTF-8 names are listed with U+FFFD and `utf8: false` but not openable: they don't occur in Jimmy's trees, and byte-exact names would cost every client.
-- **Listings** re-read the directory for each page and keep nothing, because sorting needs the whole directory and holding it between pages is state for a viewer nobody may return to. Only symlinks and `DT_UNKNOWN` entries are `stat`ed, since a symlinked directory must sort as a directory and a `stat` per scanned entry would be 5,000 syscalls on an overloaded disk. Hidden names are filtered on the server so pages stay full.
-- **Search walks per settled query and sends the best 50.** Measured on pop-os (warm): `~` is 4.4 million entries, 4.7 s to walk and 59 MB gzipped as a path list; a large repo (67,000 entries) is 70 ms and 400 KB gzipped. A client-side index costs hundreds of KB to MB per folder on a spotty link and can't cover `~`; a daemon-side index holds memory on a busy host and needs a staleness rule; a per-query walk costs a bounded burst (about 150 ms of a core) and a few KiB on the wire. Breadth first means a capped walk has covered everything down to some depth. It skips names starting with `.` (unless Show hidden files is on), directories tagged with a valid `CACHEDIR.TAG` (cargo writes one in `target/`; pop-os has 192 under `~`), and directories matching `search_skip` (default `["node_modules"]`, which writes no tag). A folder merely named `target` stays searchable. Honouring `.gitignore` would add the `ignore` crate for what two defaults and a tag cover.
-- **Content types are an extension allowlist** that never sends HTML, JavaScript, CSS or XML as anything but `text/plain`. The native player bypasses the scheme handler, so the daemon sets `nosniff` and `sandbox` itself, and with `nosniff` the declared type is the only type. `mime_guess`'s table includes `text/html`, and sniffing reads every file's first bytes on a busy disk.
-- **Raw** honours single ranges only (the viewers and AVFoundation send nothing else), with an ETag from `stat` and no `304`, because WebKit doesn't cache custom-scheme responses. A send that waits 30 s aborts the response; without it a paused player holds its slot, and the daemon's shutdown, forever, because hyper stops polling a body whose socket is full. Pages are dropped with `posix_fadvise(DONTNEED)` from the response start for files over 8 MiB: on Linux with `MemoryHigh=48M`, dropping each 64 KiB chunk kept large readahead folios resident (a 1 GiB download left 44.6 MB cached), while dropping from the response start kept the cache at or below 260 KB.
-- **Uploads** stream a raw body (no multipart parser, no base64's +33%) to a 0600 part file and rename it without replacing, so an agent never sees a half-written photo at the final name. Only the extension comes from the client, which keeps paths and shell metacharacters out of the folder and out of the path typed into the terminal. The name uses UTC because local time needs a time-zone crate. A flush every 1 MiB bounds the dirty pages charged to the unit (an 8 MiB interval held up to 8.2 MB dirty in a measured 120 MiB upload); it is 1 MiB and not more because the save's buffer took the other MiB of the ceiling. One upload runs at a time because each costs a hyper read buffer. The daemon records the live part file's path in `upload-part` before creating it and removes the record when the part lands, so a crash leaves at most one part file and cleanup needs no folder scan: sweeping the upload's own folder left stale files in folders never uploaded to again and could fail an upload on an entry it couldn't unlink.
-- **A save replaces the file by temp file and rename**: the rename is atomic, so a reader sees the old file or the new one, and the stamp check at the rename closes the race with a writer that got in after the open. Writing in place keeps the inode but a crash or full disk mid-write leaves a torn file. Refusing a file with another hard link, another owner or no write permission avoids a swap that leaves the other link with old text or changes the owner. One fixed `.muxen-save` temp name per folder means a leftover is removed by the next save there, where `{name}.tmp` would delete a user's `notes.txt.tmp`. The save has its own one-permit slot, taken before the body is read, so a minutes-long upload never makes a save `busy`.
-- **Delete is permanent** after a confirmation and a folder goes with all it holds. It never follows a link, stops at a mount (a bind mount too, through `openat2`), stops 64 levels down, and refuses home, the daemon's state folder and every folder above them, by device and inode, because a check in the menu alone missed a path through a link. Moving to the system trash needs a copy across disks and per-OS layouts.
-- **Create takes `{ dir, name }`**, so there is no path to split and the planned `Want::Parent` mode was never built.
+- **One resolution function that returns a checked descriptor**, so the check-then-open race closes for one
+  syscall and a later route isn't tempted to reopen by path. `O_NONBLOCK` keeps a FIFO in a repo from pinning
+  a blocking thread. `openat2(RESOLVE_BENEATH)` is Linux only and refuses absolute symlinks that stay inside
+  the root; `RESOLVE_IN_ROOT` resolves an absolute link to the wrong file.
+- **No scope** (Jimmy: "u already have terminal access... why tf are we restricting this?"): a device token
+  already runs any command in tmux. `dir` on `newWindow` and `newSession` is checked for shape only and
+  passed to tmux as given, so a symlinked `~/code` keeps showing as `~/code`.
+- **`config.toml` is read at startup and on a reload**, and a reload that doesn't parse changes nothing and
+  says why. Re-reading per request would either hide an error behind a last-good fallback or fail closed on a
+  typo and stop uploads. `auth.toml` keeps its per-check read because enrolment on another device must apply
+  at once. Restart-only keys stay hand edits because a wrong tmux socket set from the phone would cut off the
+  screen that fixes it.
+- **Config writes** use `toml_edit` so Jimmy's comments and keys a newer daemon wrote survive (serializing
+  with serde drops them), follow a symlink so a dotfiles link stays intact, re-stat before the rename to catch
+  most editor saves, and refuse a dangling link rather than create files wherever it points. The daemon is
+  `config.toml`'s only writer, so the save runs under the running config's own lock.
+- **Listings** re-read the directory for each page and keep nothing, because sorting needs the whole
+  directory and holding it between pages is state for a viewer nobody may return to. Only symlinks and
+  `DT_UNKNOWN` entries are `stat`ed, and hidden names are filtered on the server so pages stay full.
+- **Search walks per settled query and sends the best 50.** Measured on pop-os (warm): `~` is 4.4 million
+  entries, 4.7 s to walk and 59 MB gzipped as a path list; a large repo (67,000 entries) is 70 ms and 400 KB
+  gzipped. A client-side index costs hundreds of KB to MB per folder on a spotty link and can't cover `~`; a
+  daemon-side index holds memory on a busy host and needs a staleness rule; a per-query walk costs a bounded
+  burst and a few KiB on the wire. It skips dot names, cache-tagged directories (cargo writes one in
+  `target/`; pop-os has 192 under `~`) and `search_skip` (default `node_modules`, which writes no tag); a
+  folder merely named `target` stays searchable. Honouring `.gitignore` would add the `ignore` crate for what
+  two defaults and a tag cover.
+- **Content types are an extension allowlist** that never sends HTML, JavaScript, CSS or XML as anything but
+  `text/plain`. `nosniff` makes the declared type the only type, and `mime_guess`'s table includes
+  `text/html` while sniffing reads every file's first bytes on a busy disk.
+- **Raw** honours single ranges only (the viewers and AVFoundation send nothing else) with an ETag from
+  `stat`. A send that waits 30 s aborts the response: without it a paused player holds its slot, and the
+  daemon's shutdown, forever, because hyper stops polling a body whose socket is full. Pages are dropped with
+  `DONTNEED` from the response start for files over 8 MiB: with `MemoryHigh=48M`, dropping each 64 KiB chunk
+  kept large readahead folios resident (a 1 GiB download left 44.6 MB cached), while dropping from the start
+  kept the cache at or below 260 KB.
+- **Uploads** stream a raw body (no multipart parser, no base64's +33%) to a part file renamed without
+  replacing. The name uses UTC because local time needs a time-zone crate. A flush every 1 MiB bounds the
+  dirty pages charged to the unit (an 8 MiB interval held up to 8.2 MB dirty in a measured 120 MiB upload).
+  One upload runs at a time because each costs a hyper read buffer. The daemon records the live part file's
+  path so cleanup needs no folder scan: sweeping the upload's own folder left stale files in folders never
+  uploaded to again and could fail an upload on an entry it couldn't unlink.
+- **A save replaces the file by temp file and rename**: writing in place keeps the inode but a crash or full
+  disk mid-write leaves a torn file. Refusing a file with another hard link, another owner or no write
+  permission avoids a swap that leaves the other link with old text or changes the owner. One fixed
+  `.muxen-save` temp name per folder means a leftover is removed by the next save there, where `{name}.tmp`
+  would delete a user's `notes.txt.tmp`.
+- **Delete is permanent** after a confirmation and a folder goes with all it holds. It refuses home, the
+  state folder and every folder above them by device and inode, because a check in the menu alone missed a
+  path through a link. Moving to the system trash needs a copy across disks and per-OS layouts.
+- **Create takes `{ dir, name }`**, so there is no path to split.
