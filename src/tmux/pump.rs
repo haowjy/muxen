@@ -1,4 +1,4 @@
-//! A control client's I/O (daemon-core.md, §3.1): one task per `tmux -C` process
+//! A control client's I/O (daemon-core.md): one task per `tmux -C` process
 //! moves its stdout to the hub as raw bytes and the hub's lines to its stdin. It never
 //! parses or decides; the hub's `Session` does.
 

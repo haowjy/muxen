@@ -586,7 +586,7 @@ impl State {
     }
 
     /// A listing request joins a listing in flight, the bell poll's included, and
-    /// shares its answer (§4.8).
+    /// shares its answer.
     pub(super) fn list(&mut self, conn: ConnId, req: u32) {
         let joins = matches!(self.oneshot, Some((_, OneShotWork::List { .. })));
         if (self.oneshot.is_some() && !joins) || !self.can_reserve(conn, LISTING_RESERVATION) {

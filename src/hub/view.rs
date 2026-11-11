@@ -45,7 +45,7 @@ pub(super) struct Vote {
     pub(super) take_due: bool,
 }
 
-/// A watched session's current window and pane stream (§4.2, §4.3).
+/// A watched session's current window and pane stream.
 pub(super) struct View {
     pub(super) watches: BTreeSet<WatchKey>,
     pub(super) claim: Option<Claim>,

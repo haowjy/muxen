@@ -87,7 +87,7 @@ pub struct State {
     pub(super) clients: BTreeMap<ClientId, Client>,
     pub(super) views: BTreeMap<ViewKey, View>,
     pub(super) conns: BTreeMap<ConnId, Conn>,
-    /// Exited control clients whose session is being checked (§4.5).
+    /// Exited control clients whose session is being checked.
     pub(super) exits: BTreeMap<ClientId, ExitCheck>,
     /// The one one-shot that may run, and what its answer is for.
     pub(super) oneshot: Option<(Tag, OneShotWork)>,
@@ -227,7 +227,7 @@ pub(super) enum OneShotWork {
     SessionCheck {
         exited: ClientId,
     },
-    /// The poll has no waiters; a user's `list` joins one in flight (§4.8).
+    /// The poll has no waiters; a user's `list` joins one in flight.
     List {
         waiters: Vec<(ConnId, u32)>,
     },
@@ -242,7 +242,7 @@ pub(super) enum OneShotWork {
     },
 }
 
-/// How a control client ended (§4.5).
+/// How a control client ended.
 #[derive(Clone)]
 pub(super) struct Exit {
     pub(super) endpoint: usize,

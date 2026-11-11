@@ -1,4 +1,4 @@
-//! JSON messages (§5.3): adjacently tagged, `{"type": "<name>", "data": {...}}`,
+//! JSON messages: adjacently tagged, `{"type": "<name>", "data": {...}}`,
 //! camelCase. Optional fields and new message types need no version bump: unknown
 //! fields are ignored, and `ClientMsg::decode` reports an unknown type rather than
 //! failing.

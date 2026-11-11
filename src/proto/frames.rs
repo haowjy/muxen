@@ -1,4 +1,4 @@
-//! Binary frames (§5.4), daemon → client only. Big-endian; the first byte is the kind,
+//! Binary frames, daemon → client only. Big-endian; the first byte is the kind,
 //! and an unknown kind is a protocol error.
 //!
 //! ```text

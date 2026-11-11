@@ -1,4 +1,4 @@
-//! One WebSocket connection (src/hub/.context/CONTEXT.md, §5.2, §6; auth.md "Carrying the
+//! One WebSocket connection (src/hub/.context/CONTEXT.md; auth.md "Carrying the
 //! token"): the handshake, the idle timeout, background device re-checks, pastes
 //! written to files, the `dir` check on new windows and sessions, and
 //! the hub's `ToConn` moved through an `Outbox` onto the socket, every charge returned

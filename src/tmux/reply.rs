@@ -1,5 +1,5 @@
 //! What tmux prints for muxen's formats, each format beside the parser of its rows
-//! (src/tmux/.context/CONTEXT.md, §3.8). `command.rs` puts the formats in commands; `session.rs`
+//! (src/tmux/.context/CONTEXT.md). `command.rs` puts the formats in commands; `session.rs`
 //! and `oneshot.rs` parse the answers. The snapshot's `STATE_FORMAT` lives with its
 //! parser in `snapshot.rs`.
 
@@ -85,7 +85,7 @@ pub(super) const BELL_OURS: &str = "#{m:set-option -F @muxen-bell*,#{alert-bell[
 /// (`#{s/<LF>/\\n/:…}`; the argv holds a literal line feed). The name goes last
 /// because it can still hold a tab. The sixth field is the session's bell counter,
 /// the seventh whether this window's bells reach the hook: tmux's own verdict on what
-/// `list` can't see from outside (§4.8).
+/// `list` can't see from outside.
 pub(super) fn listing_window_format() -> String {
     format!(
         "#{{session_id}}\t#{{window_id}}\t#{{window_index}}\t#{{window_active}}\t#{{window_activity}}\t\

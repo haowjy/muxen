@@ -32,7 +32,7 @@ pub use state::{Effect, Input, State};
 
 /// Watches per connection; a watch past it ends at once.
 pub const MAX_WATCHES: usize = 2;
-/// The bell poll runs this long after the last listing answer (§4.8).
+/// The bell poll runs this long after the last listing answer.
 pub const BELL_POLL: Duration = Duration::from_secs(5);
 /// How long a control client stays attached once it owns no watched window.
 pub const LINGER: Duration = Duration::from_secs(15);

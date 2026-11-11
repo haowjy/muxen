@@ -1126,7 +1126,7 @@ fn output_past_the_spacing_deadline_stands_in_for_the_tick() {
     hub.output(client, 0, "late");
     hub.settle();
     assert!(hub.take(conn).is_empty());
-    // Only the bell poll is waiting on time (§4.8).
+    // Only the bell poll is waiting on time.
     assert!(
         hub.state
             .next_deadline()

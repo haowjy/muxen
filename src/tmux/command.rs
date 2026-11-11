@@ -1,4 +1,4 @@
-//! Typed command builders (src/tmux/.context/CONTEXT.md, §3.8): lines for a control client and
+//! Typed command builders (src/tmux/.context/CONTEXT.md): lines for a control client and
 //! arguments for `tmux` itself. Nothing else writes tmux commands, and none of them
 //! waits: a waiting command would stall every later reply.
 
@@ -62,7 +62,7 @@ pub fn pause(pane: PaneId) -> Group {
     Group::one(format!("refresh-client -A '{pane}:pause'"))
 }
 
-/// The atomic snapshot list (§3.5). `continue` goes first. The state is read before
+/// The atomic snapshot list. `continue` goes first. The state is read before
 /// the captures and again after them: a hook run between two commands can change the
 /// pane without printing, and two different reads show it. The paired active-grid
 /// captures provide wraps; the saved grid stays a visual-only restore. The alternate
@@ -217,7 +217,7 @@ fn locate(session: SessionId) -> Group {
     ))
 }
 
-/// A control client's arguments after `tmux -u -N <socket>` (§3.1). `pause-after`
+/// A control client's arguments after `tmux -u -N <socket>`. `pause-after`
 /// bounds what tmux queues for a client that falls behind.
 pub fn attach(session: SessionId) -> Vec<String> {
     let session = session.to_string();
@@ -231,7 +231,7 @@ pub fn attach(session: SessionId) -> Vec<String> {
     ])
 }
 
-/// A one-shot's arguments after `tmux -u -N <socket>` (§3.8). tmux takes each
+/// A one-shot's arguments after `tmux -u -N <socket>`. tmux takes each
 /// argument as it is, with no quoting, except that one ending in `;` ends a command.
 pub fn oneshot(cmd: &OneShotCmd) -> Result<Vec<String>, TmuxError> {
     Ok(match cmd {
@@ -303,7 +303,7 @@ pub fn oneshot(cmd: &OneShotCmd) -> Result<Vec<String>, TmuxError> {
     })
 }
 
-/// Muxen's `alert-bell` entry (§4.8): runs in the ringing session's context and
+/// Muxen's `alert-bell` entry: runs in the ringing session's context and
 /// counts its bells in a user option. The double quotes are part of the text: unquoted,
 /// tmux reads `#` as a comment and stores a truncated hook.
 const BELL_HOOK: &str =

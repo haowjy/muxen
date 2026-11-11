@@ -1,4 +1,4 @@
-//! Session view ownership and control-client lifecycle (src/hub/.context/CONTEXT.md, §4.5).
+//! Session view ownership and control-client lifecycle (src/hub/.context/CONTEXT.md).
 
 use std::time::Instant;
 

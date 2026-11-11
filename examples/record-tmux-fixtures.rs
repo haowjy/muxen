@@ -122,7 +122,7 @@ struct Recorder<'a> {
 
 impl<'a> Recorder<'a> {
     fn attach(server: &'a Server) -> Result<Self> {
-        // As the daemon spawns it (§3.1), on the private socket.
+        // As the daemon spawns it, on the private socket.
         let mut child = server
             .command()
             .arg("-N")

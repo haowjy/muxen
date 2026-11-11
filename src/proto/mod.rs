@@ -25,7 +25,7 @@ pub fn accepts(protocol: u32) -> bool {
     (MIN_PROTOCOL..=PROTOCOL_VERSION).contains(&protocol)
 }
 
-/// WebSocket close codes (§5.2). The client reconnects after any of them except
+/// WebSocket close codes. The client reconnects after any of them except
 /// `Incompatible` and `BadToken`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u16)]

@@ -83,7 +83,7 @@ pub struct Tag(pub u64);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ClientId(pub u64);
 
-/// A tmux server muxen talks to (§3.8): the tmux executable and the server's socket.
+/// A tmux server muxen talks to: the tmux executable and the server's socket.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Endpoint {
     pub program: PathBuf,
@@ -294,14 +294,14 @@ pub enum Op {
     },
 }
 
-/// Work for a one-shot `tmux -N` (§3.8): when no control client can run it, or when it
+/// Work for a one-shot `tmux -N`: when no control client can run it, or when it
 /// must not run on one. Answered with a `Reply` like an `Op`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OneShotCmd {
     /// The session sheet and the bell poll: answered by `Reply::Listing`. It first
-    /// installs muxen's bell hook if nothing is at its index (§4.8).
+    /// installs muxen's bell hook if nothing is at its index.
     List,
-    /// Daemon start and stop (§4.8): `Reply::Ok`.
+    /// Daemon start and stop: `Reply::Ok`.
     AdoptBellHook,
     RemoveBellHook,
     Locate {
@@ -439,7 +439,7 @@ pub struct ListedSession {
     pub windows: Vec<ListedWindow>,
 }
 
-/// A session's bell attention state (§4.8). `mark` counts the session's bells; every
+/// A session's bell attention state. `mark` counts the session's bells; every
 /// window line carries it. `covered` is tmux's verdict, true when every window's
 /// bells reach muxen's hook.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
