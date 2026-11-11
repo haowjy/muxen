@@ -398,85 +398,25 @@ SIGINT or SIGTERM during foreground setup before serving uses the process's defa
 signal exit and does not start the daemon; clap's `2` is for usage. Setup doesn't use
 `78`, which belongs to `muxen serve`.
 
-## Code structure
-
-```text
-src/setup/
-  AGENTS.md
-  mod.rs           background/foreground setup() and teardown(): step sequence,
-                   shared success tail and exit status
-  checks.rs        sans-IO: gathered Facts -> validated Tailnet, or check findings;
-                   platform-specific warning findings are returned separately
-  install.rs       sans-IO: the embedded unit and plist, the plist substitution, and
-                   per-platform service plans and the previous bytes of a differing file
-  systemd.rs       Linux: owns its Host and TeardownHost, gathers host facts and runs
-                   systemd actions; aliased as `platform` in mod.rs
-  launch_agent.rs  macOS: owns its Host and TeardownHost, gathers host facts and runs
-                   LaunchAgent actions; aliased as `platform` in mod.rs
-  report.rs        the success text and the QR code
-src/auth/publish.rs   plan_publish and plan_withdraw over ServeTarget and muxen's
-                      matcher; the compare-and-swap loop shared by the Mac task, setup
-                      and teardown
-src/auth/identity.rs  ServeTarget's proxy URL and matcher; read_auth_info on both
-                      platforms
-src/auth/localapi.rs  Status's Version, BackendState and CertDomains; prefs();
-                      SetServeConfigError's Denied (403) and NotLocalAdmin (401)
-src/proto/auth.rs     AuthInfo's browserPending (Swift mirrors AuthInfo by hand)
-src/main.rs           CLI dispatch for the Setup and Teardown subcommands
-src/daemon.rs         open() acquires the budget, runtime, flock and fronts, and
-                      initializes Store/Auth; Opened::run() registers signals and serves
-src/blocking.rs       the shared current-thread tokio runtime, capped at the daemon's
-                      blocking-thread budget
-```
-
-`launch_agent.rs` is named apart from `src/launchd.rs`, the daemon's socket-activation
-module and the one place `unsafe` is allowed; setup needs no `unsafe`. Setup runs on
-the shared current-thread runtime capped at the daemon's eight blocking threads.
-Background setup uses LocalAPI and `local.sock`; foreground setup calls the daemon's
-`Auth` in process. Each platform module owns its own host and teardown state behind the
-`platform` alias; the pure policy modules build on both platforms.
-
-The pure cores carry the policy logic:
-
-- `checks`: background setup's table tests cover each row of [Checks](#checks) from a
-  `Facts` value, including the version parse (`1.94.0-t…`, `1.104.2-tc…`), resolved
-  directories and messages. A foreground test exercises the exact runtime-directory
-  requirement, including alternate, noncanonical and unset paths. Remaining foreground
-  host checks are covered by S12.
-- `install`: absent, identical, differing, loaded, unloaded and disabled combinations
-  to their actions; the plist with a `PATH` holding `&`, `<` and spaces is valid XML
-  (`plutil -lint` on macOS CI).
-- `publish`: Unix-target plans: an empty or null config; the old `7850` handler at `/`
-  of `:443` removed and elsewhere kept; another app's `/` handler, Funnel and a TCP
-  forward on 443 refuse without writing; unknown fields survive; a handler under an
-  old MagicDNS name is removed; withdrawal without a live socket, on both targets.
-- LocalAPI write errors: the fake-LocalAPI integration tests (`LocalApi::at`) answer
-  `403`, `401` and `412`, and each maps to its message.
-
-The platform executors in `systemd.rs` and `launch_agent.rs` only run commands and read files,
-with no seam for faking them: the probe gates cover them. Foreground Linux's reduced
-findings are also covered by S12 on the target host.
-
 ## Probe gates
 
-| Gate | On | Check |
-|---|---|---|
-| S1 | pop-os | From a fresh state (no unit, linger off, no operator), `muxen setup --background` over SSH asks for at most two passwords, publishes, prints a code-bearing link, QR and code. The iPhone camera opens the link; Safari enrols from its fragment; the iOS app adds the host with its name and code |
-| S2 | pop-os | A rerun with `--background`: same origin, a new code-bearing link, one restart, no change lines. `tailscale serve status --json` before and after differ only in muxen's handler; another app's entry on another port survives byte for byte |
-| S3 | pop-os | Background refusals without writing: another app at `/` of `<name>:443`, Funnel on, a TCP forward on 443. Without a terminal, `muxen setup --background` prints the grant commands and exits 1 |
-| S4 | pop-os and a container | Tailscale 1.94–1.98.8 and 1.98.9 or later: `muxen setup --background` writes as operator; an operator who may not `sudo tailscale`, or whose full name differs from the login name, gets the `401` message on 1.98.9+ and succeeds on 1.98.8; a non-operator gets the `403` message; teardown with another app's Unix handler present, on 1.98.9+ |
-| S5 | pop-os | Upgrade from the loopback-TCP daemon and from a current one: `cargo install` a newer build, rerun `muxen setup --background`; `/auth/info` reports the new version, the 7850 handler is replaced, a `MemoryMax` drop-in survives, an edited unit is backed up and replaced |
-| S6 | pop-os | Reboot: muxen runs before any login, published; the phone reconnects |
-| S7 | pop-os | `muxen teardown` removes the unit and muxen's handler only; a second teardown says "Nothing to remove"; `muxen setup --background` again brings the iOS app's host back with its existing token. With no unit installed, teardown withdraws the handler only |
-| S8 | pop-os | `cargo run -- setup --background` refuses with the binary message; `XDG_STATE_HOME=/elsewhere` refuses and `XDG_STATE_HOME=$HOME/.local/state` passes; `su - jimmy` with linger on reaches the user manager |
-| S9 | the Mac | Fresh `muxen setup --background`: plist written and bootstrapped, the notification shows, published, phone works. Rerun kickstarts with a new secret, and verification waits for the new process. Port 7851 held, a hand install on another port, a second macOS account and an SSH session with no screen login each refuse before installing. Turned off under Login Items, then setup: `launchctl enable` brings it back, or the message says how. A `PATH` holding `&` installs. Teardown removes the plist and the entry, and a second teardown says "Nothing to remove"; with Tailscale quit, teardown stops before the `bootout`; turned off under Login Items, then teardown, removes the entry. A LocalAPI error during publication keeps verification polling (`browserPending`) until the daemon publishes |
-| S10 | iPhone | The QR scans from a dark and a light terminal theme, in Termius and in muxen's own terminal (xterm.js line height can open gaps between half blocks) |
-| S11 | a Linux container | `muxen setup --background` on a distribution without systemd, a logged-out tailscaled, Tailscale 1.92, and a test tailnet with HTTPS certificates off: each gets its message and changes nothing |
-| S12 | pop-os | Plain `muxen setup` in a terminal publishes and the phone enrols; Ctrl-C exits 0 and the phone shows 502, then reconnects on a rerun. With the service running, foreground setup refuses before a grant. While a terminal run holds the flock, `muxen setup --background` refuses before grants or install with its Ctrl-C instruction; teardown prints its terminal-run note. A nonmatching `XDG_RUNTIME_DIR` is refused before a grant. `cargo run -- setup` works |
-| S13 | the Mac | Plain `muxen setup` refuses with the `--background` message and changes nothing |
-
-S11 needs a Tailscale auth key for a test tailnet, which is Jimmy's to give. Without
-one, the fake-LocalAPI tests cover its messages.
+Checked on real hosts before shipping, since the fake-LocalAPI tests don't cover them: on pop-os, from a fresh
+state, `muxen setup --background` over SSH asks for at most two passwords, publishes, and prints a
+code-bearing link, QR and code that the iPhone enrols from; a rerun gives the same origin, a new code, one
+restart and no change lines, and `tailscale serve status --json` differs only in muxen's handler; refusals
+(another app at `/` of the entry, Funnel on, a TCP forward on 443, no terminal) write nothing; the operator
+grant on Tailscale 1.94–1.98.8 and on 1.98.9 and later, including an operator who may not `sudo tailscale`;
+an upgrade from the loopback-TCP daemon, with a `MemoryMax` drop-in surviving and an edited unit refused; a
+reboot with muxen running before any login; `muxen teardown` removing the unit and muxen's handler only
+(a second one says "Nothing to remove", and with no unit installed it still withdraws the handler); the
+binary-location and `XDG_STATE_HOME` refusals and `su - jimmy` with linger on; plain foreground `muxen setup`
+publishing, Ctrl-C exiting 0, and a running service refusing it before any grant. On the Mac: a fresh
+`--background` writes and bootstraps the plist and publishes; a rerun kickstarts with a new secret and
+verification waits for the new process; port 7851 held, a hand install on another port, and plain `muxen
+setup` each refuse as designed. The QR must scan from a dark and a light terminal theme, in Termius and in
+muxen's own terminal (xterm.js line height can open gaps between half blocks). A distribution without
+systemd, a logged-out tailscaled, Tailscale 1.92, and a tailnet with HTTPS certificates off each get their
+message and change nothing (this needs a test tailnet's auth key, which is Jimmy's to give).
 
 ## Not in setup
 

@@ -18,27 +18,14 @@ The reasons for the larger choices are in [Why these choices](#why-these-choices
 
 ## Constants
 
-| Constant | Value | When hit |
-|---|---|---|
-| completion enabled | effective budget 53 MiB and up; off below | `welcome.daemon.completion: false`; `/complete` returns an empty list without constructing completion |
-| request body | 4 KiB | `413 too_large` |
-| requests in flight | 4 | `503 busy` at once |
-| chips per response | 20; history at most 3 of them | the rest are dropped |
-| chip description | 100 bytes | cut |
-| completion lanes | index: 1 thread; dir: 1 thread shared with `newWindow` and `newSession` directory checks | each source waits at most 300 ms, then is skipped |
-| history file read | its last 1 MiB | older entries are ignored |
-| history lines scored | 12,000 distinct lines, newest first | an older entry only adds to a line already scored; it never starts a new one |
-| history entries kept | 10,000 distinct lines, highest score | the rest dropped |
-| history recency half-life | 200 entries | |
-| PATH index | 20,000 names or 256 KiB | the rest of `PATH` isn't indexed |
-| carapace run, and `carapace --list` | 300 ms wall time, from spawn to end of output | killed; no carapace chips |
-| carapace runs at once | 1; an uncached request for another key kills the run in flight | the older request gets no carapace chips |
-| carapace output | 1 MiB; stderr: its last 4 KiB kept | killed; treated as a failure |
-| carapace cache | 64 entries or 1 MiB, LRU; 30 s per entry, timeouts and failures included | |
-| carapace scope | `MemoryMax=128M`, `TasksMax=64`, `CPUWeight=20`, `IOWeight=10`, `RuntimeMaxSec=2` | the scope is killed, inside itself only |
-| path listing | 5,000 names or 1 MiB, as [fs.md](fs.md#constants)'s scan | the rest isn't offered |
-| path listing cache | the last directory, while its mtime holds | |
-| idle drop | 5 min after the last request | every index and cache is freed |
+The caps are constants in `src/complete/`; the ones that shape behaviour: completion runs from an effective
+budget of 53 MiB up (below, `welcome.daemon.completion` is `false` and `/complete` answers `200 {"chips": []}`
+without building anything); a request body is at most 4 KiB (`413`); 4 requests at once (`503 busy` at once);
+at most 20 chips per response, history at most 3 of them; each source waits at most 300 ms for its lane, then is
+skipped; history reads the last 1 MiB of its file and keeps 10,000 distinct lines; the `PATH` index holds
+20,000 names or 256 KiB; one carapace run at a time, 300 ms wall time, 1 MiB output, cached 30 s (failures
+included), in a scope with `MemoryMax=128M`, `TasksMax=64` and `RuntimeMaxSec=2`; a path listing is the fs
+scan's cap ([fs.md](fs.md#constants)); every index and cache is freed 5 minutes after the last request.
 
 ## Request and response
 
@@ -380,21 +367,11 @@ the unit, a release binary gets none of the effect measured above; how musl's al
 returns freed memory is unmeasured. The budget run must read the RSS after an idle
 drop for whichever binary the unit runs.
 
-**Blocking lanes.** Completion uses the one-thread index lane for history parsing and
-the PATH scan, and the one-thread dir lane for `check_dir` and path listings. The dir
-lane is shared with `newWindow` and `newSession` checks. Each lane has a 300 ms wait; a
-source that cannot get a thread in time is skipped. A call stuck on a hung mount holds
-its lane rather than permitting more work to accumulate. File API work uses its own
-four-thread fs lane; auth has two threads. The eight threads sum to
-`BLOCKING_THREADS` in `src/blocking.rs`. carapace is awaited asynchronously and takes
-no blocking thread. All blocking work uses these lanes; Tokio filesystem APIs are
-disabled. In muxen's `TasksMax`, a run counts only `systemd-run` until it
-moves into its scope.
-
-**CPU.** Every lookup is a scan of an in-memory index (10,000 lines at most); the
-work that costs anything (re-parsing, rebuilding, a carapace run) happens once per
-change, per new stem, or per 30 s. carapace's scope has muxen's `CPUWeight` and
-inherits its nice level 10.
+**CPU.** Every lookup is a scan of an in-memory index (10,000 lines at most); the work that costs anything
+(re-parsing, rebuilding, a carapace run) happens once per change, per new stem, or per 30 s. Completion uses
+the one-thread index lane and the one-thread dir lane (`src/blocking.rs`), shared with `newWindow`'s
+directory check; carapace is awaited asynchronously and takes no blocking thread, and its scope has muxen's
+`CPUWeight` and inherits nice 10.
 
 ## What the client does
 
@@ -468,50 +445,6 @@ sourcing, turns that off.
    `carapace` extracted to `~/.local/bin/`. Upgrading is a deliberate re-pin: rerun
    the parser's golden fixtures against the new binary first.
 
-## Logging
-
-- **Never:** history lines, the request's `before`, `after` or `cwd`, chip text,
-  carapace's arguments or output, or a parser's own error message: serde's `Display`
-  quotes the input it choked on, which holds the words Jimmy typed.
-- **`info`, once per process:** carapace missing.
-- **`warn`:** the history file unreadable or failing to parse, by path and byte
-  offset; once per process, `systemd-run` failing or the carapace list failing, with
-  the kept stderr tail.
-- **`debug`:** per request, which sources ran, their counts and times; carapace
-  failures by kind (timeout, killed for a newer key, exit status, bad JSON).
-- **Bad JSON is logged by kind and position only**, in the debug line and in the
-  `--list` warning alike: one of four fixed phrases (bad syntax, an unexpected shape,
-  cut short, a read error) and the line and column, as in "its JSON doesn't parse: an
-  unexpected shape at line 1, column 57". serde's own message is never logged. No other
-  log line in `src/complete/` or `src/fs/` carries a parser's message; config parse
-  errors log a line number only ([fs.md](fs.md#logging)).
-
-## Module shape
-
-`src/complete/` knows nothing of axum; `src/http/complete.rs` parses the body, takes
-an in-flight permit and calls `Completer::complete(Request) -> Completion`. The pure
-parts are tested without a disk or a process.
-
-| File | Contents |
-|---|---|
-| `complete/mod.rs` | `Completer`: the indexes as `Arc` snapshots swapped whole, index and dir lanes, the idle drop, merge and the caps; `Settings::new(config, Environment)` resolves config and daemon environment (`home`, `PATH`, `XDG_DATA_HOME`, and systemd status) |
-| `complete/context.rs` | the lexer, `context(before, after) -> Query`, and `literal`, the escaping the lexer reads back (pure) |
-| `complete/history.rs` | the three parsers, scoring and the contiguous index (pure); the stat-and-reload (`files::Stamp`) |
-| `complete/commands.rs` | the PATH scan and its mtime check (`files::Stamp`) |
-| `complete/carapace.rs` | stems, argv and JSON → values (pure), plus shared cache state |
-| `complete/runner.rs` | child process task, scope wrapper and run serialization |
-| `complete/paths.rs` | splitting (pure); the listing through `fs::open` |
-| `complete/packed.rs` | strings stored end to end in one buffer, which every index uses, so an index is two allocations and goes back to the kernel when freed |
-
-No new crates: `serde_json` is already in, and the LRU is a small local type. Tests:
-the lexer and context rules on a table of lines (redirections, `2>&1`, escaped and
-quoted words); each history format on fixture files, with metafied zsh bytes,
-continuation lines and a truncated first line; the carapace parser on golden output;
-the runner's timeout, newer-key kill, abandoned-request caching and process-group kill
-against a script that sleeps and forks; and `bash -c` reading hostile names (`;`, `$`,
-`~`, `=`, quotes, blanks) back from command, path and carapace chips as exactly the
-name, which fails if `~` or `=` rejoin the unescaped set.
-
 ## Open risks
 
 - **Marks after a snapshot.** A snapshot repaints the screen without the OSC 133
@@ -554,12 +487,11 @@ name, which fails if `~` or `=` rejoin the unescaped set.
 ## Why these choices
 
 - **The request is `{before, after, cwd}`** because a cursor index needs a character unit that JavaScript (UTF-16) and Rust (UTF-8 bytes) agree on, and two strings need none. Every source matches by prefix, so a chip only extends what is typed and the client sends the remaining characters like typed text; chips carry no control characters, so a chip can never press Enter. `cwd` comes from the tab's window subscription (`pane_current_path`), never OSC 7 or OSC 133 marks, which terminal output can forge: a `cat` could otherwise make carapace evaluate a hostile Makefile with nothing typed. Completion asks only after a keystroke sent since the B mark.
-- **History**: one file, last 1 MiB parsed into 10,000 distinct lines scored by `0.5^(age / 200 entries)` per occurrence, revalidated by `(dev, ino, size, mtime)` on each request. Entry age ranks without timestamps, which bash doesn't write by default; a `stat` per request costs nothing, an inotify watcher is a thing muxen doesn't have, and the format comes from the file's name because plain zsh and bash lines look the same. Scoring at most 12,000 distinct lines, newest first, cannot change the kept 10,000 (the maximum accumulated score is 289 times a line's newest occurrence, and `289 × 2^(-2000/200) < 1`); unbounded, the map peaked at 17.6–18.8 MB on a short-lines history, capped 1.5–2.0 MB. The snippets append history after each command (`history -a`, `INC_APPEND_HISTORY`) because bash writes history only on exit, so the commands from open shells, the ones most wanted again, were missing.
+- **History**: one file, last 1 MiB parsed into 10,000 distinct lines scored by `0.5^(age / 200 entries)` per occurrence, revalidated by `(dev, ino, size, mtime)` on each request. Entry age ranks without timestamps, which bash doesn't write by default; a `stat` per request costs nothing and muxen has no inotify watcher. Scoring at most 12,000 distinct lines, newest first, cannot change the kept 10,000; unbounded, the dedup map peaked at 17.6–18.8 MB on a short-lines history, capped 1.5–2.0 MB. The snippets append history after each command (`history -a`, `INC_APPEND_HISTORY`) because bash writes history only on exit, so the commands from open shells, the ones most wanted again, were missing.
 - **The PATH index** uses the `[complete] path` (else the daemon's own `PATH`) and `stat`s every `PATH` directory per request that needs it: a dozen `stat`s is cheaper than a watcher. The systemd user manager's `PATH` holds `~/.local/bin` and `~/.cargo/bin` but not what rc files add (nvm, bun, Go), so installing writes the interactive `PATH` into the key. A pane's `/proc/<pid>/environ` is the environment at exec, before rc files change `PATH`.
-- **carapace runs in its own transient scope** (`systemd-run --user --scope --collect --description="muxen completion" -p MemoryMax=128M -p TasksMax=64 -p CPUWeight=20 -p IOWeight=10 -p RuntimeMaxSec=2`): measured, carapace 1.8.0's RSS is 17–44 MB per run and a scope's peak up to 74 MB with its 95 MB binary cold in the page cache, while the unit's ceiling already sits at its `MemoryMax`. Scoped, the unit's peak rose 1.1 MB per run for about 27 ms of scope setup inside the 300 ms timeout. The explicit `--description` is needed because the default is the command line, which would put every run's arguments, words Jimmy typed, in the user journal; `RuntimeMaxSec=2` reaps an empty scope leaked when a kill lands before `systemd-run` execs, and bounds helpers that outlive a crashed muxen. carapace has no server mode, so a long-lived process would hold 20–40 MB while idle.
+- **carapace runs in its own transient scope** (`systemd-run --user --scope --collect`, limits above): measured, carapace 1.8.0's RSS is 17–44 MB per run and a scope's peak up to 74 MB with its 95 MB binary cold in the page cache, while the unit's ceiling already sits at its `MemoryMax`. The explicit `--description` is needed because the default is the command line, which would put every run's arguments, words Jimmy typed, in the user journal; `RuntimeMaxSec=2` reaps an empty scope leaked when a kill lands before `systemd-run` execs. carapace has no server mode, so a long-lived process would hold 20–40 MB while idle.
 - **carapace is installed by hand**, pinned to v1.8.0's tarball and checked against the release's `checksums.txt`, in `~/.local/bin` as Jimmy, never system-wide. Its JSON has no stability promise, so the pin and the parser's golden fixtures guard against a changed shape; an upgrade is a deliberate re-pin that runs the fixtures against the new binary first.
 - **carapace runs per stem and the latest request wins.** carapace gets the current word cut back to its stem (through its last `/ = : , @ +`, else `-` for a flag, else empty) and muxen filters by the whole word, so one run serves every keystroke until the stem changes. An empty current word returns no flags (`git checkout ""` gives refs only; `-` gives the 40 flags), nothing after a `/` (`origin/m`) and no multi-part values (`chmod u+`). One runner task owns the child: a request for another key kills the run in flight (the older answer is already stale) and a request aborted by the phone kills nothing. Results, timeouts and failures are cached 30 s in a 64-entry, 1 MiB LRU, so new git branches appear and a command that always times out doesn't cost 300 ms per keystroke. Only commands in `carapace --list` run.
-- **The unit pins glibc's mmap threshold** (`GLIBC_TUNABLES=glibc.malloc.mmap_threshold=131072`): glibc raises its dynamic threshold after a large free, so later completion indexes could stay resident in the heap after the idle drop (a probe showed the second 1.1 MiB block from the heap without the tunable and every block mmapped with it). `malloc_trim` and `mallopt` need an unsafe FFI call.
 - **Path chips list names in any readable directory** with scope `/`, names only: completion reads no contents, and the shell's own Tab already lists any directory.
 - **Completion state is dropped after 5 idle minutes**: the idle budget is about 5 MB with no phone connected and completion can hold about 11 MB. One timer, re-armed by each request, keeps the box quiet; dropping when the last WebSocket closes would need `complete` to see the hub's connections, which it must not.
 - **The snippet** emits OSC 133 D and A from the first prompt hook and B appended to `PS1` by the last hook (themes rebuild `PS1` in their own hooks), C from `PS0` (bash, no `DEBUG` trap) or `preexec` (zsh). The bash wrapper makes an existing `PROMPT_COMMAND` an array on bash 5.1+ and joins it with newlines before that: joined with `;`, one ending in `&` broke every prompt and one ending in a comment swallowed the B hook. tmux's DCS passthrough isn't needed: control mode sees the marks raw.
