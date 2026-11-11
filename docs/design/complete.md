@@ -11,7 +11,7 @@ dropped after five idle minutes. carapace runs in its own transient systemd scop
 outside muxen's memory limit. `/complete` never touches tmux or the hub.
 
 The product side (what the strip shows, how the client reads the command line) is in
-[plan.md](plan.md#suggestion-strip); the scheme handler that carries the request is in
+[plan.md](plan.md#suggestion-strip-client-ui-not-built); the scheme handler that carries the request is in
 [ios-shell.md](ios-shell.md#where-the-web-ui-comes-from); auth is
 [auth.md](auth.md#endpoints); path resolution is [fs.md](fs.md#path-resolution-fsopen).
 The reasons for the larger choices are in [Why these choices](#why-these-choices).
@@ -399,7 +399,7 @@ inherits its nice level 10.
 ## What the client does
 
 - **Asks only when it can read the line:** an input-start mark (OSC 133 B) or the
-  prompt-regex fallback ([plan.md](plan.md#suggestion-strip)), not on the alternate
+  prompt-regex fallback ([plan.md](plan.md#suggestion-strip-client-ui-not-built)), not on the alternate
   screen, and only when the text changed.
 - **Asks only while Jimmy is typing:** a keystroke the client sent since the current
   prompt's B mark (or since the regex-matched prompt). Terminal output can forge the
