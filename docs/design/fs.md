@@ -354,7 +354,7 @@ The web picks a code viewer's language by extension, not by type. SVG goes out a
 `image/svg+xml` for `<img>`, which runs no script.
 
 **Video** plays in `AVPlayerViewController`, not the web view
-([ios-shell.md](ios-shell.md#web-content-security)): the web sends `playVideo { host,
+([ios-shell.md](ios-shell.md#where-the-web-ui-comes-from)): the web sends `playVideo { host,
 path }`, native builds `{baseURL}/fs/raw/{encoded path}` with the same segment
 encoding and loads it through a resource loader that adds `Authorization: Bearer`
 (ios-shell.md, "Video"). AVFoundation probes with `Range:
