@@ -1,4 +1,3 @@
 # src/tmux TODO
 
-- Run the real-tmux suites with no locale set (LANG/LC_ALL unset) in CI, as
-  daemon-core.md §8 requires, to catch a missing `-u` turning non-ASCII names into `_`.
+- Run the real-tmux suites with no locale set (LANG/LC_ALL unset) in CI, to catch a missing `-u` turning non-ASCII names into `_`.

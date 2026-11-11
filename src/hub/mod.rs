@@ -1,4 +1,4 @@
-//! The hub (daemon-core.md §4): one task that owns every tmux control client's
+//! The hub (src/hub/.context/CONTEXT.md): one task that owns every tmux control client's
 //! `Session`, the windows and pane streams the phone watches, and each connection's
 //! credit. `State` is the pure core; `run` executes its effects. The hub never sees a
 //! socket: a connection task drives it through `HubHandle` with `FromConn`, receives
@@ -84,7 +84,7 @@ pub const ROWS: std::ops::RangeInclusive<u16> = 5..=300;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ConnId(pub u64);
 
-/// The tmux servers the hub talks to (daemon-core.md §3.8). Window and session refs
+/// The tmux servers the hub talks to (src/tmux/.context/CONTEXT.md). Window and session refs
 /// name theirs as `"main:<pid>-<start_time>"`; `main` is the one the session sheet
 /// lists and new sessions start on.
 #[derive(Debug, Clone)]

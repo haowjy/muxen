@@ -34,7 +34,7 @@ pub struct ShownWindow {
     pub size: Size,
 }
 
-/// A terminal size; the daemon clamps what clients send (daemon-core.md §6).
+/// A terminal size; the daemon clamps what clients send (daemon-core.md, Limits and the memory budget).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct Size {
     pub cols: u16,
@@ -282,7 +282,7 @@ pub enum ServerMsg {
     /// refetch it if the sheet is open, and prune tabs against it.
     SessionsChanged,
     /// The sessions of `server` whose bell mark or coverage changed since the last
-    /// listing the daemon read (daemon-core.md §4.8), to every connection.
+    /// listing the daemon read (src/hub/.context/CONTEXT.md), to every connection.
     /// `available: false` (with no sessions) says the daemon couldn't read tmux's bell
     /// state; the next `bell` with `available: true` ends it. `server` is the tmux
     /// instance, absent while none is known.

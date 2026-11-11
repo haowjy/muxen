@@ -1,4 +1,4 @@
-//! A connection's delivery queue (daemon-core.md §4.6), owned by its connection task.
+//! A connection's delivery queue (src/hub/.context/CONTEXT.md), owned by its connection task.
 //! It orders, replaces and coalesces what the hub sent, and holds no limit of its own:
 //! the hub's credit bounds everything in it. Every charge it was handed goes back,
 //! as written or discarded, through `take_credit`.

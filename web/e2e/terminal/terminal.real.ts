@@ -218,7 +218,7 @@ for (const version of VERSIONS) {
       await paneIncludes(s, /^after$/m);
     });
 
-    // Window size follows the client that acted last (daemon-core.md §3.6; client-architecture.md §5.4).
+    // Window size follows the client that acted last (src/tmux/.context/CONTEXT.md; client-architecture.md §5.4).
     {
       const SMALL = { width: 900, height: 600 };
       const windowSize = (s: string): string => stack.tmux("display-message", "-p", "-t", s, "#{window_width}x#{window_height}").trim();

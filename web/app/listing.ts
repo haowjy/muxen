@@ -14,7 +14,7 @@ export type ListingEvent =
   /** A `listSessions` was sent for a user-visible reason (not a `sessionsChanged` hint): rows read "Updating" until the answer. */
   | { type: "requested"; handle: string }
   | { type: "listed"; handle: string; listing: TmuxListing | null }
-  /** The daemon's `bell` message: marks that changed, or whether it can read tmux's bell state (daemon-core.md §4.8). */
+  /** The daemon's `bell` message: marks that changed, or whether it can read tmux's bell state (src/hub/.context/CONTEXT.md). */
   | { type: "bell"; handle: string; bell: Extract<ServerMsg, { type: "bell" }>["data"] }
   /** Nothing decided: cached rows go stale and offer Retry. */
   | { type: "failed"; handle: string; reason: RequestError["reason"] };

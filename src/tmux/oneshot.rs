@@ -1,4 +1,4 @@
-//! One-shot `tmux -N` commands (daemon-core.md §3.8): the session sheet's listing,
+//! One-shot `tmux -N` commands (src/tmux/.context/CONTEXT.md): the session sheet's listing,
 //! Locates when no control client is ready, and new windows and sessions. Each is one
 //! short process that never attaches, killed at the timeout.
 

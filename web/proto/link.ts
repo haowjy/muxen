@@ -1,7 +1,7 @@
 import { decodeFrame, type Frame } from "./frames";
 import { CloseCode, PROTOCOL_VERSION, type ClientMsg, type ServerMsg } from "./generated/messages";
 
-/** Timings, daemon-core.md §6 and plan.md "Reconnect". */
+/** Timings, daemon-core.md, Limits and the memory budget and plan.md "Reconnect". */
 const PING_INTERVAL_MS = 10_000;
 const IDLE_TIMEOUT_MS = 25_000; // same threshold the daemon applies to us
 /** iOS 26 can leave a new socket in CONNECTING; a silent server is told in two of these. */

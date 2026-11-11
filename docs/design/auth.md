@@ -58,7 +58,7 @@ execution for whoever passes it, so the checks guard against:
   readable only from a shell as Jimmy);
 - anything that passes the Tailscale check exhausting memory through HTTP (the
   per-route caps, the connection backstop and the buffer limits in
-  [daemon-core.md §6](daemon-core.md#6-limits-and-the-memory-ceiling)).
+  [daemon-core.md](daemon-core.md#limits-and-the-memory-budget)).
 
 **Who can hold connections.** On Linux only root and Jimmy's processes can connect to
 the sockets; on a Mac any local process can connect to the front. But tailscaled opens a backend connection for each in-flight request from
@@ -847,7 +847,7 @@ unknown path under them, for any method, is a JSON 404, never the shell.
 
 | Route | Native lane | Node lane (a Serve front) | Request → response |
 |---|---|---|---|
-| shell paths, `GET`/`HEAD` | not judged | not judged | the packaged files, under the shell caps ([daemon-core.md](daemon-core.md#static-shell)) |
+| shell paths, `GET`/`HEAD` | not judged | not judged | the packaged files, under the shell caps ([daemon-core.md](../../src/http/.context/CONTEXT.md)) |
 | `GET /auth/info` | not judged | not judged | `{hostId, name, daemonVersion, protocol, browserOrigin, browserRefused, browserPending}` |
 | `POST /auth/enroll` | redeems the code | refused: any `Origin` or `Sec-Fetch-Site` is `403 bad_origin` | `{code, deviceName}` → `{token, deviceName}` |
 | `POST /auth/node/enroll` | a token is `400 bad_request` | canonical origin, admission (mutation), whois, node rules | non-empty `{code, deviceName}` → `200 {deviceName}`; empty `{code: "", deviceName}` → native app only, no fetch metadata, enrolled node: `200 {token, deviceName}`; unenrolled node: `401 {error, node: {name}}`; `403 bad_code`, `bad_origin`, `node_refused`; `503` |

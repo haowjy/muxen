@@ -1,4 +1,4 @@
-//! What waits on time (daemon-core.md §4.1, §4.5, §4.6): the control clients' respawns,
+//! What waits on time (src/hub/.context/CONTEXT.md, §4.5, §4.6): the control clients' respawns,
 //! lingers and reply deadlines, and starved watches' snapshot spacing. Time comes in
 //! with each input; nothing here reads a clock.
 

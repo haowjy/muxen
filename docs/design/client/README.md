@@ -41,7 +41,7 @@ checks it still needs on the phone are that spec's
 
 The daemon reconstructs active-grid soft wraps in restore bytes and sends a packed wrap
 map with each history chunk, so copy joins wrapped rows into logical lines; verify with
-the headless and real-tmux checks in [daemon-core.md](../daemon-core.md#8-testing).
+the headless and real-tmux checks in [daemon-core.md](../daemon-core.md).
 Still to verify on a real iPhone: tap versus scroll versus long-press arbitration (so
 selection never sends a remote click), selection and clipboard in Safari and WKWebView,
 streaming-output selection stability, Unicode, multiline and trailing-newline paste,

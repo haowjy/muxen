@@ -234,7 +234,7 @@ Escape or Back closes it.
 - **Windows**: on the tab on screen, for a session with more than one window, its windows in index
   order, “index: name”, the shown one filled; a tap runs tmux's `select-window` on the session, so every
   attached client moves with it (it rides the tab's watch, which only the shown tab has). Then **New window** (`new-window`), for any session.
-- **Rename session** (`rename-session`), edited in place, with the daemon's reason on refusal. Not built: the menu has no Rename or Kill entries until the daemon commands exist ([daemon-core.md](../daemon-core.md#the-tabs-tmux-commands-open)).
+- **Rename session** (`rename-session`), edited in place, with the daemon's reason on refusal. Not built: the menu has no Rename or Kill entries until the daemon commands exist ([daemon-core.md](../daemon-core.md#the-tabs-tmux-commands-not-built)).
 - **Move to start**, **Move to end**.
 - **Close tab**: detaches only (`unwatch`); tmux keeps the session.
 - **Kill window** (only when the session has more than one window) and **Kill session**: last,
@@ -301,7 +301,7 @@ An attention dot on tab pills, tab overview rows and Open session rows marks a t
   device last showed that tab; mechanism and coverage limits are in
   [plan.md](../plan.md) (Bell attention). It is not a connection-status indicator.
   - **Seen is per device and saved.** The device keeps, per session, the bell mark it last showed
-    (the `mark` in the `sessions` listing and the `bell` message, daemon-core.md §5.3),
+    (the `mark` in the `sessions` listing and the `bell` message, daemon-core.md),
     and a tab shows the dot while its session's mark differs from that. The tab on
     screen counts as shown: while a tab is the active tab on a visible page, an
     arriving mark is recorded as seen at once and no dot appears for it; a hidden page

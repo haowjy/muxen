@@ -1,4 +1,4 @@
-// Bell attention on this device (daemon-core.md §4.8, §5.3; browser-behaviors.md). The daemon
+// Bell attention on this device (src/hub/.context/CONTEXT.md, §5.3; browser-behaviors.md). The daemon
 // says each session's bell mark; this device keeps the mark it last showed for each, and a tab
 // shows the dot while the two differ. "Seen" is local, never sent, and saved with the workspace
 // (app/persist.ts) so a bell rung while the page was closed still shows: tmux's shared bell

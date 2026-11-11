@@ -249,7 +249,7 @@ export class Terminals extends Store<TerminalsView> {
 
   /**
    * The line field's Return: one paste with Enter, run in the same tmux group by the daemon
-   * (daemon-core.md §3.4). Returns the paste's `req`, or null, with nothing sent, when the tab
+   * (src/tmux/.context/CONTEXT.md). Returns the paste's `req`, or null, with nothing sent, when the tab
    * isn't live. Its one answer goes to {@link Pastes.claim}' claimant, not to a notice.
    */
   sendLine(id: string, text: string): number | null {

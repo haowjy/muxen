@@ -91,7 +91,7 @@ Jimmy's decisions, as they stand:
   pasting, rotating, a font change or Fit sizes it to exactly the phone's size, whether
   the laptop's terminal is larger or smaller, and the laptop typing takes it back; a
   window muxen stops holding with nobody else acting there keeps the size it had when
-  muxen attached until the laptop types ([daemon-core.md §3.6](daemon-core.md#36-sizing)). The keyboard
+  muxen attached until the laptop types ([daemon-core.md](daemon-core.md#sizing)). The keyboard
   never resizes it.
 - **Tabs:** a terminal tab follows one tmux session, as `tmux attach` does: it shows
   the current window's active pane and follows current-window changes from any client.
@@ -119,7 +119,7 @@ Jimmy's decisions, as they stand:
   whose one user account is Jimmy's, and serves only
   while he is logged in ([auth.md](auth.md#the-mac-front)). A Mac
   is also a fine client: its browser is judged by whois on the host it connects to.
-  The Mac records the 3.7b tmux fixtures ([daemon-core.md §8](daemon-core.md#8-testing))
+  The Mac records the 3.7b tmux fixtures ([daemon-core.md](daemon-core.md))
   and builds the iOS app.
   On macOS there is no cgroup or hard memory cap; the budget only sizes the counts.
 - **Scratch shell:** kept, landing after the core MVP.
@@ -180,7 +180,7 @@ systemd unit lives in that unit's cgroup: it dies on `systemctl --user stop`, an
 muxen's memory limit would cover tmux and every agent in it
 ([probe-tmux.md §7](research/probe-tmux.md)). So Jimmy starts tmux outside muxen, as
 today, and muxen runs every tmux command with `-N`, which fails instead of starting a
-server ([daemon-core.md §3.1](daemon-core.md#31-invoking-tmux)). With no server
+server ([tmux context](../../src/tmux/.context/CONTEXT.md)). With no server
 running, the app says so and offers nothing that would start one. The scratch server
 is the one exception, started in its own transient scope so it never lives in
 muxen's cgroup.
@@ -215,7 +215,7 @@ reconnect, a tab switch, or returning from another screen. Only the terminal tab
 screen is watched.
 
 - Heartbeat while connected, and the daemon's idle timeout, are in
-  [daemon-core.md §6](daemon-core.md#6-limits-and-the-memory-ceiling); nothing runs
+  [daemon-core.md](daemon-core.md#limits-and-the-memory-budget); nothing runs
   while disconnected.
 - The client reconnects immediately on becoming visible or coming back online, with
   the heartbeat as the backstop.
@@ -239,7 +239,7 @@ screen is watched.
   (`sessionClosed`, `serverExited`), when a `sessions` listing no longer has its session
   (below), or when Jimmy closes it.
 - **Pruning.** The daemon sends `sessionClosed` for a watched session, and only the tab
-  on screen has a watch ([daemon-core.md §4.2](daemon-core.md#42-views-owners-and-locate)),
+  on screen has a watch ([hub context](../../src/hub/.context/CONTEXT.md)),
   so a session killed under another tab would leave that tab open. The web therefore
   asks each host for a `sessions` listing on every connect and prunes against it, and
   prunes against every later listing too (Open session opening, a pull to refresh, the
@@ -379,7 +379,7 @@ Versions verified 2026-10-21 ([libraries.md](research/libraries.md),
 | Auth | sha2, subtle, getrandom | [auth.md](auth.md#crates) |
 | Tailscale LocalAPI | bounded keep-alive client over tailscaled's Unix socket: status, Serve config and per-request whois | |
 | systemd and logs | sd-notify (`READY=1`, `STOPPING=1`; no watchdog), tracing + tracing-subscriber writing to stderr, which the journal captures | no watchdog because it needs a periodic timer, which breaks the zero-wakeup idle; no tracing-journald because stderr already reaches the journal |
-| Protocol types | ts-rs (TypeScript); Swift hand-written for the auth DTOs | [daemon-core.md §5.5](daemon-core.md#55-type-generation) |
+| Protocol types | ts-rs (TypeScript); Swift hand-written for the auth DTOs | [daemon-core.md](daemon-core.md#wire-protocol-srcproto) |
 | tmux parser | hand-written, pure, fixture-tested | libtmux-rs studied for ideas only |
 | Server-side emulator | none | xterm.js on the phone is the only emulator |
 | Renderer | xterm.js 6 with addons webgl, web-links, unicode11 | WebGL with DOM fallback; behind `term/`, so ghostty-web can be tried later |
@@ -396,7 +396,7 @@ and the note on `TMUX_TMPDIR` under systemd, are in [running.md](../running.md).
 | Key | Default | Meaning |
 |---|---|---|
 | `name` | the MagicDNS machine name | the host's name in the app: `/auth/info.name`, `welcome.host.name` |
-| `memory_budget_mib` | 72 | the memory budget in MiB, at least 42; selects the control-client/socket caps and whether completion runs ([daemon-core.md §6.1](daemon-core.md#61-the-memory-budget)); read at startup and keep `MemoryMax` equal to it |
+| `memory_budget_mib` | 72 | the memory budget in MiB, at least 42; selects the control-client/socket caps and whether completion runs ([daemon-core.md](daemon-core.md#the-budget)); read at startup and keep `MemoryMax` equal to it |
 | `[tmux] program` | `tmux` | the tmux executable; an absolute path if the unit's `PATH` doesn't find it |
 | `[tmux] socket_name` | none | `tmux -L <name>` |
 | `[tmux] socket_path` | none | `tmux -S <path>`; not together with `socket_name` |
@@ -422,7 +422,7 @@ there is no cgroup or hard memory/CPU cap.
 - **Nothing held for panes nobody views:** a pane's state exists only while a tab on
   screen shows it, and unviewed panes are paused in tmux.
 - **Everything bounded, sized by one setting:** every queue, buffer and cap and the
-  resulting memory ceiling are in [daemon-core.md §6](daemon-core.md#6-limits-and-the-memory-ceiling).
+  resulting memory ceiling are in [daemon-core.md](daemon-core.md#limits-and-the-memory-budget).
   `memory_budget_mib` defaults to 72 MiB and must be at least 42. The lower of it and
   the cgroup v2 memory limit at startup selects one of five tiers: control clients
   (tmux sessions), sockets, and completion on/off. A tighter budget refuses another
@@ -504,7 +504,7 @@ builds, and `ci.yml` defaults to `contents: read`.
   hard limits require cgroup v2 memory and CPU controller delegation; the daemon warns
   under systemd when no memory limit is enforced.
 - Measure budget tiers on the dev box under load as described in
-  [daemon-core.md §6.3](daemon-core.md#63-the-memory-ceiling); the Mac is not a proxy
+  [daemon-core.md](daemon-core.md#the-ceiling); the Mac is not a proxy
   for the Linux unit.
 
 ## Layout
@@ -595,7 +595,7 @@ after Tab, ↑ or readline edits.
   ([complete.md](complete.md#request-and-response)) through its host's scheme-handler
   origin, only while Jimmy is typing (a keystroke sent since the input-start mark).
   `cwd` is the tab's current directory from `watching`
-  ([daemon-core.md §3.7](daemon-core.md#37-window-subscription)), never an OSC 7:
+  ([tmux context](../../src/tmux/.context/CONTEXT.md)), never an OSC 7:
   terminal output can forge both marks.
   `/complete` is plain HTTP in `src/complete/` and never touches tmux.
 
@@ -626,7 +626,7 @@ muxen sends input with `send-keys`; only Shift+Enter is hand-encoded. Checked on
 
 | Input | Command | Bytes the pane receives |
 |---|---|---|
-| Literal text (UTF-8) | `send-keys -t @W -H <hex>` ([daemon-core.md §3.4](daemon-core.md#34-commands-commandrs)) | the text as typed |
+| Literal text (UTF-8) | `send-keys -t @W -H <hex>` ([tmux context](../../src/tmux/.context/CONTEXT.md)) | the text as typed |
 | Shift+Tab | `send-keys BTab` | `ESC [ Z` |
 | Alt+Enter (Codex newline) | `send-keys M-Enter`; Alt+key is `M-<key>` | `ESC CR` |
 | Newline (preferred) | `send-keys C-j` | `LF` |
@@ -726,14 +726,14 @@ width.
   (`set-hook -g`; it counts the ringing session's bells in a muxen user option with
   `set-option -F`); it removes only that entry when it stops, and never edits
   `.tmux.conf` or changes `monitor-bell` or `bell-action`; behavior verified on tmux 3.4,
-  3.7b and 3.8 ([daemon-core.md §4.8](daemon-core.md#48-bell-attention)). The daemon does not scan pane output for
+  3.7b and 3.8 ([daemon-core.md](daemon-core.md#bell-attention)). The daemon does not scan pane output for
   BEL: the tab on screen counts as seen on its device, so a bell in it needs no dot
   (Jimmy: "Hook only"). "Seen" is muxen's own per-device state; tmux's shared
   bell flags are never cleared for the phone. While at least one device is connected, the
   daemon reads each session's count with the session listing it already has, every 5
   seconds, and tells the devices only when a count changed: no network bytes while nothing
   rings, and no polling with nobody connected
-  ([daemon-core.md §4.8](daemon-core.md#48-bell-attention)).
+  ([daemon-core.md](daemon-core.md#bell-attention)).
   Coverage limits, stated rather than worked around: a session with its own session-level
   `alert-bell` hook shadows the global one, and `monitor-bell off` or a `bell-action` that
   excludes the window suppresses the hook; the client says so for that session in words,
@@ -889,7 +889,7 @@ upload and edit; nothing in the uploads folder is ever executed by muxen
   by host id (the Keychain token map, the host store, the `h-{host}` origins), so
   adding hosts changes nothing on the daemon.
 - **Version skew:** the client speaks one protocol version, each daemon accepts a
-  range ([daemon-core.md §5.2](daemon-core.md#52-handshake-and-versions)), checked per
+  range ([daemon-core.md](daemon-core.md#handshake-and-versions)), checked per
   host.
 - **tmux versions:** tested on 3.4 and 3.8; features gated on the detected version.
   Recorded fixtures exist for 3.4 and 3.7b; recording 3.8's is open work. libtmux-rs tests 3.2a–3.7b and is the reference for version quirks.
@@ -966,9 +966,9 @@ slice they need and storage coalesces writes within a microtask.
 - **Pure cores, thin I/O.** The control-client protocol (`tmux::Session`) and the hub
   (`hub::State`) are sans-IO state machines: input in, events or effects out, no
   I/O, no clock. Tasks around them only move bytes and execute effects
-  ([daemon-core.md §2](daemon-core.md#2-tasks-and-channels)). No `Arc<Mutex<…>>` maps.
+  ([daemon-core.md](daemon-core.md)). No `Arc<Mutex<…>>` maps.
 - **Bounded everything**, with the drop-and-snapshot rule in one place, the hub's
-  per-connection credit ([daemon-core.md §4.6](daemon-core.md#46-credit-and-the-outbox)).
+  per-connection credit ([daemon-core.md](daemon-core.md#snapshots-and-flow-control)).
 - **The `%output` decoder works on bytes, not strings.**
 - No `unsafe` outside `src/launchd.rs`, the macOS socket-activation call (`lib.rs`
   denies it, `main.rs` forbids it), no `unwrap` in daemon paths, and a panicking task surfaces
@@ -1030,6 +1030,6 @@ slice they need and storage coalesces writes within a microtask.
   [device checklist](ios-shell.md#device-checklist). Touch, copy and phone dock gates are in
   [the client research](client/terminal-interaction-design.md).
 - **Kill, rename and new-window commands:** the daemon side is open
-  ([daemon-core.md](daemon-core.md#the-tabs-tmux-commands-open)); the long-press menu waits on it.
-- Open risks per subsystem: [daemon-core.md](daemon-core.md#9-open-risks),
+  ([daemon-core.md](daemon-core.md#the-tabs-tmux-commands-not-built)); the long-press menu waits on it.
+- Open risks per subsystem: [daemon-core.md](daemon-core.md#open-risks),
   [ios-shell.md](ios-shell.md#open-risks), [auth.md](auth.md#open-risks).

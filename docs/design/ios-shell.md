@@ -15,7 +15,7 @@ each host's daemon directly. Typing goes to text boxes in the page, as in phone 
 has no text field.
 
 Auth is in [auth.md](auth.md), the wire protocol in
-[daemon-core.md §5](daemon-core.md#5-srcproto-the-wire-protocol), and the checks this
+[daemon-core.md](daemon-core.md#wire-protocol-srcproto), and the checks this
 design still needs on the phone in the [device checklist](#device-checklist). The
 reasons for the larger choices are in [Why these choices](#why-these-choices).
 
@@ -124,7 +124,7 @@ origin:
     session keeps the default). A check that gets no answer fails the held requests as a
     network error and is not remembered. The web's own `GET /auth/info` is never held by
     the gate. Only a compatible answer is kept. The protocol version covers the HTTP routes
-    ([daemon-core.md §5.2](daemon-core.md#52-handshake-and-versions)). The app's
+    ([daemon-core.md](daemon-core.md#handshake-and-versions)). The app's
     version is `DaemonProtocol.version` (`MuxenKit/AuthTypes.swift`), which moves with
     `PROTOCOL_VERSION` (2 since tabs follow a session); enrolment checks it too.
   - Only `/fs/*`, `/complete`, `/settings`, `POST /settings/reload` and exact `GET /auth/info`
@@ -308,10 +308,10 @@ InputEvent = { text: string }    // literal text
 ```
 
 - The web maps these onto the protocol's `input` and `paste` messages
-  ([daemon-core.md §5.3](daemon-core.md#53-json-messages)). A tab sends input only once
+  ([daemon-core.md](daemon-core.md#json-messages)). A tab sends input only once
   its watch is bound (`watching`).
 - Key names are plain strings checked by the daemon's allowlist
-  ([daemon-core.md §3.4](daemon-core.md#34-commands-commandrs)); `web/touch/` is the only
+  ([tmux context](../../src/tmux/.context/CONTEXT.md)); `web/touch/` is the only
   place that spells them.
 - **Shift+Enter** goes as `bytes`, never the key `S-Enter`, which tmux 3.4 types as
   literal text.
@@ -319,7 +319,7 @@ InputEvent = { text: string }    // literal text
   Option with printable non-alphanumeric ASCII, are raw `bytes` (base64); Option
   prefixes the character with ESC. Option+Space is `M-Space`.
 - The web splits `text` longer than the `input` limit
-  ([daemon-core.md §6](daemon-core.md#6-limits-and-the-memory-ceiling)) into several
+  ([daemon-core.md](daemon-core.md#limits-and-the-memory-budget)) into several
   messages; bulk text goes as `paste`.
 - If the dock's ctrl or alt is armed, `ArmedModifiers.route(key, owner)` reads the live
   armed state, commits the modifier it uses and returns where the key goes. The key row (each
@@ -390,7 +390,7 @@ and a docked keyboard covers its bottom, as in a browser.
   meets the keyboard with no band.
 - The web computes the tmux size from `stableHeight` and width only, and sends a
   new size only when that geometry or font size changes (Fit re-sends the same one,
-  [daemon-core.md §3.6](daemon-core.md#36-sizing)). A keyboard change never
+  [daemon-core.md](daemon-core.md#sizing)). A keyboard change never
   resizes tmux, and neither does the status strip appearing or going. The columns
   come from `width` minus the left and right insets, each side at least a 4 px edge
   inset (`--term-edge`) so text never touches the glass; the rows from
@@ -398,7 +398,7 @@ and a docked keyboard covers its bottom, as in a browser.
   cell size (`web/term/size.ts`). The web measures that chrome (the dock's resting slot,
   the tab bar) only when layout, density, width or the safe area change, never from a
   surface the keyboard has covered (client-architecture.md §5.4; the daemon clamps what it receives,
-  [daemon-core.md §6](daemon-core.md#6-limits-and-the-memory-ceiling)). **The strip is
+  [daemon-core.md](daemon-core.md#limits-and-the-memory-budget)). **The strip is
   not subtracted:** it shows only while the keyboard is up and the tab is live, so
   counting it would resize tmux each time chips came or went. It shortens the terminal
   area as the keyboard does, and the pan below keeps the last rows in view. The edge

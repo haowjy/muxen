@@ -1,6 +1,6 @@
 //! The tmux bridge: ids, the work a control client or a one-shot runs, and what tmux
 //! answers. `Session` is the sans-IO control client; `pump` and `oneshot` are the only
-//! files that run tmux. See daemon-core.md §3.
+//! files that run tmux. See src/tmux/.context/CONTEXT.md.
 
 use std::fmt;
 use std::path::PathBuf;
@@ -243,7 +243,7 @@ impl fmt::Display for TmuxVersion {
     }
 }
 
-/// Work a control client runs for the hub (daemon-core.md §3.4).
+/// Work a control client runs for the hub (src/tmux/.context/CONTEXT.md).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Op {
     Locate {

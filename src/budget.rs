@@ -1,4 +1,4 @@
-//! The startup memory budget and its three user-visible caps (daemon-core.md §6).
+//! The startup memory budget and its three user-visible caps (daemon-core.md, Limits and the memory budget).
 //! Linux cgroup files are advisory: odd or unavailable files fall back to config.
 
 use std::error::Error;

@@ -1,4 +1,4 @@
-//! History capture replies and tmux's `-S`/`-E` clamp (daemon-core.md §3.4).
+//! History capture replies and tmux's `-S`/`-E` clamp (src/tmux/.context/CONTEXT.md).
 
 use bytes::Bytes;
 

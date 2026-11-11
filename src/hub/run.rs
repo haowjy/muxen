@@ -1,4 +1,4 @@
-//! The hub task (daemon-core.md §2): waits on its two inboxes and its timer, feeds each
+//! The hub task (daemon-core.md): waits on its two inboxes and its timer, feeds each
 //! input to `State`, and executes the effects. It owns the pumps' line senders, the
 //! connections' channels and the one-shot tasks; it never waits on any of them, except
 //! for the pumps at shutdown.
@@ -81,7 +81,7 @@ pub(super) async fn run(
         .await;
 }
 
-/// Adopts or removes muxen's `alert-bell` entry (daemon-core.md §4.8) outside the hub's
+/// Adopts or removes muxen's `alert-bell` entry (src/hub/.context/CONTEXT.md) outside the hub's
 /// one-shot slot: nothing else runs yet or any more. A failure costs only the entry's
 /// tidiness, and no tmux server is not one.
 async fn bell_hook(endpoint: &Endpoint, cmd: OneShotCmd) {

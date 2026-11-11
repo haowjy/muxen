@@ -1,4 +1,4 @@
-//! The hub against a real tmux (daemon-core.md §8): `hub::spawn` with real pumps and
+//! The hub against a real tmux (src/tmux/AGENTS.md): `hub::spawn` with real pumps and
 //! one-shots on a private server, and a connection that does what `http/` will, minus
 //! the socket: it moves every `ToConn` through an `Outbox`, decodes the frames and
 //! returns the credit. Runs only with `MUXEN_TMUX_TESTS=1`, one test at a time;

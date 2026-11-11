@@ -41,7 +41,7 @@ The browser shell uses a restrictive CSP. There are no cookies or credentialed C
 Actual Serve header behavior, LocalAPI fields and latency, iOS Safari/PWA networking,
 raw-file active-content behavior, and resource limits remain deployment/device probe
 gates. See [auth.md §Probe gates](../auth.md#probe-gates) and
-[daemon-core.md §6](../daemon-core.md#6-limits-and-the-memory-ceiling).
+[daemon-core.md](../daemon-core.md#limits-and-the-memory-budget).
 
 ## Required phone PWA behavior
 

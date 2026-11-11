@@ -1,4 +1,4 @@
-//! Bytes from a control client into lines (daemon-core.md §3.2). No UTF-8 decoding;
+//! Bytes from a control client into lines (src/tmux/.context/CONTEXT.md). No UTF-8 decoding;
 //! a partial line is kept across calls.
 
 use bytes::Bytes;

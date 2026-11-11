@@ -1,4 +1,4 @@
-//! `tmux::Session` against recorded tmux streams (daemon-core.md §8). Each fixture is
+//! `tmux::Session` against recorded tmux streams (src/tmux/AGENTS.md). Each fixture is
 //! replayed with its requests at their recorded offsets, in 1-byte and seeded random
 //! chunks: the session must write exactly the recorded lines (or tmux's replies would
 //! belong to other groups) and report the same events however bytes arrive.

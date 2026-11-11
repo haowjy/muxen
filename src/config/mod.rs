@@ -30,7 +30,7 @@ pub const DEFAULT_SEARCH_SKIP: [&str; 1] = ["node_modules"];
 pub struct Config {
     /// The host's name in the app; default: the machine's MagicDNS name.
     pub name: Option<String>,
-    /// The daemon's memory budget, in MiB; daemon-core.md §6 derives its caps from it.
+    /// The daemon's memory budget, in MiB; daemon-core.md, Limits and the memory budget derives its caps from it.
     pub memory_budget_mib: u64,
     pub tmux: Tmux,
     /// Where uploads land; `None`: `DEFAULT_UPLOADS_DIR`.

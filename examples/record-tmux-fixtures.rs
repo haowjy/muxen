@@ -1,4 +1,4 @@
-//! Records `tmux::Session` fixtures against a real tmux (daemon-core.md §8).
+//! Records `tmux::Session` fixtures against a real tmux (src/tmux/AGENTS.md).
 //!
 //! Each scenario starts a private server (`-L muxen-fixture-<pid>-<n>`, `nice -n
 //! 10`), attaches a control client exactly as the daemon does, and drives a real

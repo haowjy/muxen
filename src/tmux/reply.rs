@@ -1,5 +1,5 @@
 //! What tmux prints for muxen's formats, each format beside the parser of its rows
-//! (daemon-core.md §3.4, §3.8). `command.rs` puts the formats in commands; `session.rs`
+//! (src/tmux/.context/CONTEXT.md, §3.8). `command.rs` puts the formats in commands; `session.rs`
 //! and `oneshot.rs` parse the answers. The snapshot's `STATE_FORMAT` lives with its
 //! parser in `snapshot.rs`.
 
@@ -70,7 +70,7 @@ pub(super) fn location(row: &[u8]) -> Option<Location> {
 
 /// The listing's first line.
 pub(super) const LISTING_SERVER_FORMAT: &str = "#{version}\t#{pid}\t#{start_time}";
-/// The server-global `alert-bell` entry muxen owns (daemon-core.md §4.8).
+/// The server-global `alert-bell` entry muxen owns (src/hub/.context/CONTEXT.md).
 pub(super) const BELL_HOOK_INDEX: u32 = 9100;
 /// True while the entry at muxen's index starts with muxen's hook text, whatever
 /// build wrote it. A session resolves the entry, so a session-level `alert-bell` hook

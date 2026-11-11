@@ -1,4 +1,4 @@
-//! The hub's pure core (daemon-core.md §4.1–§4.6): every control client's `Session`,
+//! The hub's pure core (src/hub/.context/CONTEXT.md): every control client's `Session`,
 //! the watched sessions with their windows, streams and owners, and each connection's credit,
 //! in one value. `handle` turns one input into effects; `reconcile` (reconcile.rs) then
 //! sends tmux whatever the watches need. No I/O and no clock: time comes in with each

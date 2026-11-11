@@ -1,4 +1,4 @@
-//! The tmux bridge against a real tmux (daemon-core.md §8): `Session` fed by the real
+//! The tmux bridge against a real tmux (src/tmux/AGENTS.md): `Session` fed by the real
 //! pump, and the one-shots. The snapshot boundary at full output speed, snapshots torn
 //! by a waiting hook, a Gap with a terminal client attached, and what the hub sees for
 //! each way a control client ends. Each test starts its own private server (`-L`,

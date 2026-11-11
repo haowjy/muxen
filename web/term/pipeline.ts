@@ -16,7 +16,7 @@ type Op =
   | { kind: "snapshot"; snapshot: Snapshot; done: () => void };
 
 /**
- * One serialized write pipeline per terminal (daemon-core.md §5.4).
+ * One serialized write pipeline per terminal (daemon-core.md, Wire protocol).
  *
  * `Engine.write` is asynchronous: bytes sit in the emulator's queue until parsed. A
  * snapshot's `reset()` would not clear them, so they would parse into the restored

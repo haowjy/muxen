@@ -1,4 +1,4 @@
-//! Bell attention (daemon-core.md §4.8): the poll, the baseline every listing answer is
+//! Bell attention (src/hub/.context/CONTEXT.md): the poll, the baseline every listing answer is
 //! diffed against, and the `bell` message. The source is tmux's own `alert-bell` hook,
 //! which counts a session's bells in a user option; the listing carries the count (the
 //! mark) and tmux's verdict on whether the session's bells reach the hook. The devices

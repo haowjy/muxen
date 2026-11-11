@@ -1,5 +1,5 @@
 //! The snapshot list's replies, typed, and the restore bytes composed from them
-//! (daemon-core.md §3.5).
+//! (src/tmux/.context/CONTEXT.md).
 
 use std::io::Write as _;
 

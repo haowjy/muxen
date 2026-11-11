@@ -52,7 +52,7 @@ function decodeBase64(b64: string): Uint8Array {
 }
 
 /**
- * One tab, end to end (daemon-core.md §5): its watch on the host's shared socket, the
+ * One tab, end to end (daemon-core.md, Wire protocol): its watch on the host's shared socket, the
  * connection reducer and the terminal pipeline. At most one `watch` is outstanding; each
  * gets a fresh host-wide id, so frames from an earlier watch are dropped on arrival.
  */
@@ -366,7 +366,7 @@ export class TabDriver {
 
   /**
    * Whether the window's size has differed from the size this tab sent for longer than the wait
-   * (daemon-core.md §3.6): either direction. `restart` is a claiming send, which clears the band
+   * (src/tmux/.context/CONTEXT.md): either direction. `restart` is a claiming send, which clears the band
    * and starts the wait afresh; otherwise a running wait is left alone and a match ends everything.
    */
   private checkBand(restart: boolean): void {

@@ -1,7 +1,7 @@
 import type { InputEvent } from "../platform/types";
 import type { ClientMsg, InputItem } from "../proto/generated/messages";
 
-/** The daemon refuses an `input` message over this many bytes (daemon-core.md §6). */
+/** The daemon refuses an `input` message over this many bytes (daemon-core.md, Limits and the memory budget). */
 const MAX_INPUT_BYTES = 4 * 1024;
 
 const encoder = new TextEncoder();

@@ -1,4 +1,4 @@
-//! The bounded HTTP/1 accept loop (daemon-core.md §6.4). Each accepted stream owns
+//! The bounded HTTP/1 accept loop (src/http/.context/CONTEXT.md). Each accepted stream owns
 //! its permit, including after hyper transfers it into an upgraded WebSocket.
 
 use std::convert::Infallible;

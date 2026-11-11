@@ -1,4 +1,4 @@
-// Binary frames, daemon-core.md §5.4. Big-endian; the first byte is the kind.
+// Binary frames, daemon-core.md, Wire protocol. Big-endian; the first byte is the kind.
 
 export type Frame =
   | { kind: "output"; watch: number; bytes: Uint8Array }

@@ -1,4 +1,4 @@
-//! One WebSocket connection (daemon-core.md §4.6–4.7, §5.2, §6; auth.md "Carrying the
+//! One WebSocket connection (src/hub/.context/CONTEXT.md, §5.2, §6; auth.md "Carrying the
 //! token"): the handshake, the idle timeout, background device re-checks, pastes
 //! written to files, the `dir` check on new windows and sessions, and
 //! the hub's `ToConn` moved through an `Outbox` onto the socket, every charge returned
@@ -348,7 +348,7 @@ impl Conn<'_> {
     }
 
     /// Writes the text to a 0600 file under a paste slot, on the auth lane, so the hub
-    /// holds a path, not the text (daemon-core.md §3.4). The hub deletes the file, which
+    /// holds a path, not the text (src/tmux/.context/CONTEXT.md). The hub deletes the file, which
     /// frees the slot.
     async fn paste(
         &mut self,

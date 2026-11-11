@@ -43,7 +43,7 @@ study only: read the code, copy nothing.
 
 Evidence: [ios-web.md §6](ios-web.md), [tmux-control-mode.md §9](tmux-control-mode.md).
 The Rust library [libtmux-rs](https://github.com/libtmux/libtmux-rs) is the reference
-for the snapshot boundary ([daemon-core.md §3.5](../daemon-core.md#35-snapshot)).
+for the snapshot boundary ([daemon-core.md](../daemon-core.md#snapshots-and-flow-control)).
 
 ## Notes
 

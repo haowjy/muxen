@@ -1,4 +1,4 @@
-//! `hub::State` driven by scripted inputs (daemon-core.md §8): a fake tmux server
+//! `hub::State` driven by scripted inputs (src/tmux/AGENTS.md): a fake tmux server
 //! answers the lines the hub writes, the way tmux 3.4 would, and each test checks what
 //! reaches the connections and which ops the control clients ran. `fake_tmux.rs` reads
 //! the lines and frames the answers; this server only decides what each command finds,
@@ -184,7 +184,7 @@ impl Hub {
         let conn = ConnId(self.next_conn);
         self.next_conn += 1;
         self.input(Input::Connected(conn));
-        // The first connection starts the bell poll (daemon-core.md §4.8); tests start
+        // The first connection starts the bell poll (src/hub/.context/CONTEXT.md); tests start
         // from its answer, so the one-shot slot is free.
         if matches!(self.oneshots.front(), Some((_, OneShotCmd::List))) {
             self.answer_oneshot();

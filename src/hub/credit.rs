@@ -1,4 +1,4 @@
-//! Each connection's credit (daemon-core.md §4.6): what output may use, the
+//! Each connection's credit (src/hub/.context/CONTEXT.md): what output may use, the
 //! reservations captures and listings hold, and sending control JSON, which is never
 //! refused but wedges a connection past the overdraft.
 

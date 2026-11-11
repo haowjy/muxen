@@ -596,7 +596,7 @@ returns. A stalled raw response would otherwise retain its `Ctx` and `HubHandle`
 because another handle would remain alive, the hub could not infer that all HTTP
 clients were gone and close its control clients. `main` therefore calls
 `HubHandle::stop` explicitly after `serve` returns
-([daemon-core.md §4.7](daemon-core.md#47-public-interface)). A SIGTERM with a paused
+([hub context](../../src/hub/.context/CONTEXT.md)). A SIGTERM with a paused
 raw stream then ends in 2.0 s with exit 0.
 
 | Item | Bound | MB |
@@ -610,7 +610,7 @@ raw stream then ends in 2.0 s with exit 0.
 | **file API, excluding raw responses** | scan, search, upload, save and listing page | **4.8** |
 
 Raw responses and kernel socket buffers have separate rows in the daemon's ceiling in
-[daemon-core.md §6](daemon-core.md#6-limits-and-the-memory-ceiling). HTTP/1 buffers are
+[daemon-core.md](daemon-core.md#limits-and-the-memory-budget). HTTP/1 buffers are
 bounded to 16 KiB each by its accept loop. Page cache is charged to the unit too. Clean
 pages are reclaimable, so they don't count toward the unreclaimable ceiling; at
 `MemoryMax` the kernel reclaims them before it kills. The unit sets no `MemoryHigh`,
@@ -654,7 +654,7 @@ without a disk.
 | `http/settings.rs` | `/settings` and `/settings/reload` |
 
 Wire types go in `src/proto/fs.rs` (`src/proto/settings.rs` for `/settings`) and are generated for TypeScript like the WebSocket
-messages ([daemon-core.md §5.5](daemon-core.md#55-type-generation)); Swift hand-writes
+messages ([daemon-core.md](daemon-core.md#wire-protocol-srcproto)); Swift hand-writes
 only the upload response. New dependency: axum's `query` feature. Tests run `fs::open` against a temp tree with symlinks, `..`, a FIFO and a non-UTF-8
 name, and swap a component for a symlink between canonicalize and open to exercise
 step 4.
@@ -671,7 +671,7 @@ the error codes are shared by `raw` and the save.
 - **`sandbox` and CORS on custom-scheme responses** are unverified on iOS 26
   ([ios-shell.md](ios-shell.md#open-risks)). The type allowlist holds without them.
 - **The memory ceiling sits near the unit's limit** once the file API and kernel socket
-  buffers are counted ([daemon-core.md §6](daemon-core.md#6-limits-and-the-memory-ceiling)).
+  buffers are counted ([daemon-core.md](daemon-core.md#limits-and-the-memory-budget)).
   The budget run must read the unit's `memory.peak`, which counts kernel buffers and
   page cache, not the daemon's RSS.
 - **Unit-tested only on macOS.** The fs tests pass on the Mac (APFS): the

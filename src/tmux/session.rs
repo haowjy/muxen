@@ -1,4 +1,4 @@
-//! The control-client protocol as a pure state machine (daemon-core.md §3.3): bytes
+//! The control-client protocol as a pure state machine (src/tmux/.context/CONTEXT.md): bytes
 //! and requests in, events and command lines out. No I/O, no clock.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};

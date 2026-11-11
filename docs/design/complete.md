@@ -85,7 +85,7 @@ Chip       = { insert: string,          // typed at the cursor, verbatim
   The route sits in the `devices` router behind both auth layers.
 
 Types go in `src/proto/complete.rs`, generated for TypeScript
-([daemon-core.md §5.5](daemon-core.md#55-type-generation)).
+([daemon-core.md](daemon-core.md#wire-protocol-srcproto)).
 
 ## Answering a request
 
@@ -282,7 +282,7 @@ binary was evicted from the page cache first:
 Run inside muxen's unit, one `docker` completion would add 43 MB of RSS, and up to
 74 MB on a cold cache. The unit's 64.8 MiB ceiling leaves 7.2 MiB below its 72 MB
 `MemoryMax`
-([daemon-core.md §6](daemon-core.md#6-limits-and-the-memory-ceiling)).
+([daemon-core.md](daemon-core.md#limits-and-the-memory-budget)).
 Scoped, the cost to muxen's unit is `systemd-run` before its exec: the unit's peak
 rose 1.1 MB for a `docker run --` completion. The scope adds about 27 ms (34 ms scoped
 against 7 ms direct for `tmux ''`), which the 300 ms timeout covers.
@@ -352,7 +352,7 @@ The history row's worst case, measured: 10,400 lines of 101 bytes, the largest i
 index still held, inside the 4 MB allowance.
 
 That row replaces the unmeasured carapace estimate (~15 MB) in
-[daemon-core.md §6](daemon-core.md#6-limits-and-the-memory-ceiling).
+[daemon-core.md](daemon-core.md#limits-and-the-memory-budget).
 
 The slab row is kernel memory the daemon doesn't hold: walking `PATH`'s directories and
 listing others leaves their dentries and inodes cached, and the cache is charged to the
@@ -415,7 +415,7 @@ inherits its nice level 10.
   request on `webView(_:stop:)` ([ios-shell.md](ios-shell.md#where-the-web-ui-comes-from)).
   A response for a `before` other than the current one is dropped.
 - **Sends `cwd`** as the tab's cwd from `watching`
-  ([daemon-core.md §3.7](daemon-core.md#37-window-subscription)), which is tmux's
+  ([tmux context](../../src/tmux/.context/CONTEXT.md)), which is tmux's
   `pane_current_path` read by the daemon and lags a `cd` by up to a second. It never
   takes `cwd` from an OSC 7: any output can write one, and `cwd` picks the directory
   carapace runs in. Until `watching` has a value the client sends `null`.

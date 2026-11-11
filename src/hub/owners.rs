@@ -1,4 +1,4 @@
-//! Session view ownership and control-client lifecycle (daemon-core.md §4.2, §4.5).
+//! Session view ownership and control-client lifecycle (src/hub/.context/CONTEXT.md, §4.5).
 
 use std::time::Instant;
 

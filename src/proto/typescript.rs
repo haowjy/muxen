@@ -1,5 +1,5 @@
 //! Renders the protocol's TypeScript types into `web/proto/generated/messages.ts`
-//! (daemon-core.md §5.5): the WebSocket messages, the `/fs/*`, `/settings` and `/complete` bodies,
+//! (src/proto/AGENTS.md): the WebSocket messages, the `/fs/*`, `/settings` and `/complete` bodies,
 //! and the error body every route shares. The test fails while the committed file is stale;
 //! `UPDATE_PROTO_TYPES=1 cargo test --lib proto::typescript` rewrites it.
 
@@ -81,11 +81,11 @@ fn render() -> (String, BTreeSet<TypeId>) {
     );
     let _ = writeln!(
         out,
-        "/** The protocol this build speaks (daemon-core.md §5.2). */\nexport const \
+        "/** The protocol this build speaks (daemon-core.md, Wire protocol). */\nexport const \
          PROTOCOL_VERSION = {PROTOCOL_VERSION};\n"
     );
     out.push_str(
-        "/** WebSocket close codes (daemon-core.md §5.2). */\nexport const CloseCode = {\n",
+        "/** WebSocket close codes (daemon-core.md, Wire protocol). */\nexport const CloseCode = {\n",
     );
     for code in CloseCode::ALL {
         let _ = writeln!(out, "  {code:?}: {},", code.code());

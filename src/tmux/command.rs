@@ -1,4 +1,4 @@
-//! Typed command builders (daemon-core.md §3.4, §3.8): lines for a control client and
+//! Typed command builders (src/tmux/.context/CONTEXT.md, §3.8): lines for a control client and
 //! arguments for `tmux` itself. Nothing else writes tmux commands, and none of them
 //! waits: a waiting command would stall every later reply.
 
