@@ -1,649 +1,645 @@
 # Muxen browser and mobile interaction contract
 
-The interaction contract for every client surface. Device-specific gates remain: the touch implementation still needs checking on an iPhone. [README.md](README.md) says which doc wins.
+The interaction contract for every client surface: what the user sees and does, and why. Layout
+measurements, keymaps and caches belong to the code
+([Files](../../../web/screens/files/.context/CONTEXT.md), the terminal's
+[context](../../../web/screens/terminal/.context/CONTEXT.md)). Device-specific gates remain: the touch
+implementation still needs checking on an iPhone. [README.md](README.md) says which doc wins.
 
 ## Product boundaries and vocabulary
 
-- Phone browser must support installation as a PWA with standalone launch; installation is optional for use, not for implementation scope. It shares browser behavior, preserves local drafts offline, and never queues terminal commands for later execution. See [browser setup](browser-setup.md) for research and gates.
-- Three environments: desktop browser, mobile browser, native iPhone app. Shared workspace behavior; platform-specific navigation and input. No three independent terminal implementations. The native app has a host registry; a browser/PWA is currently bound to its page origin. A unified multi-server browser workspace and its Add server route need an origin/auth design before implementation; do not relax the existing browser boundary ([connection roadmap](connection-roadmap.md)).
-- Host is the server, e.g. pop-os. Session is a real tmux session, e.g. a1 or bio2. A session contains windows; one of them is its current window. A terminal tab opens one tmux session, as `tmux attach` does: it shows the session's current window (that window's active pane) and follows it when the current window changes, whichever client changed it. A Files tab holds one folder or file preview on a host.
-- Session lists use actual session names. A terminal tab's label is the session name, then the current window's name in regular weight; a Files tab uses its current folder or file name, and "~" at the host's home. One function names a tab, so it reads the same in its pill, the overview, the dock's line field and a notice. A workspace is one server's, so a label never names the host.
-- Minimal initial product. No custom shortcut system, command palette, expanded desktop sidebar, split-pane management, SSH/SFTP/serial connection choices, or app-drawn keyboard: the dock's key row supplements the system keyboard and never replaces it.
-- Existing-session selection must be clearly distinct from session creation. Opening an existing session never creates another shell. Closing a muxen tab only detaches; only Kill window and Kill session, each behind a confirmation, end tmux state.
-- Connecting may resize a real tmux window. The setup must not suggest muxen is read-only or isolated when connected to the user's server.
+- The phone browser supports installation as a PWA with standalone launch; installation is optional
+  for use. It shares browser behaviour, preserves local drafts offline and never queues terminal
+  commands for later execution ([browser setup](browser-setup.md)).
+- Three environments: desktop browser, mobile browser, native iPhone app. Shared workspace
+  behaviour; platform-specific navigation and input. No three independent terminal implementations.
+  The native app has a host registry; a browser/PWA is bound to its page origin. A multi-server
+  browser workspace needs an origin/auth design first ([connection roadmap](connection-roadmap.md)).
+- **Host** is the server (pop-os). **Session** is a real tmux session. A terminal tab opens one
+  tmux session, as `tmux attach` does: it shows the session's current window (that window's active
+  pane) and follows it when the current window changes, whichever client changed it. A Files tab
+  holds one folder or file preview on a host.
+- Session lists use actual session names. A terminal tab's label is the session name, then the
+  current window's name in regular weight; a Files tab uses its folder or file name, and "~" at the
+  host's home. One function names a tab, so it reads the same in its pill, the overview, the dock's
+  line field and a notice. A label never names the host.
+- Minimal product: no custom shortcut system, command palette, expanded sidebar, split-pane
+  management, connection-type choices or app-drawn keyboard (the dock's key row supplements the
+  system keyboard).
+- Existing-session selection is distinct from creation; opening an existing session never creates
+  another shell. Closing a muxen tab only detaches; only Kill window and Kill session, each behind a
+  confirmation, end tmux state (not built: [daemon-core.md](../daemon-core.md#the-tabs-tmux-commands-not-built)).
+- Connecting may resize a real tmux window; the setup must not suggest muxen is read-only or
+  isolated.
 
 ## Platform layout
 
 A **workspace** is a server's open tabs, in the order the user gave them, and the tab it last
-showed. Each server has one workspace for now; the model keeps a workspace its own record, owned
-by a server, so a second one on the same server later is another record, not a remodel (Jimmy: "maybe in the future we can have multiple workspaces"). Every surface has two levels,
-and the same screens going forward and back (Jimmy: "going from home completely skips the
-workspace selection, and going back u have to go to the workspace slection"):
+showed. Each server has one for now; the model keeps a workspace its own record so a second later is
+another record, not a remodel (Jimmy: "maybe in the future we can have multiple workspaces"). Two
+levels, the same screens going forward and back:
 
 1. **Home** lists the workspaces. A row opens the workspace's last tab.
 2. **A tab** (terminal or Files) fills the screen, with the workspace's **tab row**.
 
-**The tab overview** lists one workspace's tabs, and adds, reorders and closes them. It is not a level:
-over a tab it is the tab list, opened from the tab row's All tabs, and Back closes it onto the tab it
-was opened over, or onto the tab picked in it. A workspace with no tab shows it in the tab's place,
-reached from Home; a tab opened from there takes its place, so it is never a stop on the way back.
+**The tab overview** lists one workspace's tabs and adds, reorders and closes them. It is not a
+level: over a tab it is the tab list, opened from All tabs, and Back closes it onto the tab it was
+opened over or the one picked in it. A workspace with no tab shows it in the tab's place, reached from
+Home.
 
-Back from a tab is Home. It lands on the nearest earlier Home entry, so folders drilled into on the
-way never add a stop. Back walks out of the shown Files tab's folders only: switching tabs drops the
-earlier tab's, so the history is Home, then the tab and its folders.
+Back from a tab is Home, landing on the nearest earlier Home entry, so folders drilled into never add
+a stop. Back walks out of the shown Files tab's folders only: switching tabs drops the earlier tab's.
+**Swipe back:** in the app a left-edge swipe is Back everywhere except a terminal tab with nothing
+over it, where it is off (the web tells the shell with `backSwipe { enabled }`). Over a terminal it
+closes what is over it; a Files tab steps out to the parent folder, then Home. Phone Safari owns its
+edge swipe, so there a swipe on a terminal goes Home. Pages put Back at the top left of their header
+on every layout; only a tab keeps ‹ at the bottom, in the dock's tab row.
 
-**Swipe back.** In the app, a swipe from the left edge is Back everywhere except on a terminal tab with
-nothing over it, where it is off (Jimmy: "that obiously shouldn't happen at the terminal"): the
-web tells the shell with `backSwipe { enabled }` as the screen changes, and the shell turns WebKit's
-back-forward gesture on or off. Over a terminal (the tab list, Open session, Settings) it closes what is
-over it; a Files tab steps out to the parent folder, then Home. Phone Safari owns its edge swipe and
-cannot be told no, so there a swipe on a terminal goes Home, as ‹ does.
-
-**Back's place.** Pages (the tab list, Settings, Open session) put Back at the top left of their header on
-every layout (Jimmy: "the back button on the settings is still at the bottom"). Only a tab keeps
-‹ at the bottom, in the dock's tab row, where a terminal's keyboard and keys are.
-
-**Workspace state.** A workspace record has its own id, its server's host id, its tabs in order and
-its last-shown tab; today each host has exactly one, made when the server is first known. The route is Home,
-a workspace's overview, or a workspace's tab, and it names the workspace: the tab on screen is that
-workspace's last-shown tab, so there is no separate "active tab" to disagree with it. An event that
-adds a tab (Open session, Open files) names the workspace it adds to. Reordering is one event that moves a
-tab to an index; the order and the last tab are saved per device with the rest of the workspace.
-Each workspace's last terminal tab is where Insert path and uploads go, from a Files tab too; when
-that tab closes, the nearest remaining terminal tab (right-hand neighbour first) takes over. When
-a server is removed, its workspace and tabs go with it; nothing in tmux changes. A workspace saved
-in the earlier single-strip format is discarded whole at boot, as earlier formats were: muxen
-starts at Home with no tabs, and the sessions are one Open session away.
+**Workspace state.** A workspace record has its id, its server's host id, its tabs in order and its
+last-shown tab; the route is Home, a workspace's overview or a workspace's tab, so there is no
+separate "active tab" to disagree with it. An event that adds a tab names the workspace. The order
+and last tab are saved per device. A workspace's last terminal tab is where Insert path and uploads
+go, from a Files tab too; when it closes, the nearest remaining terminal tab (right neighbour first)
+takes over. Removing a server removes its workspace and tabs; nothing in tmux changes. A workspace in
+an earlier saved format is discarded whole at boot: muxen starts at Home with no tabs.
 
 | Surface | Desktop browser | Phone browser / PWA / iPhone app |
 | --- | --- | --- |
-| Tab row | One top row: ‹, the workspace's tabs, +. No rail. | One bottom row: ‹, the workspace's tabs, +, and Show keyboard while the keyboard is down. It stays in place when the keyboard is up, above the compose box and the key row. |
+| Tab row | One top row: ‹, the workspace's tabs, +. | One bottom row: ‹, tabs, +, and Show keyboard while the keyboard is down; it stays in place when the keyboard is up, above the compose box and key row. |
 | Terminal | All space below the top row. Direct physical-keyboard input; no dock. | Full-bleed above the dock. |
-| Adding a tab | + opens a menu under it: Open session, Open files. The tab overview has the same two actions. | + opens the same menu above it, with the keyboard up or down. |
+| Adding a tab | + opens a menu under it: Open session, Open files. | The same menu above it, with the keyboard up or down. |
 
-Safe areas and browser chrome are real platform constraints. Use the measured visible
-viewport and keep controls unobscured. Mobile controls target at least 44 px of touch
-area; the dock's visible controls may be smaller. Seat the bottom row at the bottom
-safe area without a blank band; add that inset only while the keyboard is down. The tab
-row and the key row scroll horizontally. Names truncate rather than widening the
-screen. Safari's own toolbar remains below the bottom row, and its form accessory sits
-between the key row and keyboard. Standalone PWA mode has no Safari toolbar.
+Use the measured visible viewport and keep controls unobscured. Mobile controls target at least
+44 px of touch area. The bottom row sits at the bottom safe area without a blank band (the inset only
+while the keyboard is down). The tab row and key row scroll horizontally; names truncate.
 
 ## Visual treatment
 
-- Settings offers System / Light / Dark on every surface. System follows the system
-  appearance; Light and Dark override it. Dark uses a true-black terminal and neutral
-  greys rather than blue-tinted terminal surfaces. Native and web appearance agree.
-  The choice is kept by the platform: the browser's local storage (a blocked or empty
-  store falls back to System and the control still works for that page), the app's own
-  preferences, which it applies to its lock screen, sheets and keyboard before the web loads.
-- Settings offers the terminal text size: Small, Default, Large, Larger, which are 1 px
-  under today's size (12 px touch, 13 px compact) and 2 and 4 px over it. Large and Larger
-  fit about a seventh and a quarter fewer columns on a phone; Small gains one in twelve. Settings opens over Home, which
-  shows no window, so the new size takes effect when a tab is next shown: it is fit to this screen
-  at that size, in the one claim every shown tab already sends: the size comes from the font, which is
-  known while the terminal is hidden, so no second resize follows.
-- Blue is the selection/accent channel; green is reserved for connected status. Selected
-  rows use a blue-tinted fill and weight. Connection state is distinct from selection.
-- Menus and the tab overview use the current theme's raised surface. A press outside an open menu closes it; on touch that tap only closes it, as on iOS, so the row or control under the finger doesn't also act. A toast floats above the dock
-  without covering its controls.
-- Home is a centered column on desktop, with width `min(720px, 100% - 2 gutters)`.
-  Every screen and full-screen page (Home, the tab overview, Settings, Open session) has the
-  same 44 pt header row, `ScreenBar`: a back icon at the top left where the screen has a parent,
-  on every layout (only a tab keeps Back at the bottom, in its dock's tab row), the 17 pt title
-  left-aligned in the column, the screen's own controls at the end, and a rule under it. No large titles, no centred titles.
-- A terminal tab's session name is bold and its current window name regular, separated
-  by spacing, including for a one-window session; a phone pill shows the session alone. Truncate the window name first. A Files
-  tab is labelled by its folder or open file, and a tab at the host's home reads "~". Icon-only controls have accessible
-  names and tooltips on hover and keyboard focus.
-- Interactive controls share a 2 px focus ring with a 2 px offset. Spacing, type, radii
-  and icon sizes use one scale per property; icons are Lucide's (`lucide-preact`), 16, 20 or 24 px.
-- Loading, empty, offline, error, refused-session, enrolment and permission states are
-  distinct; failures must not look like empty content. Reduced motion shortens duration
-  tokens. Do not globally force transitions to 1 ms.
+- Settings offers System / Light / Dark on every surface; dark uses a true-black terminal and neutral
+  greys. The choice is kept by the platform (browser local storage, a blocked store falls back to
+  System; the app's preferences, applied to its lock screen and sheets before the web loads).
+- Settings offers the terminal text size: Small, Default, Large, Larger (1 px under, today's, 2 and
+  4 px over). It takes effect when a tab is next shown, fit in the one claim every shown tab sends, so
+  no second resize follows.
+- Blue is the selection/accent; green is reserved for connected status. Menus use the theme's raised
+  surface; a press outside an open menu closes it, and on touch only closes it, so the control under
+  the finger doesn't also act.
+- Every screen has the same 44 pt header (`ScreenBar`): back icon at the top left where there is a
+  parent, a 17 pt left-aligned title, the screen's controls at the end. Home is a centred column on
+  desktop. No large or centred titles.
+- A terminal tab's session name is bold, its window name regular; a phone pill shows the session
+  alone. Truncate the window name first. Icon-only controls have accessible names and tooltips.
+- Loading, empty, offline, error, refused-session, enrolment and permission states are distinct;
+  failures must not look like empty content. Reduced motion shortens durations. No middle-dot
+  separators in chrome or copy.
 
 ## Home
 
-Home lists the workspaces, one row each: the server's name, its connection status in its
-status colour, and how many tabs are open (Jimmy: "home should only list the
-workspaces"). Home lists no sessions or files. A row opens that workspace on the tab it last
-showed; a workspace with no tabs opens its tab overview. One and several servers use the same
-rows; a single server does not auto-navigate past Home. Add server leads to enrolment. An
-offline server's tabs remain open, reading reconnecting. A restored terminal tab reads “Connecting…”
-until a listing proves its session, or “Reconnecting…” while unreachable. Phone Safari Home also
-offers Add to Home Screen instructions.
+Home lists the workspaces, one row each: the server's name, its connection status in its status
+colour, and how many tabs are open (Jimmy: "home should only list the workspaces"). No sessions or
+files. A row opens the workspace on its last tab (an empty one opens its overview). One server and
+several use the same rows; a single server does not auto-navigate past Home. An offline server's tabs
+stay open. A restored terminal tab reads "Connecting…" until a listing proves its session, or
+"Reconnecting…" while unreachable. Phone Safari Home offers Add to Home Screen instructions. No
+servers shows enrolment instructions and Add server. If a server's tmux isn't running its row says so;
+muxen never starts it.
 
-**A row's status word** comes from its server's shown state ([plan.md](../plan.md#reachability))
-and admission, the first that applies:
+**A row's status word**, from its server's shown state ([plan.md](../plan.md#reachability)) and
+admission, the first that applies:
 
-1. **needs attention** when admission needs the user (not enrolled, token refused, incompatible,
-   wrong origin, origin refused, device refused), even if the server has since stopped answering.
-2. **offline** when the shown state is unreachable. The note says when the server was last reached
-   ("Last reached 4 min ago.", or "Not reached since muxen opened.") and how to fix it ("Check that
-   it's on and that Tailscale is on."), with Retry. When it is no network the note says "This iPhone
-   is offline." ("This device is offline." in a browser), without Retry.
-3. **connecting** when the shown state is checking, with the note "Connecting to pop-os…", or when
-   admission is undecided on a server that answers, with the server's banner ("Checking access…"
-   after 10 s) and no note.
-   The shown state is also checking while an open socket has had no answer to an ask for 3 s, so Home
-   reads "connecting" when a tab does; a live terminal on screen shows nothing for it, and offline
-   still waits for the socket to be declared dead.
-4. Otherwise **connected**, with a note if tmux isn't running, and the card's notice while the daemon is
-   turning sockets away: over the connection cap, or unable to decide right now (4503).
+1. **needs attention** when admission needs the user (not enrolled, token refused, incompatible, wrong
+   origin, origin refused, device refused), even if the server has stopped answering.
+2. **offline** when the shown state is unreachable. The note says when it was last reached ("Last
+   reached 4 min ago.", or "Not reached since muxen opened.") and how to fix it ("Check that it's on
+   and that Tailscale is on."), with Retry; with no network it says "This iPhone is offline." ("This
+   device is offline." in a browser) with no Retry.
+3. **connecting** when the shown state is checking ("Connecting to pop-os…"), or admission is
+   undecided on a server that answers (the banner "Checking access…" after 10 s). The shown state is
+   also checking while an open socket has had no answer to an ask for 3 s.
+4. Otherwise **connected**, with a note if tmux isn't running, and the card's notice while the daemon
+   is turning sockets away (over the cap, or unable to decide, 4503).
 
 The same shown state reaches every other view of the server; none decides it for itself.
 
-**Server banners.** On a screen that belongs to one server (a tab, its overview), the Shell shows
-that server's banner only; other servers' problems show on Home. Admission that needs the user
-comes first, as on the card. Otherwise an unreachable server's banner
-reads "Can't reach pop-os", with the hint and Retry; with no network it reads "This iPhone is
-offline." with no Retry. Either replaces "Checking access…". A terminal tab shows neither: its
-status strip says the same, with the same Retry, unless the tab's own state fills the strip (closed,
-at its session limit, detached, a failed watch); then the banner says it, so it is said once. A
-refusal is the banner's alone: a tab's strip stays quiet and its pill reads disconnected. Other banners, such as the
-connection cap's, still show there. The Shell shows no banner over Home: each card carries its own
-server's banner as its notice, and an offline card's note replaces it. Every Retry for a server is
-the same one ([plan.md](../plan.md#reachability), "Retry").
+**Server banners.** A screen that belongs to one server (a tab, its overview) shows that server's
+banner only; other servers' problems show on Home. Admission that needs the user comes first;
+otherwise an unreachable server's banner reads "Can't reach pop-os" with the hint and Retry (no
+network: "This iPhone is offline.", no Retry). A terminal tab shows neither: its status strip says the
+same with the same Retry, unless the tab's own state fills the strip (closed, session limit, detached,
+failed watch), and then the banner says it, so it is said once. A refusal is the banner's alone: the
+strip stays quiet and the pill reads disconnected. The Shell shows no banner over Home: each card
+carries its own notice. Every Retry for a server is the same one
+([plan.md](../plan.md#reachability)). A daemon connection-cap refusal (close 4005) reads "Too many
+connections to pop-os" with "Close muxen in another browser or the app, then retry" and Retry; the
+tabs keep their own "Reconnecting".
 
-No servers shows enrolment instructions and Add server. If a server's tmux is not running,
-its row says so; muxen never starts Jimmy's tmux server. Server management includes adding,
-removing and re-enrolling a server. Settings is a separate screen reached from the gear in Home's header, on every layout, with
-appearance, terminal text size, a section per server (below), this device/browser and local-data
-controls. The app also
-offers the Face ID relock setting ([auth.md](../auth.md#swift-side-keychain-item-and-app-lock));
-the phone browser has no Face ID setting. Clear local data deletes
-drafts and the saved workspaces on this device, leaving currently open tabs until closed;
-destructive actions confirm independently. Remove this device is available only where the
-host admits this device as a tailnet node. Settings has Back to Home.
+**Settings** is a separate screen from the gear in Home's header, with appearance, terminal text
+size, a section per server, this device/browser and local-data controls. The app also offers the
+Face ID relock setting ([auth.md](../auth.md#swift-side-keychain-item-and-app-lock)); the browser has
+none. Clear local data deletes drafts and saved workspaces on this device, leaving open tabs until
+closed. Remove this device is available only where the host admits this device as a tailnet node.
 
-**A server's settings.** Settings has one section per server, named for it, holding what that server's
-`config.toml` keeps and applies without a restart ([fs.md](../fs.md#server-settings)): **Search skips**
-(folder name patterns Search lists but doesn't enter; default `node_modules`) and **Uploads folder** (where
-Upload and pasted images land; default `~/.muxen-uploads`). They are read from the server each time
-Settings opens and shown as the server answers, defaults included; nothing is kept on the device. A
-change saves at once (Remove, Add, Reset) or when a field is committed (Return or leaving it), one save
-at a time per server, each built from the server's answer to the one before it, and the section redraws
-from the server's answer, so every device sees the same. The queue and the latest answer are the host's,
-not the screen's: closing and reopening Settings mid-save keeps the order and shows the save's outcome.
-A change that changes nothing sends nothing. "Saving…" is the only sign of a save in flight; nothing is
-disabled meanwhile. Removing a row moves focus to the next row's Remove, else the previous one's.
-Search skips is a list: one row per pattern with Remove, an Add field with an Add button (disabled while
-the field is empty; touch has no obvious Return), and Reset, which returns to the
-defaults (shown only while the list differs from them). Removing every row skips nothing. A pattern is a
-folder name, or a glob with `*` and `?` over a folder's name alone. The keys that apply only at a restart
-(`name`, `memory_budget_mib`, `[tmux]`, `[complete]`) stay hand edits. A save that fails says why in plain
-words beside the field and keeps the typed value; leaving Settings mid-save lets the save finish. The
-section shows the server's running values. When its `config.toml` was edited by hand since it was
-loaded, the section says "config.toml has changed since muxen loaded it" with **Reload config.toml**,
-which applies it, or shows the parse error ("config.toml doesn't parse: line 3, column 7…") and leaves
-the running values. Restart-only keys that a reload, or a save that picked up a hand edit, found changed
-are listed until muxen restarts ("Restart muxen to apply: memory_budget_mib").
-A server whose shown state is unreachable shows "Can't reach <server name>" in place of its values, with Try again, the server's one Retry; with no network it shows "This iPhone is offline." and no Try again. Values load by themselves when it answers again. A failed read while the server shows reachable keeps Try again, which then reads again.
+**A server's settings** hold what that server's `config.toml` applies without a restart
+([fs.md](../fs.md#server-settings)): **Search skips** (folder name patterns Search lists but doesn't
+enter; default `node_modules`; a list with Remove, Add and Reset) and **Uploads folder** (default
+`~/.muxen-uploads`). They are read from the server each time Settings opens; nothing is kept on the
+device. A change saves at once (Remove, Add, Reset) or when a field is committed, one save at a time
+per server, each built from the server's previous answer, and the section redraws from the answer so
+every device sees the same; closing Settings mid-save lets the save finish. A save that fails says why
+beside the field and keeps the typed value. When `config.toml` was edited by hand since load, the
+section says so with **Reload config.toml**, or shows the parse error and leaves the running values;
+restart-only keys (`name`, `memory_budget_mib`, `[tmux]`, `[complete]`) that changed are listed until
+restart. An unreachable server shows "Can't reach <name>" in place of its values, with the server's
+one Retry.
 
-**Where a launch opens.** A launch (a reload, a bookmark, a copied link, or the app after iOS
-killed it) opens the place the page's address names, else the route last shown, saved with the
-workspaces, else Home. The address reads `#/` (Home), `#/tabs` (the tab overview),
-`#/term/<session>` or `#/files/<path>`: a folder ends in `/`, a path under home reads `~/…`, and
-any other path drops its leading `/` (`#/files/etc/hosts`). It names no server, since a browser page
-talks to its own origin's host only; the app has no address and opens its saved route. A session no
-tab follows shows the overview; a Files place no tab shows opens a new Files tab there. The page is
-opened above Home, so Back goes to Home. A server that is down is explained on the tab
-("Can't reach pop-os", with Retry: the strip on a terminal tab, the server banner elsewhere). A
-setup link (`#code=…`) opens Home. Returning from the
-background keeps the screen the user left. The address is rewritten, without a history entry,
-when what it names changes (a session renamed).
+**Where a launch opens.** A launch (reload, bookmark, copied link, the app after iOS killed it) opens
+the place the page's address names, else the route last shown, else Home. The address reads `#/`,
+`#/tabs`, `#/term/<session>` or `#/files/<path>` (a folder ends in `/`, a path under home reads `~/…`).
+It names no server, since a browser page talks to its own origin's host; the app opens its saved
+route. A session no tab follows shows the overview; a Files place no tab shows opens a new Files tab
+there. The page opens above Home, so Back goes to Home. A setup link (`#code=…`) opens Home. The
+address is rewritten, without a history entry, when what it names changes. The cost: file paths and
+session names enter browser history, which iCloud and Google sync.
 
 ## Terminal
 
-- Selecting a tab activates it; other tabs remain open. Opening a session already represented by a tab activates that tab. Implementation identity must use server/session IDs, not mutable display names.
-- **The tab follows its session.** When the session's current window changes (prefix-n on the laptop, the window switcher below, a window exiting, a script), the tab shows the new window: its snapshot replaces the old one in place and the label changes. The tab, its draft and its place in the tab order stay. Typing, the line field, paste and an inserted path go to the window the tab is showing on this screen, so keys sent just before a change made elsewhere still reach the window the user was looking at. Opening or activating a tab enters Terminal through the router; desktop focus lands on the terminal after that screen is rendered.
-- Closing the active tab activates its right-hand neighbour, or the left-hand neighbour if it was last. Only the active tab shows ×, in the tab row on every surface; every tab keeps the space for one, so changing tabs never moves the others. It closes that muxen tab, never its tmux session or process. Scroll the active tab into view. Closing the last tab shows the tab overview. Creation-dialog cancellation/Escape restores focus to its opener.
-- The tab row's ‹ and the system back gesture go to Home, preserving open tabs and the active tab. + opens Open session and Open files.
-- Switching tabs preserves the terminal and running process.
-- On the terminal, show connection status only when not live. Reconnecting/error is visible in text, with Retry, and is distinct from active-tab selection and the bell dot. Home's workspace rows still show connected or offline.
-- Real connection states inherit the existing reconnect contract: disconnect does not silently close tabs; reconnect/error appears with the affected tab; viewing Home/Files must not kill tmux.
-- When the daemon refuses a socket for its connection cap (close code 4005), the host banner says “Too many connections to pop-os” with “Close muxen in another browser or the app, then retry” and a Retry button, until a socket is welcomed. It is a host problem: the tabs keep their own “Reconnecting” state and the socket keeps its normal backoff.
-- Scroll behavior, paste, mouse handling, focus delivery, reconnect, server identity, tmux geometry ownership, and keyboard viewport behavior need verification on real desktop browsers, phone browsers and the iPhone app.
-
-- Desktop keys go to tmux by name: Shift+Enter sends the modified-Enter bytes once, and IME composition sends nothing until it ends. Cmd combinations and F5, F6, F11 and F12 stay the browser's on every platform; Ctrl+Shift+C copies the selection as logical lines on every platform. Ctrl+Shift+F leaves the focused terminal for the tab row (focus lands on the active tab; Enter returns), handled before the key is sent; Settings lists it under Keyboard. Keystrokes are batched for 8 ms into one input message.
-- Paste sends one paste message and is refused over 256 KiB, saying so. An image paste uploads, then types the quoted path into the tab it was pasted in, if that tab is connected when the upload ends; otherwise a notice says the file is in Files.
-- A tab the daemon refused for its session limit reads “session limit” in the error colour, shows the daemon's message and Retry, and retries with a growing delay. Retry asks at once and keeps the delay.
-- The terminal stays blank until the shown tab's own snapshot paints, so another tab's content never sits under a pill that is not its own. tmux is never sized before the renderer has measured a cell.
-- A window takes the size of whichever terminal acted on it last. Opening or returning to a tab, typing, pasting, rotating, Fit, and choosing or creating a window in the window switcher size the shown window to exactly this screen's size, whether the laptop's terminal is larger or smaller; typing in another terminal (the laptop) takes it back, and the tab stays live. A tab that just stays on screen never takes it back, and neither does a reconnect after a network blip, unless the tab held the window before it. When the tab follows a window change made elsewhere (the laptop's prefix-n, a window exiting, a script), the new window keeps the size it had until this screen acts on it. The window left behind goes to the laptop's size after its prefix-n; after a change no terminal made, it takes the size the window had when muxen attached to the session, until a terminal types there. The same holds when this screen stops holding a window and nobody else acts there (the tab leaves the screen, the connection drops): it takes the size it had when muxen attached, until the laptop types. A window sized for another terminal is drawn at this screen's own font from the left edge: wider content is cut off at the right, and taller content follows the cursor, as it does above the keyboard. A window smaller than the screen sits in the top-left corner on the terminal background. Whenever the window's size (from `watching`, the whole window, not a split pane) has differed from the size this screen sent for longer than the wait, larger or smaller, the band on the terminal's top edge says “Sized for another terminal” with Fit, which sizes the window to this screen. While this screen holds the window the two sizes match, so there is no band; the wait, one second or the last measured ping round trip plus half a second, whichever is longer, restarted at each claiming send (opening, typing, pasting, rotating, Fit, choosing a window), keeps it from flashing while a claim's resize is on its way over a slow link. Reconnecting and error states replace the band.
+- Selecting a tab activates it; other tabs stay open, and switching preserves the terminal and
+  process. Opening a session already represented by a tab activates it. Identity is server/session
+  IDs, not mutable names.
+- **The tab follows its session.** When the current window changes (the laptop's prefix-n, the
+  window switcher, a window exiting, a script), the tab shows the new window: its snapshot replaces
+  the old in place and the label changes; the tab, its draft and its place stay. Typing, the line
+  field, paste and an inserted path go to the window the tab is showing on this screen, so keys sent
+  just before a change made elsewhere still reach the window the user was looking at.
+- Closing the active tab activates its right neighbour, else the left. Only the active tab shows ×,
+  and every tab keeps space for one, so changing tabs never moves the others. Closing the last tab
+  shows the tab overview. Cancelling a creation dialog restores focus to its opener.
+- Connection status shows only when not live: reconnecting/error is visible in text, with Retry, and
+  distinct from tab selection and the bell dot. Disconnect never silently closes tabs; viewing Home or
+  Files never kills tmux.
+- A tab the daemon refused for its session limit reads "session limit" in the error colour with the
+  daemon's message and Retry, and retries with a growing delay; Retry asks at once and keeps the delay.
+- The terminal stays blank until the shown tab's own snapshot paints. tmux is never sized before the
+  renderer has measured a cell.
+- Desktop keys go to tmux by name: Shift+Enter sends the modified-Enter bytes once; IME composition
+  sends nothing until it ends. Cmd combinations and F5, F6, F11, F12 stay the browser's;
+  Ctrl+Shift+C copies the selection as logical lines. Ctrl+Shift+F leaves the focused terminal for
+  the tab row (focus lands on the active tab; Enter returns); Settings lists it under Keyboard.
+  Keystrokes are batched for 8 ms into one input message. tmux prefix keys sent by muxen reach the
+  pane, not tmux's key tables.
+- Paste sends one `paste` message and is refused over 256 KiB, saying so. An image paste uploads, then
+  types the quoted path into the tab it was pasted in if that tab is connected when the upload ends;
+  otherwise a notice says the file is in Files.
+- **Sizing.** A window takes the size of whichever terminal acted on it last
+  ([daemon-core.md](../daemon-core.md#sizing)). Opening or returning to a tab, typing, pasting,
+  rotating, Fit, and choosing or creating a window size the shown window to exactly this screen,
+  larger or smaller than the laptop's terminal; typing in another terminal takes it back and the tab
+  stays live. A tab that merely stays on screen never takes it back, and neither does a reconnect
+  after a blip unless the tab held the window before. A window sized for another terminal is drawn at
+  this screen's font from the left edge (wider content cut at the right, taller content following
+  the cursor); a smaller one sits top-left. When the window's size (from `watching`) has differed
+  from the size this screen sent for longer than the wait (one second, or the last ping round trip
+  plus half a second, whichever is longer, restarted at each claiming send), the band on the
+  terminal's top edge says "Sized for another terminal" with **Fit**. Reconnecting and error states
+  replace the band.
+- Scroll, paste, mouse, focus, reconnect, tmux geometry and keyboard viewport behaviour need
+  verification on real desktop browsers, phone browsers and the iPhone app.
 
 ## Tab row
 
-The tab row holds ‹ (Home), the workspace's tabs as pills in workspace order, +,
-and All tabs (the tab list); on the phone,
-Show keyboard ends it while the keyboard is down. Every pill is filled; the active one is tinted with its
-status colour, its label and its circled × in that colour; other pills have a muted label and the
-attention dot when they have one (Jimmy, after Termius's tabs).
-Every pill is the same width, whatever its label, and keeps space for ×, so changing tabs never moves the others (Jimmy: “the tabs change size... they should be consistent... look at termius's”): the pills share the strip between a minimum and a maximum width, past the minimum the row scrolls, and on the phone they fill the row between ‹ and +. A phone pill shows the session or folder name only; the window is in the tab overview and the pill's menu. The row scrolls
-horizontally, the active pill is scrolled into view, and the next pill peeks when more remain.
-A tap switches tabs and leaves the keyboard up or down as it was; with it up, it goes to the
-new tab's input (Phone dock). ‹ goes to Home; All tabs opens the tab list over the tab.
-The tab row's controls (‹, pills, +, the keyboard control) are filled, one height and one corner
-radius; the key row's keys are plain text, so the two never read alike (Jimmy).
+The tab row holds ‹ (Home), the workspace's tabs as pills in order, +, and All tabs; on the phone,
+Show keyboard while the keyboard is down. Every pill is filled; the active one is tinted with its
+status colour (label and circled × in that colour); others have a muted label and the attention dot
+when they have one. Every pill is the same width and keeps space for ×, so changing tabs never moves
+the others (Jimmy: "the tabs change size... they should be consistent... look at termius's"). The row
+scrolls horizontally, scrolls the active pill into view, and the next pill peeks. A tap switches tabs
+and leaves the keyboard up or down as it was; with it up, it goes to the new tab's input. The tab
+row's controls are filled and the key row's keys are plain text, so the two never read alike.
 
-**+** opens a small menu anchored to it, in the popover look: **Open session**, **Open files**.
-It opens over the tab with the keyboard up or down and does not lower it; a tap outside,
-Escape or Back closes it.
+**+** opens a small menu anchored to it: **Open session**, **Open files**. It opens over the tab with
+the keyboard up or down and does not lower it; a tap outside, Escape or Back closes it.
 
-**Long press on a pill** opens the tab's menu, anchored to the pill. A terminal tab's menu:
+**Long press on a pill** opens the tab's menu. A terminal tab's:
 
-- **Windows**: on the tab on screen, for a session with more than one window, its windows in index
-  order, “index: name”, the shown one filled; a tap runs tmux's `select-window` on the session, so every
-  attached client moves with it (it rides the tab's watch, which only the shown tab has). Then **New window** (`new-window`), for any session.
-- **Rename session** (`rename-session`), edited in place, with the daemon's reason on refusal. Not built: the menu has no Rename or Kill entries until the daemon commands exist ([daemon-core.md](../daemon-core.md#the-tabs-tmux-commands-not-built)).
-- **Move to start**, **Move to end**.
-- **Close tab**: detaches only (`unwatch`); tmux keeps the session.
-- **Kill window** (only when the session has more than one window) and **Kill session**: last,
-  apart from the rest, in the danger colour, each behind a confirmation that names what ends
-  (“Kill session infra? Its 3 windows and their processes end.”). Nothing kills without it.
+- **Windows** (on the tab on screen, for a session with more than one): the windows in index order,
+  "index: name", the shown one filled; a tap runs `select-window` on the session, so every attached
+  client moves with it. Then **New window** (`new-window`).
+- **Move to start**, **Move to end**; **Close tab** (detaches only: `unwatch`).
+- **Rename session**, **Kill window** (only when the session has more than one) and **Kill session**
+  (danger colour, last, each behind a confirmation naming what ends) are **not built**; the menu has
+  none until the daemon commands exist ([daemon-core.md](../daemon-core.md#the-tabs-tmux-commands-not-built)).
 
-A Files tab's menu: **Copy path** (in the form the path field shows), Move to start, Move to end, Close tab.
-
-On desktop the same menu opens on right-click, and on Shift+F10 or the menu key on a focused
-pill; ↑ ↓ move through it, Escape closes it and returns focus to the pill. An action that
-switches tabs leaves focus on the terminal. Move to start and Move to end are the keyboard way to
-reorder. The + menu closes the same way and returns focus to +. On touch the menus never move
-the keyboard.
-
-tmux prefix keys sent by muxen reach the pane, not tmux's key tables.
+A Files tab's menu: **Copy path** (in the path field's form), Move to start, Move to end, Close tab.
+On desktop the same menu opens on right-click, Shift+F10 or the menu key; ↑ ↓ move, Escape closes and
+returns focus to the pill. On touch the menus never move the keyboard.
 
 ## Tab overview
 
-The tab overview is one workspace's page: the tab list over a tab, opened from the tab row's All tabs, or
-the page of a workspace with no tab, reached from Home. Its header has the workspace's name (the server's
-name for now) and Back, named for where it goes (the tab under the list, or Home), at its top left on
-every layout. A tap on a row, Open session and Open files close the list onto that tab. Below it, one row per tab in
-workspace order: an icon for the kind, the label, and a line of detail (a terminal's window and
-how long since its last activity or bell, from the latest listing, with no request of its own; a
-Files tab's path, shortened under home, when that says more than the label); the workspace's last-shown tab's row is filled.
-A list of rows, never previews of the terminals: a preview would stream every tab's screen
-(Jimmy).
-
-- A tap on a row opens that tab.
-- A row's ═ handle drags it to a new place in the order, which is the tab row's order. Dragging
-  starts on the handle only, so scrolling the list never reorders it.
-- A swipe left reveals Close, and a full swipe closes; a pointer that hovers shows × instead.
-  Closing only detaches and never touches tmux.
-- Under the rows: **Open session** and **Open files**. An empty workspace shows only these,
-  with a line saying it has no tabs.
-- The workspace's bell and tmux-coverage notes (Bell attention, below) show here.
+One workspace's page. Its header has the workspace's name and Back (named for where it goes). Below,
+one row per tab in order: an icon, the label and a line of detail (a terminal's window and how long
+since its last activity or bell, from the latest listing with no request of its own; a Files tab's
+path when it says more than the label); the last-shown tab is filled. Rows, never previews: a preview
+would stream every tab's screen (Jimmy). A tap opens the tab; a ═ handle drags a row to a new place in
+the order (the handle only, so scrolling never reorders); a swipe left reveals Close, a full swipe
+closes, a hovering pointer shows ×. Under the rows: **Open session** and **Open files**; an empty
+workspace shows only these with a line saying it has no tabs. The workspace's bell and tmux-coverage
+notes show here.
 
 ## Adding tabs
 
-**Open session** is one screen, “new or attach” (Jimmy).
-A field heads it, “Session name”, over this server's sessions that are not open in this
-workspace, each with its window count and last activity, from a listing fetched when the screen
-opens and refreshed on `sessionsChanged`. Typing filters the list locally, with no request per
-keystroke. A tap on a session opens it as a tab and makes it active; it never creates a shell.
-The list's last row creates: with text no session has, **Create “infra2”**. With the field empty it reads
-**New session** and asks for a name: it puts the caret in the field, which says "Type a name for the new
-session", and creates nothing (Jimmy: "if u click “new session” - it doesn't ask u for a
-name"). A session tmux would name is not offered. Return does what the first row does. Typing the name of a
-session already open here activates its tab. New-or-attach is the client's rule over the
-listing: a listed name attaches and an unlisted one sends `newSession`; a “duplicate session”
-refusal (another client created it first) re-lists and attaches. tmux's `new-session -A` is not
-used: from the daemon it fails on an existing name. A new session starts in `~`. Its tab opens from the
-next listing that contains it; after 5 seconds, say it was created but has not appeared. A refused
-name shows the daemon's reason under the field. Creating is not offered while the server has no
-tmux server, which muxen never starts, and is disabled with its reason while the server can't be
-reached. Loading, empty, offline and refused states are distinct.
+**Open session** is one screen, "new or attach" (Jimmy). A field, "Session name", heads this
+server's sessions not open in this workspace, each with its window count and last activity, from a
+listing fetched when the screen opens and refreshed on `sessionsChanged`. Typing filters locally. A
+tap opens a session as a tab; it never creates a shell. The last row creates: with text no session
+has, **Create "infra2"**; with the field empty, **New session** puts the caret in the field ("Type a
+name for the new session") and creates nothing (Jimmy: "if u click 'new session' - it doesn't ask u
+for a name"). Return does what the first row does. Typing the name of a session already open
+activates its tab. New-or-attach is the client's rule over the listing: a listed name attaches and an
+unlisted one sends `newSession`; a "duplicate session" refusal re-lists and attaches (tmux's
+`new-session -A` fails from the daemon on an existing name). A new session starts in `~`; its tab
+opens from the next listing that contains it, and after 5 s the screen says it was created but hasn't
+appeared. A refused name shows the daemon's reason under the field. Creating is not offered when the
+server has no tmux server, and is disabled with its reason while the server can't be reached.
 
-**Open files** opens a new Files tab at `~/` and makes it active (Jimmy: “it should
-just always start at ~/”). Its path field goes anywhere else (Files).
+**Open files** opens a new Files tab at `~/` (Jimmy: "it should just always start at ~/"); its path
+field goes anywhere else.
 
 ## Bell attention
 
-An attention dot on tab pills, tab overview rows and Open session rows marks a terminal bell since this
-  device last showed that tab; mechanism and coverage limits are in
-  [plan.md](../plan.md) (Bell attention). It is not a connection-status indicator.
-  - **Seen is per device and saved.** The device keeps, per session, the bell mark it last showed
-    (the `mark` in the `sessions` listing and the `bell` message, daemon-core.md),
-    and a tab shows the dot while its session's mark differs from that. The tab on
-    screen counts as shown: while a tab is the active tab on a visible page, an
-    arriving mark is recorded as seen at once and no dot appears for it; a hidden page
-    or a backgrounded app shows nothing, so the tab is not on screen and the dot
-    appears. A tab that becomes the active tab records the current mark. An overlay over a
-    terminal tab (the + menu, the long-press menu) leaves the tab visible, so it still counts as shown.
-  - **Seen survives a reload and a relaunch.** The marks are saved with the workspace (keyed by
-    host id, tmux server instance and session), so a bell rung while the page or app was away
-    shows its dot on return. Each listing drops the marks of sessions that are gone; Clear
-    local data resets them to the current marks. Two pages of one origin each save: the last
-    writer wins, so a dot cleared in one page can return in the other after a reload.
-  - **A session this device has no seen mark for** takes the first mark it learns as its
-    baseline (no dot), unless this page has already listed that host (on any tmux
-    instance): every session there was then got a seen mark, so this one's counter started
-    after that, at 0, and any mark is a bell not yet shown. A `bell` message arriving before
-    the page's first listing of the host doesn't count as listed. One rule for a listing
-    and for a `bell` message, a restarted tmux included.
-  - **Not tracked, in words, never a silent dot-free tab.** When the listing or a
-    `bell` message says `covered: false` for a session, its row says "tmux settings hide
-    bells in this session". When the `bell` message carries `available: false` for the
-    server (the daemon cannot read tmux's bell state), the server's Home row and its tab overview say "Bell tracking unavailable on this host". A `listSessions` that fails with a tmux error (not "no server") says the same. Both are plain text
-    lines, not dots, and clear when a later message or listing says otherwise.
+An attention dot on tab pills, overview rows and Open session rows marks a terminal bell since this
+device last showed that tab; the daemon side is [daemon-core.md](../daemon-core.md#bell-attention) and
+the product rule [plan.md](../plan.md#reading-on-a-small-screen). It is not a connection indicator.
+
+- **Seen is per device and saved.** The device keeps, per session, the bell mark it last showed (the
+  `mark` in the `sessions` listing and the `bell` message); a tab shows the dot while its session's
+  mark differs. The tab on screen counts as shown: while a tab is active on a visible page an arriving
+  mark is recorded at once and no dot appears; a hidden page or backgrounded app shows the dot. A tab
+  that becomes active records the current mark. An overlay over a terminal (the + menu, the long-press
+  menu) leaves the tab shown.
+- **Seen survives a reload and relaunch**: saved with the workspace, keyed by host id, tmux server
+  instance and session, so a bell rung while the app was away shows its dot on return. Each listing
+  drops marks of gone sessions; Clear local data resets them to the current marks. Two pages of one
+  origin each save; the last writer wins.
+- **A session with no seen mark** takes the first mark it learns as its baseline (no dot), unless this
+  page has already listed that host: its counter then started at 0, so any mark is a bell not yet
+  shown. A `bell` message arriving before the page's first listing of the host doesn't count as
+  listed. One rule for a listing and a `bell` message, a restarted tmux included.
+- **Not tracked, in words, never a silent dot-free tab.** `covered: false` for a session reads "tmux
+  settings hide bells in this session"; `available: false` for the server (and a `listSessions` that
+  fails with a tmux error other than "no server") reads "Bell tracking unavailable on this host" on
+  the server's Home row and overview. Both are text, not dots, and clear when a later message says
+  otherwise.
 
 ## Files
 
-Any number of Files tabs can be open, even on the same server. Each remembers its own folder or file preview locally and is labelled by that folder or file name. A Files tab can open any folder or file the daemon's user can read, `/` included; there is no scope. Open files starts a new tab at `~/`, and its path field, which works like a browser's address bar, goes anywhere else. There are no favorites (Jimmy).
+Any number of Files tabs can be open, even on one server. Each remembers its own folder or preview
+and is labelled by that name. A Files tab can open any folder or file the daemon's user can read, `/`
+included; there is no scope and no favorites (Jimmy). Open files starts at `~/`.
 
-Each Files tab presents one folder list under one header line. At rest the line reads where the user is; typed into, it narrows the folder's rows. On a desktop the list is an outline, its folders opening in place; on the phone tapping rows browses one folder at a time (Jimmy: "a on desktop, B on phone").
+Each tab presents one folder list under one header line. At rest the line reads where the user is;
+typed into, it narrows the rows. On a desktop the list is an outline with folders opening in place
+and a Preview panel beside it; on the phone, tapping rows browses one folder at a time (Jimmy: "a on
+desktop, B on phone"). Mechanism (cache, request pacing, narrowing, search, reveal, keymap) is in
+the [Files context](../../../web/screens/files/.context/CONTEXT.md).
 
-```text
-phone, at rest                           phone, the path line tapped (keyboard up)
-┌──────────────────────────────────┐     ┌──────────────────────────────────┐
-│ ~/repos/muxen/               ⌕ ⋯ │     │ [ ~/repos/▒muxen/▒     ] Cancel  │  last folder selected
-│ ▢ ..                             │     │ ▢ ..                             │
-│ ▣ docs                         › │     │ ▣ docs                         › │
-│ ▣ src                          › │     │ ▣ src                          › │
-│ ▤ Cargo.toml              2.1 KB │     │ ▤ Cargo.toml              2.1 KB │
-│ ▤ README.md               9.8 KB │     │──────────────────────────────────│
-│ Show hidden files                │     │ iOS keyboard, Return key "go"    │
-│ ‹ (muxen) (claude) (~/repos) + ⌨ │     │                                  │
-└──────────────────────────────────┘     └──────────────────────────────────┘
+**The header line.** The path line, then the folder's controls: a desktop shows Search, Upload, Paste
+and Refresh as icons, then ⋯; the phone shows the path, Search and ⋯, with Upload, Paste and Refresh
+inside ⋯. ⋯ (Folder options) holds Copy path, Show hidden files (Cmd/Ctrl+Shift+. toggles it on a
+desktop), New file and New folder.
 
-desktop, at rest
-│ ~/repos/muxen/              [Search] [Upload] [Paste] [Refresh] [⋯] │
-```
+**The path line** is one plain string in mono: the folder's path (`~/…` under `$HOME`) with its
+trailing `/`, exactly the text the field starts with (Jimmy: "it should just be 1 line string").
+Nothing in it is a link; clickable segments were a fat-finger trap on a phone. A click or tap makes it
+the field with the last folder's name and `/` selected, so Delete leaves the parent's path and the
+list shows that parent; typing replaces the selection and narrows. Editing is a history entry; Cancel,
+Escape and Back restore the path and stay. Hiding the keyboard only lowers it: the edit and its text
+stay. It has no keyboard shortcut: `/` is Search's, and Cmd+L belongs to the browser's address bar.
 
-**The header line.** One line per folder, on both layouts: the path line, then the folder's controls. A desktop shows Search, Upload, Paste and Refresh as icons, then ⋯. The phone's line has room for the path, Search and ⋯ only, so Upload, Paste and Refresh are in ⋯ there. ⋯ (Folder options) holds Copy path first, then Show hidden files (a check while on; on a desktop its shortcut beside it, as Cmd/Ctrl+Shift+. toggles it with no menu open). The folder's name is the page's heading for assistive technology; on screen the tab and the path say it.
+**Narrowing and Go.** While the field is edited, the list shows the typed parent's rows whose names
+match the typed last segment (exact name first, then prefix, then substring), plus a `..` first row
+that steps the field to the parent. Return, or Go, opens the selected row (a folder is entered, a file
+opened); with nothing selected it opens the folder the text names; a name that matches nothing says
+"Nothing named x in ~/repos" and opens nothing. Opening adds a history entry, so Back returns to the
+folder the user left. The list narrows what is loaded: a folder held only in part says "Matches are
+from the first 200 of 1,840 entries" with **Load the rest**; one the daemon cut short says it is too
+big to list in full. Cost on a spotty network: one listing per folder, never one per keystroke.
 
-**The path line** is one plain string at rest, in mono: the folder's path (`~/…` under `$HOME`) with its trailing `/` (`/` at the top), exactly the text the field starts with. Nothing in it is a link or a button, and there is no copy icon after it (Jimmy: "it should just be 1 line string"; ⋯ › Copy path copies the folder's path). A click or tap anywhere on it makes it the field, with the last folder's name and its `/` selected (`muxen/` in `~/repos/muxen/`), so Delete leaves `~/repos/` and the list shows that folder; typing replaces the selection and narrows. Nothing in the list is highlighted at first, so Enter right away stays where it is, with no new history entry. iOS places the caret at the tap point after focus, so the selection is set again on the next frame and once more after the tap settles (taps while already editing place the caret normally). Editing is a history entry, so Back ends it before it leaves the folder; Cancel beside the field restores the path and stays, as Escape and Back do. Hiding the keyboard, or a tap elsewhere, only lowers it: the edit and its text stay, with Cancel, and a tap on the field resumes typing. The path line has no keyboard shortcut: a click is the way in. `/` is left for Search, and Cmd+L is not taken: whether Chrome and Safari let a page have it is unchecked on real browsers, and the address bar is the browser's. The field turns autocorrect, auto-capitalization and spellcheck off and sets `enterkeyhint="go"`. It keeps the ordinary text keyboard: the iPhone's URL keyboard has `/` on its first layer but no space bar, and folder names can hold spaces.
+**The desktop outline.** Each folder row has a disclosure chevron; an open folder's rows sit under it,
+indented. A click on a file selects it and the Preview panel shows it; a click on a folder selects it
+and opens or closes it in place and leaves the panel on what it shows (Jimmy: a folder replacing the
+preview "shouldn't happen in the first place"). A double-click elsewhere on a row, or Enter, goes in
+(a folder becomes the list's root, a history entry; a file opens). `..` goes up on one click. The
+folder list is one focus-holding control: arrows move the selection, Right/Left open and close or
+move to the first row/parent, Enter goes in, Backspace or Cmd/Ctrl+Up goes up, Home/End jump. A tab
+keeps at most 32 open folders. Per-tab open folders, selection and preview are forgotten on reload.
 
-**The desktop outline.** A desktop's folder list is a tree: each folder row starts with a disclosure chevron (turned down while open), and an open folder's rows sit under it, indented 16px a level, with a 1px guide line under each open folder's chevron (quiet until the pointer is over the list). A click on a file selects it and the Preview panel shows it. A click on a folder selects it and opens or closes it in place; the panel stays on what it shows (Jimmy: a folder replacing the preview "shouldn't happen in the first place"). ArrowRight and ArrowLeft do the same from the keys. The chevron's hit area runs 6px past it on each side, and every click there toggles, so a quick second click on it never goes in. A double-click anywhere else on a row, or Enter, goes in, and the folder is left in its parent's outline as it was before the double-click: a folder becomes the list's root (a history entry, as before), a file opens. `..` goes up on one click. The phone keeps one folder per screen: a tap opens a row.
+**The Preview panel (desktop)** is on or off by one toggle that never moves (Jimmy: "I usually like it
+when the close stays in the same place so u can tap to open tap to close without moving the mouse").
+Space toggles it while the list has the keys. On, it follows the selected file once the selection has
+stayed put for 200 ms, under one header line (path, the viewer's controls, Copy path, Download,
+Insert ▾, ⋯, expand, toggle). Only a file moves the panel: a folder, `..` or a folder's last row
+leaves it as it is. With no file it shows the folder's README, else a card with what it holds. The
+divider drags and moves with arrow keys; double-click returns it to the default. Off, the list takes
+the window's width and the same rows show size and age as right-aligned columns, with no Kind column
+or stripes (Jimmy: "dont just copy finder"). On/off and the divider width are remembered per device.
 
-- **One listing per open folder.** A folder is listed when it first shows open (its record in the host's folder cache, the one browsing and the path field share), and kept while it shows; closing and opening it again costs nothing. A folder past one page ends in "Show more (N left)", which asks for its next page; one still loading says "Loading", one refused says why with "Try again", an empty one "Empty", one the daemon cut short "Too big to list in full". Show hidden files applies to every open folder (each is listed again with `hidden=1`). The host's folder cache asks for at most two pages at once, first or later, and queues the rest, the folder on screen, the path field's and a reveal's ahead of the outline's (a folder the outline queued first moves ahead when the user asks for it): the daemon scans one folder at a time and refuses a request past a few waiting, so a burst (Show hidden over 30 open folders, a reveal down a deep path of big folders) would end in busy errors and crowd out the file the user is reading.
-- **Bounded.** A Files tab keeps at most 32 folders open. Opening one makes it and the open folders holding it the newest; past 32, the folder opened longest ago that doesn't show (it sits in a closed folder, or outside the list's root) closes first, else the oldest that shows, never one holding the folder just opened. Only open folders whose parents are open too are listed and pinned.
-- **Per tab, never history.** The open folders (by absolute path, so one stays open when the root moves into or above it) are kept per Files tab, the selection and the Preview panel's file per tab and root, in the host's Files session (`screens/files/session.ts`, 64 of each, least recently set first); a reload forgets them.
+**Full width** is a file as its own place (a history entry): the expand button, or a double-click or
+Enter on a file. Its header starts with Back named for the folder it was opened from; Back or Escape
+returns to that list as it was, the file selected and its folders open. A file opened by its path (the
+path field, a `#/files/` address, a link, a restored tab) is the same place, and Back reveals it:
+the folders between the list's root and the file open and its row is selected and scrolled into view,
+turning Show hidden files on if a name on the way is hidden (Jimmy: "its folder didn't properly open,
+its still in ~/").
 
-**The Preview panel (desktop).** Beside the outline sits the Preview panel, which is on or off (Jimmy: "it should be like a 'preview' bar thing"); there is no × on it and nothing closes it but its toggle.
+**Search** finds files and folders below the folder on screen, by name, at any depth, fuzzy, or a
+glob when `*` or `?` is typed, with recents when empty (Jimmy chose all three). It is its own place,
+not the path line: the magnifier, and `/` or Cmd/Ctrl+P on a desktop. Opening it is a history entry
+naming the folder, so Back, Escape and Cancel close it; it is kept per tab and folder, so Back finds
+the query and rows as they were. Matching is the daemon's ([fs.md](../fs.md#get-fssearchpath)). The
+query is sent after typing pauses 250 ms; the previous rows stay, quieted, under "Searching". Results
+show the matched letters marked and their folder relative to the searched one; they are the daemon's
+best 50, best first, under "3 matches". Enter, or a tap or Go on the phone, opens the selected row
+(a folder entered, a file opened). On a desktop a click selects, the panel follows a row the user
+selected (never one an answer selected, so a query costs no file read), and Enter or a double-click
+closes Search and reveals the row in the outline. When the walk stopped at a cap the list ends with
+one line ("Searched the first 100,000 entries.", "Search stopped after half a second.", "Search
+stopped: too many folders to keep track of.", each followed by "Search from a deeper folder to see
+the rest."), never as an error; nothing matched and fully walked: "Nothing below ~/repos matches x".
+**Recents:** with the field empty, the files opened on this device from this host below the searched
+folder, most recent first, under "Opened recently"; the host keeps 20; Clear local data forgets them;
+with none, "Files you open show here." A query past 256 bytes isn't sent and says so. Errors read as
+a listing's do, with Try again.
 
-```text
-desktop, panel on                                                  desktop, panel off
-│ ~/repos/muxen/   ⇪ ⎘ ⟳ ⋯ ┃ ▤ ~/repos/muxen/docs/plan.md ⧉ ⤓ ▸▾ ⋯ ⤢ │ [▣] │      │ ~/repos/muxen/                         ⇪ ⎘ ⟳ ⋯ │ [▢] │
-│ ▢ ..                     ┃ (the file's viewer, or the       │      │ ▢ ..                                               │
-│ ⌄ ▣ docs             43m ┃  list's own README or facts)     │      │ ⌄ ▣ docs                                       43m │
-│   │ ▤ plan.md  64 KB 43m ┃                                  │      │   │ ▤ plan.md                          64 KB   43m │
-```
+**Browsing.**
 
-- **The toggle never moves** (Jimmy: "I usually like it when the close stays in the same place so u can tap to open tap to close without moving the mouse (also I'm fine with it just being an icon)"). It is an icon button (the panel-right icon) named and tooltipped for what a click does, "Hide preview" or "Show preview", tinted with the accent on the pressed fill while the panel is on; no `aria-pressed`, which would read "Hide preview, pressed". It is the last control of the Files header line, 8px from the window's right edge, past a rule, on the same pixels on and off: it is one control placed at the line's right end over both layouts, and the bar under it (the list's line with the panel off, the panel's with it on) leaves it room, so it stays put by construction and stays mounted across a toggle. Space toggles it while the list has the keys (the list, or nothing, focused; a focused button or viewer keeps Space, and in a field Space types); a held Space toggles once. Toggling leaves the keys on the list. A file full width has no toggle.
-- **On, it follows the file selected** once the selection has stayed put for 200 ms, so a held arrow key makes no read per row; a viewer's read for a row it has left is aborted. A file shows its viewer under one header line: its path (its folder quiet, with `~/` or `/` in front, then the name in bold; the folder is what shortens first on a narrow panel), the viewer's controls, Copy path, Download and Insert ▾ as icons, ⋯ (File options), then the expand button (Open full width) and the toggle. Only a file moves the panel: a folder, `..` or a folder's last row selected leaves it on what it shows, and it keeps that file, per tab and folder the list starts at, however the panel goes away and comes back (Search opened and closed, the toggle, another tab, a folder gone into and left) and when the file's folder is closed. It lets the file go when the folder is held in full and no longer lists it. With no file to show (a new root that isn't a file's, the Preview panel just turned on with none) it shows the summary of the folder the list starts at: a header line with its path in the same form, Copy path and Insert ▾ as icons (no Upload: an upload goes to the uploads folder, not the folder shown, and the list's header has Upload and Paste), then its README (`README.md` or `.markdown`, any case) rendered under the README's own name, which opens it; without one, a card with what it holds ("2 folders, 5 files", or "1,840 entries" when not all listed), when it changed (from its parent's listing, when held), and its path.
-- **The divider** between list and panel drags, and is a separator with the keys: ArrowLeft and ArrowRight move it 16px (64px with Shift), Home and End to the ends, and a double-click returns it to the default, which follows the window again. The list is at least 300px and at most 60% of the window, so the panel keeps the rest; it starts at a third of the window, 400 to 600px.
-- **Off, the list takes the window's width, its rows stopping at 960px**: the same rows (name, then size and age as right-aligned columns at the row's right end, the row's hover and selection fills spanning it to tie them), with no column headings, Kind column or stripes (Jimmy: "dont just copy finder"). The rows sit left-aligned under the path, so a size stays near its name on a wide window and turning the panel on or off moves no row sideways; the header line still spans the window, the toggle at its right end. A click does what it does with the panel on.
-- **Remembered per device:** on or off, and the divider's width (`app/viewMemory.ts`).
-- **Full width** is a file as its own place (a history entry): the expand button, or a double-click or Enter on a file, panel on or off. Its header starts with Back named for the folder whose list it was opened from; Back (or Escape) is history Back to that list, which returns as it was with the file selected and its folders open. After a reload there is no such entry, and Back goes to the file's own folder, with the file selected. A file opened by its path (the path field, a `#/files/` address, a link, a restored tab) is the same full-width place, so Back reveals it the same way: the folders between the list's root and the file open, its row is selected and scrolled into view, each folder's pages loading down to it as Search's reveal does. When a folder on the way or the file has a hidden name (`~/.config/…`), the reveal turns Show hidden files on, since without it the row has nothing to sit under (Jimmy: "its folder didn't properly open, its still in ~/"). Expanding the panel's file, and Back or Escape to it, read it no second time: the view leaving hands its text to the one taking its place, which takes it once. Nothing else keeps a text, so a file shown again later (a tab switch, a selection, the browser's Back) is read fresh.
-
-**The list's keyboard (desktop).** The folder list is one control that holds focus (a click on a row focuses it, Tab reaches it); its rows are items of it, not focusable themselves, and the selected row is named by `aria-activedescendant` and filled. ArrowDown and ArrowUp move the selection over the rows on screen and stop at the ends (from nothing, Down takes the first row and Up the last), Home and End take the first and last. ArrowRight opens a closed folder, else moves to its first row; ArrowLeft closes an open folder, else moves to the folder holding the row. Enter goes into the selected row (or acts on an open folder's last row: Show more, Try again), and Backspace or Cmd/Ctrl+ArrowUp goes up one folder. The folder the key opened (or its parent) takes the keys, so Enter and Backspace can be chained. On the phone a tap opens a row without selecting it, so a phone shows no selection. The rules are `files/outline.ts`'s (pure, with the rows to draw and the selection moves); `FolderList.tsx` wires keys and focus.
-
-**Shortcuts (desktop).** Files' shortcuts (Cmd/Ctrl+I on a file, Cmd/Ctrl+Shift+. on a folder and in Search, Cmd/Ctrl+V on a folder, `/` and Cmd/Ctrl+P for Search, Space for the Preview panel, Escape out of a file full width or Search) are one keymap, `screens/files/keymap.ts`, with one rule for when keys are free: no dialog or menu is open, no text field has focus (unless the shortcut is one a field allows), and nothing earlier claimed the key. Every Files shortcut registers there; a key two components register goes to the one mounted last. A shortcut that is one printed character (`/`, Space) is matched by the character, whatever keys type it: Shift+7 on a German layout, AltGr on some Windows layouts; Cmd or Ctrl held for themselves make it another key. A shortcut is written for the keyboard: ⌘ and ⇧ on a Mac, iPad or iPhone, Ctrl and Shift elsewhere (`Platform.shortcuts`, `useChordLabel`), and is shown only beside the control whose shortcut it is: the default tab in a file's own Insert ▾ menu shows ⌘I, the upload offer's and a row's menu don't.
-
-**Narrowing.** While the field is being edited, the list shows the rows of the typed parent folder (the folder the text names through its last `/`) whose names match the typed last segment, folders and files alike, ASCII case folded as the daemon sorts them. The name typed whole comes first, then names that start with the segment, then names that contain it, each in the daemon's order. The first row is `..`, which steps the field to the parent folder (`~/repos/` becomes `~/`; `~/` becomes `/home/`) and is absent at `/`; it takes a tap like the other rows. There is no line naming the parent: the field says where you are. While the last segment is empty (right after a `/`) the list shows all of the parent's rows and none is selected; once a character is typed the first match is selected. There is no ghost text and no accepting a name into the field: Tab and `/` are typed as they are. ArrowDown and ArrowUp (the focus stays in the field) move the selection, including onto the `..` row. A tap on a row opens it and ends editing, a folder as a folder and a file as a file. The row takes the tap without taking focus from the field, so the keyboard stays up until the place opens. Typing a path to another folder (`~/repos/many/fo`) narrows that folder's rows once its listing has arrived. A name starting with `.` asks for the hidden listing, whatever the toggle says.
-
-**Go** (the keyboard's Return, Enter on desktop) opens the selected row and ends editing: a folder is entered, a file opened. With nothing selected (the text ends in `/`, or is `.` or `..` last) it opens the folder the text names; the folder already on screen stays, with no new entry. With a name that matches nothing in a folder held in full it says “Nothing named x in ~/repos” under the field and opens nothing. A name that matches nothing in a folder not held in full is asked of the host once (a probe), which opens it if it exists; if it does not, the field says nothing in the loaded entries matches and offers the rest. In a folder not held in full, a partial name that matches a loaded row opens that row, even if the exact name sits on a page not loaded; the note and **Load the rest** are on screen to say so. Opening adds a history entry, as a tap into a folder does, so Back returns to the folder the user left.
-
-**Anywhere.** The field narrows any directory the daemon's user can read, from one `/fs/list` listing per folder, the same as browsing.
-
-**A folder not held in full.** The list narrows only what is loaded. When the typed folder holds fewer entries than it has (browsing loaded one page of 200 of 1,840), the list says “Matches are from the first 200 of 1,840 entries” with a **Load the rest** button, which pages the remaining entries in, one request each, and then narrows all of them. Nothing is loaded on a keystroke. A folder the daemon cut short at its scan cap says “This folder is too big to list in full. Matches are from what was listed.” and offers nothing more.
-
-**Cost on a spotty network: one listing per folder, never one per keystroke.** Narrowing filters a listing the client already holds. Naming another folder (a typed `/`, a pasted path) asks for that folder's first page once, after typing pauses 250 ms, and only for the folder the field names when it settles; answers for a folder the field has left are never shown, and are kept in the cache. Listings are held per host for the Files session, one record per folder (keyed by path and the hidden flag) holding every page loaded so far, whether the field or browsing loaded it; a page browsing loads joins the record the field reads. The records are bounded by the entries held in all (10,000, each folder counting one more), the least recently used going first, and a folder on screen is never dropped. Showing a folder that is cached (opening it from the field, switching to another Files tab, Back or Forward, returning to a preview's folder) costs no request, and returning to a file already probed does not probe again. A failed listing is asked for again when the field next names that folder, and Try again asks at once. Pull-to-refresh and muxen's own uploads drop the affected ones. Only the first page is asked for a folder the field names; more pages load when browsing scrolls to them or the user taps Load the rest. While a listing loads, the list says “Loading”; a refusal shows in plain words with "Try again", never as an empty list.
-
-**Hidden files** are left out of the narrowed rows unless the typed segment starts with `.` (that folder is then asked for with `hidden=1`, cached separately) or the hidden-files toggle is on.
-
-**Search** finds files and folders below the folder on screen, by name, at any depth (Jimmy: "a
-separate 'search' to 'search' for a file"; he chose fuzzy, a glob when `*` or `?` is typed, and recents
-when empty). It is its own place, not the path line: the magnifier, the first control after the path on
-the folder's header line on both layouts (on the phone between the path and ⋯; shown while the folder's
-rows are, not while it loads, is refused or is gone), and on a desktop `/` or
-Cmd/Ctrl+P (registered in Files' keymap, so they don't fire while typing; Cmd/Ctrl+P is taken from the
-browser's Print only while Files has the keys, and pressed in Search's field it stays there). Opening it
-is a history entry over the folder, naming that folder, so Back closes it, and Escape and Cancel too.
-While it is open its field is the header line and its rows replace the folder's, which stay as they were
-underneath. A Search is kept per tab and folder (`screens/files/session.ts`), so a Back onto its entry
-finds the query, the rows and the scroll as they were.
-
-- **The field** says what it searches ("Search ~/repos/muxen"), starts with the magnifier, turns
-  autocorrect, auto-capitalization and spellcheck off (iOS would capitalize the first letter and turn on
-  case-sensitive matching), has the keyboard's Search key, and shows which mode the text is in at its
-  end: Fuzzy, or Glob (in the accent) once it has `*` or `?`. Matching is the daemon's
-  ([fs.md](../fs.md#get-fssearchpath)): fuzzy terms separated by spaces, smart case, nearer files first.
-  Cancel ends it on both layouts, as it ends the path field. The field takes the keyboard inside the tap
-  on the magnifier.
-- **Asking.** The query is sent after typing pauses 250 ms, as the path field's listing is; a request
-  the field has moved past is aborted, and its answer, if it lands, is never shown. Until the new
-  answer arrives the previous rows (the recents, at first) stay, quieted, under "Searching". Text that
-  returns to what the rows answer asks nothing. Hidden files are searched while the folder's Show
-  hidden files is on, and a change to it (Cmd/Ctrl+Shift+. works in Search's field too) searches again
-  at once, dropping a request made under the old setting. A query past the daemon's 256 bytes is not
-  sent; the list says "A search can be at most 256 bytes long." in place of the rows.
-- **Results** are rows like a folder's: icon, name with the matched letters marked (the accent, and
-  heavier), and the folder it is in, relative to the searched one, in mono, quiet; on the phone that
-  folder is a second line (the searched folder's name for a row directly in it), with the age at the
-  row's end. They are the daemon's best 50, best first, under "3 matches" ("The best 50 matches" at
-  50). Each new answer selects its first row, for Enter. ArrowUp and ArrowDown move the selection while
-  the field keeps the keys; Enter acts on it (Enter pressed before the answer lands acts on the answer). On the
-  phone a tap (or Go) opens the row: a folder is entered, a file opened full screen; Back returns to
-  the results, with the query and scroll kept. On a desktop a click selects the row, as in the outline; the
-  Preview panel follows a row you selected (a click or an arrow key), never the one an answer selected,
-  and stays on what it shows until then, so a query costs no read of its top file; Enter or a double-click closes Search and reveals the row in the
-  outline, its folders opened and the list holding the keys. A reveal loads each folder's pages down to
-  the row (a folder past one page may sort it later), stopping once the pages sort past where the row
-  would be (it was deleted since) or a page is refused, and the Preview panel keeps showing the result
-  meanwhile.
-- **Stopped.** When the walk stopped at a cap the list ends with one line: "Searched the first
-  100,000 entries.", "Search stopped after half a second." or "Search stopped: too many folders to keep
-  track of.", each followed by "Search from a deeper folder to see the rest.", never as an error. With
-  no rows above it, "Nothing matches x in what was searched." comes first. Nothing matched and the walk
-  covered everything: "Nothing below ~/repos matches x".
-- **Recents.** With the field empty, Search lists the files opened on this device from this host below
-  the searched folder, most recent first, under "Opened recently", each with how long ago it was opened
-  (the row has no size: the file may have changed since). The host keeps its 20 most recent (view
-  memory, per host id; Clear local data forgets them). A file counts as opened when you open it: full
-  width, full screen on the phone, Enter or a double-click on a result, or a row you selected that stays
-  in the Preview panel; never a row the app selected (an answer's first row, the row a tab kept). The
-  phone selects none of them (a tap is the way in); a desktop selects the first, for Enter. With none: "Files you open show here."
-- **Errors** read as a listing's do, in plain words with Try again, in place of the rows; offline, the
-  field stays and the list says "Waiting for pop-os". The Preview panel stays on what it shows meanwhile.
-
-**Browsing by tap** is unchanged at rest:
-
-- Opens the current folder as a list. Returning from terminal preserves folder/preview context.
-- On the phone folders open their contents, not an accordion; a desktop's open in place (above). Every folder but `/` starts with a `..` row (a folder icon without its fill, `..` in mono, named "Up to <parent>" for assistive technology), which moves up; at `/` there is none. A folder that was moved or deleted since the tab last showed it says “This folder no longer exists” with its `..` row (the parent of its path) still working. The system/browser back gesture goes back, not up.
-- Files open a preview (on a desktop, full width). Back from a preview returns to the list it was opened from (its containing folder on the phone).
-- **Rows.** Folders and files read apart at a glance: a folder has the only coloured icon (the accent's stroke over `--color-folder-fill`) and a medium-weight name; a file has a muted icon for its kind (text, data, config, lock, script, code, image, video, audio, binary, by extension and then type) and a regular name. Folders come first, and on a desktop a 6px gap sets them off from the files. Names starting with `.` are dimmed. A desktop row is 28px: icon, name, then the size (files only) and the age in tight right-aligned columns (68px, 44px) beside it, so a date sits by its name; rows have a hover fill and no borders. The age is one short form (`12m`, `3h`, `6d`, `4mo`, `2y`) in tabular figures, in full text colour when it changed within a day, with the exact time on hover. A phone row is 48px, edge to edge under hairlines: folders end in a chevron (they drill in), files show their size and never a chevron, and ages stay off the row. The selection is a fill with no outline: blue while the keys move it (the list holds focus, or the path field drives it), neutral otherwise.
-- Returning to a Files tab restores its folder or preview; the in-app back button goes up one place, and the browser's Back returns to the previous one without a new request when its folder is still loaded.
-- A link that cannot open says why (“Broken link”, “Not a file”) and is disabled. A folder past the daemon's scan cap says it is too big to list in full. Further pages load as the end of the list nears the screen, with “Show more” as the fallback. Hidden files are shown from ⋯ › Show hidden files, Cmd/Ctrl+Shift+. on a desktop, or the quiet toggle under the list; the choice is remembered on this device, for every Files tab and server (`app/viewMemory.ts`, the page's localStorage: not Preferences, which cross the iOS bridge, and not the workspace). Clear local data forgets it.
-- **Pull to refresh** on the phone: a touch that lands with the list at its top and moves down brings a round chip down over the list's top edge (the finger moves twice as far as the chip); released past 64px it reloads the folder from its first page, with a spinner in the chip until the listing lands. It reads touches without cancelling any, so iOS's rubber band stays the list's own. With reduced motion the chip's arrow doesn't turn. A desktop has Refresh on the path line.
-- **New file and New folder** are the first rows of ⋯ (Folder options), for the folder on screen, and "New file here" and "New folder here" in a folder row's menu. On a desktop a name field opens among the rows, under its folder, which opens to show it (the list's first row for the folder on screen; the field stands in for "This folder is empty"). It is no row of the list: the list's keys and Files' shortcuts don't reach it. Return creates, Escape cancels, and leaving it empty cancels; leaving it with a name keeps it, and another window taking focus keeps it either way. It goes when its folder, or one above it, closes, or the list changes. The phone has a small dialog with Cancel and Create, which raises the keyboard: typing is all it is for. One request at a time, the field read-only with a spinner meanwhile. A success closes the form at once and the landing goes on without it: the entry is still selected and shown when it lands, as an upload's is, even if the selection has moved, but another form, what's typed in it and focus are left alone. A refusal after the form has gone is a notice. A refusal keeps the field and the name, with the words under it: "That name is already taken." (and the folder is listed again, so a create whose answer was lost shows its row), "That name can't be used.", or the refusal's own. On success "Created <name>"; on a desktop the entry is selected, so a new file shows in the Preview panel, and a new folder opens in place; on the phone its row is marked. A name starting with `.` turns Show hidden files on: asking for it is asking to see it.
-- **Rename and Delete** are the last rows of a row's menu, for a file, a folder or a link, a broken link included, whose menu has only Copy path, Rename and Delete; home and the folders above it offer neither, and the daemon refuses them and muxen's state folder. **Rename** stands in a name field for the row on a desktop, and opens a dialog on the phone, with the name selected up to its extension; Return renames, Escape or an unchanged name leaving the field cancels, and a taken name keeps the field open and says so. The renamed row is selected as a new one is, an open folder stays open, and a file previewed from it stays in the panel under its new path. **Delete** asks in a dialog ("Delete notes.txt?"; a folder adds "Everything in this folder is deleted as well."; a link says only the link is deleted), with focus on Close, so Return alone never deletes. It is permanent. Once it runs it can't be stopped, so Cancel reads Hide; the notice says when it ends. A refusal stays in the dialog, and for a folder adds that some of it may be gone. What a delete took leaves the preview and Search's recents. Another Files tab showing it finds it gone, as after a change in the terminal.
-- **A row's menu** opens on right-click on a desktop (which selects the row), Shift+F10 or the menu key on the selected row, and a held touch on the phone (450 ms, which leaves the row unselected and opens nothing when the finger lifts). It holds Open (Go into folder, for a folder), Open in new tab, New file here and New folder here (folders), Copy path, Download with the size (files) and "Insert path into" with this server's terminal tabs, the last one used first: the Insert menu's rows. The `..` row has none. Escape returns focus to the list; any press outside the menu, on the list included (a scroll starting, another row), closes it.
-- **A file's header** is one line. A desktop's: Back named for the folder ("‹ muxen"), the file's icon and name (in the Preview panel, its folder before the name), the viewer's controls (Wrap lines and Copy text for text), then **Copy path**, **Download** and **Insert into terminal ▾** as icon buttons with tooltips, and ⋯ (**File options**). The phone's: Back, the name, the same three icons, and ⋯, which holds the viewer's controls (Wrap lines and Copy text for text) above Info. **Info**, in ⋯ on both layouts, opens a small popover with the file's type and line count (for a file read as text, "+" after the count when only the first 1 MiB was read), size, modified time and path; the header line carries no size or time (Jimmy: "No text labels beside icons", and size and time to move into ⋯ › Info). **One path form** (Jimmy: "BE CONSISTENT"): a path reads `~/…` under the host's `$HOME` and absolute elsewhere, as the path field does, in the file and folder headers, Info, the can't-preview card, "Copied <path>" and everywhere Copy path copies (the header buttons, a Files tab's menu, a row's menu, ⋯ › Copy path on a folder). Insert into terminal is the exception: it sends the absolute path, because a quoted `~/my file` does not expand in a shell. Copy path confirms in place: the button turns into a green check for 1.6 s with a screen-reader status; a copy chosen from a menu, with no button left on screen, says "Copied <path>" in a notice instead. Download works on any file. In a browser it is the browser's own: a same-origin `<a download>` on `/fs/raw` (`Platform.download`). In the iPhone app, where a web view's download goes nowhere, native fetches the file, with progress and Cancel for a large one, and opens the share sheet (Save to Files, AirDrop, another app) ([ios-shell.md](../ios-shell.md#files-and-sharing)); a failure reads "Couldn't download <name>: <why>" in the notice.
-- **Edit** is in ⋯, above Info, on a text file that would survive a save byte for byte. The file stays read-only until Edit is picked, and then the editor takes the viewer's place; a file in the Preview panel opens full width ([plan.md](../plan.md), "Editing").
-- **The code frame.** Text and code run edge to edge on the sunken surface under the header's rule, in mono at the small text size (13px, 12px on the phone) with a 1.7 line height: each line is numbered in a gutter that stays put while a long line scrolls sideways (one sticky column of numbers, not a sticky number per line, which made a large file slow to scroll; wrapped, each line carries its own number), and the numbers are generated content, so neither a selection nor a copy takes them. **Wrap lines** is a switch (an icon on a desktop, pressed while on; a check in ⋯ on the phone, where it starts on). **Copy text** copies what was read and confirms in place; a file past the first 1 MiB copies only that much, and a notice says "Copied the first 1.0 MB of <name>". Markdown reads at a 72-character measure, centred.
-- **A file muxen can't show** (binary, by its type) gets a card: its icon and name, "muxen can't preview this kind of file.", its type, size, time and path, then a big **Download <size>** and **Open as text**. Its path reads in the one form above.
-- Previews: code (14 grammars, plain text for the rest), Markdown (relative links open the file here, web links go to the browser, an address link hands off to the mail app; an allowlist of prose, lists, tables, code, links and images is sanitized with DOMPurify, and no click inside it navigates the page itself), images (zoom and pan), video and audio (inline in the browser; native keeps its own player), and binary files (the card above). Markdown Mermaid diagrams render with a lazily loaded renderer in strict mode, with rendered output sanitized by DOMPurify. Each diagram's place reads “Loading diagram…” until it renders; if it can't, the code block returns with the reason after it.
-- Loading and failure never look like an empty list: a spinner with words, or the refusal in plain words with “Try again”.
-- **While its server isn't reachable**, a Files tab keeps what it has loaded. A folder or file it hasn't loaded and can't shows "Waiting for pop-os" in place of the listing, with no Retry of its own (the server's banner has it, or says the phone is offline). When the shown state becomes reachable, every folder and preview whose last load failed as `network` loads again by itself ([plan.md](../plan.md#reachability), "Requests"). A folder is never left loading once its server shows either. Only under a reachable server does a load that failed as `network` offer its own "Try again"; in every other shown state, checking included, it says "Waiting for pop-os". Images in a preview that failed to load are not retried by themselves; reopening the preview loads them.
-- Permissions, size limits, and error handling remain governed by [fs.md](../fs.md). Upload/path insertion route is specified below. New file, New folder, Rename and Delete are the only other writes; no move control is added.
+- On the phone folders open their contents; every folder but `/` starts with a `..` row. A folder
+  moved or deleted since the tab showed it says "This folder no longer exists" with its `..` still
+  working. The system back gesture goes back, not up. Files open a preview (full width on a desktop);
+  Back returns to the list it was opened from. Returning to a Files tab restores its folder or preview.
+- Folders and files read apart at a glance: a folder has the only coloured icon and a medium-weight
+  name; a file has a muted icon for its kind and a regular name. Folders come first. Names starting
+  with `.` are dimmed. A phone row shows a chevron for folders, size for files and no age. The age is
+  one short form (`12m`, `3h`, `6d`, `4mo`, `2y`). The selection is a fill: blue while the keys move
+  it, neutral otherwise.
+- A link that can't open says why ("Broken link", "Not a file") and is disabled. Further pages load as
+  the end of the list nears the screen, with "Show more (N left)" as the fallback. Hidden files show
+  from ⋯ › Show hidden files or the quiet toggle under the list; the choice is remembered on this
+  device for every Files tab and server (view memory). Clear local data forgets it.
+- **Pull to refresh** on the phone reloads the folder from its first page; a desktop has Refresh.
+- **New file and New folder** are in ⋯ for the folder on screen and in a folder row's menu. A desktop
+  opens a name field among the rows; the phone a small dialog with Cancel and Create. Return creates,
+  Escape cancels. A refusal keeps the field and name with the words under it ("That name is already
+  taken.", "That name can't be used.", or the refusal's own). On success "Created <name>"; the entry is
+  selected (desktop) or marked (phone).
+- **Rename and Delete** are the last rows of a row's menu, for a file, folder or link (a broken link's
+  menu has only Copy path, Rename, Delete); home and the folders above it offer neither. **Rename**
+  edits in place on a desktop and opens a dialog on the phone, with the name selected up to its
+  extension. **Delete** asks ("Delete notes.txt?"; a folder adds "Everything in this folder is deleted
+  as well."), with focus on Close so Return alone never deletes, and is permanent. A refusal stays in
+  the dialog. Moving a file to another folder is done in the terminal.
+- **A row's menu** opens on right-click (which selects the row), Shift+F10 or the menu key, or a held
+  touch on the phone. It holds Open, Open in new tab, New file here and New folder here (folders),
+  Copy path, Download with the size (files), "Insert path into" with this server's terminal tabs,
+  Rename, Delete. The `..` row has none.
+- **A file's header** is one line: Back named for the folder, the icon and name, the viewer's controls
+  (Wrap lines, Copy text for text), **Copy path**, **Download**, **Insert into terminal ▾**, and ⋯
+  (**File options**: Edit, Info with type, line count, size, modified time and path). No text labels
+  beside icons (Jimmy).
+- **One path form** (Jimmy: "BE CONSISTENT"): a path reads `~/…` under the host's `$HOME` and absolute
+  elsewhere, in headers, Info, the can't-preview card and everywhere Copy path copies. Insert into
+  terminal is the exception: it sends the absolute path, because a quoted `~/my file` doesn't expand
+  in a shell.
+- **Download** works on any file: a browser's own `<a download>` on `/fs/raw`; in the app native
+  fetches the file (progress and Cancel for a large one) and opens the share sheet
+  ([ios-shell.md](../ios-shell.md#files-and-sharing)).
+- **Edit** is in ⋯ on a text file that would survive a save byte for byte; the file stays read-only
+  until Edit is picked ([plan.md](../plan.md), "Editing").
+- Previews: code, Markdown (sanitized; relative links open the file here), images (zoom and pan),
+  video and audio, and a card for a file muxen can't show, with **Download** and **Open as text**.
+  Mermaid diagrams render lazily in strict mode and sanitized, and need the network.
+- Loading and failure never look like an empty list: a spinner with words, or the refusal in plain
+  words with "Try again".
+- **While its server isn't reachable**, a Files tab keeps what it has loaded; what it can't load shows
+  "Waiting for pop-os" with no Retry of its own (the server's banner has it). When the shown state
+  becomes reachable, every folder and preview whose last load failed as `network` loads again by
+  itself ([plan.md](../plan.md#reachability)).
+- Permissions, size limits and errors are [fs.md](../fs.md). New file, New folder, Rename and Delete
+  are the only writes besides upload and paste.
 
 ## Persistence and input
 
-- Small view settings are remembered per device, apart from the workspace: Show hidden files, the Files Preview panel's on or off and its divider's width, and the files opened per host (Search's recents). One typed owner, `app/viewMemory.ts`, over `PlatformStorage.view` (the page's localStorage, read synchronously at boot, never sent to native; blocked storage keeps the value for the page's life). A server's Files reads it when that server's Files first opens in a page life, so a toggle made on another server shows there after a reload. A value another build wrote that doesn't parse is the default.
-- Navigation between Home, the tab overview and tabs preserves open tabs and process state. Each Files tab retains its own folder or preview, including across reload, locally on that device.
-- Home/list refresh runs on entry and on debounced sessionsChanged while visible; there is no polling or network search per keystroke. Fetch when Open session opens, when a long-press menu opens without a listing newer than the last `sessionsChanged`, and on reconnect, and prune tabs only from authoritative listings for the matching host and tmux endpoint. A listing from the same endpoint decides all that endpoint's tabs, including live tabs: matching sessions from the same tmux run remain; a different run at that endpoint closes the old run's tabs. A scratch endpoint is never touched by the main-endpoint listing, and a null listing (no server) decides nothing. One notice reports closures. The hub serializes one-shot requests and answers an overlapping request with `busy`, so a listing cannot straddle a window-creation reply. Explicit user retry handles list errors.
-- Restore terminal tabs after reload using validated session identities and Files tabs with their own host and saved folder or preview. An unavailable session must not be silently replaced with a same-named session from another server. A workspace saved before tabs followed sessions (format version 1, window tabs) is discarded whole at boot, and so are drafts keyed by its window tabs: muxen starts at Home with no tabs. Each workspace's last terminal tab is saved too, so Insert path after a reload still goes where it went before, and so is its server's home folder (learned from the listing of `~` that Open files makes anyway), so a Files tab at home reads "~" at once.
-- Touch input follows Phone dock below. Desktop click-to-focus is unchanged.
-- Tab display keeps the session name visible and spends what width is left on the current window's name, which truncates first. Full combined name is the tooltip and accessible label. Window rows use the actual tmux window index, not array position. The server/session identity, not label, owns tab state through renames and window changes.
-- Icon-only controls have accessible names/tooltips. Disabled controls must explain why: every disabled button shows its reason beside it, and takes no tap; a button blocked by work in flight is busy instead, its label saying so (“Adding…”) with no second reason; loading/error states must not look like an empty list.
+- Small view settings are remembered per device, apart from the workspace: Show hidden files, the
+  Preview panel's state and width, and the files opened per host. One owner, `app/viewMemory.ts`; a
+  value another build wrote that doesn't parse is the default.
+- Navigation between Home, the overview and tabs preserves open tabs and process state. Each Files tab
+  keeps its folder or preview across reload.
+- The listing refreshes on entry and on debounced `sessionsChanged` while visible; no polling and no
+  network search per keystroke. Fetch when Open session opens, when a long-press menu opens without a
+  listing newer than the last `sessionsChanged`, and on reconnect. Tabs are pruned only from
+  authoritative listings for the matching host and tmux endpoint: a listing from an endpoint decides
+  all that endpoint's tabs; a different tmux run closes the old run's tabs; a null listing (no
+  server) decides nothing. One notice reports closures.
+- Restored terminal tabs use validated session identities; an unavailable session is never silently
+  replaced with a same-named session from another server. A workspace saved before tabs followed
+  sessions is discarded whole. The workspace also saves each workspace's last terminal tab and its
+  server's home folder (learned from the `~` listing Open files makes), so a Files tab at home reads
+  "~" at once.
+- Disabled controls say why beside them and take no tap; a button blocked by work in flight is busy
+  instead ("Adding…"). Closed tabs keep their unsent draft (at most 32, oldest first).
 
 ## Phone dock
 
-On touch, Terminal is full-bleed above a dock shared by the browser, PWA and native app.
-The tab row (Tab row, above) is the dock's bottom row with the keyboard down, ending with the
-keyboard control. With it up, the tab row stays where it is, its keyboard control in the same place
-(Show keyboard becomes Hide keyboard), and the compose box and a text-only key row sit under it, on
-the keyboard, the same order as Termius (Jimmy).
-A Files tab or preview reached with the keyboard down shows the tab row with Show keyboard. The terminal pans above the keyboard-up
-controls so its last row meets the bottom of the visible area;
-if that would put the cursor above the area's top, the cursor row meets the bottom instead.
-It never pans past the last row, when every row fits, or while scrolled into history. tmux
-is sized with the tab row and keyboard down; showing the keyboard never resizes it.
+On touch, Terminal is full-bleed above a dock shared by the browser, PWA and native app. The tab row
+is the dock's bottom row with the keyboard down, ending with the keyboard control. With it up, the tab
+row stays where it is (Show keyboard becomes Hide keyboard), and the compose box and a text-only key
+row sit under it, on the keyboard, in Termius's order (Jimmy). A Files tab reached with the keyboard
+down shows the tab row with Show keyboard. The terminal pans above the keyboard so its last row meets
+the visible area's bottom, or the cursor row does if the cursor would go off the top; never past the
+last row when every row fits, nor while scrolled into history. tmux is sized with the tab row and
+keyboard down; showing the keyboard never resizes it.
 
-```text
-keyboard down                              keyboard up
-terminal, full-bleed       $ █             terminal, panned       $ █
-───────────────────────────────            ───────────────────────────────────
-‹ (a1 ×) (b1) (notes.md) + [⌨]             ‹ (a1 ×) (b1) (notes.md) +
-bottom safe area                           [ Type or dictate a line          ]
-                                           esc tab ← ↑ ↓ → ctrl alt | ~ / - ⇧tab ⏎ ^R ^Z ^C … [⌨↓]
-                                           iOS keyboard
-                                           (Safari's ⌃ ⌄ Done bar sits above it)
-```
+**The keyboard is sticky**: only the keyboard control lowers it (Jimmy). Scrolling, tapping the
+terminal, switching tabs, opening a menu and a reconnect leave it up. Switching to a Files tab with it
+up gives it to the tab's path field; switching back gives typing to terminal input. The overview and
+Home lower it.
 
-The keyboard is sticky: only the keyboard control lowers it (Jimmy). Scrolling,
-tapping the terminal, switching tabs in the tab row, opening the + or long-press menu and a
-reconnect all leave it up. Switching to a Files tab with the keyboard up gives it to that tab's
-path field, which starts editing (the compose box and key row give way to the field's own
-keyboard); switching back to a terminal tab gives typing back to terminal input, keyboard still up
-(Jimmy: “b is fine”). Going to the tab overview or Home lowers it, since they have no
-input.
-
-- **Sizes.** Row items 34 px tall, key-row keys 32 px, with touch areas extended to the
-  row's height where they meet. The compose box font is 16 px to avoid Safari zoom.
-  Add the bottom safe area only while the keyboard is down, with no blank band between
-  the controls and the inset or keyboard.
-- **Compose box.** The line field is one logical line, placeholder “Type or dictate a
-  line”, wrapping and growing from one to five visual lines, then scrolling inside.
-  It remains visible while typing to tmux, idle without a caret; tapping it gives the
-  keyboard to the line. It is a textarea in the browser, the PWA and the app alike, with
-  autocorrect, capitalization, spell checking and smart punctuation off. Return (the
-  key reads "return") or Send sends the
-  text then Enter to the active tab's shown window, clears it and keeps focus in the
-  box. Empty Return sends Enter. An undelivered line returns with its reason; a
-  disconnected tab keeps the draft and says “Not connected”. Each tab's draft survives
-  keyboard hide, navigation and reload. Delivery rules:
+- **Compose box.** One logical line, placeholder "Type or dictate a line", growing from one to five
+  lines, then scrolling. A textarea everywhere, with autocorrect, capitalization, spellcheck and
+  smart punctuation off. Return (labelled "return"/Send) sends the text then Enter to the active
+  tab's shown window as one `paste` with `enter: true`, clears it and keeps focus. Empty Return sends
+  Enter. An undelivered line returns to the draft with its reason (a resend could run it twice); a
+  disconnected tab keeps the draft and says "Not connected". Each tab's draft survives keyboard hide,
+  navigation and reload. Delivery rules:
   [terminal-interaction-design.md](terminal-interaction-design.md#the-dock-line-field-key-row-and-one-keyboard-toggle).
-- **Paste.** One line is inserted for editing; text holding a line break goes to the
-  terminal as one paste without Enter, with a notice; an image takes the image paste
-  route. Clipboard reads capture the tab and window before a system prompt; if the
-  target changes, paste falls back to that captured terminal target instead of editing
-  the new line. An IME candidate Return remains with the editor.
-- **Key row.** A fixed, horizontally scrolling text-only row: esc, tab, ←, ↑, ↓, →,
-  ctrl, alt, `|`, `~`, `/`, `-`, ⇧tab, ⏎, then the chords ^R, ^Z, ^C. Keys are plain text with no fill until pressed. The order serves agent CLIs first (esc interrupts, arrows walk menus); no chord sits in the first slots, ^Z is never beside ⏎, and ^C is last (Jimmy). ^S and ^Q are not offered: ^S freezes a terminal with flow control on. While the box owns focus, unmodified ← and →
-  move its caret and unmodified esc returns focus to the terminal; ↑, ↓, ^R, ^C, tab and other
-  terminal controls go to tmux. Distinguish the two destinations visually. In terminal
-  mode the controls go to tmux. Arrows repeat while held; ↑, ↓ and ^R use the shell's
-  own history. Character keys go where typing goes. ctrl and alt arm the next key,
-  shown pressed until used or tapped again; an armed chord goes to tmux. Except for
-  esc leaving the box, a key-row tap does not move focus. The row is the same with a
-  hardware keyboard attached.
-- **Keyboard control.** Show keyboard in the tab row raises terminal input; Hide
-  keyboard in the key row lowers either target. The control's state follows focus and
-  system dismissal. Tapping the terminal or esc while composing
-  returns typing to tmux without lowering the keyboard.
-- **Focus cues.** Terminal target: solid terminal cursor; the idle box has no caret and
-  shows its draft or placeholder. Line target: box ring and caret, visible Send, hollow
-  terminal cursor, and Return labelled Send. There is exactly one active typing cursor.
-- **Terminal taps.** A tap on the terminal raises the keyboard: terminal input takes it,
-  from the box too, and the key row's toggle lowers it. In an application that asked for mouse
-  reporting the tap is a click and raises nothing. With terminal input already holding the
-  keyboard, a tap on an OSC 133 input row moves the prompt cursor. With a selection or mark up,
-  a tap elsewhere closes it and raises nothing
-  ([terminal-interaction-design.md](terminal-interaction-design.md), "One gesture owner").
-  The focus is made in the tap's own `touchend`, since iOS raises the keyboard only for a focus
-  made in the gesture. Scroll and selection do not toggle the keyboard (it is sticky, above).
-- **Safari's form accessory bar.** The phone browser/PWA may put its own ⌃ ⌄ Done bar
-  between muxen's key row and the keyboard; the page cannot remove it. Done lowers the
-  keyboard and the toggle follows. The app hides the bar (`WebKitAccessoryBar`).
+- **Paste.** One line is inserted for editing; text with a line break goes to the terminal as one
+  paste without Enter, with a notice; an image takes the image paste route. Clipboard reads capture
+  the tab and window before a system prompt.
+- **Key row.** Fixed, horizontally scrolling, text-only: esc, tab, ←, ↑, ↓, →, ctrl, alt, `|`, `~`,
+  `/`, `-`, ⇧tab, ⏎, then the chords ^R, ^Z, ^C. The order serves agent CLIs first and opens esc, tab
+  (Jimmy: "the first row should guarantee esc | tab"); ^C is last because it is "kinda dangerous" in
+  the first slots. ^S isn't offered: it is XOFF, which stops all output until ^Q. While the box owns
+  focus, unmodified ← and → move its caret and esc returns focus to the terminal; ↑, ↓, ^R, ^C, tab and
+  other controls go to tmux. Arrows repeat while held. ctrl and alt arm the next key, shown pressed
+  until used or tapped again. A key-row tap does not move focus, except esc leaving the box. The row is
+  the same with a hardware keyboard.
+- **Focus cues.** Terminal target: solid terminal cursor, an idle box without a caret. Line target:
+  box ring and caret, visible Send, hollow terminal cursor. Exactly one active typing cursor.
+- **Terminal taps.** A tap raises the keyboard (made in the tap's own `touchend`, since iOS raises the
+  keyboard only for a focus made in the gesture); in an app that asked for mouse reporting it is a
+  click and raises nothing; with a selection up, a tap elsewhere closes it and raises nothing
+  ([terminal-interaction-design.md](terminal-interaction-design.md)). Scroll and selection don't toggle
+  the keyboard.
+- **Safari's form accessory bar** may sit between the key row and the keyboard in the browser/PWA; Done
+  lowers the keyboard. The app hides it (`WebKitAccessoryBar`).
 
 ## File upload and path insertion
 
-In a Files tab, upload uses the browser/native file picker into the configured uploads folder. Several files may be picked at once; one uploads at a time and at most four are held, and a fifth is refused with “Wait for the current uploads to finish.” A file over 128 MiB is refused before it is sent. Completion adds a row to the list, with progress and a × that cancels while running (the row goes, and the server deletes what it received), then the saved name, **Insert into terminal ▾** and Preview; the screen does not navigate away from the folder. A file's header has the same control, the one Insert everywhere. It opens "Insert path into": this server's terminal tabs, the default first and then the rest in tab order. The default is the tab the upload began in for an upload's offer, else the workspace's last terminal tab (Workspace state); Cmd/Ctrl+I on a file's view sends the path there with no menu (whether Safari lets a page take Cmd+I is unchecked). Choosing a tab inserts a shell-escaped absolute canonical path into it without Enter, then returns to that terminal. It never executes the path.
+In a Files tab, upload uses the file picker into the configured uploads folder. Several files may be
+picked; one uploads at a time and at most four are held ("Wait for the current uploads to finish."); a
+file over 128 MiB is refused before it is sent. A row shows progress and a × that cancels (the server
+deletes what it received); when done it offers the saved name, **Insert into terminal ▾** and Preview,
+and the screen stays in the folder. **Insert** opens "Insert path into": this server's terminal tabs,
+the default first (the tab the upload began in for an upload's offer, else the workspace's last
+terminal tab; Cmd/Ctrl+I on a file sends the path there with no menu). Choosing inserts the
+shell-escaped absolute canonical path without Enter, then returns to that terminal. It never executes
+the path.
 
-A tab still restoring from a saved workspace, or one whose connection failed, is listed but disabled, saying why ("Restoring", "Not connected"). With no terminal tab on the server the menu says "Open a terminal tab first"; files still remain accessible. If the target disappears or disconnects, insertion fails visibly without sending into a different tab: the action is disabled while the target is reconnecting, refused for the session limit or closed, and a path still waiting for its watch is dropped with a notice if the watch fails. A tab that is still connecting, or live but not on screen, takes the path and types it when it is watching; the one eligibility rule is the driver's, shared by Files and image paste. A name holding a control character (CR, LF, ESC, ^C) is never inserted, because typed into a pane it would submit or act as a key; the notice sends the user to the terminal. The target tab and the window it shows are captured on click, not selected by matching names; the path goes to that window even if the tab has since followed its session elsewhere, and fails visibly if the window has closed. A tab that has not had its first `watching` yet (still connecting or restoring) has no window to capture, and types the path into the window its first `watching` names. Returning to the Files tab preserves its preview context.
+A tab still restoring or whose connection failed is listed but disabled, saying why. With no terminal
+tab the menu says "Open a terminal tab first". The target tab and the window it shows are captured on
+click: the path goes to that window even if the tab has since followed its session elsewhere, and
+fails visibly if the window has closed, never into a different tab. A tab that hasn't had its first
+`watching` types the path into the window its first `watching` names. A name holding a control
+character (CR, LF, ESC, ^C) is never inserted; a notice sends the user to the terminal.
 
-### Paste into a folder
+**Paste into a folder.** A Files tab showing a folder has **Paste** (an icon on a desktop, an item in ⋯
+on the phone; Cmd/Ctrl-V while Files' keys are free). It reads the clipboard inside the tap and creates
+a file: an image named like any upload (`YYYYMMDD-HHMMSSZ-xxxx.<ext>`; the app re-encodes HEIC to
+JPEG), text as `pasted-YYYYMMDD-HHMMSSZ.txt` holding exactly the text. A name is never reused (`-2`,
+`-3`). It uses the upload pipeline's limits and errors; a failure is a notice and leaves nothing
+behind. "Pasting…", then "Pasted <name>"; "Nothing to paste" for an empty clipboard. The new row is
+selected (desktop) or marked (phone). The path is typed nowhere.
 
-A Files tab showing a folder has **Paste** on its header line: an icon beside Upload on a desktop, an item in ⋯ on the phone. On a desktop the new file is selected, so the Preview panel shows it; on the phone its row is marked. It reads the clipboard inside the tap (the app through `pasteInto`; a browser through the async Clipboard API, where it is allowed) and creates a new file in that folder: an image as a file named like any upload (`YYYYMMDD-HHMMSSZ-xxxx.<ext>`; the app re-encodes HEIC to JPEG as for a photo), text as `pasted-YYYYMMDD-HHMMSSZ.txt` holding exactly the text. On a desktop, Cmd/Ctrl-V does the same with the clipboard the paste event carries, whenever the folder is showing and Files' keys are free (no dialog, such as Settings or the session list, and no menu is open, and no text box has focus: the path field keeps its own paste). The button and the keys are one path, `uploads.paste(handle, dir, pasted?)`: the browser uploads `pasted` or else reads the clipboard; the app ignores `pasted` and reads the pasteboard. A name is never reused: a clash gets `-2`, `-3`. The upload goes to the folder the tab shows, by its canonical path, through the same pipeline, limits and errors as an upload (unwritable folder, `memory_backed`, `too_large`, `busy`), worded by one table for the browser and the app (the app passes the daemon's error code in its `upload` event): a failure is a notice and leaves nothing behind. While it runs a notice says "Pasting…", then "Pasted <name>" (or "Couldn't paste: <reason>"; "Nothing to paste" for an empty clipboard). The listing reloads, and the new row is marked selected and scrolled into view, if it is in the pages loaded (a folder of more than 200 entries may sort it below them). The path is typed nowhere and no Insert path offer is made: Insert path on the file's preview stays the way to use it. The marking goes away on any navigation or refresh.
-
-Browser image paste into a focused terminal follows the same upload pipeline. Capture the exact target tab and the window it shows at paste start, upload supported image bytes into the configured uploads folder, then insert the quoted absolute canonical path into that same window through that tab, without Enter, even if the tab has since followed its session to another window. If the target is gone or disconnected when upload completes, keep the uploaded file available in Files and report the insertion failure; never redirect to a different active tab. Ordinary text paste remains terminal paste. In the app the page cannot upload a `File`: a paste event that carries an image (the line box's or the terminal input's) makes the page read the pasteboard through native instead (`readPasteboard`), the route the mark's Paste uses, so every image paste in the app is one path. Clipboard access depends on a user paste gesture and browser capabilities; unsupported image clipboard access gets an explanation and the Files upload route. Real-browser clipboard handling still needs verification.
+**Image paste into a focused terminal** uses the same pipeline: capture the exact target tab and window
+at paste start, upload, then insert the quoted absolute path into that window without Enter. If the
+target is gone or disconnected when the upload completes, the file stays in Files and the failure is
+reported; never redirected to another tab. In the app the page can't upload a `File`, so a paste
+event carrying an image makes the page read the pasteboard through native (`readPasteboard`). Browser
+image clipboard access depends on a user gesture; unsupported access gets an explanation and the Files
+upload route.
 
 ## Offline and updates
 
-The service worker serves the shell from its cache. On a launch with no network the host card reads offline with "This device is offline." (the name is the last one saved) and open tabs read “Reconnecting…”; with a network and no answer, it reads offline with when the server was last reached. Nothing shows a pretend live terminal and nothing typed is queued. The worker never intercepts `/ws`, `/auth`, `/fs`, `/complete`, `/debug` or a non-GET request.
+The service worker serves the shell from its cache. With no network the host card reads offline with
+"This device is offline." and open tabs "Reconnecting…"; with a network and no answer, offline with
+when the server was last reached. Nothing shows a pretend live terminal and nothing typed is queued.
+The worker never intercepts `/ws`, `/auth`, `/fs`, `/complete`, `/debug` or a non-GET request.
 
-A new build installs in the background and waits. Home and Files show “Update ready” with Update, never over the terminal; only the window that taps Update reloads. Another window shows “Reload to finish updating” with Reload, and keeps running its own build until then. A window whose build the host no longer has (two builds behind, or one behind when it opens its first diagram, since diagram files are not precached) fails to fetch a lazy chunk and shows the designed “Update required” with Reload, in the same place and never over the terminal.
+A new build installs in the background and waits. Home and Files show "Update ready" with Update,
+never over the terminal; only the window that taps Update reloads, another shows "Reload to finish
+updating". A window whose build the host no longer has fails to fetch a lazy chunk and shows "Update
+required" with Reload, never over the terminal.
 
 ## Keyboard ownership and navigation history
 
-Desktop terminal focus owns keys only while terminal input is focused. Session search, creation forms, and Files controls own their own input. Overlay handling intercepts Escape only while an overlay is open; otherwise Escape belongs to terminal input. Tab activation, terminal return, and overlay dismissal restore terminal focus on desktop. Focus must not steal input from a focused text field. Only focus that must raise the software keyboard needs to happen synchronously inside the user's gesture. Other focus transitions may wait until navigation or the dialog has rendered; a phone dialog must not focus a text field and unexpectedly raise its keyboard.
+Desktop terminal focus owns keys only while terminal input is focused; session search, creation forms
+and Files controls own their input. Escape is intercepted only while an overlay is open. Tab
+activation, terminal return and overlay dismissal restore terminal focus on desktop, never stealing
+from a focused text field. Only focus that must raise the software keyboard happens synchronously in
+the gesture; a phone dialog must not unexpectedly raise its keyboard.
 
-Accept browser-reserved shortcuts rather than adding a custom shortcut system or promising interception. Which combinations reach the page must be probed in Jimmy’s browsers before shipping; this contract does not claim an exhaustive reserved-key list. Browser/site navigation must never be intentionally hijacked to mimic a native terminal.
+Browser-reserved shortcuts are accepted, not intercepted; which combinations reach the page must be
+probed in Jimmy's browsers before shipping. Browser/site navigation is never hijacked to mimic a
+native terminal. The on-screen keyboard lacks Esc, Ctrl, Tab and arrows; the key row supplies them.
+The file editor has no keyboard owner of its own: the keyboard control under a Files tab raises it
+first, and its row holds only keys that mean something in text. Escape doesn't leave the file while an
+edit is open.
 
-The ordinary on-screen keyboard lacks Esc, Ctrl, Tab and arrows; the dock's key row supplies them in the browser, the PWA and the app alike.
+Navigation: Home, overview, Terminal/Files transitions, folder drill-in, preview and modals create
+reversible history entries; Back closes the top sheet/preview before leaving its parent. Opening or
+switching terminal tabs adds none. Back never kills a tmux session. The native shell follows the same
+logical hierarchy without URL history.
 
-The file editor is a text box like any other: it has no owner of its own, the keyboard control under a Files tab raises it first, and its row holds only the keys that mean something in text ([plan.md](../plan.md), "Editing"). Escape does not leave the file while an edit is open.
+## Clipboard and touch selection
 
-Browser history rule: Home, tab overview and Terminal/Files transitions, folder drill-in, preview, and modal opening create reversible navigation entries; Back closes the top sheet/preview before leaving its parent destination. Opening or switching terminal tabs does not add browser history entries. Back must not kill a tmux session. Native shell follows the same logical hierarchy without browser URL history.
+Browser copy preserves logical line breaks, not terminal soft-wrap boundaries. Paste preserves
+multiline text through the paste protocol (`load-buffer` then `paste-buffer -p -d`); it is not
+converted to Enter key events and plain paste appends no extra Enter. tmux adds bracketed-paste markers
+only when the application requests that mode, so without it embedded newlines can execute shell
+commands; no "paste never executes" guarantee is made.
 
-## Implementation gates
-
-Browser admission and static-shell rules are in [auth.md](../auth.md) and [browser setup](browser-setup.md). Keep the dev proxy's injected owner identity out of production auth, and never expose the test harness as a released client. Test real desktop input, phone-browser keyboard/viewport behavior, and the native app on hardware separately; passing unit tests and the harness does not verify them.
-
-## Visual copy rule
-
-Do not use middle-dot separators in app chrome, labels, headings, or descriptive copy. Separate metadata with layout/spacing or write a short phrase. The bell attention dot is distinct from connection status, which uses text for reconnect/error states and accessible labels; its mechanism is in plan.md (Bell attention).
-
-## Text clipboard behavior
-
-Browser copy preserves logical line breaks, not terminal soft-wrap boundaries. Paste preserves multiline clipboard text through the existing paste protocol; it is not converted into a sequence of Enter key events, and plain paste does not append an extra Enter. The daemon already uses load-buffer then paste-buffer -p -d. tmux adds bracketed-paste markers only when the receiving application requests that mode. Without bracketed-paste handling, embedded newlines can execute shell commands; no blanket “paste never executes” guarantee is made. Real browser clipboard/line-wrap behavior must be tested during implementation.
-
-Terminal context uses a bold primary session name, regular window name, and smaller muted host separated with spacing, without literal “on” or dot separators.
-
-## Touch and clipboard research gate
-
-The interaction contract is [terminal-interaction-design.md](terminal-interaction-design.md). On the phone, selection is iOS's own on the terminal's rows, drawn as page text: a long press selects a word with iOS's handles and menu, muxen draws nothing of it, and Copy joins soft wraps into logical lines; a tap elsewhere or a redraw of the selected rows closes it, and a scroll does not (a drag of a handle to the list's edge autoscrolls). In the app, keyboard up or down, the keyboard never drops for a selection: a hold of about 380 ms marks the word under the finger with muxen's highlight, the finger and two handles extend it, and iOS's edit menu shows Copy and Paste over it; a tap elsewhere or output redrawing the marked rows clears it (output never pauses); a scroll hides the menu until a tap inside the mark, and the mark autoscrolls near the list's top and bottom edges. In a browser the hold with the keyboard up does nothing. Elsewhere, Paste on the phone is the line box's. A touch sends no mouse event, in mouse-mode apps too (Jimmy). Vertical swipes in alternate-screen apps still send ↑/↓ or wheel events. Copy must preserve logical newlines, not visual wraps. Real iPhone Safari and app selection, keyboard and clipboard checks remain required.
+The selection and gesture contract is [terminal-interaction-design.md](terminal-interaction-design.md).
+On the phone, selection is iOS's own on the terminal's rows drawn as page text: a long press selects a
+word with iOS's handles and menu, and Copy joins soft wraps into logical lines. In the app, keyboard
+up or down, the keyboard never drops for a selection: a hold of about 380 ms marks the word with
+muxen's highlight, two handles extend it, and iOS's edit menu shows Copy and Paste; a tap elsewhere
+or output redrawing the marked rows clears it. In a browser the hold with the keyboard up does nothing.
+A touch sends no mouse event, in mouse-mode apps too (Jimmy). Vertical swipes in alternate-screen apps
+still send ↑/↓ or wheel events. Real iPhone Safari and app checks remain required.
 
 ## Why these choices
 
-Reasons that the rules above don't carry. Jimmy's words are quoted where they are the reason.
+Jimmy's words are quoted where they are the reason.
 
 **Workspaces and tabs**
 
-- Home lists workspaces only and the tab overview lists tabs as rows, because a half-height picker with a tab chip that blended into the key row opened two pickers for one job and made finding a file take four steps. The overview shows no terminal previews: they would stream every tab's screen. Rows reorder by a drag handle because the pills scroll sideways.
-- Open session is new-or-attach as the client's rule over the listing, not tmux's `new-session -A`, which fails from the daemon on an existing name ("open terminal failed: not a terminal", tmux 3.8). A new session starts in `~`.
-- Close only detaches, from the ×, a swipe and Close tab alike. Kill window and Kill session sit in the long-press menu behind a confirmation that names what ends: Jimmy wanted to detach or kill from a tab, "just they have to confirm it".
-- The tab row's ‹, pills, + and keyboard control are filled and the key row's keys are plain text, so the tab selector "clearly reads as a control". The keyboard control stays the tab row's last control in both keyboard states so it never moves.
-- A launch opens where the user left off, and the address names the tab and the Files folder or file. It names no server because a browser page talks to one host, its own origin. The cost is that file paths and session names enter browser history, which iCloud and Google sync.
-- Back is at the top on pages (Settings, Open session, the tab list) and the dock's ‹ on tabs: at the top on a tab it would cost a terminal row and be a reach on a large phone. Every page shares one header row, so the screens stop drifting apart.
+- Home lists workspaces only and the overview lists tabs as rows, because a half-height picker with a
+  tab chip that blended into the key row opened two pickers for one job and made finding a file take
+  four steps. Rows reorder by a drag handle because the pills scroll sideways.
+- Open session is new-or-attach as the client's rule over the listing, not tmux's `new-session -A`,
+  which fails from the daemon on an existing name ("open terminal failed: not a terminal", tmux 3.8).
+- Close only detaches; Kill window and Kill session sit behind a confirmation that names what ends:
+  Jimmy wanted to detach or kill from a tab, "just they have to confirm it".
+- The tab row's controls are filled and the key row's keys are plain text, so the tab selector "clearly
+  reads as a control". The keyboard control stays the tab row's last control in both keyboard states so
+  it never moves.
+- Back is at the top on pages and the dock's ‹ on tabs: at the top on a tab it would cost a terminal row
+  and be a reach on a large phone. Every page shares one header row so screens stop drifting apart.
+- One banner per screen, for that screen's server: another server's outage over this server's terminal
+  changes nothing the user can do, and two Retry buttons for one fault make the user pick. A refusal
+  outranks offline on the card, because its fix (re-enrol, update) is what the user must do whether or
+  not the server is on, and a refused token stops the socket so a reachability beside it would be
+  stale. One "Can't reach pop-os" covers a machine that's off and muxen that's down: a WebSocket gives
+  the same 1006 either way. The checking state reads "connecting" ("the word 'checking' doesn't make
+  any sense").
 
 **Keyboard and input**
 
-- The keyboard is sticky because typing like Termius is the benchmark: only the keyboard control lowers it, so tab switches, menus and reconnects leave it up. A tap on the terminal raises it inside the tap's own `touchend`, because iOS shows the keyboard only for a focus made in a user gesture.
-- The compose box is one logical line, and Return sends the text and Enter. The phone's box is for saying one thing to a shell or an agent; a separate Insert and a second Enter cost a tap each time. Return is a single `paste` with `enter: true` so the Enter cannot run without its paste, and a refused or unanswered paste puts the line back in the draft instead of being resent (a resend could run it twice).
-- Every text box has autocorrect, autocapitalization and spellcheck off, set as attributes: Preact assigns a JSX prop to the element's property, and WebKit's `autocorrect` property is a boolean, so `"off"` became true. The file editor follows the same rule "for now"; Jimmy found it debatable there.
-- The key row opens esc, tab ("the first row should guarantee esc | tab"); ^C is last because it is "kinda dangerous" in the first slots. ^S is not offered: it is XOFF, which stops all output until ^Q (measured on tmux 3.4), and inside a raw-mode TUI it is an ordinary key, so the same key would behave two ways.
-- Ctrl+Shift+F leaves a focused terminal on desktop: a terminal cannot tell Ctrl+Shift+letter from Ctrl+letter, so shells lose nothing, and none of Chrome, Firefox or Safari defines it. Ctrl+Shift+L (Edge's paste and go), U and E (GTK's Unicode and emoji input), Y (Firefox downloads) and Escape (shells and vim need it) were ruled out.
-- Closed tabs keep their unsent draft (at most 32, oldest first): closing a tab is often a tidy-up, and losing a half-written prompt costs more than a bounded record.
-- The app's Face ID relock is selectable (5 minutes, 1 hour, at launch) because frequent prompts annoyed; "At launch" is one unlock per process launch, not removal of the Keychain item's Face ID protection. A change that loosens the interval needs a fresh Face ID evaluation, since the page alone should not weaken a security control.
-- Appearance is System, Light or Dark, with a true-black dark terminal, so the app and web agree on one effective scheme.
-- Dialogs and Settings say only what the user can't see: "Discard your changes?" and "Delete notes.txt?" need no body. A verb says what happens ("is deleted", never "goes").
+- The keyboard is sticky because typing like Termius is the benchmark. A tap on the terminal raises it
+  inside its own `touchend`.
+- The compose box is one logical line and Return sends text plus Enter, as one `paste` with
+  `enter: true` so the Enter cannot run without its paste. A separate Insert and second Enter cost a
+  tap each time.
+- Every text box has autocorrect, autocapitalization and spellcheck off, set as attributes: Preact
+  assigns a JSX prop to the element's property, and WebKit's `autocorrect` property is a boolean, so
+  `"off"` became true. The file editor follows the rule "for now"; Jimmy found it debatable there.
+- ^S is not offered: it is XOFF (measured on tmux 3.4), and inside a raw-mode TUI it is an ordinary
+  key, so the same key would behave two ways.
+- Ctrl+Shift+F leaves a focused terminal on desktop: a terminal can't tell Ctrl+Shift+letter from
+  Ctrl+letter, so shells lose nothing, and none of Chrome, Firefox or Safari defines it. Ctrl+Shift+L
+  (Edge's paste and go), U and E (GTK's input methods), Y (Firefox downloads) and Escape (shells and vim
+  need it) were ruled out.
+- The app's Face ID relock is selectable (5 minutes, 1 hour, at launch) because frequent prompts
+  annoyed; "At launch" is one unlock per process launch, not removal of the Keychain item's Face ID
+  protection. A change that loosens the interval needs a fresh Face ID evaluation: the page alone
+  shouldn't weaken a security control.
+- Dialogs say only what the user can't see: "Discard your changes?" and "Delete notes.txt?" need no
+  body. A verb says what happens ("is deleted", never "goes").
 
 **Files**
 
-- Files has no scope: a device token already runs any command in tmux, so a boundary would guard against nothing but Jimmy ("u already have terminal access... why tf are we restricting this?"). It cost a folders-only view, a "not added" state and an "Add this folder" flow. There are no favorites; the path field is the way in, and a Files tab always starts at `~/`.
-- The path line is one plain string whose last folder is selected on a click, so deleting it goes to the parent and Cancel restores it. Clickable path segments were a fat-finger trap on a phone. Typing narrows the folder's held rows (folders and files) and loads another folder once, after a 250 ms settle, never one request per keystroke.
-- Every path reads `~/…` under home and absolute elsewhere (Jimmy: "BE CONSISTENT"), Copy path included. Insert into terminal still sends the absolute path: a quoted `~/my file` does not expand in a shell.
-- A desktop's list is an outline with disclosure triangles and a Preview panel; the phone keeps one folder per screen. A click on a folder row opens it in place and never replaces the Preview panel (Jimmy: "the folder replacing the preview thing? that shouldn't happen in the first place"); a double-click goes in. At most 32 folders stay open per tab, because each pins a listing of up to 200 entries against the folder cache's 10,000-entry bound. The panel's toggle stays on the same pixels whether the panel is on or off, so a user can tap to open and tap to close without moving the pointer.
-- The folder cache runs at most two first-page requests at a time, outline folders last: Show hidden re-listed up to 32 folders at once against a daemon that admits one scan and eight waiters and refuses the rest as `busy`.
-- Search walks per settled query and the daemon sends the best 50 ([fs.md](../fs.md#get-fssearchpath)). On a desktop a click on a result selects it and the panel follows; Enter or a double-click closes Search and reveals the row. A file counts as opened for the recents only when the user opens it, never when the app selects a row. Revealing a file under a hidden name turns Show hidden files on, since the listing would otherwise stop at the root.
-- Delete is permanent, behind a confirmation ("permanent with confirm could be fine for now"); moving to the system trash needs a copy across disks, a trash that fills and per-OS layouts, and remains the likely next step. Only-empty-folders was ruled out because the common wish is `node_modules`. Moving a file to another folder is done in the terminal.
-- An edit stays on the path it opened, and unsaved text gets no special defence ("unsaved data lost is... kinda par for the course"); only the file on disk is protected. Keeping an unsaved edit's state on the Files session lets a save's answer that lands after the view has gone find its edit by path. The latest changed edit per host is written to view memory only on a flush, since writing up to 1 MiB per keystroke would cost more than the rare loss it prevents.
-- Download in the app is a bridge request: native fetches the URL with the token into a temporary file and shows the share sheet, which offers Save to Files, AirDrop and open-in-app. The page's own `<a download>` does nothing in the app's web view. The alert with progress and Cancel appears only after 0.5 s so a small file doesn't flash it.
-- Mermaid ships in the daemon's shell but outside the service worker's precache and the shell budget: precaching about 1 MB on every install would serve a feature most documents don't use. Diagrams therefore need the network; the worker reports a 404 for an `/assets/` file it has no copy of, and the app raises "Update required" with Reload. A diagram that fails to parse stays as its source with the reason under it.
-
-**Connections and notices**
-
-- One banner per screen, for that screen's server: another server's outage over this server's terminal changes nothing the user can do there, and two Retry buttons for one fault make the user pick one. A refusal outranks offline on the card, because its fix (re-enrol, update) is what the user must do whether or not the server is on, and a refused token stops the socket, so a reachability shown beside it would be stale.
-- One "Can't reach pop-os" covers a machine that's off and muxen that's down: a WebSocket gives the same 1006 either way. The checking state reads "connecting" ("the word 'checking' doesn't make any sense").
+- Files has no scope: a device token already runs any command in tmux, so a boundary would guard against
+  nothing but Jimmy ("u already have terminal access... why tf are we restricting this?"). It cost a
+  folders-only view, a "not added" state and an "Add this folder" flow.
+- A desktop's list is an outline with a Preview panel; the phone keeps one folder per screen. At most
+  32 folders stay open per tab because each pins a listing against the cache's bounded entries.
+- Delete is permanent, behind a confirmation ("permanent with confirm could be fine for now"); the
+  system trash needs a copy across disks, a trash that fills and per-OS layouts, and remains the likely
+  next step. Only-empty-folders was ruled out because the common wish is `node_modules`.
+- An edit stays on the path it opened, and unsaved text gets no special defence ("unsaved data lost
+  is... kinda par for the course"); only the file on disk is protected.
+- Download in the app is a bridge request because the page's `<a download>` does nothing in the app's
+  web view; the progress alert appears only after 0.5 s so a small file doesn't flash it.
+- Mermaid ships outside the service worker's precache and the shell budget, so diagrams need the
+  network; the worker reports a 404 for an `/assets/` file it has no copy of and the app raises
+  "Update required" with Reload.
+- Search walks per settled query and the daemon sends the best 50 ([fs.md](../fs.md#get-fssearchpath)).
