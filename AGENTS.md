@@ -2,62 +2,14 @@
 
 Phone-first client for tmux on a dev server, over Tailscale. A Rust daemon bridges
 tmux control mode to a native iOS app that hosts a web UI. The design is in
-`docs/design/`: `plan.md` is the product and UX spec and the index of the subsystem
-specs, each with the reasons for its larger choices. Read them before adding a subsystem.
+`docs/design/`: `plan.md` is the product spec and the index of the subsystem specs,
+each with the reasons for its larger choices. Read the spec before changing or adding
+a subsystem, and read an area's `AGENTS.md` before changing that area.
 
-## How work lands (initial build)
+## Invariants
 
-muxen is being built in one pass: commit straight to `main` in the primary
-checkout. No PRs, no feature branches, no worktrees. Dropping PRs drops only the
-review ceremony; the rigor stays:
-
-- **Design before code.** Settle each subsystem's spec in `docs/design/` before
-  building it, starting from `plan.md`. Specs state the current rule and why, as
-  current truth: no decision register, no history of the doc; git history is the archive.
-- **Coding standards.** Follow "Code structure and standards" in `plan.md`
-  (sans-IO cores for the tmux protocol and the hub, thin I/O tasks, bounded queues,
-  one native focus controller). Get a review of each subsystem's design and code
-  before moving on.
-- **Probe the real thing.** Verify against real tmux (3.4, the oldest supported, and 3.8), a real iPhone,
-  and the resource budget measured on the dev box. Passing tests is not enough.
-- **Coherent commits.** One change per commit; the lead preflights each commit on a
-  clean export before pushing. The pre-push hook runs `scripts/preflight.sh full` on
-  each pushed branch tip only, not every commit in the range. Keep `docs/design/` and
-  any `.context/` notes accurate in the same commit as the code they describe.
-
-Direct pushes to `main` never release. Cut a release only when Jimmy asks, with
-`scripts/manually-release.sh`. The PR-and-label release flow in `docs/releasing.md`
-applies once muxen switches to PRs.
-
-## Safety Rules
-
-- **Never create or push `v*` tags by hand.** The only tag path is
-  `scripts/manually-release.sh`, run when Jimmy asks; the pre-push hook blocks the rest.
-- **Never use `--no-verify` on git push** unless explicitly told to.
-- **Never edit generated agent directories** (`.claude/agents/`, `.claude/skills/`,
-  `.codex/`, `.cursor/`, `.opencode/`, `.pi/`, `.agents/`). `meridian mars sync`
-  overwrites them.
-
-## Dev Commands
-
-```bash
-scripts/setup-hooks.sh        # once per clone: pre-push runs full preflight on pushed tips
-scripts/preflight.sh full     # fmt, clippy -D warnings, test, release build
-cargo run -- --version
-pnpm --dir web install       # the web client uses pnpm
-```
-
-The crate's minimum Rust is 1.85 (`rust-version` in Cargo.toml); the pinned toolchain is newer,
-so syntax stabilised later (let chains, 1.88) passes preflight and fails CI's MSRV job. Check with
-`cargo +1.85 check --locked --all-targets`.
-
-Use **pnpm, never npm**, for anything in `web/`: installs, scripts, `pnpm exec`. The lockfile
-is `web/pnpm-lock.yaml`; don't add a `package-lock.json`.
-
-## Principles
-
-Invariants (`docs/design/plan.md`, "Invariants"). A change that breaks one makes a
-different product:
+A change that breaks one makes a different product: stop and ask Jimmy first. The
+reasons and the details are in `docs/design/plan.md`, "Invariants".
 
 - **tmux is the source of truth.** muxen is a window onto Jimmy's tmux, never its
   owner: tmux's life never depends on muxen's.
@@ -68,12 +20,48 @@ different product:
 - **Content from disk or tmux never runs as the app.** Rendered Markdown and Mermaid
   are sanitized; proxied files are served sandboxed.
 
-Product rules are Jimmy's standing decisions (`docs/design/plan.md`, "Product rules")
-and change only when he says so. Among them: muxen is reachable only from Jimmy's tailnet;
-it serves several servers; hosts are POSIX (Linux, macOS), since tmux doesn't run on
+Product rules (`plan.md`, "Product rules") are Jimmy's standing decisions and change
+only when he says so. Among them: muxen is reachable only from Jimmy's tailnet; it
+serves several servers; hosts are POSIX (Linux, macOS), since tmux doesn't run on
 Windows.
 
-## Releases
+## How work lands
 
-Add a bullet under `CHANGELOG.md` `[Unreleased]` with each user-visible change;
-the release that ships it promotes the section. Mechanics: `docs/releasing.md`.
+Commit straight to `main` in the primary checkout: no PRs, feature branches or
+worktrees. The rigor PRs would carry stays:
+
+- **Spec before code.** Settle a subsystem's spec in `docs/design/` before building
+  it. Specs state the current rule and why, as current truth; git history is the
+  archive.
+- **Code standards** are `plan.md`, "Code structure and standards". Get a review of
+  each subsystem's design and code before moving on.
+- **Probe the real thing.** Verify against real tmux (3.4, the oldest supported, and
+  3.8), a real iPhone, and the resource budget measured on the dev box. Passing tests
+  is not enough.
+- **One change per commit**, with `docs/design/` and any `.context/` notes it makes
+  wrong updated in the same commit. The pre-push hook runs `scripts/preflight.sh full`
+  on each pushed branch tip only, so a commit mid-range can fail while the tip passes:
+  preflight each commit on a clean export (`git archive`) before pushing.
+- Add a bullet under `CHANGELOG.md` `[Unreleased]` for each user-visible change.
+
+A push to `main` never releases. Cut a release only when Jimmy asks, with
+`scripts/manually-release.sh`; it is the only way to create a `v*` tag, and the
+pre-push hook blocks any other. Never push with `--no-verify` unless told to.
+Mechanics: `docs/releasing.md`.
+
+`meridian mars sync` rewrites `.claude/`, `.codex/`, `.cursor/`, `.opencode/`, `.pi/`
+and `.agents/`: don't edit them.
+
+## Commands
+
+```bash
+scripts/setup-hooks.sh        # once per clone: installs the pre-push hook
+scripts/preflight.sh full     # fmt, clippy -D warnings, test, release build
+pnpm --dir web install        # the web client; commands in web/README.md
+```
+
+The crate's minimum Rust is 1.85 (`rust-version` in Cargo.toml) and the pinned
+toolchain is newer, so syntax stabilised later (let chains, 1.88) passes preflight and
+fails CI's MSRV job. Check with `cargo +1.85 check --locked --all-targets`.
+
+Use pnpm, never npm, in `web/`; don't add a `package-lock.json`.

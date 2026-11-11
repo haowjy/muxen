@@ -188,3 +188,14 @@ generated Info.plist has a generated launch screen (required for full device-siz
 publicly trusted); bundle id `com.jimmyyao.muxen`. The team is `D4K9ZT557F` (wildcard development profile,
 expires 2027-10-24, no App Groups) and stays out of `project.yml`. Later: an explicit App ID for TestFlight,
 App Groups, the share extension and push.
+
+To install on the phone, build Release for the device with the team on the command line, then
+`xcrun devicectl device install app`. `DQK9XRFMG4` in `security find-identity` is a certificate ID, not the
+team; signing with it fails with "No Account for Team".
+
+```bash
+cd ios && xcodegen generate --spec project.yml
+xcodebuild -project Muxen.xcodeproj -scheme Muxen -configuration Release \
+  -destination "id=<phone udid>" -derivedDataPath "$TMPDIR/muxen-ios-device" \
+  -allowProvisioningUpdates DEVELOPMENT_TEAM=D4K9ZT557F CODE_SIGN_STYLE=Automatic build
+```
